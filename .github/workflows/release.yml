@@ -18,7 +18,7 @@ on:
         description: What to build
         type: choice
         default: all
-        options: [all, desktop-web-docker, mobile]
+        options: [all, desktop-and-web, docker, mobile]
       eas_profile:
         description: EAS build profile for the phone apps (see apps/mobile/eas.json)
         type: choice
@@ -33,7 +33,7 @@ env:
 
 jobs:
   web:
-    if: github.event_name != 'workflow_dispatch' || inputs.platforms != 'mobile'
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'desktop-and-web'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -104,7 +104,7 @@ jobs:
           if-no-files-found: error
 
   docker:
-    if: github.event_name != 'workflow_dispatch' || inputs.platforms != 'mobile'
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'docker'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -136,7 +136,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   mobile:
-    if: github.event_name != 'workflow_dispatch' || inputs.platforms != 'desktop-web-docker'
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'mobile'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false # an iOS problem (for example missing Apple credentials) must not stop Android

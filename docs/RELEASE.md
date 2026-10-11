@@ -6,7 +6,7 @@ One GitHub workflow, `.github/workflows/release.yml`, builds everything you can 
 - Push a version tag: `git tag v1.0.0 && git push --tags`. Everything is built and attached to a
   GitHub release.
 - Or open the repository's **Actions** tab, pick **Release builds** and **Run workflow**. Choose
-  what to build (`all`, `desktop-web-docker` or `mobile`) and the phone build profile.
+  what to build (`all`, `desktop-and-web`, `docker` or `mobile`; only `docker` and `all` publish an image) and the phone build profile.
 
 Ordinary pushes still run only the tests (`ci.yml`).
 
