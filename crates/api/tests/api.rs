@@ -1,0 +1,255 @@
+use axum::body::Body;
+use axum::http::{header, Method, Request, StatusCode};
+use axum::Router;
+use financer_api::{router, AppState, TokenHash};
+use financer_store::Store;
+use http_body_util::BodyExt;
+use serde_json::{json, Value};
+use tower::ServiceExt;
+
+const TOKEN: &str = "test-token";
+
+async fn app() -> Router {
+    let store = Store::connect("sqlite::memory:").await.unwrap();
+    router(AppState { store }, TokenHash::new(TOKEN))
+}
+
+async fn call(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    body: Body,
+    content_type: Option<&str>,
+    auth: bool,
+) -> (StatusCode, Vec<u8>) {
+    let mut req = Request::builder().method(method).uri(uri);
+    if auth {
+        req = req.header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+    }
+    if let Some(ct) = content_type {
+        req = req.header(header::CONTENT_TYPE, ct);
+    }
+    let res = app.clone().oneshot(req.body(body).unwrap()).await.unwrap();
+    let status = res.status();
+    (
+        status,
+        res.into_body().collect().await.unwrap().to_bytes().to_vec(),
+    )
+}
+
+async fn get_json(app: &Router, uri: &str) -> (StatusCode, Value) {
+    let (s, b) = call(app, Method::GET, uri, Body::empty(), None, true).await;
+    (s, serde_json::from_slice(&b).unwrap_or(Value::Null))
+}
+
+fn csv() -> String {
+    let mut out = String::from(
+        "\"Auftragskonto\";\"Buchungstag\";\"Verwendungszweck\";\"Beguenstigter/Zahlungspflichtiger\";\"Kontonummer/IBAN\";\"Betrag\"\n",
+    );
+    for (d, who, purpose, amount) in [
+        ("01.01.26", "Vermieter", "Miete Januar", "-800,00"),
+        ("01.02.26", "Vermieter", "Miete Februar", "-800,00"),
+        ("01.03.26", "Vermieter", "Miete Maerz", "-800,00"),
+        ("28.01.26", "Arbeitgeber AG", "Gehalt", "2.500,00"),
+        ("27.02.26", "Arbeitgeber AG", "Gehalt", "2.500,00"),
+        ("28.03.26", "Arbeitgeber AG", "Gehalt", "2.500,00"),
+        ("02.03.26", "REWE Markt", "Kartenzahlung", "-23,47"),
+        ("09.03.26", "LIDL", "Kartenzahlung", "-31,03"),
+    ] {
+        out.push_str(&format!(
+            "\"DE89370400440532013000\";\"{d}\";\"{purpose}\";\"{who}\";\"\";\"{amount}\"\n"
+        ));
+    }
+    out
+}
+
+#[tokio::test]
+async fn health_is_open_but_v1_needs_the_token() {
+    let app = app().await;
+    let (s, b) = call(&app, Method::GET, "/health", Body::empty(), None, false).await;
+    assert_eq!((s, b.as_slice()), (StatusCode::OK, b"ok".as_slice()));
+
+    let (s, _) = call(
+        &app,
+        Method::GET,
+        "/v1/transactions",
+        Body::empty(),
+        None,
+        false,
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    let req = Request::builder()
+        .uri("/v1/transactions")
+        .header(header::AUTHORIZATION, "Bearer wrong")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+async fn import_categorizes_and_dedupes() {
+    let app = app().await;
+    let (s, b) = call(
+        &app,
+        Method::POST,
+        "/v1/transactions/import",
+        Body::from(csv()),
+        Some("text/csv"),
+        true,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let report: Value = serde_json::from_slice(&b).unwrap();
+    assert_eq!(report["imported"], 8);
+    assert_eq!(report["duplicates"], 0);
+
+    let (_, b) = call(
+        &app,
+        Method::POST,
+        "/v1/transactions/import",
+        Body::from(csv()),
+        Some("text/csv"),
+        true,
+    )
+    .await;
+    let again: Value = serde_json::from_slice(&b).unwrap();
+    assert_eq!(again["imported"], 0);
+    assert_eq!(again["duplicates"], 8);
+
+    let (s, list) = get_json(&app, "/v1/transactions").await;
+    assert_eq!(s, StatusCode::OK);
+    let list = list.as_array().unwrap();
+    assert_eq!(list.len(), 8);
+    let rewe = list
+        .iter()
+        .find(|t| t["counterparty"] == "REWE Markt")
+        .unwrap();
+    assert_eq!(rewe["category"], "groceries");
+    assert_eq!(rewe["amount_cents"], -2347);
+    assert_eq!(rewe["booking_date"], "2026-03-02");
+}
+
+#[tokio::test]
+async fn import_rejects_other_files() {
+    let app = app().await;
+    let (s, b) = call(
+        &app,
+        Method::POST,
+        "/v1/transactions/import",
+        Body::from("a;b\n1;2\n"),
+        Some("text/csv"),
+        true,
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    assert!(String::from_utf8_lossy(&b).contains("not a Sparkasse CSV export"));
+}
+
+#[tokio::test]
+async fn recurring_and_disposable_income() {
+    let app = app().await;
+    call(
+        &app,
+        Method::POST,
+        "/v1/transactions/import",
+        Body::from(csv()),
+        Some("text/csv"),
+        true,
+    )
+    .await;
+
+    let (_, rec) = get_json(&app, "/v1/recurring").await;
+    let rec = rec.as_array().unwrap();
+    assert_eq!(rec.len(), 2);
+    assert!(rec.iter().all(|r| r["cadence"] == "monthly"));
+
+    let (_, d) = get_json(&app, "/v1/budget/disposable").await;
+    assert_eq!(d["monthly_income_cents"], 250_000);
+    assert_eq!(d["monthly_fixed_costs_cents"], 80_000);
+    assert_eq!(d["disposable_cents"], 170_000);
+}
+
+#[tokio::test]
+async fn envelopes_and_status() {
+    let app = app().await;
+    call(
+        &app,
+        Method::POST,
+        "/v1/transactions/import",
+        Body::from(csv()),
+        Some("text/csv"),
+        true,
+    )
+    .await;
+
+    let put = json!([{"category": "groceries", "limit_cents": 40000}, {"category": "dining", "limit_cents": 5000}]);
+    let (s, _) = call(
+        &app,
+        Method::PUT,
+        "/v1/budget/envelopes",
+        Body::from(put.to_string()),
+        Some("application/json"),
+        true,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+
+    let (_, status) = get_json(&app, "/v1/budget/status?year=2026&month=3").await;
+    let groceries = status
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["category"] == "groceries")
+        .unwrap();
+    assert_eq!(groceries["spent_cents"], 2347 + 3103);
+    assert_eq!(groceries["remaining_cents"], 40000 - 2347 - 3103);
+
+    let (s, _) = get_json(&app, "/v1/budget/status?year=2026&month=13").await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    let dup = json!([{"category": "groceries", "limit_cents": 1}, {"category": "groceries", "limit_cents": 2}]);
+    let (s, _) = call(
+        &app,
+        Method::PUT,
+        "/v1/budget/envelopes",
+        Body::from(dup.to_string()),
+        Some("application/json"),
+        true,
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    let neg = json!([{"category": "groceries", "limit_cents": -1}]);
+    let (s, _) = call(
+        &app,
+        Method::PUT,
+        "/v1/budget/envelopes",
+        Body::from(neg.to_string()),
+        Some("application/json"),
+        true,
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+}
+
+#[test]
+fn openapi_document_lists_every_route() {
+    let doc: Value = serde_json::from_str(&financer_api::openapi_json()).unwrap();
+    let paths = doc["paths"].as_object().unwrap();
+    for p in [
+        "/health",
+        "/v1/transactions",
+        "/v1/transactions/import",
+        "/v1/recurring",
+        "/v1/budget/disposable",
+        "/v1/budget/envelopes",
+        "/v1/budget/status",
+    ] {
+        assert!(paths.contains_key(p), "missing {p}");
+    }
+}

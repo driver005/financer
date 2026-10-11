@@ -1,0 +1,13 @@
+[package]
+name = "financer-fints"
+description = "Bank data sources: Sparkasse CSV-CAMT import now, FinTS sync later"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+financer-core = { path = "../core" }
+csv = "1"
+thiserror.workspace = true
+time.workspace = true

@@ -4,7 +4,7 @@
 pub mod entity;
 pub mod migration;
 
-use financer_core::{Category, Money, Transaction};
+use financer_core::{Budget, Category, Money, Transaction};
 use sea_orm::sea_query::OnConflict;
 use sea_orm::{
     ActiveValue::Set, ConnectOptions, Database, DatabaseConnection, DbErr, EntityTrait, QueryOrder,
@@ -14,7 +14,7 @@ use sea_orm_migration::MigratorTrait;
 
 pub use sea_orm::DatabaseBackend;
 
-use entity::transaction as tx_entity;
+use entity::{budget_envelope, transaction as tx_entity};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -22,6 +22,13 @@ pub enum StoreError {
     Db(#[from] DbErr),
     #[error("unknown category in database: {0:?}")]
     BadCategory(String),
+}
+
+/// A transaction as stored, with its database id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredTransaction {
+    pub id: i64,
+    pub transaction: Transaction,
 }
 
 #[derive(Clone)]
@@ -53,9 +60,16 @@ impl Store {
     pub async fn insert_new_transactions(&self, txs: &[Transaction]) -> Result<usize, StoreError> {
         let txn = self.db.begin().await?;
         let mut inserted = 0usize;
+        // Identical rows within one batch (two coffees, same shop, same day) are distinct
+        // purchases: number them so only a re-import of the same file is treated as duplicate.
+        let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for t in txs {
+            let base = t.fingerprint();
+            let n = seen.entry(base.clone()).or_insert(0);
+            let fingerprint = if *n == 0 { base } else { format!("{base}#{n}") };
+            *n += 1;
             let model = tx_entity::ActiveModel {
-                fingerprint: Set(t.fingerprint()),
+                fingerprint: Set(fingerprint),
                 booking_date: Set(t.booking_date),
                 amount_cents: Set(t.amount.cents()),
                 counterparty: Set(t.counterparty.clone()),
@@ -79,7 +93,7 @@ impl Store {
     }
 
     /// All transactions, newest first.
-    pub async fn list_transactions(&self) -> Result<Vec<Transaction>, StoreError> {
+    pub async fn list_transactions(&self) -> Result<Vec<StoredTransaction>, StoreError> {
         let rows = tx_entity::Entity::find()
             .order_by_desc(tx_entity::Column::BookingDate)
             .order_by_desc(tx_entity::Column::Id)
@@ -91,16 +105,46 @@ impl Store {
                     Some(name) => Some(parse_category(&name)?),
                     None => None,
                 };
-                Ok(Transaction {
-                    booking_date: r.booking_date,
-                    amount: Money::from_cents(r.amount_cents),
-                    counterparty: r.counterparty,
-                    purpose: r.purpose,
-                    counterparty_iban: r.counterparty_iban,
-                    category,
+                Ok(StoredTransaction {
+                    id: r.id,
+                    transaction: Transaction {
+                        booking_date: r.booking_date,
+                        amount: Money::from_cents(r.amount_cents),
+                        counterparty: r.counterparty,
+                        purpose: r.purpose,
+                        counterparty_iban: r.counterparty_iban,
+                        category,
+                    },
                 })
             })
             .collect()
+    }
+
+    /// Replace the whole budget with `budget`.
+    pub async fn save_budget(&self, budget: &Budget) -> Result<(), StoreError> {
+        let txn = self.db.begin().await?;
+        budget_envelope::Entity::delete_many().exec(&txn).await?;
+        for (category, limit) in &budget.envelopes {
+            budget_envelope::Entity::insert(budget_envelope::ActiveModel {
+                category: Set(category_name(*category)),
+                limit_cents: Set(limit.cents()),
+            })
+            .exec_without_returning(&txn)
+            .await?;
+        }
+        txn.commit().await?;
+        Ok(())
+    }
+
+    pub async fn load_budget(&self) -> Result<Budget, StoreError> {
+        let mut budget = Budget::default();
+        for row in budget_envelope::Entity::find().all(&self.db).await? {
+            budget.envelopes.insert(
+                parse_category(&row.category)?,
+                Money::from_cents(row.limit_cents),
+            );
+        }
+        Ok(budget)
     }
 }
 
@@ -154,9 +198,38 @@ mod tests {
 
         let listed = store.list_transactions().await.unwrap();
         assert_eq!(listed.len(), 2);
-        assert_eq!(listed[0].counterparty, "Arbeitgeber AG"); // newest first
-        assert_eq!(listed[0].category, Some(Category::Income));
-        assert_eq!(listed[1], txs[0]);
+        assert_eq!(listed[0].transaction.counterparty, "Arbeitgeber AG"); // newest first
+        assert_eq!(listed[0].transaction.category, Some(Category::Income));
+        assert_eq!(listed[1].transaction, txs[0]);
+
+        let mut budget = Budget::default();
+        budget
+            .envelopes
+            .insert(Category::Groceries, Money::from_cents(40_000));
+        store.save_budget(&budget).await.unwrap();
+        budget
+            .envelopes
+            .insert(Category::Dining, Money::from_cents(6_000));
+        store.save_budget(&budget).await.unwrap();
+        let loaded = store.load_budget().await.unwrap();
+        assert_eq!(loaded.envelopes, budget.envelopes);
+    }
+
+    #[tokio::test]
+    async fn identical_purchases_in_one_batch_are_kept_but_reimport_is_not_doubled() {
+        let store = Store::connect("sqlite::memory:").await.unwrap();
+        let coffee = Transaction {
+            booking_date: date!(2026 - 03 - 02),
+            amount: Money::from_cents(-350),
+            counterparty: "Café Müller".into(),
+            purpose: "Kartenzahlung".into(),
+            counterparty_iban: None,
+            category: None,
+        };
+        let batch = vec![coffee.clone(), coffee.clone()];
+        assert_eq!(store.insert_new_transactions(&batch).await.unwrap(), 2);
+        assert_eq!(store.insert_new_transactions(&batch).await.unwrap(), 0);
+        assert_eq!(store.list_transactions().await.unwrap().len(), 2);
     }
 
     #[tokio::test]
