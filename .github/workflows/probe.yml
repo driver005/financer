@@ -1,0 +1,30 @@
+name: Probe price sources
+
+# Fetches every source in .github/probe/sources.json once, from a GitHub runner, and prints which
+# pages were reachable and parsable (see docs/PRICES.md). Polite: robots.txt is obeyed and
+# requests are spaced. A runner is a datacenter address, so a block here does not mean a block
+# from your home connection. It touches no database.
+
+on:
+  push:
+    paths:
+      - ".github/probe/**"
+      - ".github/workflows/probe.yml"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p financer-server
+      - name: Probe
+        env:
+          FINANCER_PRICE_SOURCES: .github/probe/sources.json
+        run: |
+          set +e
+          ./target/release/financer-server --probe-prices 2>&1 | tee probe.out
+          echo "exit=${PIPESTATUS[0]}"
+          { echo '### Price source probe'; echo '```json'; grep -v '^20[0-9][0-9]-' probe.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
