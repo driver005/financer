@@ -14,8 +14,16 @@ use time::{Date, Month};
 
 use crate::bank::{BankClient, BankData, BankError, PendingSync, SyncParams, TanChallenge};
 
+/// A bank that is not in the built-in registry, or a test server.
+#[derive(Clone)]
+struct Endpoint {
+    bic: String,
+    url: String,
+}
+
 pub struct FintsBank {
     product_id: String,
+    endpoint: Option<Endpoint>,
 }
 
 impl FintsBank {
@@ -23,15 +31,115 @@ impl FintsBank {
     pub fn new(product_id: &str) -> Self {
         Self {
             product_id: product_id.trim().to_string(),
+            endpoint: None,
         }
+    }
+
+    /// Talk to this FinTS URL instead of looking the bank code up in the built-in registry
+    /// (for a bank the registry lacks, or a test server). `bic` is the bank's BIC.
+    pub fn with_endpoint(mut self, bic: &str, url: &str) -> Self {
+        self.endpoint = Some(Endpoint {
+            bic: bic.to_string(),
+            url: url.to_string(),
+        });
+        self
+    }
+}
+
+/// Windows-1252 maps bytes 0x80..=0x9F to these characters (the rest of 0x80..=0xFF is Latin-1).
+const CP1252_HIGH: [(char, u8); 27] = [
+    ('€', 0x80),
+    ('‚', 0x82),
+    ('ƒ', 0x83),
+    ('„', 0x84),
+    ('…', 0x85),
+    ('†', 0x86),
+    ('‡', 0x87),
+    ('ˆ', 0x88),
+    ('‰', 0x89),
+    ('Š', 0x8A),
+    ('‹', 0x8B),
+    ('Œ', 0x8C),
+    ('Ž', 0x8E),
+    ('‘', 0x91),
+    ('’', 0x92),
+    ('“', 0x93),
+    ('”', 0x94),
+    ('•', 0x95),
+    ('–', 0x96),
+    ('—', 0x97),
+    ('˜', 0x98),
+    ('™', 0x99),
+    ('š', 0x9A),
+    ('›', 0x9B),
+    ('œ', 0x9C),
+    ('ž', 0x9E),
+    ('Ÿ', 0x9F),
+];
+
+fn cp1252_byte(c: char) -> Option<u8> {
+    match u32::from(c) {
+        0x80..=0x9F => None, // C1 controls are not produced by cp1252 decoding
+        n if n < 0x100 => Some(n as u8),
+        _ => CP1252_HIGH.iter().find(|(ch, _)| *ch == c).map(|(_, b)| *b),
+    }
+}
+
+/// Some banks (and the mock server) send UTF-8 that `fints-rs` decodes as Windows-1252, giving
+/// "ungÃ¼ltig" for "ungültig". Undo that when, and only when, the result is valid UTF-8.
+pub(crate) fn repair_text(s: &str) -> String {
+    if !s.contains('Ã') && !s.contains('Â') {
+        return s.to_string();
+    }
+    let bytes: Option<Vec<u8>> = s.chars().map(cp1252_byte).collect();
+    bytes
+        .and_then(|b| String::from_utf8(b).ok())
+        .unwrap_or_else(|| s.to_string())
+}
+
+/// Codes banks use for a wrong login or PIN. `fints-rs` only knows 9340; real banks commonly
+/// answer 9931 ("Anmeldename oder PIN ist falsch"), and 9910 is what the mock server sends.
+const WRONG_PIN_CODES: [&str; 4] = ["9340", "9910", "9930", "9931"];
+/// Codes for a locked PIN or access.
+const LOCKED_CODES: [&str; 2] = ["9942", "9943"];
+
+fn classify_bank_error(code: Option<&str>, message: &str) -> BankError {
+    let text = repair_text(message);
+    let lower = text.to_lowercase();
+    let wrong_pin = code.is_some_and(|c| WRONG_PIN_CODES.contains(&c))
+        || (lower.contains("pin")
+            && ["ungültig", "falsch", "fehlerhaft", "invalid", "wrong"]
+                .iter()
+                .any(|w| lower.contains(w)));
+    let locked = code.is_some_and(|c| LOCKED_CODES.contains(&c))
+        || lower.contains("gesperrt")
+        || lower.contains("locked");
+    if locked {
+        BankError::Locked
+    } else if wrong_pin {
+        BankError::WrongPin
+    } else {
+        BankError::Rejected(text)
     }
 }
 
 fn map_error(e: FinTSError) -> BankError {
     match e {
-        FinTSError::Auth(m) | FinTSError::TanRejected(m) => BankError::Rejected(m),
+        FinTSError::PinWrong => BankError::WrongPin,
+        FinTSError::AccountLocked => BankError::Locked,
+        FinTSError::TanTimeout => {
+            BankError::Rejected("the approval in the banking app did not arrive in time".into())
+        }
+        FinTSError::Auth(m) | FinTSError::TanRejected(m) => classify_bank_error(None, &m),
+        FinTSError::BankError { kind, message } => {
+            let code = match &kind {
+                fints::ResponseCodeKind::OtherError(c) => Some(c.as_str()),
+                _ => None,
+            };
+            classify_bank_error(code, &message)
+        }
         FinTSError::Dialog(m) if m.contains("TAN still pending") => BankError::TanPending,
-        FinTSError::Dialog(m) => BankError::Rejected(m),
+        FinTSError::Dialog(m) => classify_bank_error(None, &m),
         other => BankError::Connection(other.to_string()),
     }
 }
@@ -128,16 +236,32 @@ impl BankClient for FintsBank {
         if self.product_id.is_empty() {
             return Err(BankError::NotConfigured);
         }
-        let (flow, challenge) = Flow::initiate(
-            params.blz.trim(),
-            &UserId::new(params.user_id.trim()),
-            &Pin::new(params.pin.clone()),
-            &ProductId::new(self.product_id.clone()),
-            None,
-            None,
-            None,
-        )
-        .await
+        let user = UserId::new(params.user_id.trim());
+        let pin = Pin::new(params.pin.clone());
+        let product = ProductId::new(self.product_id.clone());
+        let (flow, challenge) = match &self.endpoint {
+            Some(e) => {
+                let config = fints::BankConfig::new(
+                    "custom",
+                    params.blz.trim(),
+                    e.bic.as_str(),
+                    e.url.as_str(),
+                );
+                Flow::initiate_with_bank(
+                    fints::bank_ops_with_config(config),
+                    &user,
+                    &pin,
+                    &product,
+                    None,
+                    None,
+                    None,
+                )
+                .await
+            }
+            None => {
+                Flow::initiate(params.blz.trim(), &user, &pin, &product, None, None, None).await
+            }
+        }
         .map_err(map_error)?;
 
         // fints-rs polls decoupled TANs (pushTAN); a method that needs a typed TAN cannot be completed.
@@ -231,7 +355,60 @@ mod tests {
     }
 
     #[test]
+    fn repairs_latin1_decoded_utf8_only_when_it_round_trips() {
+        assert_eq!(repair_text("Pin ungÃ¼ltig"), "Pin ungültig");
+        assert_eq!(repair_text("StraÃŸe"), "Straße");
+        assert_eq!(repair_text("Pin ungültig"), "Pin ungültig"); // already fine
+        assert_eq!(repair_text("Ärger"), "Ärger"); // a real capital Ä is not damage
+        assert_eq!(repair_text("Ã"), "Ã"); // not valid UTF-8 after the round trip: leave alone
+        assert_eq!(repair_text("plain"), "plain");
+    }
+
+    #[test]
+    fn recognises_wrong_pin_and_locked_by_code_or_text() {
+        let kind = |c: &str| fints::ResponseCodeKind::OtherError(c.to_string());
+        let err = |c: &str, m: &str| {
+            map_error(FinTSError::BankError {
+                kind: kind(c),
+                message: m.into(),
+            })
+        };
+        assert!(matches!(
+            err("9931", "Anmeldename oder PIN ist falsch"),
+            BankError::WrongPin
+        ));
+        assert!(matches!(err("9910", "Pin ungÃ¼ltig"), BankError::WrongPin));
+        assert!(matches!(
+            err("9999", "Die PIN ist ungültig"),
+            BankError::WrongPin
+        )); // by text alone
+        assert!(matches!(err("9942", "PIN gesperrt"), BankError::Locked));
+        assert!(matches!(err("9999", "Zugang gesperrt"), BankError::Locked));
+        match err("9050", "Teilweise fehlerhaft") {
+            BankError::Rejected(m) => assert_eq!(m, "Teilweise fehlerhaft"),
+            other => panic!("{other:?}"),
+        }
+        // a locked message that also mentions the PIN is a lock, not a wrong PIN
+        assert!(matches!(
+            err("9999", "PIN ungültig, Zugang gesperrt"),
+            BankError::Locked
+        ));
+    }
+
+    #[test]
     fn maps_errors() {
+        assert!(matches!(
+            map_error(FinTSError::PinWrong),
+            BankError::WrongPin
+        ));
+        assert!(matches!(
+            map_error(FinTSError::AccountLocked),
+            BankError::Locked
+        ));
+        assert!(matches!(
+            map_error(FinTSError::TanTimeout),
+            BankError::Rejected(_)
+        ));
         assert!(matches!(
             map_error(FinTSError::Auth("bad pin".into())),
             BankError::Rejected(_)

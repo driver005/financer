@@ -17,6 +17,8 @@ pub enum ApiError {
     NotFound,
     /// The request is fine but cannot be completed yet (e.g. TAN not approved).
     Conflict(String),
+    /// Too many attempts; try again later.
+    TooManyRequests(String),
     /// A feature that is not set up (no price sources, no LLM key).
     Unavailable(String),
     /// An upstream service failed.
@@ -37,6 +39,7 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
             ApiError::NotFound => (StatusCode::NOT_FOUND, "not found".to_string()),
             ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
+            ApiError::TooManyRequests(m) => (StatusCode::TOO_MANY_REQUESTS, m),
             ApiError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m),
             ApiError::BadGateway(m) => (StatusCode::BAD_GATEWAY, m),
             ApiError::Internal => (

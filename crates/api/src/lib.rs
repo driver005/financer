@@ -58,6 +58,8 @@ pub struct AppState {
     pub(crate) bank_configured: bool,
     pub(crate) pending_sync: Arc<tokio::sync::Mutex<Option<bank::PendingEntry>>>,
     pub(crate) sync_ttl: std::time::Duration,
+    pub(crate) pin_guard: Arc<tokio::sync::Mutex<bank::PinGuard>>,
+    pub(crate) pin_pause: std::time::Duration,
     pub(crate) http: Arc<dyn Http>,
     pub(crate) price_sources: Arc<Vec<SourceConfig>>,
     pub(crate) llm_keys: LlmKeys,
@@ -72,6 +74,8 @@ impl AppState {
             bank_configured: false,
             pending_sync: Arc::new(tokio::sync::Mutex::new(None)),
             sync_ttl: bank::DEFAULT_SYNC_TTL,
+            pin_guard: Arc::new(tokio::sync::Mutex::new(bank::PinGuard::default())),
+            pin_pause: bank::DEFAULT_PIN_PAUSE,
             http: Arc::new(NoNetwork),
             price_sources: Arc::new(Vec::new()),
             llm_keys: LlmKeys::default(),
@@ -83,6 +87,12 @@ impl AppState {
     pub fn with_bank(mut self, bank: Arc<dyn BankClient>) -> Self {
         self.bank = bank;
         self.bank_configured = true;
+        self
+    }
+
+    /// How long syncing pauses after repeated wrong PINs (tests shorten it).
+    pub fn with_pin_pause(mut self, pause: std::time::Duration) -> Self {
+        self.pin_pause = pause;
         self
     }
 

@@ -65,6 +65,10 @@ pub enum BankError {
     UnsupportedTan,
     #[error("still waiting for you to approve in the banking app")]
     TanPending,
+    #[error("the bank refused the PIN or login. Repeated wrong PINs can lock your online banking: check your credentials (for example by logging in on the Sparkasse website) before trying again")]
+    WrongPin,
+    #[error("your online banking access is locked; unlock it with your bank first")]
+    Locked,
     #[error("the bank rejected the request: {0}")]
     Rejected(String),
     #[error("bank connection failed: {0}")]
@@ -90,6 +94,7 @@ pub trait BankClient: Send + Sync {
 pub struct MockBank {
     challenge: TanChallenge,
     script: Mutex<VecDeque<Result<BankData, BankError>>>,
+    start_error: Mutex<Option<fn() -> BankError>>,
     pub started: Mutex<Vec<String>>,
 }
 
@@ -103,8 +108,16 @@ impl MockBank {
                 no_tan_required: false,
             },
             script: Mutex::new(script.into()),
+            start_error: Mutex::new(None),
             started: Mutex::new(Vec::new()),
         }
+    }
+
+    /// A bank that refuses every login with the error `make` builds (e.g. a wrong PIN).
+    pub fn failing_start(make: fn() -> BankError) -> Self {
+        let bank = Self::new("", vec![]);
+        *bank.start_error.lock().expect("mock lock") = Some(make);
+        bank
     }
 }
 
@@ -131,6 +144,9 @@ impl BankClient for MockBank {
             .lock()
             .expect("mock lock")
             .push(params.blz.clone());
+        if let Some(make) = *self.start_error.lock().expect("mock lock") {
+            return Err(make());
+        }
         let script = std::mem::take(&mut *self.script.lock().expect("mock lock"));
         Ok((
             Box::new(MockPending(Mutex::new(script))),

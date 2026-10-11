@@ -377,3 +377,88 @@ async fn syncing_twice_does_not_duplicate_transactions() {
     let (_, list) = send(&app, Method::GET, "/v1/transactions", None).await;
     assert_eq!(json_of(&list).as_array().unwrap().len(), 2);
 }
+
+#[tokio::test]
+async fn two_wrong_pins_pause_syncing_to_protect_the_account() {
+    let store = Store::connect("sqlite::memory:").await.unwrap();
+    let bank = Arc::new(MockBank::failing_start(|| BankError::WrongPin));
+    let app = router(
+        AppState::new(store)
+            .with_bank(bank.clone())
+            .with_sync_ttl(Duration::from_secs(60)),
+        TokenHash::new(TOKEN),
+    );
+
+    for attempt in 1..=2 {
+        let (status, body) = send(&app, Method::POST, "/v1/bank/sync", Some(request())).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "attempt {attempt}");
+        assert!(
+            body.contains("lock"),
+            "the message warns about lockout: {body}"
+        );
+    }
+    // third try: refused locally, the bank is not contacted again
+    let (status, body) = send(&app, Method::POST, "/v1/bank/sync", Some(request())).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(body.contains("paused"));
+    assert_eq!(bank.started.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn the_pause_ends_and_a_good_login_resets_the_count() {
+    let store = Store::connect("sqlite::memory:").await.unwrap();
+    let failing = Arc::new(MockBank::failing_start(|| BankError::WrongPin));
+    let state = AppState::new(store).with_pin_pause(Duration::from_millis(60));
+    let app = router(state.clone().with_bank(failing), TokenHash::new(TOKEN));
+    for _ in 0..2 {
+        send(&app, Method::POST, "/v1/bank/sync", Some(request())).await;
+    }
+    assert_eq!(
+        send(&app, Method::POST, "/v1/bank/sync", Some(request()))
+            .await
+            .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+
+    tokio::time::sleep(Duration::from_millis(120)).await;
+    // after the pause one more try reaches the bank (and fails again: strike one of a new round)
+    assert_eq!(
+        send(&app, Method::POST, "/v1/bank/sync", Some(request()))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+
+    // a successful login in between resets the count
+    let good = router(
+        state.with_bank(Arc::new(MockBank::new("x", vec![Ok(data())]))),
+        TokenHash::new(TOKEN),
+    );
+    assert_eq!(
+        send(&good, Method::POST, "/v1/bank/sync", Some(request()))
+            .await
+            .0,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn a_locked_account_pauses_immediately() {
+    let store = Store::connect("sqlite::memory:").await.unwrap();
+    let app = router(
+        AppState::new(store).with_bank(Arc::new(MockBank::failing_start(|| BankError::Locked))),
+        TokenHash::new(TOKEN),
+    );
+    assert_eq!(
+        send(&app, Method::POST, "/v1/bank/sync", Some(request()))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        send(&app, Method::POST, "/v1/bank/sync", Some(request()))
+            .await
+            .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}

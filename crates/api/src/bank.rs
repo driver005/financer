@@ -30,9 +30,10 @@ pub struct PendingEntry {
 fn bank_error(e: BankError) -> ApiError {
     match e {
         BankError::NotConfigured => ApiError::Unavailable(e.to_string()),
-        BankError::UnsupportedTan | BankError::Rejected(_) => {
-            ApiError::BadRequest(e.to_string().chars().take(300).collect())
-        }
+        BankError::WrongPin
+        | BankError::Locked
+        | BankError::UnsupportedTan
+        | BankError::Rejected(_) => ApiError::BadRequest(e.to_string().chars().take(300).collect()),
         BankError::TanPending => ApiError::Conflict(e.to_string()),
         BankError::Connection(_) => ApiError::BadGateway(e.to_string().chars().take(300).collect()),
     }
@@ -66,7 +67,27 @@ pub async fn start_sync(
         bic: req.bic.unwrap_or_default().trim().to_string(),
         days: req.days.unwrap_or(DEFAULT_DAYS).clamp(1, MAX_DAYS),
     };
-    let (pending, challenge) = state.bank.start(&params).await.map_err(bank_error)?;
+    if let Some(minutes) = state.pin_guard.lock().await.blocked_minutes() {
+        return Err(ApiError::TooManyRequests(format!(
+            "syncing is paused for about {minutes} more minute(s) after failed logins, to keep your online banking from being locked. Check your PIN and login first"
+        )));
+    }
+    let (pending, challenge) = match state.bank.start(&params).await {
+        Ok(started) => {
+            state.pin_guard.lock().await.failures = 0;
+            started
+        }
+        Err(e) => {
+            if matches!(e, BankError::WrongPin | BankError::Locked) {
+                let mut guard = state.pin_guard.lock().await;
+                guard.failures += 1;
+                if guard.failures >= PIN_STRIKES || matches!(e, BankError::Locked) {
+                    guard.blocked_until = Some(Instant::now() + state.pin_pause);
+                }
+            }
+            return Err(bank_error(e));
+        }
+    };
 
     let id = uuid::Uuid::new_v4().to_string();
     *state.pending_sync.lock().await = Some(PendingEntry {
@@ -189,5 +210,33 @@ pub async fn bank_status(State(state): State<AppState>) -> Result<Json<BankStatu
     }))
 }
 
+/// Two wrong PINs in a row pause new syncs: banks typically lock online banking after about
+/// three, and a locked account is far worse than a short wait.
+const PIN_STRIKES: u32 = 2;
+
+#[derive(Default)]
+pub struct PinGuard {
+    failures: u32,
+    blocked_until: Option<Instant>,
+}
+
+impl PinGuard {
+    /// Minutes left in a pause, if one is active.
+    fn blocked_minutes(&mut self) -> Option<u64> {
+        let until = self.blocked_until?;
+        match until.checked_duration_since(Instant::now()) {
+            Some(left) => Some(left.as_secs() / 60 + 1),
+            None => {
+                self.blocked_until = None;
+                self.failures = 0;
+                None
+            }
+        }
+    }
+}
+
 /// How long a started sync may wait for approval before it must be restarted.
 pub const DEFAULT_SYNC_TTL: Duration = Duration::from_secs(10 * 60);
+
+/// How long syncing pauses after repeated wrong PINs.
+pub const DEFAULT_PIN_PAUSE: Duration = Duration::from_secs(15 * 60);
