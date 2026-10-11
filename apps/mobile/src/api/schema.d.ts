@@ -144,6 +144,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/budget/period": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The budget period you are in (or the previous one), from your payday setting. */
+        get: operations["budget_period"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/budget/safe-to-spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What you can spend per day for the rest of the period, with the breakdown: expected income,
+         *     recurring costs still to come, planned envelope money not yet spent, and spending so far.
+         */
+        get: operations["safe_to_spend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/budget/status": {
         parameters: {
             query?: never;
@@ -151,7 +188,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Spent and remaining per envelope for one month. */
+        /**
+         * Spent and remaining per envelope for one budget period (a calendar month unless a payday is
+         *     set in the settings).
+         */
         get: operations["budget_status"];
         put?: never;
         post?: never;
@@ -620,6 +660,41 @@ export interface components {
             transactions_added: number;
             transactions_known: number;
         };
+        /**
+         * @description Which period to look at when no year and month are given.
+         * @enum {string}
+         */
+        PeriodChoice: "current" | "previous";
+        /** @description A budget period: from payday to the day before the next payday. */
+        PeriodDto: {
+            /**
+             * Format: int32
+             * @description Length of the period in days.
+             */
+            days: number;
+            /**
+             * Format: int32
+             * @description Days left including the reference day (0 for a finished period).
+             */
+            days_left: number;
+            /**
+             * Format: date
+             * @description Last day, inclusive.
+             * @example 2026-10-24
+             */
+            end: string;
+            /**
+             * Format: int32
+             * @description Day of month the period starts on (1 = calendar month).
+             */
+            payday: number;
+            /**
+             * Format: date
+             * @description First day, inclusive.
+             * @example 2026-09-25
+             */
+            start: string;
+        };
         PickDto: {
             chain: string;
             is_offer: boolean;
@@ -755,6 +830,72 @@ export interface components {
             stored: number;
             unmatched: number;
         };
+        /** @description The daily number and everything behind it. Amounts are integer cents. */
+        SafeToSpendDto: {
+            /**
+             * Format: int64
+             * @description `income - spent_so_far - fixed_costs_due - envelope_headroom`; negative when overspent.
+             */
+            available_cents: number;
+            /**
+             * Format: int64
+             * @description What you can spend per day for the rest of the period; never negative.
+             */
+            daily_cents: number;
+            /**
+             * Format: int32
+             * @description Days left in the period, counting today.
+             */
+            days_left: number;
+            /** Format: int32 */
+            days_total: number;
+            /**
+             * Format: int64
+             * @description Spending so far without the fixed costs already paid.
+             */
+            discretionary_spent_cents: number;
+            /**
+             * Format: int64
+             * @description Planned envelope money that is not spent yet (never negative).
+             */
+            envelope_headroom_cents: number;
+            /**
+             * Format: int64
+             * @description Recurring payments still to come this period.
+             */
+            fixed_costs_due_cents: number;
+            /**
+             * Format: int64
+             * @description Recurring income booked so far plus what is still expected this period.
+             */
+            income_cents: number;
+            /** @description Whether any recurring income was found in the bookings. */
+            income_detected: boolean;
+            /** Format: int64 */
+            income_received_cents: number;
+            /** Format: int64 */
+            income_upcoming_cents: number;
+            /**
+             * @description `on_track`, `over_pace` or `unknown` (no income detected).
+             * @example on_track
+             */
+            pace: string;
+            /**
+             * Format: int64
+             * @description The straight-line share of discretionary spending that may be used up by today.
+             */
+            pace_target_cents: number;
+            /** Format: int32 */
+            payday: number;
+            /** Format: date */
+            period_end: string;
+            /** Format: date */
+            period_start: string;
+            /** Format: int64 */
+            spent_so_far_cents: number;
+            /** Format: date */
+            today: string;
+        };
         ScanDto: {
             receipt: components["schemas"]["ReceiptDto"];
             /** @description What the model read off the photo, so mistakes can be spotted. */
@@ -769,6 +910,11 @@ export interface components {
             /** @description `claude` or `open_ai`. */
             llm_provider: string;
             openai_key_configured: boolean;
+            /**
+             * Format: int32
+             * @description Day of the month the budget period starts on (1 to 28; 1 = calendar month).
+             */
+            payday: number;
             /** @description Number of configured price sources. */
             price_sources: number;
         };
@@ -776,6 +922,11 @@ export interface components {
             habit_mode?: string | null;
             llm_model?: string | null;
             llm_provider?: string | null;
+            /**
+             * Format: int64
+             * @description Day of the month the budget period starts on, 1 to 28.
+             */
+            payday?: number | null;
         };
         SkippedRowDto: {
             /** Format: int64 */
@@ -1160,14 +1311,84 @@ export interface operations {
             };
         };
     };
+    budget_period: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `current` (default) or `previous`. */
+                period: null | components["schemas"]["PeriodChoice"];
+                /**
+                 * @description The day to treat as today, ISO format (`2026-10-11`). Defaults to today (UTC); the app
+                 *     sends its local date so that a late evening is not already "tomorrow".
+                 * @example 2026-10-11
+                 */
+                date: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeriodDto"];
+                };
+            };
+        };
+    };
+    safe_to_spend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The day to treat as today, ISO format. Defaults to today (UTC).
+                 * @example 2026-10-11
+                 */
+                date: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafeToSpendDto"];
+                };
+            };
+            /** @description Invalid date */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     budget_status: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                year: number;
-                /** @description 1 to 12 */
-                month: number;
+                /**
+                 * @description With `month`: the budget period that starts in this month (the calendar month when the
+                 *     payday is 1).
+                 */
+                year: number | null;
+                /** @description 1 to 12; only together with `year`. */
+                month: number | null;
+                /** @description Instead of `year` and `month`: `current` (default) or `previous` budget period. */
+                period: null | components["schemas"]["PeriodChoice"];
+                /** @description The day to treat as today for `period` (ISO format); defaults to today (UTC). */
+                date: string | null;
             };
             cookie?: never;
         };

@@ -2,6 +2,7 @@
 
 mod auth;
 mod bank;
+mod budget_period;
 mod dto;
 mod export;
 mod grocery;
@@ -137,6 +138,8 @@ impl AppState {
         routes::get_envelopes,
         routes::put_envelopes,
         routes::budget_status,
+        budget_period::budget_period,
+        budget_period::safe_to_spend,
         export::export_data,
         export::import_data,
         bank::start_sync,
@@ -166,6 +169,9 @@ impl AppState {
         dto::EnvelopeDto,
         dto::EnvelopeStatusDto,
         dto::DisposableDto,
+        budget_period::PeriodChoice,
+        budget_period::PeriodDto,
+        budget_period::SafeToSpendDto,
         dto::ErrorBody,
         dto::ExportTransaction,
         dto::ExportReceipt,
@@ -235,6 +241,8 @@ impl Api {
                 get(routes::get_envelopes).put(routes::put_envelopes),
             )
             .route("/budget/status", get(routes::budget_status))
+            .route("/budget/period", get(budget_period::budget_period))
+            .route("/budget/safe-to-spend", get(budget_period::safe_to_spend))
             .route("/export", get(export::export_data))
             .route("/import", post(export::import_data))
             .route("/bank/sync", post(bank::start_sync))

@@ -56,7 +56,7 @@ export function Afford() {
         What can I buy?
       </Text>
       <Text variant="bodyMedium" style={{ color: c.muted, marginTop: 4 }}>
-        Leave the amount empty to use what is left of this month's groceries limit.
+        Leave the amount empty to use what is left of this budget period's groceries limit.
       </Text>
       <TextInput
         mode="outlined"

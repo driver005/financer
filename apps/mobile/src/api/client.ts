@@ -9,6 +9,8 @@ export type Recurring = components["schemas"]["RecurringDto"];
 export type Envelope = components["schemas"]["EnvelopeDto"];
 export type EnvelopeStatus = components["schemas"]["EnvelopeStatusDto"];
 export type Disposable = components["schemas"]["DisposableDto"];
+export type BudgetPeriod = components["schemas"]["PeriodDto"];
+export type SafeToSpend = components["schemas"]["SafeToSpendDto"];
 export type Price = components["schemas"]["PriceDto"];
 export type RefreshReport = components["schemas"]["RefreshReportDto"];
 export type Pick = components["schemas"]["PickDto"];
@@ -108,6 +110,24 @@ export class Api {
 
   budgetStatus(year: number, month: number) {
     return this.request<EnvelopeStatus[]>(`/v1/budget/status?year=${year}&month=${month}`);
+  }
+
+  /** The budget status of the current or the previous budget period (see `budgetPeriod`). */
+  budgetStatusFor(period: "current" | "previous", date?: string) {
+    const q = new URLSearchParams({ period });
+    if (date) q.set("date", date);
+    return this.request<EnvelopeStatus[]>(`/v1/budget/status?${q}`);
+  }
+
+  /** The budget period (payday to payday). `date` is the local day, so a late evening is not tomorrow. */
+  budgetPeriod(period: "current" | "previous" = "current", date?: string) {
+    const q = new URLSearchParams({ period });
+    if (date) q.set("date", date);
+    return this.request<BudgetPeriod>(`/v1/budget/period?${q}`);
+  }
+
+  safeToSpend(date?: string) {
+    return this.request<SafeToSpend>(`/v1/budget/safe-to-spend${date ? `?date=${date}` : ""}`);
   }
 
   prices(item?: string) {

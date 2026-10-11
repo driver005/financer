@@ -439,32 +439,178 @@
         ]
       }
     },
+    "/v1/budget/period": {
+      "get": {
+        "tags": [
+          "budget_period"
+        ],
+        "summary": "The budget period you are in (or the previous one), from your payday setting.",
+        "operationId": "budget_period",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "description": "`current` (default) or `previous`.",
+            "required": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/PeriodChoice"
+                }
+              ]
+            }
+          },
+          {
+            "name": "date",
+            "in": "path",
+            "description": "The day to treat as today, ISO format (`2026-10-11`). Defaults to today (UTC); the app\nsends its local date so that a late evening is not already \"tomorrow\".",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "example": "2026-10-11"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeriodDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/budget/safe-to-spend": {
+      "get": {
+        "tags": [
+          "budget_period"
+        ],
+        "summary": "What you can spend per day for the rest of the period, with the breakdown: expected income,\nrecurring costs still to come, planned envelope money not yet spent, and spending so far.",
+        "operationId": "safe_to_spend",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "description": "The day to treat as today, ISO format. Defaults to today (UTC).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "example": "2026-10-11"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SafeToSpendDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid date",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/budget/status": {
       "get": {
         "tags": [
           "routes"
         ],
-        "summary": "Spent and remaining per envelope for one month.",
+        "summary": "Spent and remaining per envelope for one budget period (a calendar month unless a payday is\nset in the settings).",
         "operationId": "budget_status",
         "parameters": [
           {
             "name": "year",
             "in": "path",
+            "description": "With `month`: the budget period that starts in this month (the calendar month when the\npayday is 1).",
             "required": true,
             "schema": {
-              "type": "integer",
+              "type": [
+                "integer",
+                "null"
+              ],
               "format": "int32"
             }
           },
           {
             "name": "month",
             "in": "path",
-            "description": "1 to 12",
+            "description": "1 to 12; only together with `year`.",
             "required": true,
             "schema": {
-              "type": "integer",
+              "type": [
+                "integer",
+                "null"
+              ],
               "format": "int32",
               "minimum": 0
+            }
+          },
+          {
+            "name": "period",
+            "in": "path",
+            "description": "Instead of `year` and `month`: `current` (default) or `previous` budget period.",
+            "required": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/PeriodChoice"
+                }
+              ]
+            }
+          },
+          {
+            "name": "date",
+            "in": "path",
+            "description": "The day to treat as today for `period` (ISO format); defaults to today (UTC).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
             }
           }
         ],
@@ -1765,6 +1911,57 @@
           }
         }
       },
+      "PeriodChoice": {
+        "type": "string",
+        "description": "Which period to look at when no year and month are given.",
+        "enum": [
+          "current",
+          "previous"
+        ]
+      },
+      "PeriodDto": {
+        "type": "object",
+        "description": "A budget period: from payday to the day before the next payday.",
+        "required": [
+          "payday",
+          "start",
+          "end",
+          "days",
+          "days_left"
+        ],
+        "properties": {
+          "days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Length of the period in days.",
+            "minimum": 0
+          },
+          "days_left": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days left including the reference day (0 for a finished period).",
+            "minimum": 0
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "description": "Last day, inclusive.",
+            "example": "2026-10-24"
+          },
+          "payday": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Day of month the period starts on (1 = calendar month).",
+            "minimum": 0
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "description": "First day, inclusive.",
+            "example": "2026-09-25"
+          }
+        }
+      },
       "PickDto": {
         "type": "object",
         "required": [
@@ -2202,6 +2399,116 @@
           }
         }
       },
+      "SafeToSpendDto": {
+        "type": "object",
+        "description": "The daily number and everything behind it. Amounts are integer cents.",
+        "required": [
+          "payday",
+          "period_start",
+          "period_end",
+          "today",
+          "days_left",
+          "days_total",
+          "daily_cents",
+          "available_cents",
+          "income_detected",
+          "income_cents",
+          "income_received_cents",
+          "income_upcoming_cents",
+          "spent_so_far_cents",
+          "fixed_costs_due_cents",
+          "envelope_headroom_cents",
+          "pace",
+          "pace_target_cents",
+          "discretionary_spent_cents"
+        ],
+        "properties": {
+          "available_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`income - spent_so_far - fixed_costs_due - envelope_headroom`; negative when overspent."
+          },
+          "daily_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What you can spend per day for the rest of the period; never negative."
+          },
+          "days_left": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days left in the period, counting today.",
+            "minimum": 0
+          },
+          "days_total": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "discretionary_spent_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Spending so far without the fixed costs already paid."
+          },
+          "envelope_headroom_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Planned envelope money that is not spent yet (never negative)."
+          },
+          "fixed_costs_due_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Recurring payments still to come this period."
+          },
+          "income_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Recurring income booked so far plus what is still expected this period."
+          },
+          "income_detected": {
+            "type": "boolean",
+            "description": "Whether any recurring income was found in the bookings."
+          },
+          "income_received_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "income_upcoming_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pace": {
+            "type": "string",
+            "description": "`on_track`, `over_pace` or `unknown` (no income detected).",
+            "example": "on_track"
+          },
+          "pace_target_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The straight-line share of discretionary spending that may be used up by today."
+          },
+          "payday": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "spent_so_far_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "today": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
       "ScanDto": {
         "type": "object",
         "required": [
@@ -2226,7 +2533,8 @@
           "llm_model",
           "claude_key_configured",
           "openai_key_configured",
-          "price_sources"
+          "price_sources",
+          "payday"
         ],
         "properties": {
           "claude_key_configured": {
@@ -2246,6 +2554,12 @@
           },
           "openai_key_configured": {
             "type": "boolean"
+          },
+          "payday": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Day of the month the budget period starts on (1 to 28; 1 = calendar month).",
+            "minimum": 0
           },
           "price_sources": {
             "type": "integer",
@@ -2274,6 +2588,14 @@
               "string",
               "null"
             ]
+          },
+          "payday": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Day of the month the budget period starts on, 1 to 28."
           }
         }
       },

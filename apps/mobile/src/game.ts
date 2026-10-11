@@ -4,6 +4,10 @@
  * separately, so it can never drift from the numbers on the other screens.
  */
 
+import { budgetPeriod, daysInMonth, periodDays } from "./period";
+
+export { daysInMonth };
+
 export type Tx = { booking_date: string; amount_cents: number; category?: string | null };
 
 const DAY_MS = 86_400_000;
@@ -17,13 +21,19 @@ function toIso(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-export function daysInMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-
 /** What you may spend per day in a month with this limit (rounded down to whole cents). */
 export function dailyAllowance(limitCents: number, year: number, month: number): number {
   return Math.floor(limitCents / daysInMonth(year, month));
+}
+
+/** The same for a budget period of `days` days (a payday period is not a calendar month). */
+export function dailyAllowanceForDays(limitCents: number, days: number): number {
+  return Math.floor(limitCents / Math.max(1, days));
+}
+
+/** What you may spend per day on `date`, in the budget period (from `payday`) that contains it. */
+export function dailyAllowanceOn(limitCents: number, date: string, payday = 1): number {
+  return dailyAllowanceForDays(limitCents, periodDays(budgetPeriod(date, payday)));
 }
 
 /** Cents spent (a positive number) in one category on one day; refunds reduce it. */
@@ -37,17 +47,17 @@ export function spentOn(txs: Tx[], date: string, category: string): number {
 
 /**
  * Days in a row, ending today, on which you stayed within the daily allowance for a
- * category. A day over the allowance ends the streak. Days before your first transaction
- * are not counted (there is nothing to judge them by).
+ * category. The allowance of a day is the limit over the days of its budget period (a calendar
+ * month unless a payday is set). A day over the allowance ends the streak. Days before your
+ * first transaction are not counted (there is nothing to judge them by).
  */
-export function streak(txs: Tx[], limitCents: number, today: string, category = "groceries"): number {
+export function streak(txs: Tx[], limitCents: number, today: string, category = "groceries", payday = 1): number {
   if (limitCents <= 0 || txs.length === 0) return 0;
   const first = Math.min(...txs.map((t) => toUtc(t.booking_date)));
   let count = 0;
   for (let ms = toUtc(today), i = 0; ms >= first && i < 366; ms -= DAY_MS, i++) {
     const day = toIso(ms);
-    const [y, m] = day.split("-").map(Number);
-    if (spentOn(txs, day, category) > dailyAllowance(limitCents, y, m)) break;
+    if (spentOn(txs, day, category) > dailyAllowanceOn(limitCents, day, payday)) break;
     count++;
   }
   return count;

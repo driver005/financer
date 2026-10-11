@@ -3,7 +3,9 @@ pub mod budget;
 pub mod catalog;
 pub mod category;
 pub mod money;
+pub mod period;
 pub mod recurring;
+pub mod safe_to_spend;
 pub mod transaction;
 
 pub use basket::{
@@ -14,5 +16,7 @@ pub use budget::{Budget, Disposable, EnvelopeStatus, YearMonth};
 pub use catalog::{Catalog, GenericItem, Unit, CATALOG};
 pub use category::{Categorizer, Category};
 pub use money::Money;
+pub use period::BudgetPeriod;
 pub use recurring::{Cadence, RecurringDetector, RecurringPayment};
+pub use safe_to_spend::{Pace, SafeToSpend, SafeToSpendInput};
 pub use transaction::{NameNormalizer, Transaction};
