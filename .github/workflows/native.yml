@@ -43,6 +43,10 @@ jobs:
 
   ios:
     runs-on: macos-latest
+    env:
+      # Rust links for iOS 10 by default, while the C code in the TLS libraries is built for the
+      # SDK's iOS: the symbol ___chkstk_darwin is then missing at link time. Pin one version.
+      IPHONEOS_DEPLOYMENT_TARGET: "15.0"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
