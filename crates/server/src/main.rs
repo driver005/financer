@@ -148,7 +148,27 @@ async fn probe() -> Result<(), String> {
         );
     }
     let http = polite_http()?;
-    let sources = build_sources(&configs, time::OffsetDateTime::now_utc().date());
+    // pages read by a model use the first provider that has a key in the environment
+    let llm: Option<Arc<dyn financer_llm::LlmProvider>> = [
+        (
+            financer_llm::Provider::Claude,
+            env_key("FINANCER_ANTHROPIC_API_KEY"),
+        ),
+        (
+            financer_llm::Provider::OpenAi,
+            env_key("FINANCER_OPENAI_API_KEY"),
+        ),
+    ]
+    .into_iter()
+    .find_map(|(provider, key)| {
+        let settings = financer_llm::LlmSettings {
+            provider,
+            model: String::new(),
+            api_key: key?,
+        };
+        financer_llm::provider_for(&settings).ok().map(Arc::from)
+    });
+    let sources = build_sources(&configs, time::OffsetDateTime::now_utc().date(), llm);
     let result = refresh(&sources, http.as_ref()).await;
 
     let samples: Vec<_> = result

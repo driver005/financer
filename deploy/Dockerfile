@@ -1,15 +1,18 @@
 # Build: docker build -f deploy/Dockerfile -t financer-server .
-FROM rust:1-bookworm AS build
+# Behind Docker Hub rate limits: --build-arg REGISTRY=mirror.gcr.io/library/
+ARG REGISTRY=docker.io/library/
+
+FROM ${REGISTRY}rust:1-bookworm AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 RUN cargo build --release -p financer-server
 
-FROM debian:bookworm-slim
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates \
- && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 10001 --create-home financer \
+ARG REGISTRY
+FROM ${REGISTRY}debian:bookworm-slim
+# CA certificates come from the build image, so this stage needs no apt (and no network).
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN useradd --system --uid 10001 --create-home financer \
  && mkdir /data && chown financer /data
 COPY --from=build /src/target/release/financer-server /usr/local/bin/financer-server
 USER financer

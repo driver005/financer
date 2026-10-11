@@ -10,8 +10,16 @@ standards-based sources:
   barcodes you assign to a catalog item. Only prices seen in one of the four chains and not
   older than `max_age_days` (default 60) are used.
 
-If a retailer page has no JSON-LD, there is simply no data from it. That is deliberate; I did
-not write parsers for page layouts I could not check against the live site.
+- **Pages read by a model** (`llm_page`): for pages without structured data (most offer
+  pages), your configured Claude or OpenAI model reads the page's visible text and lists the
+  products and prices. It works on any layout without a parser written for it. It costs API
+  calls (at most 5 model calls of 12,000 characters per page per refresh), and a product is only
+  accepted if its price text literally appears in the page, so invented prices are dropped.
+
+I did not write per-retailer page parsers: I could not check them against the live sites, so
+`llm_page` is the way to read a page whose layout is unknown. Whether a particular retailer's
+page is reachable, allowed by its robots.txt and read well is something only
+`--probe-prices` on your own server can tell you.
 
 ## Configure
 
@@ -20,6 +28,7 @@ Create a JSON file and point `FINANCER_PRICE_SOURCES` at it:
 ```json
 [
   { "type": "json_ld", "chain": "rewe", "urls": ["https://example.invalid/replace-with-a-real-offers-page"], "is_offer": true },
+  { "type": "llm_page", "chain": "kaufland", "urls": ["https://example.invalid/replace-with-a-real-offers-page"], "is_offer": true },
   { "type": "open_prices", "max_age_days": 60,
     "items": [ { "item": "milch", "barcode": "<EAN of a milk you buy>" } ] }
 ]

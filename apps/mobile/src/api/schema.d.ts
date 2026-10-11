@@ -300,7 +300,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Scan a receipt photo: a vision-capable model (Claude or OpenAI, as configured) transcribes it
+         * Scan a receipt photo or a digital receipt PDF (a Rewe eBon or Lidl Plus receipt exported from
+         *     their app or email): a model that can read documents (Claude or OpenAI, as configured) transcribes it
          *     and the transcript is parsed like pasted text. The photo is sent to that provider.
          */
         post: operations["scan_receipt"];
@@ -695,9 +696,9 @@ export interface components {
             text: string;
         };
         ReceiptScan: {
-            /** @description The photo's bytes, base64-encoded (at most 8 MB decoded). */
+            /** @description The photo's or PDF's bytes, base64-encoded (at most 8 MB decoded). */
             image_base64: string;
-            /** @description `image/jpeg`, `image/png` or `image/webp`. */
+            /** @description `image/jpeg`, `image/png`, `image/webp` or `application/pdf`. */
             mime_type: string;
         };
         ReceiptUpload: {

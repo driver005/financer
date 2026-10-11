@@ -8,6 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 financer-core = { path = "../core" }
+financer-llm = { path = "../llm" }
 async-trait = "0.1"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "gzip"] }

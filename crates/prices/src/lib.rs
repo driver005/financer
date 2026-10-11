@@ -4,14 +4,15 @@ pub mod http;
 pub mod jsonld;
 pub mod normalize;
 pub mod off;
+pub mod pagetext;
 pub mod size;
 pub mod source;
 
 pub use http::{fake::FakeHttp, Http, HttpResponse, PoliteHttp, ReqwestHttp};
 pub use normalize::{normalize, normalize_all, NormalizeReport, QuoteDetail, RawOffer, Skip};
 pub use source::{
-    build_sources, refresh, JsonLdSource, OpenPricesSource, PriceSource, RefreshResult,
-    SourceConfig, SourceStatus,
+    build_sources, refresh, JsonLdSource, LlmPageSource, OpenPricesSource, PriceSource,
+    RefreshResult, SourceConfig, SourceStatus,
 };
 
 #[derive(Debug, thiserror::Error)]

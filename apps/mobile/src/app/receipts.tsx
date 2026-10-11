@@ -7,6 +7,8 @@ import type { Receipt } from "@/api/client";
 import { useApi } from "@/api/config";
 import { Body, Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
+import { toBase64 } from "@/native/base64";
+import { pickFileBytes } from "@/native/files";
 import { useScreenData } from "@/hooks";
 
 export default function Receipts() {
@@ -33,6 +35,27 @@ export default function Receipts() {
       await reload();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Could not add receipt");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function scanPdf() {
+    if (!api) return;
+    try {
+      const bytes = await pickFileBytes(["application/pdf"]);
+      if (bytes === null) return;
+      setBusy(true);
+      setMessage("Reading the receipt… (the file is sent to your configured AI provider)");
+      const r = await api.scanReceipt(toBase64(bytes), "application/pdf");
+      setMessage(
+        r.receipt.duplicate
+          ? "This receipt was already added."
+          : `Added ${r.receipt.items.length} items${r.receipt.reconciles ? "; they add up to the total." : ", but they do not add up to the printed total. Check the receipt."}`,
+      );
+      await reload();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not read the PDF");
     } finally {
       setBusy(false);
     }
@@ -101,7 +124,7 @@ export default function Receipts() {
           ListHeaderComponent={
             <View style={{ marginBottom: 8 }}>
               <Text variant="bodyMedium" style={{ color: c.muted, marginBottom: 8 }}>
-                Photograph a receipt, or paste its text. Photos are read by your configured AI provider (Claude or
+                Photograph a receipt, import a digital receipt PDF (a Rewe eBon or Lidl Plus receipt exported from their app), or paste the text. Photos and PDFs are read by your configured AI provider (Claude or
                 OpenAI), so the image leaves your server; only do this if you are fine with that.
               </Text>
               <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
@@ -110,6 +133,9 @@ export default function Receipts() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Button label="Photo" icon="image-outline" mode="outlined" onPress={() => scan("library")} disabled={busy} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button label="PDF" icon="file-pdf-box" mode="outlined" onPress={scanPdf} disabled={busy} />
                 </View>
               </View>
               <TextInput

@@ -462,9 +462,9 @@ pub struct BankStatus {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct ReceiptScan {
-    /// The photo's bytes, base64-encoded (at most 8 MB decoded).
+    /// The photo's or PDF's bytes, base64-encoded (at most 8 MB decoded).
     pub image_base64: String,
-    /// `image/jpeg`, `image/png` or `image/webp`.
+    /// `image/jpeg`, `image/png`, `image/webp` or `application/pdf`.
     pub mime_type: String,
 }
 

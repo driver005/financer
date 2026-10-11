@@ -786,7 +786,7 @@
         "tags": [
           "grocery"
         ],
-        "summary": "Scan a receipt photo: a vision-capable model (Claude or OpenAI, as configured) transcribes it\nand the transcript is parsed like pasted text. The photo is sent to that provider.",
+        "summary": "Scan a receipt photo or a digital receipt PDF (a Rewe eBon or Lidl Plus receipt exported from\ntheir app or email): a model that can read documents (Claude or OpenAI, as configured) transcribes it\nand the transcript is parsed like pasted text. The photo is sent to that provider.",
         "operationId": "scan_receipt",
         "requestBody": {
           "content": {
@@ -2003,11 +2003,11 @@
         "properties": {
           "image_base64": {
             "type": "string",
-            "description": "The photo's bytes, base64-encoded (at most 8 MB decoded)."
+            "description": "The photo's or PDF's bytes, base64-encoded (at most 8 MB decoded)."
           },
           "mime_type": {
             "type": "string",
-            "description": "`image/jpeg`, `image/png` or `image/webp`."
+            "description": "`image/jpeg`, `image/png`, `image/webp` or `application/pdf`."
           }
         }
       },

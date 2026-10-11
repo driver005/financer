@@ -6,6 +6,12 @@
     "is_offer": true
   },
   {
+    "type": "llm_page",
+    "chain": "kaufland",
+    "urls": ["https://example.invalid/replace-with-a-real-offers-page"],
+    "is_offer": true
+  },
+  {
     "type": "open_prices",
     "max_age_days": 60,
     "items": [{ "item": "milch", "barcode": "replace-with-an-EAN-you-buy" }]

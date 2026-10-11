@@ -107,7 +107,17 @@ pub async fn refresh_prices(
 
 /// The refresh behind `POST /v1/prices/refresh`; the server's daily scheduler calls it too.
 pub(crate) async fn refresh_prices_now(state: &AppState) -> Result<RefreshReportDto, ApiError> {
-    let sources = build_sources(&state.price_sources, today());
+    // pages read by a model need a configured provider; other sources do not
+    let llm: Option<std::sync::Arc<dyn financer_llm::LlmProvider>> = if state
+        .price_sources
+        .iter()
+        .any(|c| matches!(c, financer_prices::SourceConfig::LlmPage { .. }))
+    {
+        build_llm(state).await.ok().map(std::sync::Arc::from)
+    } else {
+        None
+    };
+    let sources = build_sources(&state.price_sources, today(), llm);
     if sources.is_empty() {
         return Err(ApiError::Unavailable(
             "no price sources configured (see docs/PRICES.md)".into(),
@@ -339,7 +349,7 @@ async fn store_receipt_text(state: &AppState, text: &str) -> Result<ReceiptDto, 
     Ok(receipt_dto(id, id.is_none(), parsed))
 }
 
-const SCAN_SYSTEM: &str = "You transcribe photos of shop receipts. Output only the text printed on the receipt, \
+const SCAN_SYSTEM: &str = "You transcribe photos or PDFs of shop receipts. Output only the text printed on the receipt, \
 one receipt line per output line, in reading order. Keep item names, prices, quantity lines such as \
 '2 x 0,99', the total (SUMME) and the date exactly as printed. Do not summarise, translate or add commentary. \
 If the image is not a receipt, answer with the single word NONE.";
@@ -347,7 +357,8 @@ If the image is not a receipt, answer with the single word NONE.";
 /// Largest photo accepted (decoded bytes).
 const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 
-/// Scan a receipt photo: a vision-capable model (Claude or OpenAI, as configured) transcribes it
+/// Scan a receipt photo or a digital receipt PDF (a Rewe eBon or Lidl Plus receipt exported from
+/// their app or email): a model that can read documents (Claude or OpenAI, as configured) transcribes it
 /// and the transcript is parsed like pasted text. The photo is sent to that provider.
 #[utoipa::path(post, path = "/v1/receipts/scan", request_body = ReceiptScan, responses(
     (status = 200, body = ScanDto),
@@ -359,9 +370,11 @@ pub async fn scan_receipt(
     State(state): State<AppState>,
     Json(scan): Json<ReceiptScan>,
 ) -> Result<Json<ScanDto>, ApiError> {
-    if !["image/jpeg", "image/png", "image/webp"].contains(&scan.mime_type.as_str()) {
+    if !["image/jpeg", "image/png", "image/webp", "application/pdf"]
+        .contains(&scan.mime_type.as_str())
+    {
         return Err(ApiError::BadRequest(
-            "mime_type must be image/jpeg, image/png or image/webp".into(),
+            "mime_type must be image/jpeg, image/png, image/webp or application/pdf".into(),
         ));
     }
     let b64 = scan.image_base64.trim();

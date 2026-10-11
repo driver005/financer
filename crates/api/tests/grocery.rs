@@ -608,7 +608,7 @@ async fn scanning_a_photo_transcribes_parses_and_stores() {
 async fn scan_rejects_bad_input_before_calling_the_model() {
     let (app, images) = scan_app(vec![Ok(SCANNED.into())]).await;
     for bad in [
-        json!({"image_base64": "QUJD", "mime_type": "application/pdf"}),
+        json!({"image_base64": "QUJD", "mime_type": "application/zip"}),
         json!({"image_base64": "", "mime_type": "image/png"}),
         json!({"image_base64": "not base64 !!", "mime_type": "image/png"}),
         json!({"image_base64": "A".repeat(11_500_000), "mime_type": "image/png"}),
@@ -675,4 +675,96 @@ async fn scan_needs_a_key_and_a_model_that_can_see() {
         .as_str()
         .unwrap()
         .contains("cannot read images"));
+}
+
+// ---- pages read by a model ----
+
+const OFFERS_HTML: &str =
+    "<html><body><div><h3>Vollmilch</h3><span>1 l</span><b>0,89 &euro;</b></div>\
+<div><h3>Spaghetti</h3><span>500 g</span><b>0,69 &euro;</b></div></body></html>";
+
+#[tokio::test]
+async fn llm_page_sources_fill_prices_when_a_provider_is_configured() {
+    let http = Arc::new(FakeHttp::with(vec![(
+        "https://kaufland.test/angebote",
+        200,
+        OFFERS_HTML,
+    )]));
+    let answer = r#"{"products":[{"name":"Vollmilch","price":"0,89","size":"1 l","valid_until":null},
+        {"name":"Spaghetti","price":"0,69","size":"500 g","valid_until":null},
+        {"name":"Erfunden","price":"3,33","size":"1 kg","valid_until":null}]}"#;
+    let sources = vec![PriceSourceConfig::LlmPage {
+        chain: Chain::Kaufland,
+        urls: vec!["https://kaufland.test/angebote".into()],
+        is_offer: true,
+    }];
+    let app = app_with(move |s| {
+        s.with_http(http)
+            .with_price_sources(sources)
+            .with_llm_keys(LlmKeys {
+                claude: Some("k".into()),
+                openai: None,
+            })
+            .with_llm_factory(Arc::new(move |_| {
+                Ok(Box::new(MockProvider::with_answers(vec![
+                    Ok(answer.into()),
+                ])))
+            }))
+    })
+    .await;
+    let (status, report) = send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        report["stored"], 2,
+        "the invented 3,33 price is not on the page and must be dropped"
+    );
+    let (_, milk) = get(&app, "/v1/prices?item=milch").await;
+    assert_eq!(
+        (
+            milk[0]["chain"].clone(),
+            milk[0]["price_cents"].clone(),
+            milk[0]["source"].clone()
+        ),
+        (json!("kaufland"), json!(89), json!("llm-page:kaufland"))
+    );
+}
+
+#[tokio::test]
+async fn llm_page_sources_without_a_key_report_why() {
+    let http = Arc::new(FakeHttp::with(vec![(
+        "https://kaufland.test/angebote",
+        200,
+        OFFERS_HTML,
+    )]));
+    let sources = vec![PriceSourceConfig::LlmPage {
+        chain: Chain::Kaufland,
+        urls: vec!["https://kaufland.test/angebote".into()],
+        is_offer: true,
+    }];
+    let app = app_with(move |s| s.with_http(http).with_price_sources(sources)).await;
+    let (status, report) = send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(report["stored"], 0);
+    assert!(report["sources"][0]["error"]
+        .as_str()
+        .unwrap()
+        .contains("LLM API key"));
+}
+
+#[tokio::test]
+async fn digital_receipts_as_pdf_are_read_like_photos() {
+    let (app, images) = scan_app(vec![Ok(SCANNED.into())]).await;
+    let (status, body) = send(
+        &app,
+        Method::POST,
+        "/v1/receipts/scan",
+        Some(json!({"image_base64": "JVBERi0xLjQ=", "mime_type": "application/pdf"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["receipt"]["chain"], "rewe");
+    assert_eq!(
+        images.lock().unwrap().as_slice(),
+        &[("application/pdf".to_string(), 12)]
+    );
 }
