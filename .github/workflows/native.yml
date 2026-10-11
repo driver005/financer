@@ -1,0 +1,57 @@
+name: Native libraries
+
+# Cross-compiles the Rust backend that runs inside the phone (crates/embedded) for Android and
+# iOS. It checks that the crate and all its dependencies build with a real Android NDK and Xcode,
+# which a normal Linux build cannot show. It does not run the app on a device.
+
+on:
+  push:
+    paths:
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/native.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+      - name: Show the NDK
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          ls "$ANDROID_NDK_HOME" | head -5
+      - name: Build for arm64 phones and the x86_64 emulator
+        run: cargo ndk -t arm64-v8a -t x86_64 --platform 24 -o jniLibs build --release -p financer-embedded --locked
+      - run: find jniLibs -name '*.so' -exec ls -lh {} +
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-jniLibs
+          path: jniLibs
+          retention-days: 7
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+      - name: Build for iPhones and the simulator
+        run: |
+          for t in aarch64-apple-ios aarch64-apple-ios-sim; do
+            cargo build --release -p financer-embedded --locked --target "$t"
+          done
+      - run: ls -lh target/aarch64-apple-ios/release/libfinancer_embedded.* target/aarch64-apple-ios-sim/release/libfinancer_embedded.*
