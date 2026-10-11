@@ -84,7 +84,10 @@ What this means:
 - **Open Prices**: the old code first looked each barcode up on `world.openfoodfacts.org/api`,
   whose robots.txt says `Disallow: /api` for everyone, so the polite client refused it (correctly).
   The Open Prices response already contains the product name, pack size and store brand, so the
-  source now uses only `prices.openfoodfacts.org` and no second lookup. The parser is tested
-  against the shape of a live response; a full probe with that fix has not been repeated yet.
+  source now uses only `prices.openfoodfacts.org` and no second lookup. A repeat probe confirmed
+  it: the source is `ok`, no robots.txt refusal, and it fetched and parsed a live offer for the
+  test barcodes. That offer was then (correctly) rejected as a `size_mismatch`, because the probe
+  deliberately mapped a Nutella barcode to the catalog item `milch`. So the whole path works
+  against the live service; whether it yields useful prices depends on the barcodes you choose.
 - Open Prices only helps for products someone has recorded a price for in one of the four chains
   (matched by store brand), so expect sparse data.
