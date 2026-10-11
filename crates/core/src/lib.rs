@@ -5,7 +5,9 @@ pub mod category;
 pub mod money;
 pub mod period;
 pub mod recurring;
+pub mod rules;
 pub mod safe_to_spend;
+pub mod split;
 pub mod transaction;
 
 pub use basket::{
@@ -18,5 +20,7 @@ pub use category::{Categorizer, Category};
 pub use money::Money;
 pub use period::BudgetPeriod;
 pub use recurring::{Cadence, RecurringDetector, RecurringPayment};
+pub use rules::{AmountSign, MatchKind, RuleError, RuleSet, UserRule};
 pub use safe_to_spend::{Pace, SafeToSpend, SafeToSpendInput};
+pub use split::{SplitError, SplitPart, Splitter};
 pub use transaction::{NameNormalizer, Transaction};

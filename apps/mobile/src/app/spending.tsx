@@ -2,10 +2,12 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, Text, View } from "react-native";
 import { Link, useFocusEffect } from "expo-router";
 
-import type { Transaction } from "@/api/client";
+import type { Split, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
-import { Body, Button, Card, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
-import { formatCents, formatDate } from "@/format";
+import { CategorizationTools } from "@/components/CategorizationTools";
+import { RecategorizeSheet } from "@/components/RecategorizeSheet";
+import { TransactionRow } from "@/components/TransactionRow";
+import { Body, Button, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { pickFileBytes } from "@/native/files";
 
 export default function Spending() {
@@ -14,12 +16,15 @@ export default function Spending() {
   const [items, setItems] = useState<Transaction[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [splits, setSplits] = useState<Split[]>([]);
+  const [selected, setSelected] = useState<Transaction | null>(null);
 
   const load = useCallback(async () => {
     if (!api) return;
     setBusy(true);
     try {
       setItems(await api.transactions());
+      setSplits(await api.splits());
       setMessage(null);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Could not load transactions");
@@ -66,26 +71,25 @@ export default function Spending() {
           <View style={{ height: 8 }} />
           <Button label="Import Sparkasse CSV" icon="file-delimited-outline" mode="outlined" onPress={importCsv} disabled={busy} />
           {message ? <Text style={{ color: c.muted, marginVertical: 8 }}>{message}</Text> : null}
+          <RecategorizeSheet
+            tx={selected}
+            split={splits.find((s) => s.transaction_id === selected?.id)}
+            onClose={() => setSelected(null)}
+            onChanged={async (note) => {
+              setSelected(null);
+              await load();
+              setMessage(note);
+            }}
+          />
           <FlatList
             style={{ marginTop: 8 }}
             data={items}
             keyExtractor={(t) => String(t.id)}
             refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}
             ListEmptyComponent={busy ? null : <Body muted>No transactions yet. Import a CSV export from Sparkasse online banking.</Body>}
+            ListHeaderComponent={<CategorizationTools onChanged={(note) => void load().then(() => setMessage(note))} />}
             renderItem={({ item }) => (
-              <Card>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-                  <View style={{ flex: 1 }}>
-                    <Body bold>{item.counterparty || "Unknown"}</Body>
-                    <Text numberOfLines={1} style={{ color: c.muted, fontSize: 13 }}>
-                      {formatDate(item.booking_date)} · {item.category ?? "uncategorized"}
-                    </Text>
-                  </View>
-                  <Text style={{ color: item.amount_cents < 0 ? c.text : c.good, fontSize: 16, fontWeight: "600" }}>
-                    {formatCents(item.amount_cents)}
-                  </Text>
-                </View>
-              </Card>
+              <TransactionRow item={item} split={splits.some((s) => s.transaction_id === item.id)} onPress={() => setSelected(item)} />
             )}
           />
         </>

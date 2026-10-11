@@ -3,7 +3,7 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use financer_core::{Budget, Categorizer, Disposable, RecurringDetector};
+use financer_core::{Budget, Disposable, RecurringDetector};
 use financer_fints::SparkasseCsv;
 use serde::Deserialize;
 use time::Date;
@@ -189,7 +189,7 @@ impl Routes {
     ) -> Result<Json<ImportReport>, ApiError> {
         let parsed = SparkasseCsv::parse(&body).map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
-        let categorizer = Categorizer::new();
+        let categorizer = state.store.categorizer().await?;
         let mut txs = parsed.transactions;
         for tx in &mut txs {
             tx.category = Some(categorizer.categorize(tx));
@@ -288,13 +288,8 @@ impl Routes {
         q: MonthQuery,
     ) -> Result<Json<Vec<EnvelopeStatusDto>>, ApiError> {
         let period = BudgetPeriods::resolve(&state, q.year, q.month, q.period, q.date).await?;
-        let txs: Vec<_> = state
-            .store
-            .list_transactions()
-            .await?
-            .into_iter()
-            .map(|s| s.transaction)
-            .collect();
+        // split transactions count by their parts
+        let txs = state.store.list_effective_transactions().await?;
         let budget = state.store.load_budget().await?;
         let status = budget.status(&txs, period);
         Ok(Json(

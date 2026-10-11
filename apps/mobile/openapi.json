@@ -1190,6 +1190,260 @@
         ]
       }
     },
+    "/v1/rules": {
+      "get": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Your categorization rules in priority order (first match wins, before the built-in rules).",
+        "operationId": "list_rules",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RuleDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Add a rule at the end of the priority order.",
+        "operationId": "create_rule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty pattern or bad amount range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/rules/apply": {
+      "post": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Run the rules again over existing transactions. Transactions you categorized by hand keep\ntheir category. Returns how many changed.",
+        "operationId": "apply_rules",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyReport"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/rules/reorder": {
+      "post": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Set the priority order of all rules.",
+        "operationId": "reorder_rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleOrder"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RuleDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The ids are not every rule exactly once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/rules/{id}": {
+      "put": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Replace a rule's fields; its place in the order stays.",
+        "operationId": "update_rule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Rule id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty pattern or bad amount range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "categorization"
+        ],
+        "operationId": "delete_rule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Rule id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "No such rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/settings": {
       "get": {
         "tags": [
@@ -1287,6 +1541,98 @@
         ]
       }
     },
+    "/v1/transactions/categorize-unknown": {
+      "post": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Ask your Claude or OpenAI model to suggest categories for merchants still left as\nuncategorized or other. Only distinct merchant names (letters only) and the allowed\ncategories are sent; never amounts, dates, IBANs or purposes. Nothing is changed until you\naccept suggestions.",
+        "operationId": "categorize_unknown",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestionsDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The provider failed or returned nothing usable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No API key configured for the selected provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/transactions/categorize-unknown/accept": {
+      "post": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Accept suggestions: one rule per merchant, then the rules are applied to existing\ntransactions.",
+        "operationId": "accept_suggestions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptSuggestions"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A merchant without letters or a category suggestions cannot use",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/transactions/import": {
       "post": {
         "tags": [
@@ -1332,10 +1678,263 @@
           }
         ]
       }
+    },
+    "/v1/transactions/splits": {
+      "get": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "All split transactions with their parts.",
+        "operationId": "list_splits",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SplitDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/transactions/{id}/category": {
+      "put": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Recategorize one transaction. With `remember`, the merchant gets a rule so its other and\nfuture transactions follow.",
+        "operationId": "set_category",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Transaction id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryChanged"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nothing to remember: the transaction has no merchant name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such transaction",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/transactions/{id}/split": {
+      "put": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Split a transaction into parts with their own category. The parts must add up to the\ntransaction amount exactly. Budget and spending totals then use the parts.",
+        "operationId": "put_split",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Transaction id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SplitInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fewer than two parts, wrong signs or the parts do not add up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such transaction",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Remove the split; the transaction counts as a whole again.",
+        "operationId": "delete_split",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Transaction id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Split removed"
+          },
+          "404": {
+            "description": "No such transaction, or it is not split",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "AcceptReport": {
+        "type": "object",
+        "required": [
+          "rules_saved",
+          "transactions_changed"
+        ],
+        "properties": {
+          "rules_saved": {
+            "type": "integer",
+            "description": "Rules created or updated (one per accepted merchant).",
+            "minimum": 0
+          },
+          "transactions_changed": {
+            "type": "integer",
+            "description": "Transactions that changed category as a result.",
+            "minimum": 0
+          }
+        }
+      },
+      "AcceptSuggestions": {
+        "type": "object",
+        "required": [
+          "suggestions"
+        ],
+        "properties": {
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AcceptedSuggestion"
+            }
+          }
+        }
+      },
+      "AcceptedSuggestion": {
+        "type": "object",
+        "required": [
+          "merchant",
+          "category"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "example": "dining"
+          },
+          "merchant": {
+            "type": "string"
+          }
+        }
+      },
       "AffordabilityDto": {
         "type": "object",
         "required": [
@@ -1380,6 +1979,19 @@
               "$ref": "#/components/schemas/StapleDto"
             },
             "description": "Cheapest items that fit the budget (at most 20)."
+          }
+        }
+      },
+      "ApplyReport": {
+        "type": "object",
+        "required": [
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "integer",
+            "description": "Transactions whose category changed. Transactions you categorized by hand are skipped.",
+            "minimum": 0
           }
         }
       },
@@ -1521,6 +2133,50 @@
           },
           "reference_pack": {
             "type": "string"
+          }
+        }
+      },
+      "CategoryChange": {
+        "type": "object",
+        "required": [
+          "category"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "example": "groceries"
+          },
+          "remember": {
+            "type": "boolean",
+            "description": "Also create (or update) a rule for this merchant and apply it to its other\ntransactions."
+          }
+        }
+      },
+      "CategoryChanged": {
+        "type": "object",
+        "required": [
+          "transaction",
+          "others_changed"
+        ],
+        "properties": {
+          "others_changed": {
+            "type": "integer",
+            "description": "Other transactions that changed category because of that rule.",
+            "minimum": 0
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RuleDto",
+                "description": "The rule that was created or updated when `remember` was set."
+              }
+            ]
+          },
+          "transaction": {
+            "$ref": "#/components/schemas/TransactionDto"
           }
         }
       },
@@ -2399,6 +3055,120 @@
           }
         }
       },
+      "RuleDto": {
+        "type": "object",
+        "description": "A user categorization rule. Rules run in list order; the first match wins and beats the\nbuilt-in rules.",
+        "required": [
+          "id",
+          "pattern",
+          "kind",
+          "category"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "example": "dining"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`contains`, `equals` or `starts_with`.",
+            "example": "contains"
+          },
+          "max_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Largest amount that matches, compared without sign.",
+            "example": 2000
+          },
+          "min_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Smallest amount that matches, compared without sign.",
+            "example": 500
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Compared with the counterparty name after normalization (case, digits and punctuation\nare ignored)."
+          },
+          "sign": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only expenses (`expense`) or only income (`income`); absent for both.",
+            "example": "expense"
+          }
+        }
+      },
+      "RuleInput": {
+        "type": "object",
+        "description": "Fields of a rule when creating or replacing one.",
+        "required": [
+          "pattern",
+          "kind",
+          "category"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "example": "dining"
+          },
+          "kind": {
+            "type": "string",
+            "example": "contains"
+          },
+          "max_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "min_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "sign": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "expense"
+          }
+        }
+      },
+      "RuleOrder": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Every rule id exactly once, highest priority first."
+          }
+        }
+      },
       "SafeToSpendDto": {
         "type": "object",
         "description": "The daily number and everything behind it. Amounts are integer cents.",
@@ -2642,6 +3412,65 @@
           }
         }
       },
+      "SplitDto": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "parts"
+        ],
+        "properties": {
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SplitPartDto"
+            }
+          },
+          "transaction_id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SplitInput": {
+        "type": "object",
+        "required": [
+          "parts"
+        ],
+        "properties": {
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SplitPartDto"
+            },
+            "description": "At least two parts that add up to the transaction amount exactly."
+          }
+        }
+      },
+      "SplitPartDto": {
+        "type": "object",
+        "required": [
+          "amount_cents",
+          "category"
+        ],
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Same sign as the transaction (negative for an expense).",
+            "example": -1500
+          },
+          "category": {
+            "type": "string",
+            "example": "shopping"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "StapleDto": {
         "type": "object",
         "required": [
@@ -2669,6 +3498,49 @@
           "price_cents": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "SuggestionDto": {
+        "type": "object",
+        "required": [
+          "merchant",
+          "category",
+          "transactions"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "example": "dining"
+          },
+          "merchant": {
+            "type": "string",
+            "description": "The merchant name as sent (lowercase letters only)."
+          },
+          "transactions": {
+            "type": "integer",
+            "description": "How many of your transactions carry this merchant.",
+            "minimum": 0
+          }
+        }
+      },
+      "SuggestionsDto": {
+        "type": "object",
+        "required": [
+          "suggestions",
+          "merchants_sent"
+        ],
+        "properties": {
+          "merchants_sent": {
+            "type": "integer",
+            "description": "How many distinct merchant names were sent to the model.",
+            "minimum": 0
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SuggestionDto"
+            }
           }
         }
       },

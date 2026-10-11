@@ -12,5 +12,5 @@
     "types": ["node"],
     "lib": ["es2022", "dom"]
   },
-  "include": ["../src/api/transport.ts", "../src/api/client.ts", "../src/format.ts", "../src/native/base64.ts", "./*.test.ts"]
+  "include": ["../src/api/transport.ts", "../src/api/client.ts", "../src/format.ts", "../src/native/base64.ts", "../src/rules.ts", "./*.test.ts"]
 }

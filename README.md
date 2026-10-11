@@ -13,6 +13,7 @@ SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](d
 |---|---|
 | Spending: import a Sparkasse CSV export, categorize, find recurring payments | built and tested; the CSV column names come from memory of the export, **check with a real file** |
 | Live Sparkasse sync (FinTS, pushTAN approval in the Sparkasse app) | login, balance and transactions are verified against the `fints-rs` mock bank over the real protocol (in CI); wrong PINs are recognised and pause syncing after two tries to protect against lockout; pushTAN approval polling is verified against a **simulated** pushTAN bank (a small patch to the mock, in CI) but it was never run against a real Sparkasse; needs your FinTS product id ([docs/FINTS.md](docs/FINTS.md)) |
+| Categorization rules, learning from corrections, split transactions, AI suggestions | your own rules (name contains/is/starts with, optional expense/income and amount range) beat the built-in ones on import and sync and can be re-applied; recategorizing a transaction can "remember" the merchant; a transaction can be split into parts that must add up exactly and that budget totals use; "Suggest categories" asks your Claude/OpenAI model about unknown merchants and sends **only merchant names**. Tested on SQLite and over HTTP with a mock model; the screens are typechecked and their logic unit-tested but **never run on a device**, and the real providers were never called ([docs/CATEGORIZATION.md](docs/CATEGORIZATION.md)) |
 | Budget: monthly limits per category, income and fixed costs from recurring payments | built and tested |
 | Payday budget months and "safe to spend today" | set the day you get paid (1-28) in Settings; budget status, envelopes and the grocery goal then run payday to payday instead of on calendar months. Today shows a daily number (income this period minus spending so far, recurring costs still due and unspent envelope money, divided by the days left) with a pace flag and an explainer sheet. Rust logic unit-tested (payday 31 clamp, year-end, no income, overspent envelopes) and the endpoints tested through the router; the TS mirror of the period rule is tested against the same cases. The app screens typecheck but were **never run on a device or in a browser**; the daily number is a budget estimate from detected recurring payments, **not a bank balance**, and is only as good as that detection ([docs/BUDGET_PERIODS.md](docs/BUDGET_PERIODS.md)) |
 | "What can I buy?": basket per chain, cheapest split, cheapest items for your budget | built and tested on supplied prices |
@@ -86,7 +87,7 @@ crates/server     hosted binary
 crates/embedded   the same backend as a library for the phone (UniFFI)
 apps/mobile       Expo app (routes in src/app)
 deploy/           Dockerfile, compose, Caddyfile
-docs/             FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
+docs/             CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
 ```
 
 ## Security notes

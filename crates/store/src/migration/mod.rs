@@ -8,6 +8,9 @@ mod m20261011_000003_create_price_quotes;
 mod m20261011_000004_create_usual_items;
 mod m20261011_000005_create_receipts;
 mod m20261011_000006_create_settings;
+mod m20261012_000200_create_categorization_rules;
+mod m20261012_000201_create_transaction_splits;
+mod m20261012_000202_create_category_overrides;
 
 pub struct Migrator;
 
@@ -21,6 +24,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20261011_000004_create_usual_items::Migration),
             Box::new(m20261011_000005_create_receipts::Migration),
             Box::new(m20261011_000006_create_settings::Migration),
+            Box::new(m20261012_000200_create_categorization_rules::Migration),
+            Box::new(m20261012_000201_create_transaction_splits::Migration),
+            Box::new(m20261012_000202_create_category_overrides::Migration),
         ]
     }
 }

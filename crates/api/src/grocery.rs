@@ -463,13 +463,8 @@ impl Grocery {
                         "set a groceries limit in the budget or pass budget_cents".into(),
                     ));
                 }
-                let txs: Vec<_> = state
-                    .store
-                    .list_transactions()
-                    .await?
-                    .into_iter()
-                    .map(|s| s.transaction)
-                    .collect();
+                // split transactions count by their parts
+                let txs = state.store.list_effective_transactions().await?;
                 let period =
                     BudgetPeriod::containing(Self::today(), BudgetPeriods::payday(&state).await?);
                 (
@@ -616,7 +611,9 @@ impl Grocery {
     }
 
     /// The configured provider, or `503` with what to set when its key is missing.
-    async fn build_llm(state: &AppState) -> Result<Box<dyn financer_llm::LlmProvider>, ApiError> {
+    pub(crate) async fn build_llm(
+        state: &AppState,
+    ) -> Result<Box<dyn financer_llm::LlmProvider>, ApiError> {
         let (provider, model) = Self::llm_settings(state).await?;
         let Some(api_key) = Self::key_for(state, provider) else {
             let var = if provider == Provider::Claude {
