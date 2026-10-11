@@ -128,7 +128,7 @@ impl fmt::Display for Money {
         let euros = (abs / 100).to_string();
         let mut grouped = String::new();
         for (i, c) in euros.chars().enumerate() {
-            if i > 0 && (euros.len() - i) % 3 == 0 {
+            if i > 0 && (euros.len() - i).is_multiple_of(3) {
                 grouped.push('.');
             }
             grouped.push(c);

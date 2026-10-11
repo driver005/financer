@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/store", "crates/fints", "crates/api", "crates/server"]
+members = ["crates/core", "crates/store", "crates/fints", "crates/api", "crates/server", "crates/llm", "crates/recipes", "crates/receipts"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-rust-version = "1.80"
+rust-version = "1.94"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

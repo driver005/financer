@@ -1,5 +1,6 @@
 pub mod basket;
 pub mod budget;
+pub mod catalog;
 pub mod category;
 pub mod money;
 pub mod recurring;
@@ -12,6 +13,7 @@ pub use basket::{
 pub use budget::{
     disposable_income, spent_by_category, Budget, Disposable, EnvelopeStatus, YearMonth,
 };
+pub use catalog::{by_key, match_product, GenericItem, Unit, CATALOG};
 pub use category::{Categorizer, Category};
 pub use money::Money;
 pub use recurring::{detect_recurring, Cadence, RecurringPayment};

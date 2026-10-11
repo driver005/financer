@@ -1,0 +1,15 @@
+[package]
+name = "financer-llm"
+description = "Provider-agnostic LLM access (Claude and OpenAI) behind a small trait"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+genai = "0.6"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+async-trait = "0.1"
