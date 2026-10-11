@@ -4,12 +4,19 @@ use axum::Router;
 use financer_api::{router, with_web_app, AppState, TokenHash};
 use financer_store::Store;
 use http_body_util::BodyExt;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
 
 async fn app_with_web() -> (Router, std::path::PathBuf) {
-    let dir = std::env::temp_dir().join(format!("financer-web-{}", std::process::id()));
+    // tests run in parallel and each removes its dir, so every call gets its own
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "financer-web-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
     std::fs::create_dir_all(dir.join("assets")).unwrap();
     std::fs::write(dir.join("index.html"), "<html>FINANCER-APP</html>").unwrap();
     std::fs::write(dir.join("assets/app.js"), "console.log('app')").unwrap();
