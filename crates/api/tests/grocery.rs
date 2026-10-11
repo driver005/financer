@@ -527,3 +527,152 @@ async fn new_routes_need_the_token() {
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "{uri}");
     }
 }
+
+// ---- receipt photo scan ----
+
+const SCANNED: &str =
+    "REWE Markt GmbH\nVOLLMILCH 1,19 B\nSPAGHETTI 500G 0,89 A\nSUMME 2,08\n02.03.26\n";
+
+fn scan_body() -> Value {
+    json!({"image_base64": "QUJDREVGRw==", "mime_type": "image/jpeg"})
+}
+
+async fn scan_app(
+    answers: Vec<Result<String, String>>,
+) -> (Router, Arc<std::sync::Mutex<Vec<(String, usize)>>>) {
+    let provider = Arc::new(MockProvider::with_answers(answers));
+    let images = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let (p2, i2) = (provider.clone(), images.clone());
+    let app = app_with(move |s| {
+        s.with_llm_keys(LlmKeys {
+            claude: Some("k".into()),
+            openai: None,
+        })
+        .with_llm_factory(Arc::new(move |_| {
+            struct Shared(
+                Arc<MockProvider>,
+                Arc<std::sync::Mutex<Vec<(String, usize)>>>,
+            );
+            #[async_trait::async_trait]
+            impl financer_llm::LlmProvider for Shared {
+                async fn complete_json(
+                    &self,
+                    s: &str,
+                    u: &str,
+                ) -> Result<String, financer_llm::LlmError> {
+                    self.0.complete_json(s, u).await
+                }
+                async fn describe_image(
+                    &self,
+                    s: &str,
+                    u: &str,
+                    mime: &str,
+                    b64: &str,
+                ) -> Result<String, financer_llm::LlmError> {
+                    self.1.lock().unwrap().push((mime.to_string(), b64.len()));
+                    self.0.describe_image(s, u, mime, b64).await
+                }
+            }
+            Ok(Box::new(Shared(p2.clone(), i2.clone())))
+        }))
+    })
+    .await;
+    (app, images)
+}
+
+#[tokio::test]
+async fn scanning_a_photo_transcribes_parses_and_stores() {
+    let (app, images) = scan_app(vec![Ok(SCANNED.into())]).await;
+    let (status, body) = send(&app, Method::POST, "/v1/receipts/scan", Some(scan_body())).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["text"], SCANNED);
+    assert_eq!(
+        (
+            body["receipt"]["reconciles"].clone(),
+            body["receipt"]["chain"].clone()
+        ),
+        (json!(true), json!("rewe"))
+    );
+    assert_eq!(body["receipt"]["items"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        images.lock().unwrap().as_slice(),
+        &[("image/jpeg".to_string(), 12)]
+    );
+    assert_eq!(
+        get(&app, "/v1/receipts").await.1.as_array().unwrap().len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn scan_rejects_bad_input_before_calling_the_model() {
+    let (app, images) = scan_app(vec![Ok(SCANNED.into())]).await;
+    for bad in [
+        json!({"image_base64": "QUJD", "mime_type": "application/pdf"}),
+        json!({"image_base64": "", "mime_type": "image/png"}),
+        json!({"image_base64": "not base64 !!", "mime_type": "image/png"}),
+        json!({"image_base64": "A".repeat(11_500_000), "mime_type": "image/png"}),
+    ] {
+        assert_eq!(
+            send(&app, Method::POST, "/v1/receipts/scan", Some(bad))
+                .await
+                .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    assert!(
+        images.lock().unwrap().is_empty(),
+        "the model must not be called for rejected input"
+    );
+}
+
+#[tokio::test]
+async fn scan_handles_non_receipts_and_empty_transcripts() {
+    let (app, _) = scan_app(vec![Ok("NONE".into()), Ok("just some words".into())]).await;
+    let (status, body) = send(&app, Method::POST, "/v1/receipts/scan", Some(scan_body())).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("does not look like a receipt"));
+    let (status, body) = send(&app, Method::POST, "/v1/receipts/scan", Some(scan_body())).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body["error"].as_str().unwrap().contains("no items"));
+    assert_eq!(
+        get(&app, "/v1/receipts").await.1.as_array().unwrap().len(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn scan_needs_a_key_and_a_model_that_can_see() {
+    let app = app_with(|s| s).await;
+    assert_eq!(
+        send(&app, Method::POST, "/v1/receipts/scan", Some(scan_body()))
+            .await
+            .0,
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+
+    struct Blind;
+    #[async_trait::async_trait]
+    impl financer_llm::LlmProvider for Blind {
+        async fn complete_json(&self, _: &str, _: &str) -> Result<String, financer_llm::LlmError> {
+            Ok("{}".into())
+        }
+    }
+    let app = app_with(|s| {
+        s.with_llm_keys(LlmKeys {
+            claude: Some("k".into()),
+            openai: None,
+        })
+        .with_llm_factory(Arc::new(|_| Ok(Box::new(Blind))))
+    })
+    .await;
+    let (status, body) = send(&app, Method::POST, "/v1/receipts/scan", Some(scan_body())).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("cannot read images"));
+}

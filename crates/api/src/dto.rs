@@ -459,3 +459,18 @@ pub struct BankStatus {
     pub iban: Option<String>,
     pub bic: Option<String>,
 }
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ReceiptScan {
+    /// The photo's bytes, base64-encoded (at most 8 MB decoded).
+    pub image_base64: String,
+    /// `image/jpeg`, `image/png` or `image/webp`.
+    pub mime_type: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ScanDto {
+    /// What the model read off the photo, so mistakes can be spotted.
+    pub text: String,
+    pub receipt: ReceiptDto,
+}

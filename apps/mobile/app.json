@@ -26,7 +26,14 @@
     "scheme": "financer",
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Financer uses the camera to photograph receipts so it can learn what you usually buy.",
+          "photosPermission": "Financer reads receipt photos you choose so it can learn what you usually buy."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

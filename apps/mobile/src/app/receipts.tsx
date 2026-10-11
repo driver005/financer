@@ -1,3 +1,4 @@
+import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { FlatList, View } from "react-native";
 import { HelperText, IconButton, Text, TextInput } from "react-native-paper";
@@ -37,6 +38,44 @@ export default function Receipts() {
     }
   }
 
+  async function scan(source: "camera" | "library") {
+    if (!api) return;
+    try {
+      if (source === "camera") {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          setMessage("Camera permission was denied. Allow it in the system settings, or choose a photo instead.");
+          return;
+        }
+      }
+      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images"], quality: 0.7, base64: true };
+      const picked =
+        source === "camera" ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+      if (picked.canceled) return;
+      const asset = picked.assets[0];
+      if (!asset.base64) {
+        setMessage("Could not read the photo.");
+        return;
+      }
+      setBusy(true);
+      setMessage("Reading the receipt… (the photo is sent to your configured AI provider)");
+      const mime = asset.mimeType && ["image/jpeg", "image/png", "image/webp"].includes(asset.mimeType) ? asset.mimeType : "image/jpeg";
+      const r = await api.scanReceipt(asset.base64, mime);
+      setMessage(
+        r.receipt.duplicate
+          ? "This receipt was already added."
+          : r.receipt.reconciles
+            ? `Added ${r.receipt.items.length} items; they add up to the total.`
+            : `Added ${r.receipt.items.length} items, but they do not add up to the printed total. Compare with the transcript:\n\n${r.text}`,
+      );
+      await reload();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not scan the receipt");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove(r: Receipt) {
     if (!api || r.id == null) return;
     try {
@@ -62,9 +101,17 @@ export default function Receipts() {
           ListHeaderComponent={
             <View style={{ marginBottom: 8 }}>
               <Text variant="bodyMedium" style={{ color: c.muted, marginBottom: 8 }}>
-                Paste the text of a receipt. Scanning a photo with your camera needs a text-recognition module in
-                a custom build and is not part of this version.
+                Photograph a receipt, or paste its text. Photos are read by your configured AI provider (Claude or
+                OpenAI), so the image leaves your server; only do this if you are fine with that.
               </Text>
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Button label="Scan" icon="camera-outline" onPress={() => scan("camera")} disabled={busy} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button label="Photo" icon="image-outline" mode="outlined" onPress={() => scan("library")} disabled={busy} />
+                </View>
+              </View>
               <TextInput
                 mode="outlined"
                 label="Receipt text"

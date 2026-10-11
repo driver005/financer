@@ -252,6 +252,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/receipts/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Scan a receipt photo: a vision-capable model (Claude or OpenAI, as configured) transcribes it
+         *     and the transcript is parsed like pasted text. The photo is sent to that provider.
+         */
+        post: operations["scan_receipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/receipts/{id}": {
         parameters: {
             query?: never;
@@ -588,6 +608,12 @@ export interface components {
             quantity: number;
             text: string;
         };
+        ReceiptScan: {
+            /** @description The photo's bytes, base64-encoded (at most 8 MB decoded). */
+            image_base64: string;
+            /** @description `image/jpeg`, `image/png` or `image/webp`. */
+            mime_type: string;
+        };
         ReceiptUpload: {
             /** @description Text recognised from the receipt photo. */
             text: string;
@@ -641,6 +667,11 @@ export interface components {
             /** @description Quotes stored after this refresh. */
             stored: number;
             unmatched: number;
+        };
+        ScanDto: {
+            receipt: components["schemas"]["ReceiptDto"];
+            /** @description What the model read off the photo, so mistakes can be spotted. */
+            text: string;
         };
         SettingsDto: {
             claude_key_configured: boolean;
@@ -1204,6 +1235,56 @@ export interface operations {
             };
             /** @description No items recognised */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    scan_receipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiptScan"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanDto"];
+                };
+            };
+            /** @description Not a usable image, or no items found on it */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The provider failed or cannot read images */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No API key configured */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -22,6 +22,7 @@ export type BankStatus = components["schemas"]["BankStatus"];
 export type SyncStarted = components["schemas"]["SyncStarted"];
 export type SyncDone = components["schemas"]["SyncDone"];
 export type SyncRequest = components["schemas"]["SyncRequest"];
+export type ScanResult = components["schemas"]["ScanDto"];
 export type Chain = "aldi" | "lidl" | "kaufland" | "rewe";
 
 export type ApiConfig = { baseUrl: string; token: string };
@@ -136,6 +137,11 @@ export class Api {
 
   uploadReceipt(text: string) {
     return this.json<Receipt>("/v1/receipts", "POST", { text });
+  }
+
+  /** Photo of a receipt: a vision model transcribes it and the server parses the transcript. */
+  scanReceipt(imageBase64: string, mimeType: string) {
+    return this.json<ScanResult>("/v1/receipts/scan", "POST", { image_base64: imageBase64, mime_type: mimeType });
   }
 
   deleteReceipt(id: number) {

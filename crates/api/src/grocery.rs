@@ -306,20 +306,24 @@ pub async fn upload_receipt(
     State(state): State<AppState>,
     Json(up): Json<ReceiptUpload>,
 ) -> Result<Json<ReceiptDto>, ApiError> {
-    if up.text.len() > 20_000 {
+    store_receipt_text(&state, &up.text).await.map(Json)
+}
+
+/// Parse receipt text and store it unless it is a duplicate or shows no items.
+async fn store_receipt_text(state: &AppState, text: &str) -> Result<ReceiptDto, ApiError> {
+    if text.len() > 20_000 {
         return Err(ApiError::BadRequest(
             "receipt text is longer than 20000 characters".into(),
         ));
     }
-    let parsed = parse_receipt(&up.text);
+    let parsed = parse_receipt(text);
     if parsed.items.is_empty() {
         return Err(ApiError::BadRequest(
             "no items recognised on this receipt".into(),
         ));
     }
     let fingerprint: String = Sha256::digest(
-        up.text
-            .split_whitespace()
+        text.split_whitespace()
             .collect::<Vec<_>>()
             .join(" ")
             .as_bytes(),
@@ -332,7 +336,72 @@ pub async fn upload_receipt(
         .store
         .add_receipt(&fingerprint, parsed.date, parsed.merchant.as_deref(), &json)
         .await?;
-    Ok(Json(receipt_dto(id, id.is_none(), parsed)))
+    Ok(receipt_dto(id, id.is_none(), parsed))
+}
+
+const SCAN_SYSTEM: &str = "You transcribe photos of shop receipts. Output only the text printed on the receipt, \
+one receipt line per output line, in reading order. Keep item names, prices, quantity lines such as \
+'2 x 0,99', the total (SUMME) and the date exactly as printed. Do not summarise, translate or add commentary. \
+If the image is not a receipt, answer with the single word NONE.";
+
+/// Largest photo accepted (decoded bytes).
+const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+
+/// Scan a receipt photo: a vision-capable model (Claude or OpenAI, as configured) transcribes it
+/// and the transcript is parsed like pasted text. The photo is sent to that provider.
+#[utoipa::path(post, path = "/v1/receipts/scan", request_body = ReceiptScan, responses(
+    (status = 200, body = ScanDto),
+    (status = 400, description = "Not a usable image, or no items found on it", body = ErrorBody),
+    (status = 502, description = "The provider failed or cannot read images", body = ErrorBody),
+    (status = 503, description = "No API key configured", body = ErrorBody)),
+    security(("bearer" = [])))]
+pub async fn scan_receipt(
+    State(state): State<AppState>,
+    Json(scan): Json<ReceiptScan>,
+) -> Result<Json<ScanDto>, ApiError> {
+    if !["image/jpeg", "image/png", "image/webp"].contains(&scan.mime_type.as_str()) {
+        return Err(ApiError::BadRequest(
+            "mime_type must be image/jpeg, image/png or image/webp".into(),
+        ));
+    }
+    let b64 = scan.image_base64.trim();
+    // base64 inflates by 4/3; reject before decoding anything
+    if b64.is_empty() || b64.len() > MAX_IMAGE_BYTES / 3 * 4 + 8 {
+        return Err(ApiError::BadRequest(
+            "image is empty or larger than 8 MB".into(),
+        ));
+    }
+    if !b64
+        .bytes()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'+' | b'/' | b'='))
+    {
+        return Err(ApiError::BadRequest(
+            "image_base64 is not valid base64".into(),
+        ));
+    }
+
+    let llm = build_llm(&state).await?;
+    let text = llm
+        .describe_image(
+            SCAN_SYSTEM,
+            "Transcribe this receipt.",
+            &scan.mime_type,
+            b64,
+        )
+        .await
+        .map_err(|e| match e {
+            financer_llm::LlmError::Unsupported => ApiError::BadGateway(
+                "the selected model cannot read images; choose another model in Settings".into(),
+            ),
+            other => ApiError::BadGateway(other.to_string().chars().take(300).collect()),
+        })?;
+    if text.trim().eq_ignore_ascii_case("none") {
+        return Err(ApiError::BadRequest(
+            "that does not look like a receipt".into(),
+        ));
+    }
+    let receipt = store_receipt_text(&state, &text).await?;
+    Ok(Json(ScanDto { text, receipt }))
 }
 
 #[utoipa::path(get, path = "/v1/receipts", responses((status = 200, body = Vec<ReceiptDto>)), security(("bearer" = [])))]
@@ -561,6 +630,27 @@ fn key_for(state: &AppState, provider: Provider) -> Option<String> {
     .filter(|k| !k.trim().is_empty())
 }
 
+/// The configured provider, or `503` with what to set when its key is missing.
+async fn build_llm(state: &AppState) -> Result<Box<dyn financer_llm::LlmProvider>, ApiError> {
+    let (provider, model) = llm_settings(state).await?;
+    let Some(api_key) = key_for(state, provider) else {
+        let var = if provider == Provider::Claude {
+            "FINANCER_ANTHROPIC_API_KEY"
+        } else {
+            "FINANCER_OPENAI_API_KEY"
+        };
+        return Err(ApiError::Unavailable(format!(
+            "no API key for {provider:?}; set {var} on the server"
+        )));
+    };
+    (state.llm)(&LlmSettings {
+        provider,
+        model,
+        api_key,
+    })
+    .map_err(|e| ApiError::Unavailable(e.to_string()))
+}
+
 /// New recipe ideas from Claude or OpenAI, based on your usual items and current offers. Only
 /// item names, the budget and your diet note are sent, never bank data.
 #[utoipa::path(post, path = "/v1/recipes/ideas", request_body = IdeasRequest, responses(
@@ -572,23 +662,7 @@ pub async fn recipe_ideas(
     State(state): State<AppState>,
     Json(req): Json<IdeasRequest>,
 ) -> Result<Json<Vec<IdeaDto>>, ApiError> {
-    let (provider, model) = llm_settings(&state).await?;
-    let Some(api_key) = key_for(&state, provider) else {
-        let var = if provider == Provider::Claude {
-            "FINANCER_ANTHROPIC_API_KEY"
-        } else {
-            "FINANCER_OPENAI_API_KEY"
-        };
-        return Err(ApiError::Unavailable(format!(
-            "no API key for {provider:?}; set {var} on the server"
-        )));
-    };
-    let llm = (state.llm)(&LlmSettings {
-        provider,
-        model,
-        api_key,
-    })
-    .map_err(|e| ApiError::Unavailable(e.to_string()))?;
+    let llm = build_llm(&state).await?;
 
     let (basket, _) = effective_basket(&state).await?;
     let quotes = live_quotes(&state).await?;

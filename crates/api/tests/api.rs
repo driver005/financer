@@ -252,6 +252,7 @@ fn openapi_document_lists_every_route() {
         "/v1/catalog",
         "/v1/basket",
         "/v1/receipts",
+        "/v1/receipts/scan",
         "/v1/receipts/{id}",
         "/v1/affordability",
         "/v1/recipes",
@@ -266,4 +267,48 @@ fn openapi_document_lists_every_route() {
     ] {
         assert!(paths.contains_key(p), "missing {p}");
     }
+}
+
+#[tokio::test]
+async fn too_many_wrong_tokens_lock_the_api_even_for_the_right_one() {
+    let app = app().await;
+    let wrong = || {
+        Request::builder()
+            .uri("/v1/transactions")
+            .header(header::AUTHORIZATION, "Bearer nope")
+            .body(Body::empty())
+            .unwrap()
+    };
+    for _ in 0..20 {
+        assert_eq!(
+            app.clone().oneshot(wrong()).await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    assert_eq!(
+        app.clone().oneshot(wrong()).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    ); // 21st trips the lock
+    let res = app.clone().oneshot(wrong()).await.unwrap();
+    assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(res.headers().get(header::RETRY_AFTER).is_some());
+
+    let (status, _) = call(
+        &app,
+        Method::GET,
+        "/v1/transactions",
+        Body::empty(),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "a locked API refuses everyone for the lockout period"
+    );
+
+    // /health stays open for uptime checks
+    let (status, _) = call(&app, Method::GET, "/health", Body::empty(), None, false).await;
+    assert_eq!(status, StatusCode::OK);
 }

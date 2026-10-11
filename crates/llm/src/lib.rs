@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use genai::adapter::AdapterKind;
-use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ChatResponseFormat};
+use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ChatResponseFormat, ContentPart};
 use genai::resolver::{AuthData, AuthResolver};
 use genai::{Client, ModelIden};
 use serde::{Deserialize, Serialize};
@@ -64,12 +64,25 @@ pub enum LlmError {
     Empty,
     #[error("LLM request failed: {0}")]
     Request(String),
+    #[error("this provider or model cannot read images")]
+    Unsupported,
 }
 
 /// One request/response round trip that must come back as JSON text.
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
     async fn complete_json(&self, system: &str, user: &str) -> Result<String, LlmError>;
+
+    /// Plain-text answer about an image (`image_base64` is the file's bytes, base64-encoded).
+    async fn describe_image(
+        &self,
+        _system: &str,
+        _user: &str,
+        _mime_type: &str,
+        _image_base64: &str,
+    ) -> Result<String, LlmError> {
+        Err(LlmError::Unsupported)
+    }
 }
 
 /// Real provider, backed by the `genai` crate.
@@ -115,12 +128,38 @@ impl LlmProvider for GenaiProvider {
             .filter(|t| !t.trim().is_empty())
             .ok_or(LlmError::Empty)
     }
+
+    async fn describe_image(
+        &self,
+        system: &str,
+        user: &str,
+        mime_type: &str,
+        image_base64: &str,
+    ) -> Result<String, LlmError> {
+        let req = ChatRequest::new(vec![
+            ChatMessage::system(system),
+            ChatMessage::user(vec![
+                ContentPart::from_text(user),
+                ContentPart::from_binary_base64(mime_type, image_base64, None),
+            ]),
+        ]);
+        let res = self
+            .client
+            .exec_chat(self.model.as_str(), req, None)
+            .await
+            .map_err(|e| LlmError::Request(e.to_string()))?;
+        res.into_first_text()
+            .filter(|t| !t.trim().is_empty())
+            .ok_or(LlmError::Empty)
+    }
 }
 
 /// Test double: returns canned answers in order and records what it was asked.
 pub struct MockProvider {
     answers: Mutex<Vec<Result<String, String>>>,
     pub requests: Mutex<Vec<(String, String)>>,
+    /// `(mime type, base64 length)` of every image it was asked about.
+    pub images: Mutex<Vec<(String, usize)>>,
 }
 
 impl MockProvider {
@@ -128,6 +167,7 @@ impl MockProvider {
         Self {
             answers: Mutex::new(answers.into_iter().rev().collect()),
             requests: Mutex::new(Vec::new()),
+            images: Mutex::new(Vec::new()),
         }
     }
 }
@@ -144,6 +184,20 @@ impl LlmProvider for MockProvider {
             Some(Err(e)) => Err(LlmError::Request(e)),
             None => Err(LlmError::Empty),
         }
+    }
+
+    async fn describe_image(
+        &self,
+        system: &str,
+        user: &str,
+        mime_type: &str,
+        image_base64: &str,
+    ) -> Result<String, LlmError> {
+        self.images
+            .lock()
+            .unwrap()
+            .push((mime_type.to_string(), image_base64.len()));
+        self.complete_json(system, user).await
     }
 }
 
@@ -193,6 +247,33 @@ mod tests {
         );
         assert!(Provider::Claude.default_model().starts_with("claude-"));
         assert!(Provider::OpenAi.default_model().starts_with("gpt-"));
+    }
+
+    #[tokio::test]
+    async fn providers_without_vision_say_so_and_the_mock_records_images() {
+        struct NoVision;
+        #[async_trait]
+        impl LlmProvider for NoVision {
+            async fn complete_json(&self, _: &str, _: &str) -> Result<String, LlmError> {
+                Ok("{}".into())
+            }
+        }
+        assert!(matches!(
+            NoVision.describe_image("s", "u", "image/png", "AAAA").await,
+            Err(LlmError::Unsupported)
+        ));
+
+        let m = MockProvider::with_answers(vec![Ok("REWE\nMILCH 1,19".into())]);
+        assert_eq!(
+            m.describe_image("s", "u", "image/jpeg", "QUJD")
+                .await
+                .unwrap(),
+            "REWE\nMILCH 1,19"
+        );
+        assert_eq!(
+            *m.images.lock().unwrap(),
+            vec![("image/jpeg".to_string(), 4)]
+        );
     }
 
     #[tokio::test]

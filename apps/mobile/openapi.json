@@ -709,6 +709,72 @@
         ]
       }
     },
+    "/v1/receipts/scan": {
+      "post": {
+        "tags": [
+          "grocery"
+        ],
+        "summary": "Scan a receipt photo: a vision-capable model (Claude or OpenAI, as configured) transcribes it\nand the transcript is parsed like pasted text. The photo is sent to that provider.",
+        "operationId": "scan_receipt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptScan"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a usable image, or no items found on it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The provider failed or cannot read images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No API key configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/receipts/{id}": {
       "delete": {
         "tags": [
@@ -1694,6 +1760,23 @@
           }
         }
       },
+      "ReceiptScan": {
+        "type": "object",
+        "required": [
+          "image_base64",
+          "mime_type"
+        ],
+        "properties": {
+          "image_base64": {
+            "type": "string",
+            "description": "The photo's bytes, base64-encoded (at most 8 MB decoded)."
+          },
+          "mime_type": {
+            "type": "string",
+            "description": "`image/jpeg`, `image/png` or `image/webp`."
+          }
+        }
+      },
       "ReceiptUpload": {
         "type": "object",
         "required": [
@@ -1882,6 +1965,22 @@
           "unmatched": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "ScanDto": {
+        "type": "object",
+        "required": [
+          "text",
+          "receipt"
+        ],
+        "properties": {
+          "receipt": {
+            "$ref": "#/components/schemas/ReceiptDto"
+          },
+          "text": {
+            "type": "string",
+            "description": "What the model read off the photo, so mistakes can be spotted."
           }
         }
       },

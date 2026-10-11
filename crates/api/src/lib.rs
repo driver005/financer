@@ -136,6 +136,7 @@ impl AppState {
         grocery::get_basket,
         grocery::put_basket,
         grocery::upload_receipt,
+        grocery::scan_receipt,
         grocery::list_receipts,
         grocery::delete_receipt,
         grocery::affordability,
@@ -167,6 +168,8 @@ impl AppState {
         dto::ReceiptUpload,
         dto::ReceiptItemDto,
         dto::ReceiptDto,
+        dto::ReceiptScan,
+        dto::ScanDto,
         dto::ChainAffordabilityDto,
         dto::StapleDto,
         dto::PlanStopDto,
@@ -221,6 +224,10 @@ pub fn router(state: AppState, token: TokenHash) -> Router {
         .route(
             "/receipts",
             get(grocery::list_receipts).post(grocery::upload_receipt),
+        )
+        .route(
+            "/receipts/scan",
+            post(grocery::scan_receipt).layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
         )
         .route("/receipts/{id}", delete(grocery::delete_receipt))
         .route("/affordability", get(grocery::affordability))
