@@ -1,0 +1,513 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Financer API",
+    "description": "REST API: Axum router and services shared by the hosted server and the embedded on-phone backend",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Server is up",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/budget/disposable": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "summary": "Monthly income minus fixed costs, from detected recurring payments.",
+        "operationId": "disposable",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisposableDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/budget/envelopes": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "get_envelopes",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EnvelopeDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "routes"
+        ],
+        "summary": "Replace all monthly envelopes. A category may appear once; limits must not be negative.",
+        "operationId": "put_envelopes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/EnvelopeDto"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EnvelopeDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Duplicate category or negative limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/budget/status": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "summary": "Spent and remaining per envelope for one month.",
+        "operationId": "budget_status",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "month",
+            "in": "path",
+            "description": "1 to 12",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EnvelopeStatusDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid month",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/recurring": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "summary": "Payments that repeat on a steady rhythm and amount (rent, salary, subscriptions).",
+        "operationId": "recurring",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecurringDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/transactions": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "summary": "All transactions, newest first.",
+        "operationId": "list_transactions",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TransactionDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/transactions/import": {
+      "post": {
+        "tags": [
+          "routes"
+        ],
+        "summary": "Import a Sparkasse CSV-CAMT export. Transactions are categorized, and rows that were\nimported before are skipped, so re-uploading an overlapping period is safe.",
+        "operationId": "import_transactions",
+        "requestBody": {
+          "content": {
+            "text/csv": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Import finished",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a Sparkasse CSV export",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DisposableDto": {
+        "type": "object",
+        "required": [
+          "monthly_income_cents",
+          "monthly_fixed_costs_cents",
+          "disposable_cents"
+        ],
+        "properties": {
+          "disposable_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "monthly_fixed_costs_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "monthly_income_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "EnvelopeDto": {
+        "type": "object",
+        "required": [
+          "category",
+          "limit_cents"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "example": "groceries"
+          },
+          "limit_cents": {
+            "type": "integer",
+            "format": "int64",
+            "example": 40000
+          }
+        }
+      },
+      "EnvelopeStatusDto": {
+        "type": "object",
+        "required": [
+          "category",
+          "limit_cents",
+          "spent_cents",
+          "remaining_cents"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "example": "groceries"
+          },
+          "limit_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "remaining_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`limit - spent`; negative when overspent."
+          },
+          "spent_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "ImportReport": {
+        "type": "object",
+        "required": [
+          "imported",
+          "duplicates",
+          "skipped"
+        ],
+        "properties": {
+          "duplicates": {
+            "type": "integer",
+            "description": "Rows already stored (same date, amount, counterparty and purpose).",
+            "minimum": 0
+          },
+          "imported": {
+            "type": "integer",
+            "description": "Rows stored for the first time.",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedRowDto"
+            },
+            "description": "Rows that could not be read, with the reason."
+          }
+        }
+      },
+      "RecurringDto": {
+        "type": "object",
+        "required": [
+          "counterparty",
+          "amount_cents",
+          "cadence",
+          "last_date",
+          "next_expected"
+        ],
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cadence": {
+            "type": "string",
+            "example": "monthly"
+          },
+          "counterparty": {
+            "type": "string"
+          },
+          "last_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "next_expected": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "SkippedRowDto": {
+        "type": "object",
+        "required": [
+          "line",
+          "reason"
+        ],
+        "properties": {
+          "line": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "TransactionDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "booking_date",
+          "amount_cents",
+          "counterparty",
+          "purpose"
+        ],
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Negative for money leaving the account.",
+            "example": -2347
+          },
+          "booking_date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-03-02"
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "groceries"
+          },
+          "counterparty": {
+            "type": "string"
+          },
+          "counterparty_iban": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "purpose": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

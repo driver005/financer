@@ -1,0 +1,5 @@
+# Automatic HTTPS via Let's Encrypt for $DOMAIN; the API container is not exposed directly.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy server:8080
+}
