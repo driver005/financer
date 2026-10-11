@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { coachMessage, dailyAllowance, daysInMonth, level, quests, spentOn, streak, xp, type Tx } from "../src/game";
+import { coachMessage, dailyAllowance, dailyAllowanceForDays, dailyAllowanceOn, daysInMonth, level, quests, spentOn, streak, xp, type Tx } from "../src/game";
 
 const g = (booking_date: string, cents: number): Tx => ({ booking_date, amount_cents: -cents, category: "groceries" });
 
@@ -93,5 +93,29 @@ describe("mood", () => {
     assert.equal(moodFor({ ...base, spentTodayCents: 2000, streakDays: 9, celebrating: true }), "worried");
     // no limit set: nothing to be worried about
     assert.equal(moodFor({ streakDays: 0, allowanceCents: 0, spentTodayCents: 5000 }), "happy");
+  });
+});
+
+describe("payday periods", () => {
+  it("splits the limit over the days of the payday period, not the calendar month", () => {
+    assert.equal(dailyAllowanceForDays(30000, 30), 1000);
+    assert.equal(dailyAllowanceForDays(10000, 31), 322);
+    // 25 Sep to 24 Oct is 30 days, the calendar month October has 31
+    assert.equal(dailyAllowanceOn(31000, "2026-10-11", 25), 1033);
+    assert.equal(dailyAllowanceOn(31000, "2026-10-11", 1), 1000);
+    // payday 1 matches the calendar-month allowance exactly
+    assert.equal(dailyAllowanceOn(10000, "2026-03-15"), dailyAllowance(10000, 2026, 3));
+  });
+
+  it("judges every day by the period it belongs to", () => {
+    // payday 25, limit 300 for a 30-day period = 10 a day; 24 Oct ends one period, 25 Oct starts the next
+    const txs = [g("2026-10-24", 900), g("2026-10-25", 900), g("2026-10-26", 900)];
+    assert.equal(streak(txs, 30000, "2026-10-26", "groceries", 25), 3);
+    assert.equal(streak([...txs, g("2026-10-25", 200)], 30000, "2026-10-26", "groceries", 25), 1);
+  });
+
+  it("is unchanged by default", () => {
+    const txs = [g("2026-04-01", 500), g("2026-04-05", 900), g("2026-04-08", 5000)];
+    assert.equal(streak(txs, 30000, "2026-04-10"), streak(txs, 30000, "2026-04-10", "groceries", 1));
   });
 });

@@ -3,11 +3,12 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use financer_core::{Budget, Categorizer, Disposable, RecurringDetector, YearMonth};
+use financer_core::{Budget, Categorizer, Disposable, RecurringDetector};
 use financer_fints::SparkasseCsv;
 use serde::Deserialize;
-use time::Month;
+use time::Date;
 
+use crate::budget_period::{BudgetPeriods, PeriodChoice};
 use crate::dto::*;
 use crate::AppState;
 
@@ -146,12 +147,20 @@ pub async fn put_envelopes(
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct MonthQuery {
-    year: i32,
-    /// 1 to 12
-    month: u8,
+    /// With `month`: the budget period that starts in this month (the calendar month when the
+    /// payday is 1).
+    year: Option<i32>,
+    /// 1 to 12; only together with `year`.
+    month: Option<u8>,
+    /// Instead of `year` and `month`: `current` (default) or `previous` budget period.
+    period: Option<PeriodChoice>,
+    /// The day to treat as today for `period` (ISO format); defaults to today (UTC).
+    #[param(value_type = Option<String>, format = Date)]
+    date: Option<Date>,
 }
 
-/// Spent and remaining per envelope for one month.
+/// Spent and remaining per envelope for one budget period (a calendar month unless a payday is
+/// set in the settings).
 #[utoipa::path(
     get,
     path = "/v1/budget/status",
@@ -278,8 +287,7 @@ impl Routes {
         state: AppState,
         q: MonthQuery,
     ) -> Result<Json<Vec<EnvelopeStatusDto>>, ApiError> {
-        let month = Month::try_from(q.month)
-            .map_err(|_| ApiError::BadRequest("month must be 1-12".into()))?;
+        let period = BudgetPeriods::resolve(&state, q.year, q.month, q.period, q.date).await?;
         let txs: Vec<_> = state
             .store
             .list_transactions()
@@ -288,7 +296,7 @@ impl Routes {
             .map(|s| s.transaction)
             .collect();
         let budget = state.store.load_budget().await?;
-        let status = budget.status(&txs, YearMonth::new(q.year, month));
+        let status = budget.status(&txs, period);
         Ok(Json(
             status.into_iter().map(EnvelopeStatusDto::from).collect(),
         ))

@@ -5,6 +5,7 @@ use time::{Date, Month};
 
 use crate::category::Category;
 use crate::money::Money;
+use crate::period::BudgetPeriod;
 use crate::recurring::{Cadence, RecurringPayment};
 use crate::transaction::Transaction;
 
@@ -35,7 +36,7 @@ impl YearMonth {
     }
 }
 
-/// Monthly spending limit per category.
+/// Spending limit per category and budget period (a calendar month unless a payday is set).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Budget {
     pub envelopes: BTreeMap<Category, Money>,
@@ -51,14 +52,15 @@ pub struct EnvelopeStatus {
 }
 
 impl Budget {
-    /// Spending per category in a month, as positive amounts. Income and savings are not spending.
+    /// Spending per category in a budget period, as positive amounts. Income and savings are not
+    /// spending.
     pub fn spent_by_category(
         transactions: &[Transaction],
-        month: YearMonth,
+        period: BudgetPeriod,
     ) -> BTreeMap<Category, Money> {
         let mut out: BTreeMap<Category, Money> = BTreeMap::new();
         for tx in transactions {
-            if !tx.is_expense() || !month.contains(tx.booking_date) {
+            if !tx.is_expense() || !period.contains(tx.booking_date) {
                 continue;
             }
             let cat = tx.category.unwrap_or(Category::Other);
@@ -70,8 +72,12 @@ impl Budget {
         out
     }
 
-    pub fn status(&self, transactions: &[Transaction], month: YearMonth) -> Vec<EnvelopeStatus> {
-        let spent = Self::spent_by_category(transactions, month);
+    pub fn status(
+        &self,
+        transactions: &[Transaction],
+        period: BudgetPeriod,
+    ) -> Vec<EnvelopeStatus> {
+        let spent = Self::spent_by_category(transactions, period);
         self.envelopes
             .iter()
             .map(|(category, limit)| {
@@ -86,14 +92,14 @@ impl Budget {
             .collect()
     }
 
-    /// What is left of one envelope this month, never below zero.
+    /// What is left of one envelope in this period, never below zero.
     pub fn remaining(
         &self,
         category: Category,
         transactions: &[Transaction],
-        month: YearMonth,
+        period: BudgetPeriod,
     ) -> Money {
-        self.status(transactions, month)
+        self.status(transactions, period)
             .into_iter()
             .find(|s| s.category == category)
             .map(|s| {
@@ -192,7 +198,7 @@ mod tests {
             .envelopes
             .insert(Category::Dining, Money::from_cents(500));
 
-        let m = YearMonth::new(2026, Month::March);
+        let m = BudgetPeriod::for_month(YearMonth::new(2026, Month::March), 1);
         let status = budget.status(&txs, m);
         let groceries = status
             .iter()
@@ -215,9 +221,39 @@ mod tests {
     }
 
     #[test]
+    fn a_payday_period_cuts_spending_at_payday() {
+        let txs = vec![
+            Fixture::tx(date!(2026 - 02 - 24), -1000, Category::Groceries),
+            Fixture::tx(date!(2026 - 02 - 25), -2000, Category::Groceries),
+            Fixture::tx(date!(2026 - 03 - 24), -400, Category::Groceries),
+            Fixture::tx(date!(2026 - 03 - 25), -8000, Category::Groceries),
+        ];
+        let mut budget = Budget::default();
+        budget
+            .envelopes
+            .insert(Category::Groceries, Money::from_cents(5000));
+        let p = BudgetPeriod::containing(date!(2026 - 03 - 10), 25);
+        assert_eq!(p.start, date!(2026 - 02 - 25));
+        assert_eq!(
+            Budget::spent_by_category(&txs, p)[&Category::Groceries],
+            Money::from_cents(2400)
+        );
+        assert_eq!(
+            budget.remaining(Category::Groceries, &txs, p),
+            Money::from_cents(2600)
+        );
+        // the next period holds only what came after payday
+        assert_eq!(
+            budget.remaining(Category::Groceries, &txs, p.next(25)),
+            Money::ZERO
+        );
+    }
+
+    #[test]
     fn income_is_not_spending() {
         let txs = vec![Fixture::tx(date!(2026 - 03 - 10), 250000, Category::Income)];
-        assert!(Budget::spent_by_category(&txs, YearMonth::new(2026, Month::March)).is_empty());
+        let march = BudgetPeriod::for_month(YearMonth::new(2026, Month::March), 1);
+        assert!(Budget::spent_by_category(&txs, march).is_empty());
     }
 
     #[test]

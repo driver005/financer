@@ -371,6 +371,8 @@ pub struct SettingsDto {
     pub openai_key_configured: bool,
     /// Number of configured price sources.
     pub price_sources: usize,
+    /// Day of the month the budget period starts on (1 to 28; 1 = calendar month).
+    pub payday: u8,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -378,6 +380,8 @@ pub struct SettingsUpdate {
     pub habit_mode: Option<String>,
     pub llm_provider: Option<String>,
     pub llm_model: Option<String>,
+    /// Day of the month the budget period starts on, 1 to 28.
+    pub payday: Option<i64>,
 }
 
 impl PriceDto {

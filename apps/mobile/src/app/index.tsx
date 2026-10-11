@@ -5,12 +5,15 @@ import { useEffect, useState } from "react";
 import { ScrollView, Text as RNText, View } from "react-native";
 
 import { Mascot } from "@/components/Mascot";
+import { SafeToSpendCard } from "@/components/SafeToSpendCard";
 import { ChunkyButton } from "@/components/kit";
 import { Bar, Body, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import type { SafeToSpend } from "@/api/client";
 import { useApi } from "@/api/config";
 import { formatCents } from "@/format";
-import { coachMessage, dailyAllowance, level, moodFor, quests, spentOn, streak, xp, type Progress, type Quest } from "@/game";
+import { coachMessage, dailyAllowanceOn, level, moodFor, quests, spentOn, streak, xp, type Progress, type Quest } from "@/game";
 import { useScreenData } from "@/hooks";
+import { localIsoDate } from "@/period";
 import { getSecret, setSecret } from "@/api/storage";
 import { celebrate } from "@/native/haptics";
 import { usePalette } from "@/theme";
@@ -19,11 +22,6 @@ const SEEN_KEY = "financer.quests.seen";
 // Quests already celebrated since the app started. Module level (not per component) so a
 // remount or two quick reloads cannot celebrate the same quest twice.
 const celebrated = new Set<string>();
-
-function isoToday(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 function Pill({ icon, text, color, label }: { icon: string; text: string; color: string; label: string }) {
   const p = usePalette();
@@ -67,7 +65,12 @@ function QuestRow({ quest, onGo }: { quest: Quest; onGo: () => void }) {
   );
 }
 
-type TodayData = { progress: Progress; txs: Awaited<ReturnType<import("@/api/client").Api["transactions"]>>; groceryLimit: number };
+type TodayData = {
+  progress: Progress;
+  txs: Awaited<ReturnType<import("@/api/client").Api["transactions"]>>;
+  groceryLimit: number;
+  safe: SafeToSpend | null;
+};
 
 export default function Today() {
   const { api, loaded } = useApi();
@@ -76,15 +79,18 @@ export default function Today() {
   const { toast } = useToast();
   const [celebrating, setCelebrating] = useState(false);
   const { data, error } = useScreenData<TodayData>(async (a) => {
-    const [txs, envelopes, basket, prices, receipts] = await Promise.all([
+    const [txs, envelopes, basket, prices, receipts, safe] = await Promise.all([
       a.transactions(),
       a.envelopes(),
       a.basket(),
       a.prices(),
       a.receipts(),
+      // the rest of the screen still works if this one fails (e.g. an older server)
+      a.safeToSpend(localIsoDate()).catch(() => null),
     ]);
     return {
       txs,
+      safe,
       groceryLimit: envelopes.find((e) => e.category === "groceries")?.limit_cents ?? 0,
       progress: {
         transactions: txs.length,
@@ -96,11 +102,12 @@ export default function Today() {
     };
   });
 
-  const today = isoToday();
-  const [y, m] = today.split("-").map(Number);
-  const allowance = data ? dailyAllowance(data.groceryLimit, y, m) : 0;
+  const today = localIsoDate();
+  // the budget period (payday to payday) decides how many days the limit is spread over
+  const payday = data?.safe?.payday ?? 1;
+  const allowance = data ? dailyAllowanceOn(data.groceryLimit, today, payday) : 0;
   const spentToday = data ? spentOn(data.txs, today, "groceries") : 0;
-  const days = data ? streak(data.txs, data.groceryLimit, today) : 0;
+  const days = data ? streak(data.txs, data.groceryLimit, today, "groceries", payday) : 0;
   const list = data ? quests(data.progress) : [];
   const doneCount = list.filter((q) => q.done).length;
   const points = xp(doneCount, days);
@@ -149,6 +156,8 @@ export default function Today() {
         error ? <Body muted>{error}</Body> : <Loading />
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+          <SafeToSpendCard data={data.safe} />
+
           <View style={{ flexDirection: "row", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
             <Pill icon="🔥" text={`${days}`} color={p.orange} label={`Streak: ${days} days`} />
             <Pill icon="⚡" text={`${points} XP`} color={p.gold} label={`${points} experience points`} />
@@ -182,7 +191,7 @@ export default function Today() {
               </>
             ) : (
               <>
-                <Body muted>Set a monthly grocery limit and it becomes a daily goal here.</Body>
+                <Body muted>Set a grocery limit and it becomes a daily goal here.</Body>
                 <View style={{ marginTop: 12 }}>
                   <ChunkyButton label="Set a limit" onPress={() => router.push("/budget")} />
                 </View>

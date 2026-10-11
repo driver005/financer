@@ -5,6 +5,7 @@ import { HelperText, List, SegmentedButtons, Text, TextInput } from "@/component
 
 import { Api, type ExportData } from "@/api/client";
 import { useApi } from "@/api/config";
+import { PaydayPicker } from "@/components/PaydayPicker";
 import { Body, Button, Card, Screen, Title, useColors } from "@/components/ui";
 import { pickTextFile, shareTextFile } from "@/native/files";
 import { useScreenData } from "@/hooks";
@@ -187,6 +188,15 @@ export default function SettingsScreen() {
 
         {api && settings ? (
           <>
+            <Card>
+              <Text variant="titleMedium">When do you get paid?</Text>
+              <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
+                Your budget month runs from payday to the day before the next one, so limits and the daily number line up with
+                your salary. Day 1 is the calendar month.
+              </Text>
+              <PaydayPicker value={settings.payday} onChange={(day) => update({ payday: day })} />
+            </Card>
+
             <Card>
               <Text variant="titleMedium">How should I learn what you buy?</Text>
               <SegmentedButtons

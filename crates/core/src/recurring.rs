@@ -16,7 +16,7 @@ pub enum Cadence {
 }
 
 impl Cadence {
-    fn nominal_days(self) -> i64 {
+    pub(crate) fn nominal_days(self) -> i64 {
         match self {
             Cadence::Weekly => 7,
             Cadence::Monthly => 30,
@@ -27,7 +27,7 @@ impl Cadence {
 
     /// The next booking after `last`: calendar-aware for monthly and longer rhythms
     /// (the 1st stays the 1st), a plain 7 days for weekly.
-    fn next_after(self, last: Date) -> Date {
+    pub(crate) fn next_after(self, last: Date) -> Date {
         match self {
             Cadence::Weekly => last + Duration::days(7),
             Cadence::Monthly => Self::add_months(last, 1),
