@@ -37,6 +37,12 @@ export type Split = components["schemas"]["SplitDto"];
 export type SplitInput = components["schemas"]["SplitInput"];
 export type Suggestions = components["schemas"]["SuggestionsDto"];
 export type AcceptReport = components["schemas"]["AcceptReport"];
+export type Subscriptions = components["schemas"]["SubscriptionsDto"];
+export type Subscription = components["schemas"]["SubscriptionDto"];
+export type UpcomingCharge = components["schemas"]["UpcomingChargeDto"];
+export type PriceHike = components["schemas"]["PriceHikeDto"];
+export type Alert = components["schemas"]["AlertDto"];
+export type AlertList = components["schemas"]["AlertsDto"];
 export type Chain = "aldi" | "lidl" | "kaufland" | "rewe";
 
 export class ApiError extends Error {
@@ -201,6 +207,20 @@ export class Api {
 
   saveSettings(update: SettingsUpdate) {
     return this.json<Settings>("/v1/settings", "PUT", update);
+  }
+
+  /** Calendar of expected charges for the next `days` days, price hikes, duplicates and stopped subscriptions. */
+  subscriptions(days?: number) {
+    return this.request<Subscriptions>(`/v1/subscriptions${days ? `?days=${days}` : ""}`);
+  }
+
+  /** Anomaly alerts; dismissed ones only with `includeDismissed`. */
+  alerts(includeDismissed = false) {
+    return this.request<AlertList>(`/v1/alerts${includeDismissed ? "?include_dismissed=true" : ""}`);
+  }
+
+  dismissAlert(id: string) {
+    return this.request<{ id: string; dismissed: boolean }>(`/v1/alerts/${encodeURIComponent(id)}/dismiss`, { method: "POST" });
   }
 
   /** Everything that is yours as one document (no secrets, no prices). */

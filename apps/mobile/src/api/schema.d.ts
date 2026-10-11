@@ -40,6 +40,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Possible problems in recent payments: duplicate charges, amounts far above the usual, big
+         *     first-time merchants and charges that are large for their category. Dismissed alerts are left
+         *     out unless `include_dismissed=true`.
+         */
+        get: operations["alerts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alerts/{id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss an alert so it no longer counts as unread. Dismissing twice is fine. */
+        post: operations["dismiss_alert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/bank/status": {
         parameters: {
             query?: never;
@@ -512,6 +550,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recurring payments seen as a watchdog: what is due in the next days, price hikes, possible
+         *     duplicates, and subscriptions that seem to have stopped.
+         */
+        get: operations["subscriptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/transactions": {
         parameters: {
             query?: never;
@@ -678,6 +736,53 @@ export interface components {
             /** @description Cheapest items that fit the budget (at most 20). */
             staples: components["schemas"]["StapleDto"][];
         };
+        AlertDismissedDto: {
+            dismissed: boolean;
+            id: string;
+        };
+        AlertDto: {
+            /**
+             * Format: int64
+             * @description What was charged (positive).
+             */
+            amount_cents: number;
+            /** Format: date */
+            booking_date: string;
+            counterparty: string;
+            dismissed: boolean;
+            /** @description How many earlier charges the comparison is based on. */
+            history_count: number;
+            /** @description Stable id; pass it to `POST /v1/alerts/{id}/dismiss`. */
+            id: string;
+            /**
+             * @description `duplicate_charge`, `unusual_amount`, `new_merchant` or `large_for_category`. The app labels
+             *     these in the user's language; `reason` is the English explanation with the numbers.
+             * @example duplicate_charge
+             */
+            kind: string;
+            reason: string;
+            /**
+             * Format: int64
+             * @description What it is compared with (earlier charge, median, threshold), positive.
+             */
+            reference_cents?: number | null;
+            /**
+             * @description `low`, `medium` or `high`.
+             * @example high
+             */
+            severity: string;
+            /**
+             * Format: int64
+             * @description Id of the transaction in `GET /v1/transactions`.
+             */
+            transaction_id: number;
+        };
+        AlertsDto: {
+            /** @description Newest first. */
+            alerts: components["schemas"]["AlertDto"][];
+            /** @description Alerts that are not dismissed (also when `include_dismissed` is set). */
+            unread_count: number;
+        };
         ApplyReport: {
             /** @description Transactions whose category changed. Transactions you categorized by hand are skipped. */
             changed: number;
@@ -763,6 +868,15 @@ export interface components {
             monthly_fixed_costs_cents: number;
             /** Format: int64 */
             monthly_income_cents: number;
+        };
+        DuplicateSubscriptionDto: {
+            first: components["schemas"]["SubscriptionDto"];
+            /**
+             * @description `same_merchant` or `similar_merchant`.
+             * @example similar_merchant
+             */
+            reason: string;
+            second: components["schemas"]["SubscriptionDto"];
         };
         EnvelopeDto: {
             /** @example groceries */
@@ -949,6 +1063,27 @@ export interface components {
             source: string;
             /** Format: date */
             valid_until?: string | null;
+        };
+        PriceHikeDto: {
+            /** @example monthly */
+            cadence: string;
+            counterparty: string;
+            /** Format: int64 */
+            delta_cents: number;
+            /** Format: int64 */
+            new_amount_cents: number;
+            /** Format: int64 */
+            old_amount_cents: number;
+            /**
+             * Format: int64
+             * @description Increase in basis points of the old amount: 2002 is +20.02%.
+             */
+            percent_bp: number;
+            /**
+             * Format: date
+             * @description First booking at the new price.
+             */
+            since: string;
         };
         ReceiptDto: {
             /** @example rewe */
@@ -1219,6 +1354,17 @@ export interface components {
             category: string;
             note?: string | null;
         };
+        /** @description A subscription whose last charge is older than two periods: cancelled, paused or moved. */
+        StaleSubscriptionDto: {
+            /** Format: int64 */
+            days_since_last: number;
+            /**
+             * Format: int32
+             * @description How many expected charges did not arrive (at least 2).
+             */
+            periods_missed: number;
+            subscription: components["schemas"]["SubscriptionDto"];
+        };
         StapleDto: {
             chain: string;
             item: string;
@@ -1227,6 +1373,57 @@ export interface components {
             name: string;
             /** Format: int64 */
             price_cents: number;
+        };
+        /** @description One recurring outgoing payment. All amounts in the watchdog are positive charge sizes. */
+        SubscriptionDto: {
+            /**
+             * Format: int64
+             * @example 1299
+             */
+            amount_cents: number;
+            /** @example monthly */
+            cadence: string;
+            /**
+             * Format: int32
+             * @description 10 to 99.
+             */
+            confidence: number;
+            counterparty: string;
+            /** Format: date */
+            first_date: string;
+            /** Format: date */
+            last_date: string;
+            /**
+             * Format: int64
+             * @description What it costs per month on average (weekly x 52/12, quarterly / 3, yearly / 12).
+             * @example 1299
+             */
+            monthly_cents: number;
+            /** Format: date */
+            next_expected: string;
+            occurrences: number;
+        };
+        SubscriptionsDto: {
+            /** @description Subscriptions that are still running. */
+            active: components["schemas"]["SubscriptionDto"][];
+            /** Format: date */
+            as_of: string;
+            /**
+             * Format: int64
+             * @description How many days ahead `upcoming` looks.
+             */
+            days: number;
+            duplicates: components["schemas"]["DuplicateSubscriptionDto"][];
+            /**
+             * Format: int64
+             * @description Sum of `monthly_cents` of the active subscriptions.
+             */
+            monthly_total_cents: number;
+            price_hikes: components["schemas"]["PriceHikeDto"][];
+            /** @description Possibly cancelled or unused, reported apart from the active ones. */
+            stale: components["schemas"]["StaleSubscriptionDto"][];
+            /** @description Expected charges from today to `days` ahead, in date order (an overdue one comes first). */
+            upcoming: components["schemas"]["UpcomingChargeDto"][];
         };
         SuggestionDto: {
             /** @example dining */
@@ -1294,6 +1491,22 @@ export interface components {
             id: number;
             purpose: string;
         };
+        UpcomingChargeDto: {
+            /** Format: int64 */
+            amount_cents: number;
+            /** @example monthly */
+            cadence: string;
+            /**
+             * Format: int32
+             * @description 10 to 99; lower for charges further out and for overdue ones.
+             */
+            confidence: number;
+            counterparty: string;
+            /** Format: date */
+            date: string;
+            /** @description The expected date has passed and the charge has not been booked yet. */
+            overdue: boolean;
+        };
     };
     responses: never;
     parameters: never;
@@ -1347,6 +1560,66 @@ export interface operations {
             };
             /** @description No budget given and no groceries limit set */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    alerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Also list dismissed alerts (default false). */
+                include_dismissed: boolean | null;
+                /** @description Only payments booked within this many days (default 60, 1 to 3650). */
+                lookback_days: number | null;
+                /**
+                 * @description Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.
+                 * @example 2026-03-02
+                 */
+                as_of: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertsDto"];
+                };
+            };
+        };
+    };
+    dismiss_alert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description alert id from GET /v1/alerts */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertDismissedDto"];
+                };
+            };
+            /** @description No such alert */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2285,6 +2558,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    subscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description How many days ahead the calendar looks (default 30, 1 to 366). */
+                days: number | null;
+                /**
+                 * @description Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.
+                 * @example 2026-03-02
+                 */
+                as_of: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionsDto"];
                 };
             };
         };

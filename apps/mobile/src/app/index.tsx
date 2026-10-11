@@ -6,6 +6,7 @@ import { ScrollView, Text as RNText, View } from "react-native";
 
 import { Mascot } from "@/components/Mascot";
 import { SafeToSpendCard } from "@/components/SafeToSpendCard";
+import { WatchdogCard } from "@/components/Watchdog";
 import { ChunkyButton } from "@/components/kit";
 import { Bar, Body, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
 import type { SafeToSpend } from "@/api/client";
@@ -198,6 +199,8 @@ export default function Today() {
               </>
             )}
           </Card>
+
+          <WatchdogCard />
 
           <Card>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>

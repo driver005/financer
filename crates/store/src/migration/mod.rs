@@ -11,6 +11,7 @@ mod m20261011_000006_create_settings;
 mod m20261012_000200_create_categorization_rules;
 mod m20261012_000201_create_transaction_splits;
 mod m20261012_000202_create_category_overrides;
+mod m20261012_000300_create_alert_dismissals;
 
 pub struct Migrator;
 
@@ -27,6 +28,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261012_000200_create_categorization_rules::Migration),
             Box::new(m20261012_000201_create_transaction_splits::Migration),
             Box::new(m20261012_000202_create_category_overrides::Migration),
+            Box::new(m20261012_000300_create_alert_dismissals::Migration),
         ]
     }
 }

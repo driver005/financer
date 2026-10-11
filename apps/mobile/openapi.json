@@ -95,6 +95,119 @@
         ]
       }
     },
+    "/v1/alerts": {
+      "get": {
+        "tags": [
+          "watchdog"
+        ],
+        "summary": "Possible problems in recent payments: duplicate charges, amounts far above the usual, big\nfirst-time merchants and charges that are large for their category. Dismissed alerts are left\nout unless `include_dismissed=true`.",
+        "operationId": "alerts",
+        "parameters": [
+          {
+            "name": "include_dismissed",
+            "in": "path",
+            "description": "Also list dismissed alerts (default false).",
+            "required": true,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "lookback_days",
+            "in": "path",
+            "description": "Only payments booked within this many days (default 60, 1 to 3650).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "path",
+            "description": "Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "2026-03-02"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/alerts/{id}/dismiss": {
+      "post": {
+        "tags": [
+          "watchdog"
+        ],
+        "summary": "Dismiss an alert so it no longer counts as unread. Dismissing twice is fine.",
+        "operationId": "dismiss_alert",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "alert id from GET /v1/alerts",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertDismissedDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such alert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/bank/status": {
       "get": {
         "tags": [
@@ -1512,6 +1625,60 @@
         ]
       }
     },
+    "/v1/subscriptions": {
+      "get": {
+        "tags": [
+          "watchdog"
+        ],
+        "summary": "Recurring payments seen as a watchdog: what is due in the next days, price hikes, possible\nduplicates, and subscriptions that seem to have stopped.",
+        "operationId": "subscriptions",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "path",
+            "description": "How many days ahead the calendar looks (default 30, 1 to 366).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "path",
+            "description": "Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "2026-03-02"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/transactions": {
       "get": {
         "tags": [
@@ -1982,6 +2149,109 @@
           }
         }
       },
+      "AlertDismissedDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "dismissed"
+        ],
+        "properties": {
+          "dismissed": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "AlertDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "severity",
+          "reason",
+          "transaction_id",
+          "booking_date",
+          "counterparty",
+          "amount_cents",
+          "history_count",
+          "dismissed"
+        ],
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What was charged (positive)."
+          },
+          "booking_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "counterparty": {
+            "type": "string"
+          },
+          "dismissed": {
+            "type": "boolean"
+          },
+          "history_count": {
+            "type": "integer",
+            "description": "How many earlier charges the comparison is based on.",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable id; pass it to `POST /v1/alerts/{id}/dismiss`."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`duplicate_charge`, `unusual_amount`, `new_merchant` or `large_for_category`. The app labels\nthese in the user's language; `reason` is the English explanation with the numbers.",
+            "example": "duplicate_charge"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "reference_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "What it is compared with (earlier charge, median, threshold), positive."
+          },
+          "severity": {
+            "type": "string",
+            "description": "`low`, `medium` or `high`.",
+            "example": "high"
+          },
+          "transaction_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Id of the transaction in `GET /v1/transactions`."
+          }
+        }
+      },
+      "AlertsDto": {
+        "type": "object",
+        "required": [
+          "unread_count",
+          "alerts"
+        ],
+        "properties": {
+          "alerts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlertDto"
+            },
+            "description": "Newest first."
+          },
+          "unread_count": {
+            "type": "integer",
+            "description": "Alerts that are not dismissed (also when `include_dismissed` is set).",
+            "minimum": 0
+          }
+        }
+      },
       "ApplyReport": {
         "type": "object",
         "required": [
@@ -2237,6 +2507,27 @@
           "monthly_income_cents": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "DuplicateSubscriptionDto": {
+        "type": "object",
+        "required": [
+          "reason",
+          "first",
+          "second"
+        ],
+        "properties": {
+          "first": {
+            "$ref": "#/components/schemas/SubscriptionDto"
+          },
+          "reason": {
+            "type": "string",
+            "description": "`same_merchant` or `similar_merchant`.",
+            "example": "similar_merchant"
+          },
+          "second": {
+            "$ref": "#/components/schemas/SubscriptionDto"
           }
         }
       },
@@ -2757,6 +3048,49 @@
               "null"
             ],
             "format": "date"
+          }
+        }
+      },
+      "PriceHikeDto": {
+        "type": "object",
+        "required": [
+          "counterparty",
+          "cadence",
+          "old_amount_cents",
+          "new_amount_cents",
+          "delta_cents",
+          "percent_bp",
+          "since"
+        ],
+        "properties": {
+          "cadence": {
+            "type": "string",
+            "example": "monthly"
+          },
+          "counterparty": {
+            "type": "string"
+          },
+          "delta_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "new_amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "old_amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "percent_bp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Increase in basis points of the old amount: 2002 is +20.02%."
+          },
+          "since": {
+            "type": "string",
+            "format": "date",
+            "description": "First booking at the new price."
           }
         }
       },
@@ -3471,6 +3805,30 @@
           }
         }
       },
+      "StaleSubscriptionDto": {
+        "type": "object",
+        "description": "A subscription whose last charge is older than two periods: cancelled, paused or moved.",
+        "required": [
+          "subscription",
+          "days_since_last",
+          "periods_missed"
+        ],
+        "properties": {
+          "days_since_last": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "periods_missed": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many expected charges did not arrive (at least 2).",
+            "minimum": 0
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/SubscriptionDto"
+          }
+        }
+      },
       "StapleDto": {
         "type": "object",
         "required": [
@@ -3498,6 +3856,125 @@
           "price_cents": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "SubscriptionDto": {
+        "type": "object",
+        "description": "One recurring outgoing payment. All amounts in the watchdog are positive charge sizes.",
+        "required": [
+          "counterparty",
+          "amount_cents",
+          "monthly_cents",
+          "cadence",
+          "first_date",
+          "last_date",
+          "next_expected",
+          "occurrences",
+          "confidence"
+        ],
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "format": "int64",
+            "example": 1299
+          },
+          "cadence": {
+            "type": "string",
+            "example": "monthly"
+          },
+          "confidence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "10 to 99.",
+            "minimum": 0
+          },
+          "counterparty": {
+            "type": "string"
+          },
+          "first_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "last_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "monthly_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What it costs per month on average (weekly x 52/12, quarterly / 3, yearly / 12).",
+            "example": 1299
+          },
+          "next_expected": {
+            "type": "string",
+            "format": "date"
+          },
+          "occurrences": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SubscriptionsDto": {
+        "type": "object",
+        "required": [
+          "as_of",
+          "days",
+          "active",
+          "monthly_total_cents",
+          "upcoming",
+          "price_hikes",
+          "duplicates",
+          "stale"
+        ],
+        "properties": {
+          "active": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionDto"
+            },
+            "description": "Subscriptions that are still running."
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date"
+          },
+          "days": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many days ahead `upcoming` looks."
+          },
+          "duplicates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateSubscriptionDto"
+            }
+          },
+          "monthly_total_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sum of `monthly_cents` of the active subscriptions."
+          },
+          "price_hikes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceHikeDto"
+            }
+          },
+          "stale": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaleSubscriptionDto"
+            },
+            "description": "Possibly cancelled or unused, reported apart from the active ones."
+          },
+          "upcoming": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UpcomingChargeDto"
+            },
+            "description": "Expected charges from today to `days` ahead, in date order (an overdue one comes first)."
           }
         }
       },
@@ -3687,6 +4164,44 @@
           },
           "purpose": {
             "type": "string"
+          }
+        }
+      },
+      "UpcomingChargeDto": {
+        "type": "object",
+        "required": [
+          "date",
+          "counterparty",
+          "amount_cents",
+          "cadence",
+          "confidence",
+          "overdue"
+        ],
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cadence": {
+            "type": "string",
+            "example": "monthly"
+          },
+          "confidence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "10 to 99; lower for charges further out and for overdue ones.",
+            "minimum": 0
+          },
+          "counterparty": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "overdue": {
+            "type": "boolean",
+            "description": "The expected date has passed and the charge has not been booked yet."
           }
         }
       }
