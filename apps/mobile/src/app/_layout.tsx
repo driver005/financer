@@ -4,6 +4,7 @@ import { useColorScheme, type ColorValue } from "react-native";
 import { PaperProvider } from "react-native-paper";
 
 import { ApiProvider } from "@/api/config";
+import "@/native/background"; // defines the background task at startup
 import { themes } from "@/theme";
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];

@@ -3,7 +3,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { Api, type ApiConfig } from "./client";
 import { deleteSecret, getSecret, setSecret } from "./storage";
 import { EmbeddedTransport } from "./transport";
+import { disableBackgroundRefresh, enableBackgroundRefresh } from "../native/background";
 import {
+  EMBEDDED_KEY,
   EMPTY_EMBEDDED_SETTINGS,
   embeddedAvailable,
   startEmbedded,
@@ -12,7 +14,6 @@ import {
 
 const KEY = "financer.api-config";
 const MODE_KEY = "financer.backend-mode";
-const EMBEDDED_KEY = "financer.embedded-settings";
 
 export type BackendMode = "remote" | "embedded";
 
@@ -66,6 +67,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     if (!loaded || mode !== "embedded") {
       setEmbeddedApi(null);
       setEmbeddedError(null);
+      if (loaded) void disableBackgroundRefresh().catch(() => {});
       return;
     }
     let cancelled = false;
@@ -74,6 +76,9 @@ export function ApiProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setEmbeddedApi(new Api(new EmbeddedTransport(backend)));
           setEmbeddedError(null);
+          // refresh prices once now (the app is open) and ask the OS for background windows
+          void backend.refreshPrices().catch(() => {});
+          void enableBackgroundRefresh().catch(() => {});
         }
       })
       .catch((e) => {

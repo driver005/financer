@@ -19,10 +19,10 @@ SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](d
 | What you normally buy | three modes: your own list, learned from receipts, or a generic starter basket |
 | Receipts | paste text, or photograph one (read by your Claude/OpenAI model; the photo leaves your server). digital receipts (Rewe eBon, Lidl Plus) work as PDF imports: export the PDF from their app and import it, read by your model; there is no automatic pull from their private APIs |
 | Recipes | 23 bundled German recipes ranked by your items, offers and cost; "surprise me" ideas from Claude or OpenAI (switchable), tested with a mock model, **not with a real API key** |
-| Embedded on-phone backend | Rust side built and tested; bindings generate; the **native build and device run are not done** ([docs/EMBEDDED.md](docs/EMBEDDED.md)) |
+| Embedded on-phone backend | Rust side built and tested; bindings generate; background refresh task written; the **native build and device run are not done** ([docs/EMBEDDED.md](docs/EMBEDDED.md)) |
 | Backup / move between server and phone | export and import of your data as one JSON file (no secrets), idempotent; tested, including through the browser |
 | App | typechecks, 15 Node tests, bundles for iOS/Android/web, and the web build was driven in a real browser against the real server; **never run on a phone** |
-| Deployment (Docker, Caddy HTTPS, Postgres profile) | compose file validated with `docker compose config`; the release build from the Dockerfile's exact copy set works and the binary starts; the **image itself was never built or deployed** (no Docker daemon here) |
+| Deployment (Docker, Caddy HTTPS, Postgres profile) | the image **was built and run**: 161 MB, non-root user, health and auth work, data survives a container restart, and it runs against a PostgreSQL container. The Caddy/HTTPS part (needs a real domain) and `docker compose up` as a whole were not run |
 
 ## Run it
 
