@@ -12,6 +12,7 @@ name: Release builds
 on:
   push:
     tags: ["v*"]
+    branches: [claude/financial-planner-app-plan-lofid2] # TEMPORARY: test run
   workflow_dispatch:
     inputs:
       platforms:
@@ -104,7 +105,7 @@ jobs:
           if-no-files-found: error
 
   docker:
-    if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'docker'
+    if: github.ref_type == 'tag' # TEMPORARY: the test run on a branch must not publish an image
     runs-on: ubuntu-latest
     permissions:
       contents: read
