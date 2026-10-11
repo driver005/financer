@@ -30,6 +30,7 @@ import {
 
 import { twMerge } from "tailwind-merge";
 
+import { tap } from "@/native/haptics";
 import { usePalette } from "@/theme";
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
@@ -211,6 +212,94 @@ export function IconButton({
   );
 }
 
+/**
+ * Chunky game-style button: a coloured face with a darker 3D lip that squashes when pressed.
+ * `tone` picks the colours; `outline` is a white face with a grey lip.
+ */
+export function ChunkyButton({
+  label,
+  onPress,
+  disabled,
+  icon,
+  tone = "green",
+  outline,
+  compact,
+  flat,
+  style,
+  accessibilityRole = "button",
+  accessibilityState,
+  ...rest
+}: Omit<PressableProps, "style" | "children"> & {
+  label: string;
+  onPress?: () => void;
+  icon?: string;
+  tone?: "green" | "blue" | "red";
+  outline?: boolean;
+  /** Smaller padding, for rows. */
+  compact?: boolean;
+  /** No lip and no face: a plain text button. */
+  flat?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const p = usePalette();
+  const colours = {
+    green: { face: p.accent, edge: p.accentEdge, text: p.onAccent, ink: p.accent },
+    blue: { face: p.blue, edge: p.blueEdge, text: "#ffffff", ink: p.blue },
+    red: { face: p.bad, edge: "#a31d1d", text: "#ffffff", ink: p.bad },
+  }[tone];
+  const lip = flat ? 0 : 4;
+  const textColour = flat || outline ? colours.ink : colours.text;
+  return (
+    <Pressable
+      {...rest}
+      onPress={
+        onPress
+          ? (e) => {
+              tap();
+              onPress();
+            }
+          : undefined
+      }
+      disabled={disabled}
+      accessibilityRole={accessibilityRole}
+      accessibilityLabel={rest.accessibilityLabel ?? label}
+      accessibilityState={{ ...accessibilityState, disabled: !!disabled }}
+      style={({ pressed }) => [
+        {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          borderRadius: 16,
+          paddingVertical: compact ? 8 : 14,
+          paddingHorizontal: compact ? 14 : 18,
+          backgroundColor: flat ? "transparent" : outline ? p.surface : colours.face,
+          borderWidth: outline ? 2 : 0,
+          borderColor: p.border,
+          borderBottomWidth: lip + (outline ? 2 : 0) - (pressed ? lip : 0),
+          borderBottomColor: outline ? p.border : colours.edge,
+          marginTop: pressed ? lip : 0,
+          opacity: disabled ? 0.5 : 1,
+        },
+        style,
+      ]}
+    >
+      {icon ? <MaterialCommunityIcons name={icon as IconName} size={compact ? 16 : 20} color={textColour} /> : null}
+      <RNText
+        style={{
+          color: textColour,
+          fontWeight: "800",
+          fontSize: compact ? 13 : 15,
+          letterSpacing: 0.8,
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </RNText>
+    </Pressable>
+  );
+}
+
 /** Row of mutually exclusive options. */
 export function SegmentedButtons<T extends string>({
   value,
@@ -223,26 +312,22 @@ export function SegmentedButtons<T extends string>({
   buttons: { value: T; label: string; icon?: string }[];
   style?: StyleProp<ViewStyle>;
 }) {
-  const p = usePalette();
   return (
     <View style={style} className="flex-row gap-2" accessibilityRole="radiogroup">
       {buttons.map((b) => {
         const on = b.value === value;
         return (
-          <Button
+          <ChunkyButton
             key={b.value}
-            className="min-w-0 flex-1"
-            size="sm"
-            variant={on ? "primary" : "secondary"}
+            compact
+            outline={!on}
+            icon={b.icon}
+            label={b.label}
+            style={{ flex: 1 }}
             onPress={() => onValueChange(b.value)}
             accessibilityRole="radio"
             accessibilityState={{ checked: on }}
-          >
-            {b.icon ? (
-              <MaterialCommunityIcons name={b.icon as IconName} size={16} color={on ? "#ffffff" : p.text} />
-            ) : null}
-            <Button.Label>{b.label}</Button.Label>
-          </Button>
+          />
         );
       })}
     </View>

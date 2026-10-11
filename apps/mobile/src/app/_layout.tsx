@@ -24,17 +24,19 @@ export default function RootLayout() {
   const p = usePalette();
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <HeroUINativeProvider>
+      <HeroUINativeProvider config={{ toast: { defaultProps: { placement: "bottom" } } }}>
       <ApiProvider>
         <Tabs
           screenOptions={{
             headerShown: false,
             tabBarActiveTintColor: p.accent,
             tabBarInactiveTintColor: p.muted,
-            tabBarStyle: { backgroundColor: p.surface },
+            tabBarStyle: { backgroundColor: p.surface, borderTopWidth: 2, borderTopColor: p.border, height: 64, paddingTop: 6 },
+            tabBarLabelStyle: { fontSize: 10, fontWeight: "800", letterSpacing: 0.3, textTransform: "uppercase" },
           }}
         >
-          <Tabs.Screen name="index" options={tab("Spending", "swap-vertical")} />
+          <Tabs.Screen name="index" options={tab("Today", "home-variant")} />
+          <Tabs.Screen name="spending" options={tab("Spending", "swap-vertical")} />
           <Tabs.Screen name="budget" options={tab("Budget", "wallet-outline")} />
           <Tabs.Screen name="prices" options={tab("Prices", "tag-multiple-outline")} />
           <Tabs.Screen name="recipes" options={tab("Recipes", "chef-hat")} />

@@ -4,47 +4,47 @@
 
 @source "../node_modules/heroui-native/lib";
 
-/* Calm green palette. Keep in sync with src/theme.ts, which the few JS-only colour
-   users (tab bar, icons) read. */
+/* Bright, game-like palette (green / blue / orange / gold on white, or deep slate in dark
+   mode). Keep in sync with src/theme.ts, which the few JS-only colour users read. */
 @layer theme {
   :root {
     @variant light {
-      --background: #f6fbf6;
-      --foreground: #151d18;
+      --background: #ffffff;
+      --foreground: #3c3c3c;
       --surface: #ffffff;
-      --surface-secondary: #eef5ee;
-      --surface-tertiary: #e2ebe3;
-      --muted: #5b6a60;
-      --default: #e3ece5;
-      --default-foreground: #151d18;
-      --accent: #1b6b4a;
+      --surface-secondary: #f7f7f7;
+      --surface-tertiary: #efefef;
+      --muted: #777777;
+      --default: #e5e5e5;
+      --default-foreground: #3c3c3c;
+      --accent: #58a700;
       --accent-foreground: #ffffff;
-      --field-background: #ffffff;
-      --field-border: #bfc9c1;
-      --border: #d3ddd5;
-      --separator: #cdd8cf;
-      --success: #1b6b4a;
-      --danger: #ba1a1a;
+      --field-background: #f7f7f7;
+      --field-border: #e5e5e5;
+      --border: #e5e5e5;
+      --separator: #e5e5e5;
+      --success: #58a700;
+      --danger: #ea2b2b;
       --segment: #ffffff;
     }
     @variant dark {
-      --background: #0f1512;
-      --foreground: #e3eae5;
-      --surface: #17201b;
-      --surface-secondary: #1f2a23;
-      --surface-tertiary: #26332b;
-      --muted: #a9b6ad;
-      --default: #26332b;
-      --default-foreground: #e3eae5;
-      --accent: #5fbf8d;
-      --accent-foreground: #04170e;
-      --field-background: #17201b;
-      --field-border: #404943;
-      --border: #2a362e;
-      --separator: #33413a;
-      --success: #7fd9a8;
-      --danger: #ffb4ab;
-      --segment: #2e3d34;
+      --background: #131f24;
+      --foreground: #f1f7fb;
+      --surface: #202f36;
+      --surface-secondary: #243740;
+      --surface-tertiary: #2b414b;
+      --muted: #8fa1ab;
+      --default: #2b414b;
+      --default-foreground: #f1f7fb;
+      --accent: #58cc02;
+      --accent-foreground: #0d2000;
+      --field-background: #202f36;
+      --field-border: #37464f;
+      --border: #37464f;
+      --separator: #37464f;
+      --success: #58cc02;
+      --danger: #ff6b6b;
+      --segment: #2b414b;
     }
   }
 }
