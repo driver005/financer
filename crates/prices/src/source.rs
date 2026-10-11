@@ -188,13 +188,6 @@ impl PriceSource for OpenPricesSource {
         let oldest = self.today - Duration::days(self.max_age_days);
         let mut all = Vec::new();
         for (item, code) in &self.items {
-            let product = http.get(&OpenFoodFacts::product_url(code)).await?;
-            let Some(product) = (product.status < 400)
-                .then(|| OpenFoodFacts::parse_product(&product.body))
-                .flatten()
-            else {
-                continue;
-            };
             let prices = http.get(&OpenFoodFacts::open_prices_url(code)).await?;
             if prices.status >= 400 {
                 continue;
@@ -204,14 +197,17 @@ impl PriceSource for OpenPricesSource {
                 let Some(chain) = p.store.as_deref().and_then(Chain::from_name) else {
                     continue;
                 };
+                let Some(name) = p.product_name.clone() else {
+                    continue;
+                };
                 if p.date < oldest || p.date > self.today {
                     continue;
                 }
                 all.push(RawOffer {
                     chain,
-                    name: product.name.clone(),
+                    name,
                     price: p.price,
-                    pack_text: product.quantity.clone(),
+                    pack_text: p.pack.clone(),
                     valid_until: None,
                     is_offer: false,
                     source: self.name(),
@@ -397,22 +393,15 @@ mod tests {
 
     #[tokio::test]
     async fn open_prices_filters_by_chain_and_age() {
-        let http = FakeHttp::with(vec![
-            (
-                &OpenFoodFacts::product_url("111"),
-                200,
-                r#"{"status":1,"product":{"code":"111","product_name":"Vollmilch","quantity":"1 l"}}"#,
-            ),
-            (
-                &OpenFoodFacts::open_prices_url("111"),
-                200,
-                r#"{"items":[
-                    {"product_code":"111","price":1.19,"currency":"EUR","date":"2026-03-01","location":{"osm_name":"REWE Markt"}},
-                    {"product_code":"111","price":0.99,"currency":"EUR","date":"2026-03-02","location":{"osm_name":"Edeka"}},
-                    {"product_code":"111","price":0.89,"currency":"EUR","date":"2025-01-01","location":{"osm_name":"Aldi Nord"}},
-                    {"product_code":"111","price":1.09,"currency":"EUR","date":"2026-03-03"}]}"#,
-            ),
-        ]);
+        let http = FakeHttp::with(vec![(
+            &OpenFoodFacts::open_prices_url("111"),
+            200,
+            r#"{"items":[
+                    {"product_code":"111","price":1.19,"currency":"EUR","date":"2026-03-01","product":{"code":"111","product_name":"Vollmilch","product_quantity":1,"product_quantity_unit":"l"},"location":{"osm_brand":"REWE","osm_name":"Markt Bonn"}},
+                    {"product_code":"111","price":0.99,"currency":"EUR","date":"2026-03-02","product":{"product_name":"Vollmilch"},"location":{"osm_name":"Edeka"}},
+                    {"product_code":"111","price":0.89,"currency":"EUR","date":"2025-01-01","product":{"product_name":"Vollmilch"},"location":{"osm_name":"Aldi Nord"}},
+                    {"product_code":"111","price":1.09,"currency":"EUR","date":"2026-03-03","product":{"product_name":"Vollmilch"}}]}"#,
+        )]);
         let src = OpenPricesSource {
             items: vec![("milch".into(), "111".into())],
             max_age_days: 60,
