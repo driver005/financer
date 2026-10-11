@@ -1,23 +1,28 @@
 # Financer
 
-Personal finance and grocery planner for one person with a Sparkasse account: track expenses, set a budget, see what the budget can buy, compare Lidl / Aldi / Kaufland / Rewe prices and get recipe ideas from what you normally buy.
+Personal finance and grocery planner for one person with a Sparkasse account. It tracks your
+spending, keeps a budget, shows what the budget can buy, compares Lidl / Aldi / Kaufland / Rewe
+prices, and suggests recipes from what you normally buy.
 
-**Stack:** Expo (TypeScript) app + Rust backend (Axum) on PostgreSQL or SQLite. The same API can later also run embedded on the phone.
+**Stack:** Expo (TypeScript, React Native Paper) app + Rust backend (Axum) on PostgreSQL or
+SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](docs/EMBEDDED.md)).
 
-## Status
+## What works, and how sure I am
 
-| Area | State |
+| Feature | State |
 |---|---|
-| Domain logic (money, categorizer, recurring payments, budget, basket / "what can I buy") | done, unit tested |
-| Sparkasse CSV import | done (column names from memory of the CSV-CAMT export; check against a real export) |
-| Store on SQLite **and** PostgreSQL | done, tested on both |
-| REST API + hosted server, bearer-token auth, OpenAPI | done, tested |
-| Expo app: connect, import CSV, transactions, budget limits | done; typechecks and bundles, **not yet run on a device** |
-| Docker / Caddy deployment files | written; compose file validated, **image not built or deployed yet** |
-| FinTS live sync | not started, needs DK product registration, see [docs/FINTS.md](docs/FINTS.md) |
-| Price scrapers, Open Food Facts / Open Prices | not started |
-| Receipts, recipes, LLM (Claude / OpenAI) | not started |
-| Embedded on-phone backend | not started |
+| Spending: import a Sparkasse CSV export, categorize, find recurring payments | built and tested; the CSV column names come from memory of the export, **check with a real file** |
+| Live Sparkasse sync (FinTS, pushTAN approval in the Sparkasse app) | built and tested against a **mock bank only**, never a real one; needs your FinTS product id ([docs/FINTS.md](docs/FINTS.md)) |
+| Budget: monthly limits per category, income and fixed costs from recurring payments | built and tested |
+| "What can I buy?": basket per chain, cheapest split, cheapest items for your budget | built and tested on supplied prices |
+| Prices from Lidl, Aldi, Kaufland, Rewe | **no scrapers shipped.** You configure pages that embed schema.org data, plus Open Prices; whether your chains' pages have that data is unknown ([docs/PRICES.md](docs/PRICES.md)). The fetch path (robots.txt, extraction, pack-size normalisation) is tested end to end against a local page |
+| What you normally buy | three modes: your own list, learned from receipts, or a generic starter basket |
+| Receipts | paste text, or photograph one (read by your Claude/OpenAI model; the photo leaves your server). Rewe eBon / Lidl Plus import is **not built**: it would mean reverse-engineering private APIs |
+| Recipes | 23 bundled German recipes ranked by your items, offers and cost; "surprise me" ideas from Claude or OpenAI (switchable), tested with a mock model, **not with a real API key** |
+| Embedded on-phone backend | Rust side built and tested; bindings generate; the **native build and device run are not done** ([docs/EMBEDDED.md](docs/EMBEDDED.md)) |
+| Backup / move between server and phone | export and import of your data as one JSON file (no secrets), idempotent; tested, including through the browser |
+| App | typechecks, 15 Node tests, bundles for iOS/Android/web, and the web build was driven in a real browser against the real server; **never run on a phone** |
+| Deployment (Docker, Caddy HTTPS, Postgres profile) | files validated with `docker compose config`; the **image was never built or deployed** here |
 
 ## Run it
 
@@ -28,45 +33,70 @@ export FINANCER_API_TOKEN=$(openssl rand -hex 32)   # at least 32 characters
 cargo run -p financer-server                        # listens on 127.0.0.1:8080
 ```
 
-PostgreSQL instead: `FINANCER_DATABASE_URL=postgres://user:pass@host/db`. Other settings are documented at the top of `crates/server/src/main.rs`.
+Settings (environment variables; the full list is at the top of `crates/server/src/main.rs`):
+
+| Variable | Purpose |
+|---|---|
+| `FINANCER_API_TOKEN` | required; the app sends it as a bearer token |
+| `FINANCER_DATABASE_URL` | `postgres://user:pass@host/db` or `sqlite://path?mode=rwc` (default `sqlite://financer.db?mode=rwc`) |
+| `FINANCER_BIND` | listen address, default `127.0.0.1:8080` (put HTTPS in front) |
+| `FINANCER_PRICE_SOURCES` | path to a JSON file of price sources |
+| `FINANCER_FINTS_PRODUCT_ID` | enables live Sparkasse sync |
+| `FINANCER_ANTHROPIC_API_KEY`, `FINANCER_OPENAI_API_KEY` | enable recipe ideas and receipt photo scan |
 
 App:
 
 ```sh
 cd apps/mobile
 npm install
-npm start          # Expo; open in Expo Go
+npm start          # Expo; open in Expo Go (the on-phone backend needs a custom build)
 ```
 
-In the app, open **Settings**, enter the server address and the token, then **Transactions → Import Sparkasse CSV** (export from Sparkasse online banking, CSV-CAMT format).
+In the app: **Settings** → server address and token → **Spending** → import a CSV (or
+**Sync with Sparkasse**).
 
-Deploying to a small VPS with HTTPS: see `deploy/docker-compose.yml` (about 3–6 EUR per month).
+Deploy to a small VPS with HTTPS: `deploy/docker-compose.yml` (about 3–6 EUR a month).
 
 ## Develop
 
 ```sh
 cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace                                  # PostgreSQL tests are skipped unless:
+cargo test --workspace
+# PostgreSQL tests are skipped unless:
 FINANCER_TEST_POSTGRES_URL=postgres://financer:financer@127.0.0.1:5432/financer_test cargo test --workspace
-cd apps/mobile && npm run typecheck
+cd apps/mobile && npm run typecheck && npm test
 npm run gen:api    # regenerate src/api/schema.d.ts after changing the API
 ```
 
 ## Layout
 
 ```
-crates/core      money, categorizer, recurring detection, budget and basket engines
-crates/store     SeaORM entities + migrations (SQLite and PostgreSQL, chosen by URL)
-crates/fints     bank sources; Sparkasse CSV import (FinTS client to come)
-crates/api       Axum router, auth, OpenAPI
-crates/server    hosted binary
-apps/mobile      Expo app (routes in src/app)
-deploy/          Dockerfile, compose, Caddyfile
+crates/core       money, catalog of generic items, categorizer, recurring payments, budget and basket engines
+crates/store      SeaORM entities + migrations (SQLite and PostgreSQL, chosen by URL)
+crates/fints      CSV import; live bank sync (trait, mock, fints-rs adapter)
+crates/prices     pack-size normalisation, JSON-LD / Open Food Facts / Open Prices, polite HTTP
+crates/receipts   receipt text parser and usual-item learning
+crates/recipes    bundled recipes, ranking, AI ideas
+crates/llm        Claude and OpenAI behind one trait (genai)
+crates/api        Axum router, auth, OpenAPI
+crates/server     hosted binary
+crates/embedded   the same backend as a library for the phone (UniFFI)
+apps/mobile       Expo app (routes in src/app)
+deploy/           Dockerfile, compose, Caddyfile
+docs/             FINTS.md, PRICES.md, EMBEDDED.md
 ```
 
 ## Security notes
 
-- The API needs `Authorization: Bearer <token>` on everything except `/health`; the server keeps only a hash of the token and refuses tokens under 32 characters.
-- Run it behind HTTPS (the Caddy file does this). Without it the token and your bank data travel in clear text.
-- There is no rate limiting on token attempts yet; a long random token makes guessing impractical, but add it before exposing the server widely.
-- Scraping retailer sites (planned) may breach their terms; it is meant for personal use only.
+- Everything except `/health` needs `Authorization: Bearer <token>`. The server keeps only a
+  hash of the token and refuses tokens under 32 characters. After 20 wrong tokens in a minute
+  the API answers 429 for a minute (global, because there is one user).
+- Run it behind HTTPS (the Caddy file does this). Without it the token and your bank data
+  travel in clear text.
+- The bank PIN is sent per sync, held in memory until you approve, and never stored or logged.
+  API keys live in the server's environment, not in the app (on the phone they go into secure
+  storage, since there is no server).
+- The web build stores settings in `localStorage`, which is not secure storage. It exists for
+  development; do not use it with a real bank server.
+- Reading retailer pages may breach their terms. It is meant for personal use, runs only for
+  sources you configure, obeys robots.txt and waits between requests.

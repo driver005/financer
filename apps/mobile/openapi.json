@@ -529,6 +529,78 @@
         ]
       }
     },
+    "/v1/export": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Download everything that is yours as one JSON document (no secrets, no prices).",
+        "operationId": "export_data",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/import": {
+      "post": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Merge an export into this backend. Transactions and receipts already present (same\nfingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items\nlist replace the current ones when the export has any; settings are applied if present.",
+        "operationId": "import_data",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a valid export",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/prices": {
       "get": {
         "tags": [
@@ -1423,6 +1495,131 @@
           }
         }
       },
+      "ExportDto": {
+        "type": "object",
+        "description": "Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,\nwhich are fetched again.",
+        "required": [
+          "version",
+          "transactions",
+          "budget",
+          "basket",
+          "receipts",
+          "settings"
+        ],
+        "properties": {
+          "basket": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BasketItemDto"
+            }
+          },
+          "budget": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvelopeDto"
+            }
+          },
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportReceipt"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ExportSettings"
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportTransaction"
+            }
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Format version, currently 1.",
+            "minimum": 0
+          }
+        }
+      },
+      "ExportReceipt": {
+        "type": "object",
+        "required": [
+          "fingerprint",
+          "receipt"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string"
+          },
+          "receipt": {
+            "type": "object",
+            "description": "The parsed receipt, as stored."
+          }
+        }
+      },
+      "ExportSettings": {
+        "type": "object",
+        "properties": {
+          "habit_mode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "llm_model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "llm_provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ExportTransaction": {
+        "type": "object",
+        "required": [
+          "booking_date",
+          "amount_cents",
+          "counterparty",
+          "purpose"
+        ],
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "booking_date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-03-02"
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "groceries"
+          },
+          "counterparty": {
+            "type": "string"
+          },
+          "counterparty_iban": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "purpose": {
+            "type": "string"
+          }
+        }
+      },
       "IdeaDto": {
         "type": "object",
         "required": [
@@ -1528,6 +1725,43 @@
               "$ref": "#/components/schemas/SkippedRowDto"
             },
             "description": "Rows that could not be read, with the reason."
+          }
+        }
+      },
+      "ImportReportDto": {
+        "type": "object",
+        "required": [
+          "transactions_added",
+          "transactions_known",
+          "receipts_added",
+          "receipts_known",
+          "budget_envelopes",
+          "basket_items"
+        ],
+        "properties": {
+          "basket_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "budget_envelopes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "receipts_added": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "receipts_known": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "transactions_added": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "transactions_known": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },

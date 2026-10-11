@@ -178,6 +178,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download everything that is yours as one JSON document (no secrets, no prices). */
+        get: operations["export_data"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge an export into this backend. Transactions and receipts already present (same
+         *     fingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items
+         *     list replace the current ones when the export has any; settings are applied if present.
+         */
+        post: operations["import_data"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/prices": {
         parameters: {
             query?: never;
@@ -505,6 +543,46 @@ export interface components {
         ErrorBody: {
             error: string;
         };
+        /**
+         * @description Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
+         *     which are fetched again.
+         */
+        ExportDto: {
+            basket: components["schemas"]["BasketItemDto"][];
+            budget: components["schemas"]["EnvelopeDto"][];
+            receipts: components["schemas"]["ExportReceipt"][];
+            settings: components["schemas"]["ExportSettings"];
+            transactions: components["schemas"]["ExportTransaction"][];
+            /**
+             * Format: int32
+             * @description Format version, currently 1.
+             */
+            version: number;
+        };
+        ExportReceipt: {
+            fingerprint: string;
+            /** @description The parsed receipt, as stored. */
+            receipt: Record<string, never>;
+        };
+        ExportSettings: {
+            habit_mode?: string | null;
+            llm_model?: string | null;
+            llm_provider?: string | null;
+        };
+        ExportTransaction: {
+            /** Format: int64 */
+            amount_cents: number;
+            /**
+             * Format: date
+             * @example 2026-03-02
+             */
+            booking_date: string;
+            /** @example groceries */
+            category?: string | null;
+            counterparty: string;
+            counterparty_iban?: string | null;
+            purpose: string;
+        };
         IdeaDto: {
             ingredients: components["schemas"]["IdeaIngredientDto"][];
             /** Format: int32 */
@@ -532,6 +610,14 @@ export interface components {
             imported: number;
             /** @description Rows that could not be read, with the reason. */
             skipped: components["schemas"]["SkippedRowDto"][];
+        };
+        ImportReportDto: {
+            basket_items: number;
+            budget_envelopes: number;
+            receipts_added: number;
+            receipts_known: number;
+            transactions_added: number;
+            transactions_known: number;
         };
         PickDto: {
             chain: string;
@@ -1120,6 +1206,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogItemDto"][];
+                };
+            };
+        };
+    };
+    export_data: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportDto"];
+                };
+            };
+        };
+    };
+    import_data: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReportDto"];
+                };
+            };
+            /** @description Not a valid export */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

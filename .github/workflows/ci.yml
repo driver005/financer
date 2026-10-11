@@ -34,6 +34,13 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - name: Native bindings still generate (Kotlin and Swift)
+        run: |
+          cargo build -p financer-embedded --features bindgen-cli
+          for lang in kotlin swift; do
+            cargo run -q -p financer-embedded --features bindgen-cli --bin uniffi-bindgen -- \
+              generate --library target/debug/libfinancer_embedded.so --language $lang --out-dir "$RUNNER_TEMP/bindings-$lang"
+          done
       - name: OpenAPI file is up to date
         run: cargo run -q -p financer-server -- --print-openapi | diff - apps/mobile/openapi.json
 
@@ -51,3 +58,4 @@ jobs:
           cache-dependency-path: apps/mobile/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm test

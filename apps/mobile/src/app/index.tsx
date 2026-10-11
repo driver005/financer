@@ -1,5 +1,3 @@
-import { File } from "expo-file-system";
-import * as DocumentPicker from "expo-document-picker";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, Text, View } from "react-native";
 import { Link, useFocusEffect } from "expo-router";
@@ -8,6 +6,7 @@ import type { Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
 import { Body, Button, Card, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
+import { pickFileBytes } from "@/native/files";
 
 export default function Transactions() {
   const { api, loaded } = useApi();
@@ -38,13 +37,9 @@ export default function Transactions() {
   const importCsv = useCallback(async () => {
     if (!api) return;
     try {
-      const picked = await DocumentPicker.getDocumentAsync({
-        type: ["text/csv", "text/comma-separated-values", "application/vnd.ms-excel", "text/plain"],
-        copyToCacheDirectory: true,
-      });
-      if (picked.canceled) return;
+      const bytes = await pickFileBytes(["text/csv", "text/comma-separated-values", "application/vnd.ms-excel", "text/plain"]);
+      if (bytes === null) return;
       setBusy(true);
-      const bytes = await new File(picked.assets[0].uri).arrayBuffer();
       const r = await api.importCsv(bytes);
       const skipped = r.skipped.length ? `, ${r.skipped.length} unreadable` : "";
       setMessage(`Imported ${r.imported} new, ${r.duplicates} already known${skipped}`);

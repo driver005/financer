@@ -3,6 +3,7 @@
 mod auth;
 mod bank;
 mod dto;
+mod export;
 mod grocery;
 mod routes;
 
@@ -126,6 +127,8 @@ impl AppState {
         routes::get_envelopes,
         routes::put_envelopes,
         routes::budget_status,
+        export::export_data,
+        export::import_data,
         bank::start_sync,
         bank::confirm_sync,
         bank::bank_status,
@@ -154,6 +157,11 @@ impl AppState {
         dto::EnvelopeStatusDto,
         dto::DisposableDto,
         dto::ErrorBody,
+        dto::ExportTransaction,
+        dto::ExportReceipt,
+        dto::ExportSettings,
+        dto::ExportDto,
+        dto::ImportReportDto,
         dto::SyncRequest,
         dto::SyncStarted,
         dto::SyncDone,
@@ -213,6 +221,8 @@ pub fn router(state: AppState, token: TokenHash) -> Router {
             get(routes::get_envelopes).put(routes::put_envelopes),
         )
         .route("/budget/status", get(routes::budget_status))
+        .route("/export", get(export::export_data))
+        .route("/import", post(export::import_data))
         .route("/bank/sync", post(bank::start_sync))
         .route("/bank/sync/{id}/confirm", post(bank::confirm_sync))
         .route("/bank/status", get(bank::bank_status))

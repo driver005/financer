@@ -41,6 +41,8 @@ pub struct StoredQuote {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredReceipt {
     pub id: i64,
+    /// Identity of the receipt text, so the same receipt is never stored twice.
+    pub fingerprint: String,
     pub date: Option<time::Date>,
     pub merchant: Option<String>,
     pub json: String,
@@ -300,6 +302,7 @@ impl Store {
             .into_iter()
             .map(|r| StoredReceipt {
                 id: r.id,
+                fingerprint: r.fingerprint,
                 date: r.receipt_date,
                 merchant: r.merchant,
                 json: r.json,

@@ -1,4 +1,7 @@
 import type { components } from "./schema";
+import { RemoteTransport, type ApiConfig, type Transport } from "./transport";
+
+export type { ApiConfig } from "./transport";
 
 export type Transaction = components["schemas"]["TransactionDto"];
 export type ImportReport = components["schemas"]["ImportReport"];
@@ -23,9 +26,9 @@ export type SyncStarted = components["schemas"]["SyncStarted"];
 export type SyncDone = components["schemas"]["SyncDone"];
 export type SyncRequest = components["schemas"]["SyncRequest"];
 export type ScanResult = components["schemas"]["ScanDto"];
+export type ExportData = components["schemas"]["ExportDto"];
+export type ImportSummary = components["schemas"]["ImportReportDto"];
 export type Chain = "aldi" | "lidl" | "kaufland" | "rewe";
-
-export type ApiConfig = { baseUrl: string; token: string };
 
 export class ApiError extends Error {
   constructor(
@@ -36,43 +39,39 @@ export class ApiError extends Error {
   }
 }
 
-/** Thin typed client for the Financer REST API (the same API the embedded backend will serve). */
+/** Thin typed client for the Financer REST API (the same API the embedded backend serves). */
 export class Api {
-  constructor(private config: ApiConfig) {}
+  private transport: Transport;
 
-  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const base = this.config.baseUrl.replace(/\/+$/, "");
-    const res = await fetch(`${base}${path}`, {
-      ...init,
-      headers: { Authorization: `Bearer ${this.config.token}`, ...(init.headers ?? {}) },
-    });
-    if (!res.ok) {
+  /** `new Api(config)` talks to a server over HTTP; pass a [`Transport`] for the on-phone backend. */
+  constructor(configOrTransport: ApiConfig | Transport) {
+    this.transport = "send" in configOrTransport ? configOrTransport : new RemoteTransport(configOrTransport);
+  }
+
+  private async request<T>(path: string, init: { method?: string; headers?: Record<string, string>; body?: string | ArrayBuffer } = {}): Promise<T> {
+    const res = await this.transport.send({ method: init.method ?? "GET", path, headers: init.headers, body: init.body });
+    if (res.status < 200 || res.status >= 300) {
       let message = `HTTP ${res.status}`;
       try {
-        const body = await res.json();
+        const body = JSON.parse(res.text);
         if (typeof body?.error === "string") message = body.error;
       } catch {
         // body was not JSON; keep the status message
       }
       throw new ApiError(res.status, res.status === 401 ? "Wrong or missing API token" : message);
     }
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+    if (res.status === 204 || res.text === "") return undefined as T;
+    return JSON.parse(res.text) as T;
   }
 
   private json<T>(path: string, method: string, body: unknown) {
-    return this.request<T>(path, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    return this.request<T>(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   }
 
   /** Open endpoint: checks the server is reachable, without needing the token. */
   async health(): Promise<boolean> {
-    const base = this.config.baseUrl.replace(/\/+$/, "");
-    const res = await fetch(`${base}/health`);
-    return res.ok;
+    if (this.transport instanceof RemoteTransport) return this.transport.health();
+    return true;
   }
 
   transactions() {
@@ -175,6 +174,15 @@ export class Api {
 
   saveSettings(update: SettingsUpdate) {
     return this.json<Settings>("/v1/settings", "PUT", update);
+  }
+
+  /** Everything that is yours as one document (no secrets, no prices). */
+  exportData() {
+    return this.request<ExportData>("/v1/export");
+  }
+
+  importData(data: ExportData) {
+    return this.json<ImportSummary>("/v1/import", "POST", data);
   }
 
   bankStatus() {

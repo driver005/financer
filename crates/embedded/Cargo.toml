@@ -1,0 +1,37 @@
+[package]
+name = "financer-embedded"
+description = "The Financer backend as a library for the phone: same API, served in-process (no network port)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[features]
+# Builds the `uniffi-bindgen` helper binary used to generate Kotlin/Swift/TypeScript bindings.
+bindgen-cli = ["uniffi/cli"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen-cli"]
+
+[dependencies]
+financer-api = { path = "../api" }
+financer-fints = { path = "../fints" }
+financer-prices = { path = "../prices" }
+financer-store = { path = "../store" }
+axum = { version = "0.8", default-features = false }
+http-body-util = "0.1"
+serde_json.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tower = { version = "0.5", features = ["util"] }
+uniffi = { version = "=0.31", features = ["tokio"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }

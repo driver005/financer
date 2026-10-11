@@ -474,3 +474,56 @@ pub struct ScanDto {
     pub text: String,
     pub receipt: ReceiptDto,
 }
+
+// ---- export / import ----
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ExportTransaction {
+    #[schema(value_type = String, format = Date, example = "2026-03-02")]
+    pub booking_date: Date,
+    #[schema(value_type = i64)]
+    pub amount_cents: Money,
+    pub counterparty: String,
+    pub purpose: String,
+    pub counterparty_iban: Option<String>,
+    #[schema(value_type = Option<String>, example = "groceries")]
+    pub category: Option<Category>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ExportReceipt {
+    pub fingerprint: String,
+    /// The parsed receipt, as stored.
+    #[schema(value_type = Object)]
+    pub receipt: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ExportSettings {
+    pub habit_mode: Option<String>,
+    pub llm_provider: Option<String>,
+    pub llm_model: Option<String>,
+}
+
+/// Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
+/// which are fetched again.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ExportDto {
+    /// Format version, currently 1.
+    pub version: u32,
+    pub transactions: Vec<ExportTransaction>,
+    pub budget: Vec<EnvelopeDto>,
+    pub basket: Vec<BasketItemDto>,
+    pub receipts: Vec<ExportReceipt>,
+    pub settings: ExportSettings,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ImportReportDto {
+    pub transactions_added: usize,
+    pub transactions_known: usize,
+    pub receipts_added: usize,
+    pub receipts_known: usize,
+    pub budget_envelopes: usize,
+    pub basket_items: usize,
+}

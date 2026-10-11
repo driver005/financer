@@ -4,6 +4,7 @@
 # Required in deploy/.env (never commit it):
 #   FINANCER_API_TOKEN=<at least 32 random characters, e.g. `openssl rand -hex 32`>
 #   DOMAIN=financer.example.com
+# Optional: FINANCER_FINTS_PRODUCT_ID, FINANCER_ANTHROPIC_API_KEY, FINANCER_OPENAI_API_KEY, FINANCER_PRICE_SOURCES
 # For PostgreSQL also: POSTGRES_PASSWORD=<random>  and  FINANCER_DATABASE_URL=postgres://financer:<same password>@postgres/financer
 services:
   server:
@@ -14,9 +15,17 @@ services:
     environment:
       FINANCER_API_TOKEN: ${FINANCER_API_TOKEN:?set FINANCER_API_TOKEN in deploy/.env}
       FINANCER_DATABASE_URL: ${FINANCER_DATABASE_URL:-sqlite:///data/financer.db?mode=rwc}
+      # Optional features (leave empty to keep them off):
+      FINANCER_FINTS_PRODUCT_ID: ${FINANCER_FINTS_PRODUCT_ID:-}
+      FINANCER_ANTHROPIC_API_KEY: ${FINANCER_ANTHROPIC_API_KEY:-}
+      FINANCER_OPENAI_API_KEY: ${FINANCER_OPENAI_API_KEY:-}
+      # e.g. /config/sources.json, with the file in deploy/config/ (see docs/PRICES.md)
+      FINANCER_PRICE_SOURCES: ${FINANCER_PRICE_SOURCES:-}
+      FINANCER_REFRESH_HOURS: ${FINANCER_REFRESH_HOURS:-24}
       RUST_LOG: info
     volumes:
       - financer-data:/data
+      - ./config:/config:ro
     expose:
       - "8080"
 

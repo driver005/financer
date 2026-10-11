@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "ignoreDeprecations": "6.0",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "outDir": "../.test-build",
+    "rootDir": "..",
+    "types": ["node"],
+    "lib": ["es2022", "dom"]
+  },
+  "include": ["../src/api/transport.ts", "../src/api/client.ts", "../src/format.ts", "./*.test.ts"]
+}

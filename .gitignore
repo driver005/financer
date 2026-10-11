@@ -30,3 +30,4 @@ deploy/.env
 *.db-wal
 node_modules/
 .expo/
+deploy/config/sources.json

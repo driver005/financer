@@ -54,7 +54,8 @@ async fn main() {
 }
 
 fn load_sources() -> Result<Vec<PriceSourceConfig>, String> {
-    let Ok(path) = std::env::var("FINANCER_PRICE_SOURCES") else {
+    // an empty value (e.g. passed through by docker compose) means "not configured"
+    let Some(path) = env_key("FINANCER_PRICE_SOURCES") else {
         return Ok(Vec::new());
     };
     let text = std::fs::read_to_string(&path)

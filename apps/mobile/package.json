@@ -13,6 +13,7 @@
     "expo-linking": "~57.0.12",
     "expo-router": "~57.0.25",
     "expo-secure-store": "~57.0.4",
+    "expo-sharing": "~57.0.22",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -25,6 +26,7 @@
     "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
     "@types/react": "~19.2.2",
     "typescript": "~6.0.3"
   },
@@ -34,7 +36,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "gen:api": "(cd ../.. && cargo run -q -p financer-server -- --print-openapi) > openapi.json && npx --yes openapi-typescript@7.13.0 openapi.json -o src/api/schema.d.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tests/tsconfig.json && node --test \".test-build/tests/*.test.js\""
   },
   "private": true
 }
