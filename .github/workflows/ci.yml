@@ -30,14 +30,31 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      # Dependencies and workspace libs are compiled once and restored on later runs (also when a
+      # run fails, so the next push does not start from zero).
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: workspace
+          cache-on-failure: true
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
-      - name: FinTS client against the fints-rs mock bank (real protocol, incl. pushTAN approval)
+      # The two mock bank servers are built from source (several minutes); keep the binaries.
+      - name: Cache the FinTS mock banks
+        id: fints-mock
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/fints
+            ${{ runner.temp }}/fints-decoupled
+          key: fints-mock-${{ runner.os }}-fints-rs-0.2.0-${{ hashFiles('crates/fints/tests/mock/**') }}
+      - name: Build the FinTS mock banks
+        if: steps.fints-mock.outputs.cache-hit != 'true'
         run: |
           cargo install fints-rs --version 0.2.0 --features server --bin fints-server --root "$RUNNER_TEMP/fints" --locked
           crates/fints/tests/mock/build.sh "$RUNNER_TEMP/fints-decoupled"
+      - name: FinTS client against the fints-rs mock bank (real protocol, incl. pushTAN approval)
+        run: |
           FINTS_MOCK_SERVER="$RUNNER_TEMP/fints/bin/fints-server" \
           FINTS_MOCK_DECOUPLED="$RUNNER_TEMP/fints-decoupled/fints-server" \
             cargo test -p financer-fints --test mock_bank

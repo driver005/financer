@@ -77,7 +77,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      # Compiled dependencies and workspace libs are restored per platform on later releases.
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release
+          cache-on-failure: true
       - run: cargo build --release --locked -p financer-server
       - uses: actions/download-artifact@v4
         with:
