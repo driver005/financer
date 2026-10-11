@@ -4,8 +4,8 @@
 
 @source "../node_modules/heroui-native/lib";
 
-/* Bright, game-like purple palette (purple with orange / gold accents on white, or deep
-   violet in dark mode). Keep in sync with src/theme.ts, which the few JS-only colour users read. */
+/* Bright, game-like purple palette (purple with orange / gold accents on white, or near-black
+   in dark mode). Keep in sync with src/theme.ts, which the few JS-only colour users read. */
 @layer theme {
   :root {
     @variant light {
@@ -28,23 +28,23 @@
       --segment: #ffffff;
     }
     @variant dark {
-      --background: #1a1026;
-      --foreground: #f5eefc;
-      --surface: #2a1b3d;
-      --surface-secondary: #33224a;
-      --surface-tertiary: #3d2a58;
-      --muted: #b3a3c9;
-      --default: #3d2a58;
-      --default-foreground: #f5eefc;
+      --background: #0a0a0d;
+      --foreground: #f2f2f7;
+      --surface: #16161b;
+      --surface-secondary: #1e1e25;
+      --surface-tertiary: #272730;
+      --muted: #9a9aa8;
+      --default: #272730;
+      --default-foreground: #f2f2f7;
       --accent: #a78bfa;
-      --accent-foreground: #1e0b3d;
-      --field-background: #2a1b3d;
-      --field-border: #473160;
-      --border: #473160;
-      --separator: #473160;
+      --accent-foreground: #1a0b3a;
+      --field-background: #16161b;
+      --field-border: #2a2a33;
+      --border: #2a2a33;
+      --separator: #2a2a33;
       --success: #4ade80;
       --danger: #ff6b6b;
-      --segment: #3d2a58;
+      --segment: #272730;
     }
   }
 }

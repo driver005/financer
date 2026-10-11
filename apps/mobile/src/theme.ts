@@ -23,15 +23,15 @@ const light = {
 };
 
 const dark: typeof light = {
-  background: "#1a1026",
-  surface: "#2a1b3d",
-  surfaceAlt: "#33224a",
-  text: "#f5eefc",
-  muted: "#b3a3c9",
-  border: "#473160",
+  background: "#0a0a0d",
+  surface: "#16161b",
+  surfaceAlt: "#1e1e25",
+  text: "#f2f2f7",
+  muted: "#9a9aa8",
+  border: "#2a2a33",
   accent: "#a78bfa",
   accentEdge: "#7c3aed",
-  onAccent: "#1e0b3d",
+  onAccent: "#1a0b3a",
   fill: "#a855f7",
   blue: "#1cb0f6",
   blueEdge: "#1388bd",
