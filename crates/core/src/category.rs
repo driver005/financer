@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::rules::RuleSet;
 use crate::transaction::{NameNormalizer, Transaction};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -85,6 +86,7 @@ const DEFAULT_RULES: &[Rule] = &[
 #[derive(Debug, Clone, Default)]
 pub struct Categorizer {
     overrides: HashMap<String, Category>,
+    rules: RuleSet,
 }
 
 impl Categorizer {
@@ -98,7 +100,16 @@ impl Categorizer {
             .insert(NameNormalizer::normalize(counterparty), category);
     }
 
+    /// Put the user's own rules (in priority order) in front of the built-in ones.
+    pub fn with_rules(mut self, rules: RuleSet) -> Self {
+        self.rules = rules;
+        self
+    }
+
     pub fn categorize(&self, tx: &Transaction) -> Category {
+        if let Some(rule) = self.rules.first_match(tx) {
+            return rule.category;
+        }
         if let Some(c) = self
             .overrides
             .get(&NameNormalizer::normalize(&tx.counterparty))
@@ -181,6 +192,33 @@ mod tests {
         assert_eq!(c.categorize(&t), Category::Groceries);
         c.learn("REWE gutschein shop", Category::Leisure);
         assert_eq!(c.categorize(&t), Category::Leisure);
+    }
+
+    #[test]
+    fn user_rules_beat_built_in_rules_in_priority_order() {
+        use crate::rules::{MatchKind, UserRule};
+        let rule = |id, pattern: &str, category| UserRule {
+            id,
+            pattern: pattern.into(),
+            kind: MatchKind::Contains,
+            sign: None,
+            min: None,
+            max: None,
+            category,
+        };
+        let t = Fixture::tx("Rewe Gutschein Shop", "", -1000);
+        let plain = Categorizer::new();
+        assert_eq!(plain.categorize(&t), Category::Groceries);
+        let c = Categorizer::new().with_rules(RuleSet::new(vec![
+            rule(1, "gutschein", Category::Leisure),
+            rule(2, "rewe", Category::Health),
+        ]));
+        assert_eq!(c.categorize(&t), Category::Leisure);
+        // a rule that does not match leaves the built-in rules in charge
+        assert_eq!(
+            c.categorize(&Fixture::tx("Lidl", "", -100)),
+            Category::Groceries
+        );
     }
 
     #[test]

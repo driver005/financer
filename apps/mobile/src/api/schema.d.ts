@@ -384,6 +384,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your categorization rules in priority order (first match wins, before the built-in rules). */
+        get: operations["list_rules"];
+        put?: never;
+        /** Add a rule at the end of the priority order. */
+        post: operations["create_rule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rules/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the rules again over existing transactions. Transactions you categorized by hand keep
+         *     their category. Returns how many changed.
+         */
+        post: operations["apply_rules"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rules/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set the priority order of all rules. */
+        post: operations["reorder_rules"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a rule's fields; its place in the order stays. */
+        put: operations["update_rule"];
+        post?: never;
+        delete: operations["delete_rule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/settings": {
         parameters: {
             query?: never;
@@ -417,6 +489,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/transactions/categorize-unknown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask your Claude or OpenAI model to suggest categories for merchants still left as
+         *     uncategorized or other. Only distinct merchant names (letters only) and the allowed
+         *     categories are sent; never amounts, dates, IBANs or purposes. Nothing is changed until you
+         *     accept suggestions.
+         */
+        post: operations["categorize_unknown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/categorize-unknown/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept suggestions: one rule per merchant, then the rules are applied to existing
+         *     transactions.
+         */
+        post: operations["accept_suggestions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/transactions/import": {
         parameters: {
             query?: never;
@@ -437,10 +551,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/transactions/splits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** All split transactions with their parts. */
+        get: operations["list_splits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/{id}/category": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Recategorize one transaction. With `remember`, the merchant gets a rule so its other and
+         *     future transactions follow.
+         */
+        put: operations["set_category"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/{id}/split": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Split a transaction into parts with their own category. The parts must add up to the
+         *     transaction amount exactly. Budget and spending totals then use the parts.
+         */
+        put: operations["put_split"];
+        post?: never;
+        /** Remove the split; the transaction counts as a whole again. */
+        delete: operations["delete_split"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AcceptReport: {
+            /** @description Rules created or updated (one per accepted merchant). */
+            rules_saved: number;
+            /** @description Transactions that changed category as a result. */
+            transactions_changed: number;
+        };
+        AcceptSuggestions: {
+            suggestions: components["schemas"]["AcceptedSuggestion"][];
+        };
+        AcceptedSuggestion: {
+            /** @example dining */
+            category: string;
+            merchant: string;
+        };
         AffordabilityDto: {
             basket_source: string;
             /** Format: int64 */
@@ -451,6 +637,10 @@ export interface components {
             plan?: null | components["schemas"]["PlanDto"];
             /** @description Cheapest items that fit the budget (at most 20). */
             staples: components["schemas"]["StapleDto"][];
+        };
+        ApplyReport: {
+            /** @description Transactions whose category changed. Transactions you categorized by hand are skipped. */
+            changed: number;
         };
         BankStatus: {
             /** Format: int64 */
@@ -495,6 +685,21 @@ export interface components {
             key: string;
             name: string;
             reference_pack: string;
+        };
+        CategoryChange: {
+            /** @example groceries */
+            category: string;
+            /**
+             * @description Also create (or update) a rule for this merchant and apply it to its other
+             *     transactions.
+             */
+            remember?: boolean;
+        };
+        CategoryChanged: {
+            /** @description Other transactions that changed category because of that rule. */
+            others_changed: number;
+            rule?: null | components["schemas"]["RuleDto"];
+            transaction: components["schemas"]["TransactionDto"];
         };
         ChainAffordabilityDto: {
             /** Format: int64 */
@@ -755,6 +960,61 @@ export interface components {
             stored: number;
             unmatched: number;
         };
+        /**
+         * @description A user categorization rule. Rules run in list order; the first match wins and beats the
+         *     built-in rules.
+         */
+        RuleDto: {
+            /** @example dining */
+            category: string;
+            /** Format: int64 */
+            id: number;
+            /**
+             * @description `contains`, `equals` or `starts_with`.
+             * @example contains
+             */
+            kind: string;
+            /**
+             * Format: int64
+             * @description Largest amount that matches, compared without sign.
+             * @example 2000
+             */
+            max_cents?: number | null;
+            /**
+             * Format: int64
+             * @description Smallest amount that matches, compared without sign.
+             * @example 500
+             */
+            min_cents?: number | null;
+            /**
+             * @description Compared with the counterparty name after normalization (case, digits and punctuation
+             *     are ignored).
+             */
+            pattern: string;
+            /**
+             * @description Only expenses (`expense`) or only income (`income`); absent for both.
+             * @example expense
+             */
+            sign?: string | null;
+        };
+        /** @description Fields of a rule when creating or replacing one. */
+        RuleInput: {
+            /** @example dining */
+            category: string;
+            /** @example contains */
+            kind: string;
+            /** Format: int64 */
+            max_cents?: number | null;
+            /** Format: int64 */
+            min_cents?: number | null;
+            pattern: string;
+            /** @example expense */
+            sign?: string | null;
+        };
+        RuleOrder: {
+            /** @description Every rule id exactly once, highest priority first. */
+            ids: number[];
+        };
         ScanDto: {
             receipt: components["schemas"]["ReceiptDto"];
             /** @description What the model read off the photo, so mistakes can be spotted. */
@@ -788,6 +1048,26 @@ export interface components {
             offers_found: number;
             ok: boolean;
         };
+        SplitDto: {
+            parts: components["schemas"]["SplitPartDto"][];
+            /** Format: int64 */
+            transaction_id: number;
+        };
+        SplitInput: {
+            /** @description At least two parts that add up to the transaction amount exactly. */
+            parts: components["schemas"]["SplitPartDto"][];
+        };
+        SplitPartDto: {
+            /**
+             * Format: int64
+             * @description Same sign as the transaction (negative for an expense).
+             * @example -1500
+             */
+            amount_cents: number;
+            /** @example shopping */
+            category: string;
+            note?: string | null;
+        };
         StapleDto: {
             chain: string;
             item: string;
@@ -796,6 +1076,19 @@ export interface components {
             name: string;
             /** Format: int64 */
             price_cents: number;
+        };
+        SuggestionDto: {
+            /** @example dining */
+            category: string;
+            /** @description The merchant name as sent (lowercase letters only). */
+            merchant: string;
+            /** @description How many of your transactions carry this merchant. */
+            transactions: number;
+        };
+        SuggestionsDto: {
+            /** @description How many distinct merchant names were sent to the model. */
+            merchants_sent: number;
+            suggestions: components["schemas"]["SuggestionDto"][];
         };
         SyncDone: {
             /** Format: int64 */
@@ -1548,6 +1841,182 @@ export interface operations {
             };
         };
     };
+    list_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDto"][];
+                };
+            };
+        };
+    };
+    create_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDto"];
+                };
+            };
+            /** @description Empty pattern or bad amount range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    apply_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplyReport"];
+                };
+            };
+        };
+    };
+    reorder_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleOrder"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDto"][];
+                };
+            };
+            /** @description The ids are not every rule exactly once */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Rule id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDto"];
+                };
+            };
+            /** @description Empty pattern or bad amount range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such rule */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Rule id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such rule */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     get_settings: {
         parameters: {
             query?: never;
@@ -1618,6 +2087,75 @@ export interface operations {
             };
         };
     };
+    categorize_unknown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestionsDto"];
+                };
+            };
+            /** @description The provider failed or returned nothing usable */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No API key configured for the selected provider */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    accept_suggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptSuggestions"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptReport"];
+                };
+            };
+            /** @description A merchant without letters or a category suggestions cannot use */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     import_transactions: {
         parameters: {
             query?: never;
@@ -1642,6 +2180,143 @@ export interface operations {
             };
             /** @description Not a Sparkasse CSV export */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_splits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SplitDto"][];
+                };
+            };
+        };
+    };
+    set_category: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Transaction id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryChange"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryChanged"];
+                };
+            };
+            /** @description Nothing to remember: the transaction has no merchant name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such transaction */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_split: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Transaction id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SplitInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SplitDto"];
+                };
+            };
+            /** @description Fewer than two parts, wrong signs or the parts do not add up */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such transaction */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_split: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Transaction id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Split removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such transaction, or it is not split */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

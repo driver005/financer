@@ -28,6 +28,13 @@ export type SyncRequest = components["schemas"]["SyncRequest"];
 export type ScanResult = components["schemas"]["ScanDto"];
 export type ExportData = components["schemas"]["ExportDto"];
 export type ImportSummary = components["schemas"]["ImportReportDto"];
+export type Rule = components["schemas"]["RuleDto"];
+export type RuleInput = components["schemas"]["RuleInput"];
+export type CategoryChanged = components["schemas"]["CategoryChanged"];
+export type Split = components["schemas"]["SplitDto"];
+export type SplitInput = components["schemas"]["SplitInput"];
+export type Suggestions = components["schemas"]["SuggestionsDto"];
+export type AcceptReport = components["schemas"]["AcceptReport"];
 export type Chain = "aldi" | "lidl" | "kaufland" | "rewe";
 
 export class ApiError extends Error {
@@ -196,5 +203,59 @@ export class Api {
   /** Throws `ApiError` with status 409 while the approval in the banking app is still missing. */
   confirmSync(id: string) {
     return this.request<SyncDone>(`/v1/bank/sync/${encodeURIComponent(id)}/confirm`, { method: "POST" });
+  }
+
+  // ---- categorization: rules, corrections, splits, AI suggestions ----
+
+  rules() {
+    return this.request<Rule[]>("/v1/rules");
+  }
+
+  createRule(rule: RuleInput) {
+    return this.json<Rule>("/v1/rules", "POST", rule);
+  }
+
+  updateRule(id: number, rule: RuleInput) {
+    return this.json<Rule>(`/v1/rules/${id}`, "PUT", rule);
+  }
+
+  deleteRule(id: number) {
+    return this.request<void>(`/v1/rules/${id}`, { method: "DELETE" });
+  }
+
+  /** `ids` lists every rule once, highest priority first. */
+  reorderRules(ids: number[]) {
+    return this.json<Rule[]>("/v1/rules/reorder", "POST", { ids });
+  }
+
+  /** Re-run the rules over existing transactions; resolves with how many changed. */
+  applyRules() {
+    return this.request<{ changed: number }>("/v1/rules/apply", { method: "POST" });
+  }
+
+  /** `remember` also makes a rule for the merchant and applies it to its other transactions. */
+  setCategory(id: number, category: string, remember: boolean) {
+    return this.json<CategoryChanged>(`/v1/transactions/${id}/category`, "PUT", { category, remember });
+  }
+
+  splits() {
+    return this.request<Split[]>("/v1/transactions/splits");
+  }
+
+  putSplit(id: number, split: SplitInput) {
+    return this.json<Split>(`/v1/transactions/${id}/split`, "PUT", split);
+  }
+
+  deleteSplit(id: number) {
+    return this.request<void>(`/v1/transactions/${id}/split`, { method: "DELETE" });
+  }
+
+  /** Asks the configured AI for categories of merchants nothing placed; sends merchant names only. */
+  suggestCategories() {
+    return this.request<Suggestions>("/v1/transactions/categorize-unknown", { method: "POST" });
+  }
+
+  acceptSuggestions(suggestions: { merchant: string; category: string }[]) {
+    return this.json<AcceptReport>("/v1/transactions/categorize-unknown/accept", "POST", { suggestions });
   }
 }

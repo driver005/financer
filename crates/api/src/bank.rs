@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 
 use axum::extract::{Path, State};
 use axum::Json;
-use financer_core::Categorizer;
 use financer_fints::{BankError, PendingSync, SyncParams};
 use time::OffsetDateTime;
 
@@ -168,7 +167,7 @@ impl BankRoutes {
         let entry = slot.take().expect("entry present");
         drop(slot);
 
-        let categorizer = Categorizer::new();
+        let categorizer = state.store.categorizer().await?;
         let mut txs = data.transactions;
         for tx in &mut txs {
             tx.category = Some(categorizer.categorize(tx));

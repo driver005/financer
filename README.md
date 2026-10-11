@@ -13,6 +13,7 @@ SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](d
 |---|---|
 | Spending: import a Sparkasse CSV export, categorize, find recurring payments | built and tested; the CSV column names come from memory of the export, **check with a real file** |
 | Live Sparkasse sync (FinTS, pushTAN approval in the Sparkasse app) | login, balance and transactions are verified against the `fints-rs` mock bank over the real protocol (in CI); wrong PINs are recognised and pause syncing after two tries to protect against lockout; pushTAN approval polling is verified against a **simulated** pushTAN bank (a small patch to the mock, in CI) but it was never run against a real Sparkasse; needs your FinTS product id ([docs/FINTS.md](docs/FINTS.md)) |
+| Categorization rules, learning from corrections, split transactions, AI suggestions | your own rules (name contains/is/starts with, optional expense/income and amount range) beat the built-in ones on import and sync and can be re-applied; recategorizing a transaction can "remember" the merchant; a transaction can be split into parts that must add up exactly and that budget totals use; "Suggest categories" asks your Claude/OpenAI model about unknown merchants and sends **only merchant names**. Tested on SQLite and over HTTP with a mock model; the screens are typechecked and their logic unit-tested but **never run on a device**, and the real providers were never called ([docs/CATEGORIZATION.md](docs/CATEGORIZATION.md)) |
 | Budget: monthly limits per category, income and fixed costs from recurring payments | built and tested |
 | "What can I buy?": basket per chain, cheapest split, cheapest items for your budget | built and tested on supplied prices |
 | Prices from Lidl, Aldi, Kaufland, Rewe | **no per-retailer scrapers** (I could not check any against the live sites). You configure pages, read by schema.org data, by your Claude/OpenAI model (works on any layout, costs API calls, prices must literally appear in the page), or Open Prices ([docs/PRICES.md](docs/PRICES.md)). The whole path is tested end to end against local pages; **which real pages work is unverified**
@@ -85,7 +86,7 @@ crates/server     hosted binary
 crates/embedded   the same backend as a library for the phone (UniFFI)
 apps/mobile       Expo app (routes in src/app)
 deploy/           Dockerfile, compose, Caddyfile
-docs/             FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
+docs/             CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
 ```
 
 ## Security notes
