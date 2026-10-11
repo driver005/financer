@@ -1,0 +1,19 @@
+[package]
+name = "financer-store"
+description = "Persistence: SeaORM entities and migrations for SQLite and PostgreSQL"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+financer-core = { path = "../core" }
+sea-orm = { version = "2", default-features = false, features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-rustls", "macros", "with-time"] }
+sea-orm-migration = { version = "2", default-features = false, features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-rustls"] }
+thiserror.workspace = true
+async-trait = "0.1"
+serde_json.workspace = true
+time.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[dev-dependencies]
