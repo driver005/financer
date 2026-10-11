@@ -1,44 +1,44 @@
 import { useColorScheme } from "react-native";
 
-// Bright, game-like palette. Mirrors the CSS variables in global.css (the components read
+// Bright, game-like purple palette. Mirrors the CSS variables in global.css (the components read
 // those; this is for the few places that need a colour value in JS: the 3D buttons, the
 // tab bar, icons and progress fills).
 const light = {
   background: "#ffffff",
   surface: "#ffffff",
-  surfaceAlt: "#f7f7f7",
-  text: "#3c3c3c",
-  muted: "#777777",
-  border: "#e5e5e5",
-  accent: "#58a700", // buttons and text on white (contrast 3.4:1 for bold labels)
-  accentEdge: "#3d7500", // the 3D "lip" under a button
+  surfaceAlt: "#faf5ff",
+  text: "#2d2438",
+  muted: "#6b5f7a",
+  border: "#e9defa",
+  accent: "#7c3aed", // buttons and text on white (contrast 5.7:1)
+  accentEdge: "#5b21b6", // the 3D "lip" under a button
   onAccent: "#ffffff",
-  fill: "#58cc02", // bright green for progress fills and decorations
+  fill: "#a855f7", // bright purple for progress fills and decorations
   blue: "#1899d6",
   blueEdge: "#126f9c",
   orange: "#ff9600",
   gold: "#ffc800",
   bad: "#ea2b2b",
-  good: "#58a700",
+  good: "#16a34a",
 };
 
 const dark: typeof light = {
-  background: "#131f24",
-  surface: "#202f36",
-  surfaceAlt: "#243740",
-  text: "#f1f7fb",
-  muted: "#8fa1ab",
-  border: "#37464f",
-  accent: "#58cc02",
-  accentEdge: "#3f9000",
-  onAccent: "#0d2000",
-  fill: "#58cc02",
+  background: "#1a1026",
+  surface: "#2a1b3d",
+  surfaceAlt: "#33224a",
+  text: "#f5eefc",
+  muted: "#b3a3c9",
+  border: "#473160",
+  accent: "#a78bfa",
+  accentEdge: "#7c3aed",
+  onAccent: "#1e0b3d",
+  fill: "#a855f7",
   blue: "#1cb0f6",
   blueEdge: "#1388bd",
   orange: "#ff9600",
   gold: "#ffc800",
   bad: "#ff6b6b",
-  good: "#58cc02",
+  good: "#4ade80",
 };
 
 export const palette = { light, dark };
