@@ -7,6 +7,6 @@ pub use bank::{
     BankClient, BankData, BankError, MockBank, PendingSync, SyncParams, TanChallenge,
     UnconfiguredBank,
 };
-pub use csv_import::{parse_sparkasse_csv, ImportError, ImportResult, SkippedRow};
+pub use csv_import::{ImportError, ImportResult, SkippedRow, SparkasseCsv};
 #[cfg(feature = "live")]
 pub use live::FintsBank;

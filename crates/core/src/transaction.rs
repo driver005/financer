@@ -26,27 +26,32 @@ impl Transaction {
             "{}|{}|{}|{}",
             self.booking_date,
             self.amount.cents(),
-            normalize_name(&self.counterparty),
-            normalize_name(&self.purpose),
+            NameNormalizer::normalize(&self.counterparty),
+            NameNormalizer::normalize(&self.purpose),
         )
     }
 }
 
-/// Lowercase, collapse whitespace and strip punctuation/digits-noise so that
-/// `"REWE SAGT DANKE 1234"` and `"Rewe sagt danke"` group together.
-pub fn normalize_name(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut last_space = true;
-    for c in input.chars().flat_map(|c| c.to_lowercase()) {
-        if c.is_alphabetic() {
-            out.push(c);
-            last_space = false;
-        } else if !last_space {
-            out.push(' ');
-            last_space = true;
+/// Normalizes free-text names (counterparties, purposes, product titles) for grouping and matching.
+pub struct NameNormalizer;
+
+impl NameNormalizer {
+    /// Lowercase, collapse whitespace and strip punctuation/digits-noise so that
+    /// `"REWE SAGT DANKE 1234"` and `"Rewe sagt danke"` group together.
+    pub fn normalize(input: &str) -> String {
+        let mut out = String::with_capacity(input.len());
+        let mut last_space = true;
+        for c in input.chars().flat_map(|c| c.to_lowercase()) {
+            if c.is_alphabetic() {
+                out.push(c);
+                last_space = false;
+            } else if !last_space {
+                out.push(' ');
+                last_space = true;
+            }
         }
+        out.trim_end().to_string()
     }
-    out.trim_end().to_string()
 }
 
 #[cfg(test)]
@@ -57,10 +62,10 @@ mod tests {
     #[test]
     fn normalizes_merchant_names() {
         assert_eq!(
-            normalize_name("REWE SAGT DANKE 1234/Köln"),
+            NameNormalizer::normalize("REWE SAGT DANKE 1234/Köln"),
             "rewe sagt danke köln"
         );
-        assert_eq!(normalize_name("  Lidl  "), "lidl");
+        assert_eq!(NameNormalizer::normalize("  Lidl  "), "lidl");
     }
 
     #[test]

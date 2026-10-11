@@ -15,7 +15,7 @@ use axum::middleware;
 use axum::routing::{delete, get, post};
 use axum::Router;
 use financer_fints::{BankClient, UnconfiguredBank};
-use financer_llm::{provider_for, LlmError, LlmProvider, LlmSettings};
+use financer_llm::{LlmError, LlmProvider, LlmSettings, ProviderFactory};
 use financer_prices::{Http, HttpResponse, PriceError, SourceConfig};
 use financer_store::Store;
 use tower_http::trace::TraceLayer;
@@ -79,7 +79,7 @@ impl AppState {
             http: Arc::new(NoNetwork),
             price_sources: Arc::new(Vec::new()),
             llm_keys: LlmKeys::default(),
-            llm: Arc::new(provider_for),
+            llm: Arc::new(ProviderFactory::create),
         }
     }
 
@@ -219,90 +219,98 @@ impl utoipa::Modify for BearerAuth {
     }
 }
 
-/// Build the router. `/health` is open; everything under `/v1` needs the bearer token.
-pub fn router(state: AppState, token: TokenHash) -> Router {
-    let v1 = Router::new()
-        .route("/transactions", get(routes::list_transactions))
-        .route("/transactions/import", post(routes::import_transactions))
-        .route("/recurring", get(routes::recurring))
-        .route("/budget/disposable", get(routes::disposable))
-        .route(
-            "/budget/envelopes",
-            get(routes::get_envelopes).put(routes::put_envelopes),
-        )
-        .route("/budget/status", get(routes::budget_status))
-        .route("/export", get(export::export_data))
-        .route("/import", post(export::import_data))
-        .route("/bank/sync", post(bank::start_sync))
-        .route("/bank/sync/{id}/confirm", post(bank::confirm_sync))
-        .route("/bank/status", get(bank::bank_status))
-        .route("/prices", get(grocery::list_prices))
-        .route("/prices/best", get(grocery::best_prices))
-        .route("/prices/refresh", post(grocery::refresh_prices))
-        .route("/catalog", get(grocery::catalog))
-        .route("/basket", get(grocery::get_basket).put(grocery::put_basket))
-        .route(
-            "/receipts",
-            get(grocery::list_receipts).post(grocery::upload_receipt),
-        )
-        .route(
-            "/receipts/scan",
-            post(grocery::scan_receipt).layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
-        )
-        .route("/receipts/{id}", delete(grocery::delete_receipt))
-        .route("/affordability", get(grocery::affordability))
-        .route("/recipes", get(grocery::recipes))
-        .route("/recipes/ideas", post(grocery::recipe_ideas))
-        .route(
-            "/settings",
-            get(grocery::get_settings).put(grocery::put_settings),
-        )
-        // An unknown API path is an API error, never a web page (see `with_web_app`).
-        .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
-        .layer(middleware::from_fn_with_state(token, auth::require_token));
+/// Entry points that assemble and run the API.
+pub struct Api;
 
-    Router::new()
-        .route("/health", get(routes::health))
-        .nest("/v1", v1)
-        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
-        .layer(TraceLayer::new_for_http())
-        .with_state(state)
-}
+impl Api {
+    /// Build the router. `/health` is open; everything under `/v1` needs the bearer token.
+    pub fn router(state: AppState, token: TokenHash) -> Router {
+        let v1 = Router::new()
+            .route("/transactions", get(routes::list_transactions))
+            .route("/transactions/import", post(routes::import_transactions))
+            .route("/recurring", get(routes::recurring))
+            .route("/budget/disposable", get(routes::disposable))
+            .route(
+                "/budget/envelopes",
+                get(routes::get_envelopes).put(routes::put_envelopes),
+            )
+            .route("/budget/status", get(routes::budget_status))
+            .route("/export", get(export::export_data))
+            .route("/import", post(export::import_data))
+            .route("/bank/sync", post(bank::start_sync))
+            .route("/bank/sync/{id}/confirm", post(bank::confirm_sync))
+            .route("/bank/status", get(bank::bank_status))
+            .route("/prices", get(grocery::list_prices))
+            .route("/prices/best", get(grocery::best_prices))
+            .route("/prices/refresh", post(grocery::refresh_prices))
+            .route("/catalog", get(grocery::catalog))
+            .route("/basket", get(grocery::get_basket).put(grocery::put_basket))
+            .route(
+                "/receipts",
+                get(grocery::list_receipts).post(grocery::upload_receipt),
+            )
+            .route(
+                "/receipts/scan",
+                post(grocery::scan_receipt).layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
+            )
+            .route("/receipts/{id}", delete(grocery::delete_receipt))
+            .route("/affordability", get(grocery::affordability))
+            .route("/recipes", get(grocery::recipes))
+            .route("/recipes/ideas", post(grocery::recipe_ideas))
+            .route(
+                "/settings",
+                get(grocery::get_settings).put(grocery::put_settings),
+            )
+            // An unknown API path is an API error, never a web page (see `Api::with_web_app`).
+            .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
+            .layer(middleware::from_fn_with_state(
+                token,
+                auth::TokenAuth::require,
+            ));
 
-/// Also serve a built web app (`expo export --platform web`) from `dir`: files as they are, and
-/// `index.html` for any other path so the app's own routes survive a reload. `/health` and
-/// `/v1` are untouched; an unknown `/v1` path is still an API error, never the web page.
-pub fn with_web_app(app: Router, dir: impl AsRef<std::path::Path>) -> Router {
-    use tower_http::services::{ServeDir, ServeFile};
-    let dir = dir.as_ref();
-    app.fallback_service(ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html"))))
-}
-
-/// Refresh all configured price sources now. Returns a one-line summary for logs; used by the
-/// server's scheduler.
-pub async fn refresh_prices_summary(state: &AppState) -> Result<String, String> {
-    match grocery::refresh_prices_now(state).await {
-        Ok(r) => {
-            let failed: Vec<_> = r
-                .sources
-                .iter()
-                .filter(|s| !s.ok)
-                .map(|s| s.name.as_str())
-                .collect();
-            Ok(format!(
-                "{} quotes stored, {} source(s) failed {:?}",
-                r.stored,
-                failed.len(),
-                failed
-            ))
-        }
-        Err(routes::ApiError::Unavailable(m)) => Err(m),
-        Err(_) => Err("price refresh failed".into()),
+        Router::new()
+            .route("/health", get(routes::health))
+            .nest("/v1", v1)
+            .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+            .layer(TraceLayer::new_for_http())
+            .with_state(state)
     }
-}
 
-pub fn openapi_json() -> String {
-    ApiDoc::openapi()
-        .to_pretty_json()
-        .expect("OpenAPI document serializes")
+    /// Also serve a built web app (`expo export --platform web`) from `dir`: files as they are, and
+    /// `index.html` for any other path so the app's own routes survive a reload. `/health` and
+    /// `/v1` are untouched; an unknown `/v1` path is still an API error, never the web page.
+    pub fn with_web_app(app: Router, dir: impl AsRef<std::path::Path>) -> Router {
+        use tower_http::services::{ServeDir, ServeFile};
+        let dir = dir.as_ref();
+        app.fallback_service(ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html"))))
+    }
+
+    /// Refresh all configured price sources now. Returns a one-line summary for logs; used by the
+    /// server's scheduler.
+    pub async fn refresh_prices_summary(state: &AppState) -> Result<String, String> {
+        match grocery::Grocery::refresh_prices_now(state).await {
+            Ok(r) => {
+                let failed: Vec<_> = r
+                    .sources
+                    .iter()
+                    .filter(|s| !s.ok)
+                    .map(|s| s.name.as_str())
+                    .collect();
+                Ok(format!(
+                    "{} quotes stored, {} source(s) failed {:?}",
+                    r.stored,
+                    failed.len(),
+                    failed
+                ))
+            }
+            Err(routes::ApiError::Unavailable(m)) => Err(m),
+            Err(_) => Err("price refresh failed".into()),
+        }
+    }
+
+    pub fn openapi_json() -> String {
+        ApiDoc::openapi()
+            .to_pretty_json()
+            .expect("OpenAPI document serializes")
+    }
 }

@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::transaction::normalize_name;
+use crate::transaction::NameNormalizer;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -26,253 +26,255 @@ pub struct GenericItem {
     pub keywords: &'static [&'static str],
 }
 
-const fn item(
-    key: &'static str,
-    name_de: &'static str,
-    unit: Unit,
-    pantry: bool,
-    keywords: &'static [&'static str],
-) -> GenericItem {
-    GenericItem {
-        key,
-        name_de,
-        unit,
-        pantry,
-        keywords,
+impl GenericItem {
+    const fn new(
+        key: &'static str,
+        name_de: &'static str,
+        unit: Unit,
+        pantry: bool,
+        keywords: &'static [&'static str],
+    ) -> Self {
+        Self {
+            key,
+            name_de,
+            unit,
+            pantry,
+            keywords,
+        }
     }
 }
 
 use Unit::{Kilogram as Kg, Liter as L, Piece as P};
 
 pub const CATALOG: &[GenericItem] = &[
-    item(
+    GenericItem::new(
         "milch",
         "Milch",
         L,
         false,
         &["milch", "vollmilch", "hmilch", "frischmilch"],
     ),
-    item(
+    GenericItem::new(
         "butter",
         "Butter",
         Kg,
         false,
         &["butter", "markenbutter", "süßrahmbutter"],
     ),
-    item(
+    GenericItem::new(
         "eier",
         "Eier",
         P,
         false,
         &["eier", "ei", "freilandeier", "bodenhaltung"],
     ),
-    item(
+    GenericItem::new(
         "joghurt",
         "Joghurt",
         Kg,
         false,
         &["joghurt", "naturjoghurt"],
     ),
-    item(
+    GenericItem::new(
         "sahne",
         "Sahne",
         L,
         false,
         &["sahne", "schlagsahne", "kochsahne"],
     ),
-    item("kaese-gouda", "Gouda", Kg, false, &["gouda"]),
-    item("mozzarella", "Mozzarella", Kg, false, &["mozzarella"]),
-    item(
+    GenericItem::new("kaese-gouda", "Gouda", Kg, false, &["gouda"]),
+    GenericItem::new("mozzarella", "Mozzarella", Kg, false, &["mozzarella"]),
+    GenericItem::new(
         "parmesan",
         "Parmesan",
         Kg,
         false,
         &["parmesan", "grana padano"],
     ),
-    item(
+    GenericItem::new(
         "quark",
         "Quark",
         Kg,
         false,
         &["quark", "magerquark", "speisequark"],
     ),
-    item(
+    GenericItem::new(
         "brot",
         "Brot",
         Kg,
         false,
         &["brot", "vollkornbrot", "mischbrot", "toastbrot"],
     ),
-    item(
+    GenericItem::new(
         "broetchen",
         "Brötchen",
         P,
         false,
         &["brötchen", "semmel", "schrippen"],
     ),
-    item("mehl", "Weizenmehl", Kg, false, &["weizenmehl", "mehl"]),
-    item(
+    GenericItem::new("mehl", "Weizenmehl", Kg, false, &["weizenmehl", "mehl"]),
+    GenericItem::new(
         "nudeln",
         "Nudeln",
         Kg,
         false,
         &["nudeln", "spaghetti", "penne", "fusilli", "makkaroni"],
     ),
-    item(
+    GenericItem::new(
         "reis",
         "Reis",
         Kg,
         false,
         &["reis", "basmatireis", "langkornreis"],
     ),
-    item("haferflocken", "Haferflocken", Kg, false, &["haferflocken"]),
-    item(
+    GenericItem::new("haferflocken", "Haferflocken", Kg, false, &["haferflocken"]),
+    GenericItem::new(
         "kartoffeln",
         "Kartoffeln",
         Kg,
         false,
         &["kartoffeln", "speisekartoffeln"],
     ),
-    item(
+    GenericItem::new(
         "zwiebeln",
         "Zwiebeln",
         Kg,
         false,
         &["zwiebeln", "speisezwiebeln"],
     ),
-    item("knoblauch", "Knoblauch", P, false, &["knoblauch"]),
-    item("karotten", "Karotten", Kg, false, &["karotten", "möhren"]),
-    item(
+    GenericItem::new("knoblauch", "Knoblauch", P, false, &["knoblauch"]),
+    GenericItem::new("karotten", "Karotten", Kg, false, &["karotten", "möhren"]),
+    GenericItem::new(
         "tomaten",
         "Tomaten",
         Kg,
         false,
         &["tomaten", "rispentomaten", "cherrytomaten"],
     ),
-    item(
+    GenericItem::new(
         "tomaten-passiert",
         "Passierte Tomaten",
         L,
         false,
         &["passierte tomaten", "tomaten passiert", "pomito"],
     ),
-    item("paprika", "Paprika", Kg, false, &["paprika"]),
-    item("gurke", "Gurke", P, false, &["gurke", "salatgurke"]),
-    item("zucchini", "Zucchini", Kg, false, &["zucchini"]),
-    item("brokkoli", "Brokkoli", Kg, false, &["brokkoli"]),
-    item("spinat", "Spinat", Kg, false, &["spinat", "blattspinat"]),
-    item(
+    GenericItem::new("paprika", "Paprika", Kg, false, &["paprika"]),
+    GenericItem::new("gurke", "Gurke", P, false, &["gurke", "salatgurke"]),
+    GenericItem::new("zucchini", "Zucchini", Kg, false, &["zucchini"]),
+    GenericItem::new("brokkoli", "Brokkoli", Kg, false, &["brokkoli"]),
+    GenericItem::new("spinat", "Spinat", Kg, false, &["spinat", "blattspinat"]),
+    GenericItem::new(
         "champignons",
         "Champignons",
         Kg,
         false,
         &["champignons", "pilze"],
     ),
-    item("lauch", "Lauch", Kg, false, &["lauch", "porree"]),
-    item(
+    GenericItem::new("lauch", "Lauch", Kg, false, &["lauch", "porree"]),
+    GenericItem::new(
         "salat",
         "Salat",
         P,
         false,
         &["eisbergsalat", "kopfsalat", "salatherzen"],
     ),
-    item("aepfel", "Äpfel", Kg, false, &["äpfel", "apfel"]),
-    item("bananen", "Bananen", Kg, false, &["bananen"]),
-    item("zitronen", "Zitronen", P, false, &["zitronen", "zitrone"]),
-    item(
+    GenericItem::new("aepfel", "Äpfel", Kg, false, &["äpfel", "apfel"]),
+    GenericItem::new("bananen", "Bananen", Kg, false, &["bananen"]),
+    GenericItem::new("zitronen", "Zitronen", P, false, &["zitronen", "zitrone"]),
+    GenericItem::new(
         "haehnchenbrust",
         "Hähnchenbrust",
         Kg,
         false,
         &["hähnchenbrust", "hühnerbrust", "hähnchenbrustfilet"],
     ),
-    item(
+    GenericItem::new(
         "hackfleisch",
         "Hackfleisch gemischt",
         Kg,
         false,
         &["hackfleisch", "gehacktes"],
     ),
-    item(
+    GenericItem::new(
         "bacon",
         "Speck",
         Kg,
         false,
         &["speck", "bacon", "frühstücksspeck"],
     ),
-    item(
+    GenericItem::new(
         "wuerstchen",
         "Würstchen",
         P,
         false,
         &["würstchen", "bratwurst"],
     ),
-    item("lachs", "Lachs", Kg, false, &["lachs", "lachsfilet"]),
-    item("thunfisch", "Thunfisch (Dose)", P, false, &["thunfisch"]),
-    item("linsen", "Linsen", Kg, false, &["linsen"]),
-    item(
+    GenericItem::new("lachs", "Lachs", Kg, false, &["lachs", "lachsfilet"]),
+    GenericItem::new("thunfisch", "Thunfisch (Dose)", P, false, &["thunfisch"]),
+    GenericItem::new("linsen", "Linsen", Kg, false, &["linsen"]),
+    GenericItem::new(
         "kichererbsen",
         "Kichererbsen (Dose)",
         P,
         false,
         &["kichererbsen"],
     ),
-    item(
+    GenericItem::new(
         "kidneybohnen",
         "Kidneybohnen (Dose)",
         P,
         false,
         &["kidneybohnen", "kidney bohnen"],
     ),
-    item("mais", "Mais (Dose)", P, false, &["mais", "gemüsemais"]),
-    item("tofu", "Tofu", Kg, false, &["tofu"]),
-    item("kokosmilch", "Kokosmilch", L, false, &["kokosmilch"]),
-    item("tomatenmark", "Tomatenmark", Kg, false, &["tomatenmark"]),
-    item("zucker", "Zucker", Kg, true, &["zucker", "haushaltszucker"]),
-    item("salz", "Salz", Kg, true, &["salz", "speisesalz", "jodsalz"]),
-    item("pfeffer", "Pfeffer", Kg, true, &["pfeffer"]),
-    item(
+    GenericItem::new("mais", "Mais (Dose)", P, false, &["mais", "gemüsemais"]),
+    GenericItem::new("tofu", "Tofu", Kg, false, &["tofu"]),
+    GenericItem::new("kokosmilch", "Kokosmilch", L, false, &["kokosmilch"]),
+    GenericItem::new("tomatenmark", "Tomatenmark", Kg, false, &["tomatenmark"]),
+    GenericItem::new("zucker", "Zucker", Kg, true, &["zucker", "haushaltszucker"]),
+    GenericItem::new("salz", "Salz", Kg, true, &["salz", "speisesalz", "jodsalz"]),
+    GenericItem::new("pfeffer", "Pfeffer", Kg, true, &["pfeffer"]),
+    GenericItem::new(
         "oel",
         "Speiseöl",
         L,
         true,
         &["speiseöl", "rapsöl", "sonnenblumenöl", "olivenöl"],
     ),
-    item("essig", "Essig", L, true, &["essig"]),
-    item("bruehe", "Gemüsebrühe", Kg, true, &["gemüsebrühe", "brühe"]),
-    item("curry", "Currypulver", Kg, true, &["currypulver", "curry"]),
-    item("kaffee", "Kaffee", Kg, false, &["kaffee", "bohnenkaffee"]),
-    item("tee", "Tee", P, false, &["tee", "früchtetee", "schwarztee"]),
-    item(
+    GenericItem::new("essig", "Essig", L, true, &["essig"]),
+    GenericItem::new("bruehe", "Gemüsebrühe", Kg, true, &["gemüsebrühe", "brühe"]),
+    GenericItem::new("curry", "Currypulver", Kg, true, &["currypulver", "curry"]),
+    GenericItem::new("kaffee", "Kaffee", Kg, false, &["kaffee", "bohnenkaffee"]),
+    GenericItem::new("tee", "Tee", P, false, &["tee", "früchtetee", "schwarztee"]),
+    GenericItem::new(
         "wasser",
         "Mineralwasser",
         L,
         false,
         &["mineralwasser", "wasser", "sprudel"],
     ),
-    item(
+    GenericItem::new(
         "apfelsaft",
         "Apfelsaft",
         L,
         false,
         &["apfelsaft", "orangensaft", "saft"],
     ),
-    item(
+    GenericItem::new(
         "schokolade",
         "Schokolade",
         Kg,
         false,
         &["schokolade", "vollmilchschokolade"],
     ),
-    item("kekse", "Kekse", Kg, false, &["kekse", "butterkekse"]),
-    item(
+    GenericItem::new("kekse", "Kekse", Kg, false, &["kekse", "butterkekse"]),
+    GenericItem::new(
         "pizza-tk",
         "Tiefkühlpizza",
         P,
         false,
         &["tiefkühlpizza", "pizza"],
     ),
-    item(
+    GenericItem::new(
         "toilettenpapier",
         "Toilettenpapier",
         P,
@@ -281,55 +283,61 @@ pub const CATALOG: &[GenericItem] = &[
     ),
 ];
 
-/// Size of the reference pack all prices of an item are normalised to, in thousandths of
-/// the item's base unit (kg, l or piece): `1000` is 1 kg / 1 l / 1 piece. Chains sell
-/// different pack sizes, so a quote is always converted to this pack before comparing.
-pub fn reference_milli(key: &str) -> u32 {
-    match key {
-        "eier" => 10_000,
-        "nudeln" | "mehl" | "haferflocken" | "linsen" | "quark" | "tofu" | "zucker" | "salz" => 500,
-        "butter" | "kaese-gouda" | "mozzarella" | "parmesan" | "joghurt" | "champignons"
-        | "hackfleisch" | "haehnchenbrust" | "lachs" | "bacon" | "spinat" | "brokkoli"
-        | "schokolade" | "kekse" | "kaffee" | "tomatenmark" | "curry" | "pfeffer" => 250,
-        "sahne" | "kokosmilch" | "tomaten-passiert" => 500,
-        "broetchen" | "wuerstchen" | "toilettenpapier" => 4_000,
-        _ => 1_000,
+/// Lookups over the generic item [`CATALOG`].
+pub struct Catalog;
+
+impl Catalog {
+    /// Size of the reference pack all prices of an item are normalised to, in thousandths of
+    /// the item's base unit (kg, l or piece): `1000` is 1 kg / 1 l / 1 piece. Chains sell
+    /// different pack sizes, so a quote is always converted to this pack before comparing.
+    pub fn reference_milli(key: &str) -> u32 {
+        match key {
+            "eier" => 10_000,
+            "nudeln" | "mehl" | "haferflocken" | "linsen" | "quark" | "tofu" | "zucker"
+            | "salz" => 500,
+            "butter" | "kaese-gouda" | "mozzarella" | "parmesan" | "joghurt" | "champignons"
+            | "hackfleisch" | "haehnchenbrust" | "lachs" | "bacon" | "spinat" | "brokkoli"
+            | "schokolade" | "kekse" | "kaffee" | "tomatenmark" | "curry" | "pfeffer" => 250,
+            "sahne" | "kokosmilch" | "tomaten-passiert" => 500,
+            "broetchen" | "wuerstchen" | "toilettenpapier" => 4_000,
+            _ => 1_000,
+        }
     }
-}
 
-/// `500 g`, `1 l`, `10 Stück`: the reference pack as shown to the user.
-pub fn reference_label(key: &str) -> Option<String> {
-    let item = by_key(key)?;
-    let milli = reference_milli(key);
-    Some(match item.unit {
-        Unit::Piece => format!("{} Stück", milli / 1000),
-        Unit::Kilogram if milli < 1000 => format!("{milli} g"),
-        Unit::Kilogram => format!("{} kg", milli / 1000),
-        Unit::Liter if milli < 1000 => format!("{milli} ml"),
-        Unit::Liter => format!("{} l", milli / 1000),
-    })
-}
-
-pub fn by_key(key: &str) -> Option<&'static GenericItem> {
-    CATALOG.iter().find(|i| i.key == key)
-}
-
-/// Map a free-text product or receipt line ("Bio Vollmilch 3,5% 1L") to a generic item.
-///
-/// Matching is by whole words, so `Milchschnitte` never matches `milch`. When several items
-/// match, the one with the longest (most specific) keyword wins.
-pub fn match_product(text: &str) -> Option<&'static GenericItem> {
-    let normalized = normalize_name(text);
-    if normalized.is_empty() {
-        return None;
+    /// `500 g`, `1 l`, `10 Stück`: the reference pack as shown to the user.
+    pub fn reference_label(key: &str) -> Option<String> {
+        let item = Self::by_key(key)?;
+        let milli = Self::reference_milli(key);
+        Some(match item.unit {
+            Unit::Piece => format!("{} Stück", milli / 1000),
+            Unit::Kilogram if milli < 1000 => format!("{milli} g"),
+            Unit::Kilogram => format!("{} kg", milli / 1000),
+            Unit::Liter if milli < 1000 => format!("{milli} ml"),
+            Unit::Liter => format!("{} l", milli / 1000),
+        })
     }
-    let padded = format!(" {normalized} ");
-    CATALOG
-        .iter()
-        .flat_map(|it| it.keywords.iter().map(move |k| (it, *k)))
-        .filter(|(_, k)| padded.contains(&format!(" {} ", normalize_name(k))))
-        .max_by_key(|(_, k)| k.len())
-        .map(|(it, _)| it)
+
+    pub fn by_key(key: &str) -> Option<&'static GenericItem> {
+        CATALOG.iter().find(|i| i.key == key)
+    }
+
+    /// Map a free-text product or receipt line ("Bio Vollmilch 3,5% 1L") to a generic item.
+    ///
+    /// Matching is by whole words, so `Milchschnitte` never matches `milch`. When several items
+    /// match, the one with the longest (most specific) keyword wins.
+    pub fn match_product(text: &str) -> Option<&'static GenericItem> {
+        let normalized = NameNormalizer::normalize(text);
+        if normalized.is_empty() {
+            return None;
+        }
+        let padded = format!(" {normalized} ");
+        CATALOG
+            .iter()
+            .flat_map(|it| it.keywords.iter().map(move |k| (it, *k)))
+            .filter(|(_, k)| padded.contains(&format!(" {} ", NameNormalizer::normalize(k))))
+            .max_by_key(|(_, k)| k.len())
+            .map(|(it, _)| it)
+    }
 }
 
 #[cfg(test)]
@@ -347,7 +355,7 @@ mod tests {
 
     #[test]
     fn matches_on_whole_words_only() {
-        let key = |s: &str| match_product(s).map(|i| i.key);
+        let key = |s: &str| Catalog::match_product(s).map(|i| i.key);
         assert_eq!(key("Bio Vollmilch 3,5% 1L"), Some("milch"));
         assert_eq!(key("Milchschnitte 5er"), None);
         assert_eq!(key("Spaghetti No. 5 500g"), Some("nudeln"));
@@ -363,11 +371,11 @@ mod tests {
     fn longest_keyword_wins() {
         // "kokosmilch" must not be read as milk, "apfelsaft" not as apples
         assert_eq!(
-            match_product("Kokosmilch 400ml").map(|i| i.key),
+            Catalog::match_product("Kokosmilch 400ml").map(|i| i.key),
             Some("kokosmilch")
         );
         assert_eq!(
-            match_product("Apfelsaft naturtrüb").map(|i| i.key),
+            Catalog::match_product("Apfelsaft naturtrüb").map(|i| i.key),
             Some("apfelsaft")
         );
     }
@@ -375,26 +383,29 @@ mod tests {
     #[test]
     fn reference_packs_are_sensible_for_every_item() {
         for i in CATALOG {
-            let m = reference_milli(i.key);
+            let m = Catalog::reference_milli(i.key);
             assert!(m > 0, "{}", i.key);
-            assert!(reference_label(i.key).is_some());
+            assert!(Catalog::reference_label(i.key).is_some());
             if i.unit != Unit::Piece {
                 assert!(m <= 5_000, "{} reference pack is unreasonably large", i.key);
             }
         }
-        assert_eq!(reference_label("milch").as_deref(), Some("1 l"));
-        assert_eq!(reference_label("nudeln").as_deref(), Some("500 g"));
-        assert_eq!(reference_label("eier").as_deref(), Some("10 Stück"));
+        assert_eq!(Catalog::reference_label("milch").as_deref(), Some("1 l"));
+        assert_eq!(Catalog::reference_label("nudeln").as_deref(), Some("500 g"));
         assert_eq!(
-            reference_label("tomaten-passiert").as_deref(),
+            Catalog::reference_label("eier").as_deref(),
+            Some("10 Stück")
+        );
+        assert_eq!(
+            Catalog::reference_label("tomaten-passiert").as_deref(),
             Some("500 ml")
         );
-        assert_eq!(reference_label("nope"), None);
+        assert_eq!(Catalog::reference_label("nope"), None);
     }
 
     #[test]
     fn lookup_by_key() {
-        assert_eq!(by_key("milch").unwrap().name_de, "Milch");
-        assert!(by_key("nope").is_none());
+        assert_eq!(Catalog::by_key("milch").unwrap().name_de, "Milch");
+        assert!(Catalog::by_key("nope").is_none());
     }
 }

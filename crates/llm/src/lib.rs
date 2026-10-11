@@ -229,9 +229,14 @@ impl LlmProvider for MockProvider {
     }
 }
 
-/// Build the real provider for the given settings.
-pub fn provider_for(settings: &LlmSettings) -> Result<Box<dyn LlmProvider>, LlmError> {
-    Ok(Box::new(GenaiProvider::new(settings)?))
+/// Builds [`LlmProvider`] instances from settings.
+pub struct ProviderFactory;
+
+impl ProviderFactory {
+    /// Build the real provider for the given settings.
+    pub fn create(settings: &LlmSettings) -> Result<Box<dyn LlmProvider>, LlmError> {
+        Ok(Box::new(GenaiProvider::new(settings)?))
+    }
 }
 
 #[cfg(test)]

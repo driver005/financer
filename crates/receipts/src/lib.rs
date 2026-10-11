@@ -7,7 +7,9 @@
 
 pub mod habits;
 
-use financer_core::{match_product, Chain, Money};
+pub use habits::Habits;
+
+use financer_core::{Catalog, Chain, Money};
 use serde::{Deserialize, Serialize};
 use time::{Date, Month};
 
@@ -71,147 +73,152 @@ const SKIP_WORDS: &[&str] = &[
     "danke",
 ];
 
-/// `1,19`, `-0,50`, `1,19B`, `1,19*` -> money. Rejects anything that is not a plain amount.
-fn parse_amount(token: &str) -> Option<Money> {
-    let t = token.trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '*');
-    let body = t.strip_prefix('-').unwrap_or(t);
-    let (euros, cents) = body.split_once(',')?;
-    if euros.is_empty()
-        || cents.len() != 2
-        || !euros.bytes().all(|b| b.is_ascii_digit() || b == b'.')
-        || !cents.bytes().all(|b| b.is_ascii_digit())
-    {
-        return None;
-    }
-    Money::parse(t).ok()
-}
+/// Parses OCR text of a receipt into line items.
+pub struct ReceiptParser;
 
-/// `2 x 0,99` -> (2, None). Some receipts print the line total on the same line,
-/// `2 x 0,99   1,98 B` -> (2, Some(1,98)); the item name is then the line above.
-fn quantity_line(line: &str) -> Option<(u32, Option<Money>)> {
-    let mut parts = line.split_whitespace();
-    let qty: u32 = parts.next()?.parse().ok()?;
-    let x = parts.next()?;
-    if !(x == "x" || x == "X") || qty == 0 || qty > 99 {
-        return None;
-    }
-    parts.next().and_then(parse_amount)?;
-    let rest: Vec<&str> = parts.filter(|t| !t.eq_ignore_ascii_case("eur")).collect();
-    let line_total = match rest.as_slice() {
-        [] => None,
-        [amount] | [amount, _] => Some(parse_amount(amount)?),
-        _ => return None,
-    };
-    Some((qty, line_total))
-}
-
-fn parse_date(line: &str) -> Option<Date> {
-    for word in line.split(|c: char| !(c.is_ascii_digit() || c == '.')) {
-        let mut p = word.split('.');
-        let (Some(d), Some(m), Some(y), None) = (p.next(), p.next(), p.next(), p.next()) else {
-            continue;
-        };
-        let (Ok(d), Ok(m), Ok(y)) = (d.parse::<u8>(), m.parse::<u8>(), y.parse::<i32>()) else {
-            continue;
-        };
-        let year = if y < 100 { 2000 + y } else { y };
-        if let (Ok(month), true) = (Month::try_from(m), (2000..2100).contains(&year)) {
-            if let Ok(date) = Date::from_calendar_date(year, month, d) {
-                return Some(date);
-            }
+impl ReceiptParser {
+    /// `1,19`, `-0,50`, `1,19B`, `1,19*` -> money. Rejects anything that is not a plain amount.
+    fn parse_amount(token: &str) -> Option<Money> {
+        let t = token.trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '*');
+        let body = t.strip_prefix('-').unwrap_or(t);
+        let (euros, cents) = body.split_once(',')?;
+        if euros.is_empty()
+            || cents.len() != 2
+            || !euros.bytes().all(|b| b.is_ascii_digit() || b == b'.')
+            || !cents.bytes().all(|b| b.is_ascii_digit())
+        {
+            return None;
         }
+        Money::parse(t).ok()
     }
-    None
-}
 
-fn is_skipped(lower: &str) -> bool {
-    SKIP_WORDS.iter().any(|w| lower.contains(w))
-}
-
-fn is_total_line(lower: &str) -> bool {
-    TOTAL_WORDS.iter().any(|w| lower.starts_with(w))
-}
-
-pub fn parse_receipt(text: &str) -> ParsedReceipt {
-    let lines: Vec<&str> = text
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .collect();
-    let merchant = lines.first().map(|s| s.to_string());
-    let chain = merchant.as_deref().and_then(Chain::from_name);
-    let date = lines.iter().find_map(|l| parse_date(l));
-
-    let mut items: Vec<ReceiptItem> = Vec::new();
-    let mut total = None;
-    // A line with a name but no price; the next line may be `2 x 0,99   1,98 B` for it.
-    let mut pending_name: Option<String> = None;
-
-    for line in &lines {
-        let lower = line.to_lowercase();
-        if is_total_line(&lower) {
-            if let Some(a) = line.split_whitespace().rev().find_map(parse_amount) {
-                total = Some(total.map_or(a, |t: Money| t.max(a)));
-            }
-            pending_name = None;
-            continue;
+    /// `2 x 0,99` -> (2, None). Some receipts print the line total on the same line,
+    /// `2 x 0,99   1,98 B` -> (2, Some(1,98)); the item name is then the line above.
+    fn quantity_line(line: &str) -> Option<(u32, Option<Money>)> {
+        let mut parts = line.split_whitespace();
+        let qty: u32 = parts.next()?.parse().ok()?;
+        let x = parts.next()?;
+        if !(x == "x" || x == "X") || qty == 0 || qty > 99 {
+            return None;
         }
-        if let Some((qty, line_total)) = quantity_line(line) {
-            match (line_total, pending_name.take()) {
-                (Some(price), Some(name)) if !is_skipped(&name.to_lowercase()) => {
-                    items.push(ReceiptItem {
-                        item: match_product(&name).map(|i| i.key.to_string()),
-                        text: name,
-                        quantity: qty,
-                        line_total: price,
-                    })
+        parts.next().and_then(Self::parse_amount)?;
+        let rest: Vec<&str> = parts.filter(|t| !t.eq_ignore_ascii_case("eur")).collect();
+        let line_total = match rest.as_slice() {
+            [] => None,
+            [amount] | [amount, _] => Some(Self::parse_amount(amount)?),
+            _ => return None,
+        };
+        Some((qty, line_total))
+    }
+
+    fn parse_date(line: &str) -> Option<Date> {
+        for word in line.split(|c: char| !(c.is_ascii_digit() || c == '.')) {
+            let mut p = word.split('.');
+            let (Some(d), Some(m), Some(y), None) = (p.next(), p.next(), p.next(), p.next()) else {
+                continue;
+            };
+            let (Ok(d), Ok(m), Ok(y)) = (d.parse::<u8>(), m.parse::<u8>(), y.parse::<i32>()) else {
+                continue;
+            };
+            let year = if y < 100 { 2000 + y } else { y };
+            if let (Ok(month), true) = (Month::try_from(m), (2000..2100).contains(&year)) {
+                if let Ok(date) = Date::from_calendar_date(year, month, d) {
+                    return Some(date);
                 }
-                (None, _) => {
-                    if let Some(last) = items.last_mut() {
-                        last.quantity = qty;
+            }
+        }
+        None
+    }
+
+    fn is_skipped(lower: &str) -> bool {
+        SKIP_WORDS.iter().any(|w| lower.contains(w))
+    }
+
+    fn is_total_line(lower: &str) -> bool {
+        TOTAL_WORDS.iter().any(|w| lower.starts_with(w))
+    }
+
+    pub fn parse(text: &str) -> ParsedReceipt {
+        let lines: Vec<&str> = text
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        let merchant = lines.first().map(|s| s.to_string());
+        let chain = merchant.as_deref().and_then(Chain::from_name);
+        let date = lines.iter().find_map(|l| Self::parse_date(l));
+
+        let mut items: Vec<ReceiptItem> = Vec::new();
+        let mut total = None;
+        // A line with a name but no price; the next line may be `2 x 0,99   1,98 B` for it.
+        let mut pending_name: Option<String> = None;
+
+        for line in &lines {
+            let lower = line.to_lowercase();
+            if Self::is_total_line(&lower) {
+                if let Some(a) = line.split_whitespace().rev().find_map(Self::parse_amount) {
+                    total = Some(total.map_or(a, |t: Money| t.max(a)));
+                }
+                pending_name = None;
+                continue;
+            }
+            if let Some((qty, line_total)) = Self::quantity_line(line) {
+                match (line_total, pending_name.take()) {
+                    (Some(price), Some(name)) if !Self::is_skipped(&name.to_lowercase()) => items
+                        .push(ReceiptItem {
+                            item: Catalog::match_product(&name).map(|i| i.key.to_string()),
+                            text: name,
+                            quantity: qty,
+                            line_total: price,
+                        }),
+                    (None, _) => {
+                        if let Some(last) = items.last_mut() {
+                            last.quantity = qty;
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
+                continue;
             }
-            continue;
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            let Some((price_idx, price)) = tokens
+                .iter()
+                .enumerate()
+                .rev()
+                .find_map(|(i, t)| Self::parse_amount(t).map(|a| (i, a)))
+            else {
+                pending_name = Some(line.to_string());
+                continue;
+            };
+            pending_name = None;
+            // price must be at the end, optionally followed by one tax-class letter (A, B, *)
+            let trailing = tokens.len() - 1 - price_idx;
+            if trailing > 1 || (trailing == 1 && tokens[price_idx + 1].len() > 1) || price_idx == 0
+            {
+                continue;
+            }
+            let name = tokens[..price_idx].join(" ");
+            if Self::is_skipped(&lower) || price.is_negative() || price.cents() == 0 {
+                continue;
+            }
+            items.push(ReceiptItem {
+                item: Catalog::match_product(&name).map(|i| i.key.to_string()),
+                text: name,
+                quantity: 1,
+                line_total: price,
+            });
         }
-        let tokens: Vec<&str> = line.split_whitespace().collect();
-        let Some((price_idx, price)) = tokens
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(i, t)| parse_amount(t).map(|a| (i, a)))
-        else {
-            pending_name = Some(line.to_string());
-            continue;
-        };
-        pending_name = None;
-        // price must be at the end, optionally followed by one tax-class letter (A, B, *)
-        let trailing = tokens.len() - 1 - price_idx;
-        if trailing > 1 || (trailing == 1 && tokens[price_idx + 1].len() > 1) || price_idx == 0 {
-            continue;
-        }
-        let name = tokens[..price_idx].join(" ");
-        if is_skipped(&lower) || price.is_negative() || price.cents() == 0 {
-            continue;
-        }
-        items.push(ReceiptItem {
-            item: match_product(&name).map(|i| i.key.to_string()),
-            text: name,
-            quantity: 1,
-            line_total: price,
-        });
-    }
 
-    let sum: Money = items.iter().map(|i| i.line_total).sum();
-    let reconciles = total.is_some_and(|t| t == sum);
-    ParsedReceipt {
-        merchant,
-        chain,
-        date,
-        items,
-        total,
-        reconciles,
+        let sum: Money = items.iter().map(|i| i.line_total).sum();
+        let reconciles = total.is_some_and(|t| t == sum);
+        ParsedReceipt {
+            merchant,
+            chain,
+            date,
+            items,
+            total,
+            reconciles,
+        }
     }
 }
 
@@ -238,7 +245,7 @@ Vielen Dank für Ihren Einkauf!";
 
     #[test]
     fn parses_a_typical_receipt() {
-        let r = parse_receipt(REWE);
+        let r = ReceiptParser::parse(REWE);
         assert_eq!(r.chain, Some(Chain::Rewe));
         assert_eq!(r.date, Some(date!(2026 - 03 - 02)));
         assert_eq!(r.total, Some(Money::from_cents(784)));
@@ -261,7 +268,7 @@ Vielen Dank für Ihren Einkauf!";
 
     #[test]
     fn maps_items_to_catalog_keys() {
-        let r = parse_receipt(REWE);
+        let r = ReceiptParser::parse(REWE);
         let keys: Vec<_> = r.items.iter().filter_map(|i| i.item.as_deref()).collect();
         assert_eq!(keys, vec!["milch", "nudeln", "bananen", "eier", "joghurt"]);
     }
@@ -269,19 +276,19 @@ Vielen Dank für Ihren Einkauf!";
     #[test]
     fn reconciles_when_lines_add_up_to_the_total() {
         let ok = "LIDL\nMILCH 1,09 B\nBROT 2,49 B\nSUMME 3,58\n";
-        let r = parse_receipt(ok);
+        let r = ReceiptParser::parse(ok);
         assert!(r.reconciles);
         assert_eq!(r.chain, Some(Chain::Lidl));
 
         let dropped_line = "LIDL\nMILCH 1,09 B\nSUMME 3,58\n";
-        assert!(!parse_receipt(dropped_line).reconciles);
+        assert!(!ReceiptParser::parse(dropped_line).reconciles);
 
-        assert!(!parse_receipt("LIDL\nMILCH 1,09 B\n").reconciles); // no total printed
+        assert!(!ReceiptParser::parse("LIDL\nMILCH 1,09 B\n").reconciles); // no total printed
     }
 
     #[test]
     fn quantity_line_after_item_sets_quantity() {
-        let r = parse_receipt("ALDI SÜD\nJOGHURT NATUR 1,98 B\n2 x 0,99\nSUMME 1,98\n");
+        let r = ReceiptParser::parse("ALDI SÜD\nJOGHURT NATUR 1,98 B\n2 x 0,99\nSUMME 1,98\n");
         assert_eq!(r.items[0].quantity, 2);
         assert_eq!(r.items[0].line_total, Money::from_cents(198));
         assert!(r.reconciles);
@@ -289,26 +296,35 @@ Vielen Dank für Ihren Einkauf!";
 
     #[test]
     fn ignores_discounts_payment_and_weight_lines() {
-        let r = parse_receipt("KAUFLAND\nBANANEN 1,49 B\n0,812 kg x 1,84 EUR/kg\nRABATT -0,50\nEC-KARTE 5,00\nSUMME 1,49\n");
+        let r = ReceiptParser::parse("KAUFLAND\nBANANEN 1,49 B\n0,812 kg x 1,84 EUR/kg\nRABATT -0,50\nEC-KARTE 5,00\nSUMME 1,49\n");
         assert_eq!(r.items.len(), 1);
         assert_eq!(r.chain, Some(Chain::Kaufland));
     }
 
     #[test]
     fn garbage_in_gives_empty_receipt_not_a_panic() {
-        let r = parse_receipt("");
+        let r = ReceiptParser::parse("");
         assert!(r.items.is_empty() && r.merchant.is_none() && !r.reconciles);
-        let r = parse_receipt("%%%\n,,,\n1,2,3\n--\n");
+        let r = ReceiptParser::parse("%%%\n,,,\n1,2,3\n--\n");
         assert!(r.items.is_empty());
     }
 
     #[test]
     fn amount_parsing_is_strict() {
-        assert_eq!(parse_amount("1,19"), Some(Money::from_cents(119)));
-        assert_eq!(parse_amount("1,19B"), Some(Money::from_cents(119)));
-        assert_eq!(parse_amount("1.234,50"), Some(Money::from_cents(123_450)));
-        assert_eq!(parse_amount("500G"), None);
-        assert_eq!(parse_amount("3,5%"), None);
-        assert_eq!(parse_amount("1,5"), None);
+        assert_eq!(
+            ReceiptParser::parse_amount("1,19"),
+            Some(Money::from_cents(119))
+        );
+        assert_eq!(
+            ReceiptParser::parse_amount("1,19B"),
+            Some(Money::from_cents(119))
+        );
+        assert_eq!(
+            ReceiptParser::parse_amount("1.234,50"),
+            Some(Money::from_cents(123_450))
+        );
+        assert_eq!(ReceiptParser::parse_amount("500G"), None);
+        assert_eq!(ReceiptParser::parse_amount("3,5%"), None);
+        assert_eq!(ReceiptParser::parse_amount("1,5"), None);
     }
 }

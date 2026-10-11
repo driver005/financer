@@ -69,19 +69,24 @@ impl Drop for Server {
     }
 }
 
-fn params(pin: &str) -> SyncParams {
-    SyncParams {
-        blz: "12345678".into(),
-        user_id: "test1".into(),
-        pin: pin.into(),
-        iban: "DE89370400440532013000".into(),
-        bic: "GENODE23X42".into(),
-        days: 90,
-    }
-}
+/// Sync parameters and a bank wired to the mock server.
+struct Fixtures;
 
-fn bank(server: &Server) -> FintsBank {
-    FintsBank::new("TESTPRODUCT").with_endpoint("GENODE23X42", &server.url)
+impl Fixtures {
+    fn params(pin: &str) -> SyncParams {
+        SyncParams {
+            blz: "12345678".into(),
+            user_id: "test1".into(),
+            pin: pin.into(),
+            iban: "DE89370400440532013000".into(),
+            bic: "GENODE23X42".into(),
+            days: 90,
+        }
+    }
+
+    fn bank(server: &Server) -> FintsBank {
+        FintsBank::new("TESTPRODUCT").with_endpoint("GENODE23X42", &server.url)
+    }
 }
 
 macro_rules! server_or_skip {
@@ -99,7 +104,10 @@ macro_rules! server_or_skip {
 #[tokio::test]
 async fn login_balance_and_transactions_over_the_real_protocol() {
     let server = server_or_skip!(&[]);
-    let (mut pending, challenge) = bank(&server).start(&params("1234")).await.expect("login");
+    let (mut pending, challenge) = Fixtures::bank(&server)
+        .start(&Fixtures::params("1234"))
+        .await
+        .expect("login");
     // this mock never asks for a TAN (see the note at the top), so no approval step
     assert!(challenge.no_tan_required);
     let data = pending.confirm().await.expect("data");
@@ -125,7 +133,10 @@ async fn login_balance_and_transactions_over_the_real_protocol() {
 async fn a_wrong_pin_is_reported_as_wrong_pin() {
     // the mock accepts only PIN 1234
     let server = server_or_skip!(&[]);
-    match bank(&server).start(&params("0000")).await {
+    match Fixtures::bank(&server)
+        .start(&Fixtures::params("0000"))
+        .await
+    {
         Err(BankError::WrongPin) => {}
         other => panic!(
             "expected WrongPin, got {:?}",
@@ -152,8 +163,8 @@ macro_rules! decoupled_or_skip {
 async fn pushtan_sync_waits_for_approval_then_returns_data() {
     // the mock "approves" 2 seconds after the login
     let server = decoupled_or_skip!(&["--tan-mode", "decoupled", "--auto-confirm-secs", "2"]);
-    let (mut pending, challenge) = bank(&server)
-        .start(&params("1234"))
+    let (mut pending, challenge) = Fixtures::bank(&server)
+        .start(&Fixtures::params("1234"))
         .await
         .expect("login and challenge");
     assert!(!challenge.no_tan_required, "the bank asked for an approval");
@@ -192,7 +203,10 @@ async fn pushtan_sync_waits_for_approval_then_returns_data() {
 #[tokio::test]
 async fn an_approval_that_never_comes_stays_pending_without_errors() {
     let server = decoupled_or_skip!(&["--tan-mode", "decoupled", "--auto-confirm-secs", "3600"]);
-    let (mut pending, challenge) = bank(&server).start(&params("1234")).await.expect("login");
+    let (mut pending, challenge) = Fixtures::bank(&server)
+        .start(&Fixtures::params("1234"))
+        .await
+        .expect("login");
     assert!(!challenge.no_tan_required);
     for i in 0..6 {
         assert!(
@@ -207,7 +221,9 @@ async fn an_approval_that_never_comes_stays_pending_without_errors() {
 async fn a_wrong_pin_never_reaches_the_approval_step() {
     let server = decoupled_or_skip!(&["--tan-mode", "decoupled", "--auto-confirm-secs", "1"]);
     assert!(matches!(
-        bank(&server).start(&params("0000")).await,
+        Fixtures::bank(&server)
+            .start(&Fixtures::params("0000"))
+            .await,
         Err(BankError::WrongPin)
     ));
 }
@@ -215,7 +231,7 @@ async fn a_wrong_pin_never_reaches_the_approval_step() {
 #[tokio::test]
 async fn an_unreachable_bank_is_a_connection_error() {
     let dead = FintsBank::new("TESTPRODUCT").with_endpoint("GENODE23X42", "http://127.0.0.1:9");
-    match dead.start(&params("1234")).await {
+    match dead.start(&Fixtures::params("1234")).await {
         Err(BankError::Connection(_)) => {}
         other => panic!(
             "expected a connection error, got {:?}",

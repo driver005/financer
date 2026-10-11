@@ -50,28 +50,28 @@ pub struct EnvelopeStatus {
     pub remaining: Money,
 }
 
-/// Spending per category in a month, as positive amounts. Income and savings are not spending.
-pub fn spent_by_category(
-    transactions: &[Transaction],
-    month: YearMonth,
-) -> BTreeMap<Category, Money> {
-    let mut out: BTreeMap<Category, Money> = BTreeMap::new();
-    for tx in transactions {
-        if !tx.is_expense() || !month.contains(tx.booking_date) {
-            continue;
-        }
-        let cat = tx.category.unwrap_or(Category::Other);
-        if matches!(cat, Category::Income | Category::Savings) {
-            continue;
-        }
-        *out.entry(cat).or_default() += -tx.amount;
-    }
-    out
-}
-
 impl Budget {
+    /// Spending per category in a month, as positive amounts. Income and savings are not spending.
+    pub fn spent_by_category(
+        transactions: &[Transaction],
+        month: YearMonth,
+    ) -> BTreeMap<Category, Money> {
+        let mut out: BTreeMap<Category, Money> = BTreeMap::new();
+        for tx in transactions {
+            if !tx.is_expense() || !month.contains(tx.booking_date) {
+                continue;
+            }
+            let cat = tx.category.unwrap_or(Category::Other);
+            if matches!(cat, Category::Income | Category::Savings) {
+                continue;
+            }
+            *out.entry(cat).or_default() += -tx.amount;
+        }
+        out
+    }
+
     pub fn status(&self, transactions: &[Transaction], month: YearMonth) -> Vec<EnvelopeStatus> {
-        let spent = spent_by_category(transactions, month);
+        let spent = Self::spent_by_category(transactions, month);
         self.envelopes
             .iter()
             .map(|(category, limit)| {
@@ -107,25 +107,6 @@ impl Budget {
     }
 }
 
-/// Convert a recurring payment into its monthly cost (cents, rounded to nearest).
-fn monthly_equivalent(amount: Money, cadence: Cadence) -> Money {
-    let cents = amount.cents();
-    let (num, den) = match cadence {
-        Cadence::Weekly => (52, 12),
-        Cadence::Monthly => (1, 1),
-        Cadence::Quarterly => (1, 3),
-        Cadence::Yearly => (1, 12),
-    };
-    let scaled = cents * num;
-    let half = den / 2;
-    let rounded = if scaled >= 0 {
-        (scaled + half) / den
-    } else {
-        (scaled - half) / den
-    };
-    Money::from_cents(rounded)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Disposable {
     pub monthly_income: Money,
@@ -133,23 +114,44 @@ pub struct Disposable {
     pub disposable: Money,
 }
 
-/// Disposable income per month from detected recurring payments: recurring credits are
-/// income, recurring debits are fixed costs, the rest is yours to budget.
-pub fn disposable_income(recurring: &[RecurringPayment]) -> Disposable {
-    let mut income = Money::ZERO;
-    let mut fixed = Money::ZERO;
-    for r in recurring {
-        let monthly = monthly_equivalent(r.amount, r.cadence);
-        if monthly.is_negative() {
-            fixed += -monthly;
-        } else {
-            income += monthly;
+impl Disposable {
+    /// Disposable income per month from detected recurring payments: recurring credits are
+    /// income, recurring debits are fixed costs, the rest is yours to budget.
+    pub fn from_recurring(recurring: &[RecurringPayment]) -> Disposable {
+        let mut income = Money::ZERO;
+        let mut fixed = Money::ZERO;
+        for r in recurring {
+            let monthly = Self::monthly_equivalent(r.amount, r.cadence);
+            if monthly.is_negative() {
+                fixed += -monthly;
+            } else {
+                income += monthly;
+            }
+        }
+        Disposable {
+            monthly_income: income,
+            monthly_fixed_costs: fixed,
+            disposable: income - fixed,
         }
     }
-    Disposable {
-        monthly_income: income,
-        monthly_fixed_costs: fixed,
-        disposable: income - fixed,
+
+    /// Convert a recurring payment into its monthly cost (cents, rounded to nearest).
+    fn monthly_equivalent(amount: Money, cadence: Cadence) -> Money {
+        let cents = amount.cents();
+        let (num, den) = match cadence {
+            Cadence::Weekly => (52, 12),
+            Cadence::Monthly => (1, 1),
+            Cadence::Quarterly => (1, 3),
+            Cadence::Yearly => (1, 12),
+        };
+        let scaled = cents * num;
+        let half = den / 2;
+        let rounded = if scaled >= 0 {
+            (scaled + half) / den
+        } else {
+            (scaled - half) / den
+        };
+        Money::from_cents(rounded)
     }
 }
 
@@ -158,25 +160,29 @@ mod tests {
     use super::*;
     use time::macros::date;
 
-    fn tx(date: Date, cents: i64, cat: Category) -> Transaction {
-        Transaction {
-            booking_date: date,
-            amount: Money::from_cents(cents),
-            counterparty: "x".into(),
-            purpose: String::new(),
-            counterparty_iban: None,
-            category: Some(cat),
+    struct Fixture;
+
+    impl Fixture {
+        fn tx(date: Date, cents: i64, cat: Category) -> Transaction {
+            Transaction {
+                booking_date: date,
+                amount: Money::from_cents(cents),
+                counterparty: "x".into(),
+                purpose: String::new(),
+                counterparty_iban: None,
+                category: Some(cat),
+            }
         }
     }
 
     #[test]
     fn computes_envelope_status_for_one_month() {
         let txs = vec![
-            tx(date!(2026 - 03 - 02), -2347, Category::Groceries),
-            tx(date!(2026 - 03 - 15), -5000, Category::Groceries),
-            tx(date!(2026 - 02 - 28), -9999, Category::Groceries),
-            tx(date!(2026 - 03 - 10), 250000, Category::Income),
-            tx(date!(2026 - 03 - 11), -1000, Category::Dining),
+            Fixture::tx(date!(2026 - 03 - 02), -2347, Category::Groceries),
+            Fixture::tx(date!(2026 - 03 - 15), -5000, Category::Groceries),
+            Fixture::tx(date!(2026 - 02 - 28), -9999, Category::Groceries),
+            Fixture::tx(date!(2026 - 03 - 10), 250000, Category::Income),
+            Fixture::tx(date!(2026 - 03 - 11), -1000, Category::Dining),
         ];
         let mut budget = Budget::default();
         budget
@@ -210,8 +216,8 @@ mod tests {
 
     #[test]
     fn income_is_not_spending() {
-        let txs = vec![tx(date!(2026 - 03 - 10), 250000, Category::Income)];
-        assert!(spent_by_category(&txs, YearMonth::new(2026, Month::March)).is_empty());
+        let txs = vec![Fixture::tx(date!(2026 - 03 - 10), 250000, Category::Income)];
+        assert!(Budget::spent_by_category(&txs, YearMonth::new(2026, Month::March)).is_empty());
     }
 
     #[test]
@@ -224,7 +230,7 @@ mod tests {
             last_date: d,
             next_expected: d,
         };
-        let r = disposable_income(&[
+        let r = Disposable::from_recurring(&[
             rec(250000, Cadence::Monthly),
             rec(-80000, Cadence::Monthly),
             rec(-12000, Cadence::Yearly),

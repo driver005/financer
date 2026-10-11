@@ -10,9 +10,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode, Uri};
 use axum::Router;
-use financer_api::{
-    refresh_prices_summary, router, AppState, LlmKeys, PriceSourceConfig, TokenHash,
-};
+use financer_api::{Api, AppState, LlmKeys, PriceSourceConfig, TokenHash};
 use financer_fints::FintsBank;
 use financer_prices::{PoliteHttp, ReqwestHttp};
 use financer_store::Store;
@@ -74,13 +72,15 @@ pub struct Backend {
     token: String,
 }
 
-fn error_response(status: StatusCode, message: &str) -> HttpResponse {
-    HttpResponse {
-        status: status.as_u16(),
-        content_type: Some("application/json".into()),
-        body: serde_json::json!({ "error": message })
-            .to_string()
-            .into_bytes(),
+impl HttpResponse {
+    fn error(status: StatusCode, message: &str) -> HttpResponse {
+        HttpResponse {
+            status: status.as_u16(),
+            content_type: Some("application/json".into()),
+            body: serde_json::json!({ "error": message })
+                .to_string()
+                .into_bytes(),
+        }
     }
 }
 
@@ -127,7 +127,7 @@ impl Backend {
             uuid::Uuid::new_v4().simple(),
             uuid::Uuid::new_v4().simple()
         );
-        let router = router(state.clone(), TokenHash::new(&token));
+        let router = Api::router(state.clone(), TokenHash::new(&token));
         Ok(Arc::new(Backend {
             router,
             state,
@@ -138,16 +138,16 @@ impl Backend {
     /// Serve one request. Never panics: malformed input becomes a 4xx response.
     pub async fn handle_request(&self, req: HttpRequest) -> HttpResponse {
         let Ok(method) = Method::from_bytes(req.method.trim().to_uppercase().as_bytes()) else {
-            return error_response(StatusCode::BAD_REQUEST, "invalid HTTP method");
+            return HttpResponse::error(StatusCode::BAD_REQUEST, "invalid HTTP method");
         };
         let Ok(uri) = req.path_and_query.parse::<Uri>() else {
-            return error_response(StatusCode::BAD_REQUEST, "invalid path");
+            return HttpResponse::error(StatusCode::BAD_REQUEST, "invalid path");
         };
         if uri.scheme().is_some()
             || uri.authority().is_some()
             || !req.path_and_query.starts_with('/')
         {
-            return error_response(StatusCode::BAD_REQUEST, "path must start with /");
+            return HttpResponse::error(StatusCode::BAD_REQUEST, "path must start with /");
         }
         let mut builder = Request::builder()
             .method(method)
@@ -157,7 +157,7 @@ impl Backend {
             builder = builder.header(header::CONTENT_TYPE, ct);
         }
         let Ok(request) = builder.body(Body::from(req.body)) else {
-            return error_response(StatusCode::BAD_REQUEST, "invalid request");
+            return HttpResponse::error(StatusCode::BAD_REQUEST, "invalid request");
         };
         match self.router.clone().oneshot(request).await {
             Ok(res) => {
@@ -173,7 +173,7 @@ impl Backend {
                         content_type,
                         body: bytes.to_vec(),
                     },
-                    _ => error_response(
+                    _ => HttpResponse::error(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "response could not be read",
                     ),
@@ -186,7 +186,7 @@ impl Backend {
     /// Refresh prices now (call on app open and from the OS background task slot). Returns a
     /// one-line summary.
     pub async fn refresh(&self) -> Result<String, EmbeddedError> {
-        refresh_prices_summary(&self.state)
+        Api::refresh_prices_summary(&self.state)
             .await
             .map_err(|message| EmbeddedError::Failed { message })
     }
@@ -212,34 +212,39 @@ impl Backend {
 mod tests {
     use super::*;
 
-    fn temp_db(name: &str) -> String {
-        let dir =
-            std::env::temp_dir().join(format!("financer-embedded-{}-{name}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir.join("app.db").display().to_string()
-    }
+    /// Builders and readers shared by the tests.
+    struct Fixtures;
 
-    fn config(name: &str) -> StartConfig {
-        StartConfig {
-            db_path: temp_db(name),
-            claude_api_key: None,
-            openai_api_key: None,
-            fints_product_id: None,
-            price_sources_json: None,
+    impl Fixtures {
+        fn temp_db(name: &str) -> String {
+            let dir = std::env::temp_dir()
+                .join(format!("financer-embedded-{}-{name}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            dir.join("app.db").display().to_string()
         }
-    }
 
-    fn get(path: &str) -> HttpRequest {
-        HttpRequest {
-            method: "GET".into(),
-            path_and_query: path.into(),
-            content_type: None,
-            body: vec![],
+        fn config(name: &str) -> StartConfig {
+            StartConfig {
+                db_path: Self::temp_db(name),
+                claude_api_key: None,
+                openai_api_key: None,
+                fints_product_id: None,
+                price_sources_json: None,
+            }
         }
-    }
 
-    fn json(r: &HttpResponse) -> serde_json::Value {
-        serde_json::from_slice(&r.body).unwrap_or(serde_json::Value::Null)
+        fn get(path: &str) -> HttpRequest {
+            HttpRequest {
+                method: "GET".into(),
+                path_and_query: path.into(),
+                content_type: None,
+                body: vec![],
+            }
+        }
+
+        fn json(r: &HttpResponse) -> serde_json::Value {
+            serde_json::from_slice(&r.body).unwrap_or(serde_json::Value::Null)
+        }
     }
 
     const CSV: &str = "\"Buchungstag\";\"Verwendungszweck\";\"Beguenstigter/Zahlungspflichtiger\";\"Kontonummer/IBAN\";\"Betrag\"\n\
@@ -247,8 +252,8 @@ mod tests {
 
     #[tokio::test]
     async fn serves_the_same_api_in_process() {
-        let b = Backend::start_with(config("api")).await.unwrap();
-        let health = b.handle_request(get("/health")).await;
+        let b = Backend::start_with(Fixtures::config("api")).await.unwrap();
+        let health = b.handle_request(Fixtures::get("/health")).await;
         assert_eq!(
             (health.status, health.body.as_slice()),
             (200, b"ok".as_slice())
@@ -263,16 +268,16 @@ mod tests {
             })
             .await;
         assert_eq!(import.status, 200);
-        assert_eq!(json(&import)["imported"], 1);
+        assert_eq!(Fixtures::json(&import)["imported"], 1);
 
-        let list = b.handle_request(get("/v1/transactions")).await;
+        let list = b.handle_request(Fixtures::get("/v1/transactions")).await;
         assert_eq!(list.content_type.as_deref(), Some("application/json"));
-        assert_eq!(json(&list)[0]["category"], "groceries");
+        assert_eq!(Fixtures::json(&list)[0]["category"], "groceries");
     }
 
     #[tokio::test]
     async fn data_persists_across_restarts() {
-        let cfg = config("persist");
+        let cfg = Fixtures::config("persist");
         let first = Backend::start_with(cfg.clone()).await.unwrap();
         first
             .handle_request(HttpRequest {
@@ -285,17 +290,21 @@ mod tests {
         drop(first);
         let second = Backend::start_with(cfg).await.unwrap();
         assert_eq!(
-            json(&second.handle_request(get("/v1/transactions")).await)
-                .as_array()
-                .unwrap()
-                .len(),
+            Fixtures::json(
+                &second
+                    .handle_request(Fixtures::get("/v1/transactions"))
+                    .await
+            )
+            .as_array()
+            .unwrap()
+            .len(),
             1
         );
     }
 
     #[tokio::test]
     async fn malformed_requests_become_4xx_not_panics() {
-        let b = Backend::start_with(config("bad")).await.unwrap();
+        let b = Backend::start_with(Fixtures::config("bad")).await.unwrap();
         for (method, path) in [
             ("GE T", "/health"),
             ("GET", "http://evil.test/health"),
@@ -312,19 +321,19 @@ mod tests {
                 .await;
             assert_eq!(r.status, 400, "{method} {path:?}");
         }
-        assert_eq!(b.handle_request(get("/nope")).await.status, 404);
+        assert_eq!(b.handle_request(Fixtures::get("/nope")).await.status, 404);
     }
 
     #[tokio::test]
     async fn keys_and_sources_are_passed_in_and_never_leak() {
-        let mut cfg = config("keys");
+        let mut cfg = Fixtures::config("keys");
         cfg.claude_api_key = Some("sk-claude-secret".into());
         cfg.price_sources_json = Some(
             r#"[{"type":"json_ld","chain":"rewe","urls":["https://example.invalid/x"]}]"#.into(),
         );
         let b = Backend::start_with(cfg).await.unwrap();
-        let settings = b.handle_request(get("/v1/settings")).await;
-        let v = json(&settings);
+        let settings = b.handle_request(Fixtures::get("/v1/settings")).await;
+        let v = Fixtures::json(&settings);
         assert_eq!(
             (
                 v["claude_key_configured"].clone(),
@@ -337,21 +346,21 @@ mod tests {
 
     #[tokio::test]
     async fn bad_configuration_is_reported() {
-        let mut cfg = config("cfg");
+        let mut cfg = Fixtures::config("cfg");
         cfg.db_path = "  ".into();
         assert!(matches!(
             Backend::start_with(cfg).await,
             Err(EmbeddedError::Config { .. })
         ));
 
-        let mut cfg = config("cfg2");
+        let mut cfg = Fixtures::config("cfg2");
         cfg.price_sources_json = Some("[{\"type\":\"bogus\"}]".into());
         assert!(matches!(
             Backend::start_with(cfg).await,
             Err(EmbeddedError::Config { .. })
         ));
 
-        let mut cfg = config("cfg3");
+        let mut cfg = Fixtures::config("cfg3");
         cfg.db_path = "/nonexistent-dir-xyz/sub/app.db".into();
         assert!(matches!(
             Backend::start_with(cfg).await,
@@ -361,7 +370,9 @@ mod tests {
 
     #[tokio::test]
     async fn refresh_without_sources_explains_itself() {
-        let b = Backend::start_with(config("refresh")).await.unwrap();
+        let b = Backend::start_with(Fixtures::config("refresh"))
+            .await
+            .unwrap();
         let err = b.refresh().await.unwrap_err();
         assert!(err.to_string().contains("no price sources"));
     }

@@ -20,68 +20,83 @@ struct Fake {
     reply: Value,
 }
 
-async fn handle(State(f): State<Fake>, headers: HeaderMap, Json(body): Json<Value>) -> Json<Value> {
-    let h = |n: &str| {
-        headers
-            .get(n)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_string()
-    };
-    let auth = format!(
-        "x-api-key={};anthropic-version={};authorization={}",
-        h("x-api-key"),
-        h("anthropic-version"),
-        h("authorization")
-    );
-    f.seen.lock().unwrap().push((auth, body));
-    Json(f.reply.clone())
-}
+impl Fake {
+    async fn handle(
+        State(f): State<Fake>,
+        headers: HeaderMap,
+        Json(body): Json<Value>,
+    ) -> Json<Value> {
+        let h = |n: &str| {
+            headers
+                .get(n)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .to_string()
+        };
+        let auth = format!(
+            "x-api-key={};anthropic-version={};authorization={}",
+            h("x-api-key"),
+            h("anthropic-version"),
+            h("authorization")
+        );
+        f.seen.lock().unwrap().push((auth, body));
+        Json(f.reply.clone())
+    }
 
-/// Starts a fake server on a random port; returns its base URL and the recorded requests.
-async fn serve(path: &'static str, reply: Value) -> (String, Seen) {
-    let seen: Seen = Arc::default();
-    let app = Router::new().route(path, post(handle)).with_state(Fake {
-        seen: seen.clone(),
-        reply,
-    });
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    (format!("http://{addr}/"), seen)
-}
-
-fn settings(provider: Provider, base: &str) -> LlmSettings {
-    LlmSettings {
-        provider,
-        model: String::new(),
-        api_key: "test-key-123".into(),
-        base_url: Some(base.into()),
+    /// Starts a fake server on a random port; returns its base URL and the recorded requests.
+    async fn serve(path: &'static str, reply: Value) -> (String, Seen) {
+        let seen: Seen = Arc::default();
+        let app = Router::new()
+            .route(path, post(Self::handle))
+            .with_state(Fake {
+                seen: seen.clone(),
+                reply,
+            });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        (format!("http://{addr}/"), seen)
     }
 }
 
-fn anthropic_reply(text: &str) -> Value {
-    json!({
-        "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-haiku-5-5",
-        "content": [{"type": "text", "text": text}],
-        "stop_reason": "end_turn", "stop_sequence": null,
-        "usage": {"input_tokens": 5, "output_tokens": 7}
-    })
-}
+/// Request settings and canned provider replies for the tests.
+struct Fixtures;
 
-fn openai_reply(text: &str) -> Value {
-    json!({
-        "id": "chatcmpl-1", "object": "chat.completion", "created": 1, "model": "gpt-5.4-mini",
-        "choices": [{"index": 0, "finish_reason": "stop",
-            "message": {"role": "assistant", "content": text}}],
-        "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12}
-    })
+impl Fixtures {
+    fn settings(provider: Provider, base: &str) -> LlmSettings {
+        LlmSettings {
+            provider,
+            model: String::new(),
+            api_key: "test-key-123".into(),
+            base_url: Some(base.into()),
+        }
+    }
+
+    fn anthropic_reply(text: &str) -> Value {
+        json!({
+            "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-haiku-5-5",
+            "content": [{"type": "text", "text": text}],
+            "stop_reason": "end_turn", "stop_sequence": null,
+            "usage": {"input_tokens": 5, "output_tokens": 7}
+        })
+    }
+
+    fn openai_reply(text: &str) -> Value {
+        json!({
+            "id": "chatcmpl-1", "object": "chat.completion", "created": 1, "model": "gpt-5.4-mini",
+            "choices": [{"index": 0, "finish_reason": "stop",
+                "message": {"role": "assistant", "content": text}}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12}
+        })
+    }
 }
 
 #[tokio::test]
 async fn claude_json_request_and_response() {
-    let (base, seen) = serve("/v1/messages", anthropic_reply("{\"ideas\":[]}")).await;
-    let p = GenaiProvider::new(&settings(Provider::Claude, &format!("{base}v1"))).unwrap();
+    let (base, seen) =
+        Fake::serve("/v1/messages", Fixtures::anthropic_reply("{\"ideas\":[]}")).await;
+    let p =
+        GenaiProvider::new(&Fixtures::settings(Provider::Claude, &format!("{base}v1"))).unwrap();
     let out = p
         .complete_json("Du bist Koch.", "Ideen bitte")
         .await
@@ -101,8 +116,13 @@ async fn claude_json_request_and_response() {
 
 #[tokio::test]
 async fn claude_image_is_sent_as_base64_block() {
-    let (base, seen) = serve("/v1/messages", anthropic_reply("REWE\nMILCH 1,19")).await;
-    let p = GenaiProvider::new(&settings(Provider::Claude, &format!("{base}v1"))).unwrap();
+    let (base, seen) = Fake::serve(
+        "/v1/messages",
+        Fixtures::anthropic_reply("REWE\nMILCH 1,19"),
+    )
+    .await;
+    let p =
+        GenaiProvider::new(&Fixtures::settings(Provider::Claude, &format!("{base}v1"))).unwrap();
     let out = p
         .describe_image("lies den Bon", "Text bitte", "image/jpeg", "QUJDRA==")
         .await
@@ -122,8 +142,13 @@ async fn claude_image_is_sent_as_base64_block() {
 
 #[tokio::test]
 async fn openai_json_mode_request_and_response() {
-    let (base, seen) = serve("/v1/chat/completions", openai_reply("{\"ideas\":[1]}")).await;
-    let p = GenaiProvider::new(&settings(Provider::OpenAi, &format!("{base}v1"))).unwrap();
+    let (base, seen) = Fake::serve(
+        "/v1/chat/completions",
+        Fixtures::openai_reply("{\"ideas\":[1]}"),
+    )
+    .await;
+    let p =
+        GenaiProvider::new(&Fixtures::settings(Provider::OpenAi, &format!("{base}v1"))).unwrap();
     let out = p
         .complete_json("Du bist Koch.", "Ideen bitte")
         .await
@@ -140,8 +165,13 @@ async fn openai_json_mode_request_and_response() {
 
 #[tokio::test]
 async fn openai_image_is_sent_as_data_uri() {
-    let (base, seen) = serve("/v1/chat/completions", openai_reply("EDEKA\nBROT 2,49")).await;
-    let p = GenaiProvider::new(&settings(Provider::OpenAi, &format!("{base}v1/"))).unwrap();
+    let (base, seen) = Fake::serve(
+        "/v1/chat/completions",
+        Fixtures::openai_reply("EDEKA\nBROT 2,49"),
+    )
+    .await;
+    let p =
+        GenaiProvider::new(&Fixtures::settings(Provider::OpenAi, &format!("{base}v1/"))).unwrap();
     let out = p
         .describe_image("lies den Bon", "Text bitte", "image/png", "QUJDRA==")
         .await
@@ -158,7 +188,8 @@ async fn openai_image_is_sent_as_data_uri() {
 #[tokio::test]
 async fn provider_errors_surface_as_request_errors() {
     // No route registered for the path the adapter uses: the fake answers 404.
-    let (base, _) = serve("/nope", json!({})).await;
-    let p = GenaiProvider::new(&settings(Provider::Claude, &format!("{base}v1"))).unwrap();
+    let (base, _) = Fake::serve("/nope", json!({})).await;
+    let p =
+        GenaiProvider::new(&Fixtures::settings(Provider::Claude, &format!("{base}v1"))).unwrap();
     assert!(p.complete_json("s", "u").await.is_err());
 }

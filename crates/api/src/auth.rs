@@ -81,29 +81,31 @@ impl TokenHash {
     }
 }
 
-/// Rejects every request without `Authorization: Bearer <token>`; answers 429 while locked out.
-pub async fn require_token(
-    State(expected): State<TokenHash>,
-    req: Request,
-    next: Next,
-) -> Response {
-    if let Some(wait) = expected.locked_for() {
-        let mut res = (StatusCode::TOO_MANY_REQUESTS, "too many failed attempts").into_response();
-        if let Ok(v) = HeaderValue::from_str(&wait.to_string()) {
-            res.headers_mut().insert(header::RETRY_AFTER, v);
+/// The bearer-token middleware.
+pub struct TokenAuth;
+
+impl TokenAuth {
+    /// Rejects every request without `Authorization: Bearer <token>`; answers 429 while locked out.
+    pub async fn require(State(expected): State<TokenHash>, req: Request, next: Next) -> Response {
+        if let Some(wait) = expected.locked_for() {
+            let mut res =
+                (StatusCode::TOO_MANY_REQUESTS, "too many failed attempts").into_response();
+            if let Ok(v) = HeaderValue::from_str(&wait.to_string()) {
+                res.headers_mut().insert(header::RETRY_AFTER, v);
+            }
+            return res;
         }
-        return res;
-    }
-    let presented = req
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
-    match presented {
-        Some(token) if expected.matches(token) => next.run(req).await,
-        _ => {
-            expected.record_failure();
-            StatusCode::UNAUTHORIZED.into_response()
+        let presented = req
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "));
+        match presented {
+            Some(token) if expected.matches(token) => next.run(req).await,
+            _ => {
+                expected.record_failure();
+                StatusCode::UNAUTHORIZED.into_response()
+            }
         }
     }
 }

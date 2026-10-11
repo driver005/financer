@@ -5,8 +5,8 @@ use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
-pub use ideas::{generate_ideas, IdeaError, IdeaRequest, RecipeIdea};
-pub use matcher::{rank_recipes, MatchInput, RecipeMatch};
+pub use ideas::{IdeaError, IdeaGenerator, IdeaRequest, RecipeIdea};
+pub use matcher::{MatchInput, RecipeMatch, RecipeMatcher};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ingredient {
@@ -27,13 +27,15 @@ pub struct Recipe {
     pub steps: Vec<String>,
 }
 
-/// The recipes shipped with the app (German, everyday dishes).
-pub fn bundled() -> &'static [Recipe] {
-    static RECIPES: OnceLock<Vec<Recipe>> = OnceLock::new();
-    RECIPES.get_or_init(|| {
-        serde_json::from_str(include_str!("../data/recipes.json"))
-            .expect("bundled recipes.json is valid")
-    })
+impl Recipe {
+    /// The recipes shipped with the app (German, everyday dishes).
+    pub fn bundled() -> &'static [Recipe] {
+        static RECIPES: OnceLock<Vec<Recipe>> = OnceLock::new();
+        RECIPES.get_or_init(|| {
+            serde_json::from_str(include_str!("../data/recipes.json"))
+                .expect("bundled recipes.json is valid")
+        })
+    }
 }
 
 #[cfg(test)]
@@ -43,7 +45,7 @@ mod tests {
 
     #[test]
     fn bundled_recipes_are_well_formed() {
-        let recipes = bundled();
+        let recipes = Recipe::bundled();
         assert!(recipes.len() >= 20);
         let mut ids = HashSet::new();
         for r in recipes {
@@ -59,10 +61,10 @@ mod tests {
 
     #[test]
     fn every_ingredient_is_in_the_catalog() {
-        for r in bundled() {
+        for r in Recipe::bundled() {
             for ing in &r.ingredients {
                 assert!(
-                    financer_core::by_key(&ing.item).is_some(),
+                    financer_core::Catalog::by_key(&ing.item).is_some(),
                     "recipe {} uses unknown item {:?}",
                     r.id,
                     ing.item

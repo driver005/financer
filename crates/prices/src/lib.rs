@@ -9,10 +9,10 @@ pub mod size;
 pub mod source;
 
 pub use http::{fake::FakeHttp, Http, HttpResponse, PoliteHttp, ReqwestHttp};
-pub use normalize::{normalize, normalize_all, NormalizeReport, QuoteDetail, RawOffer, Skip};
+pub use normalize::{NormalizeReport, Normalizer, QuoteDetail, RawOffer, Skip};
 pub use source::{
-    build_sources, refresh, JsonLdSource, LlmPageSource, OpenPricesSource, PriceSource,
-    RefreshResult, SourceConfig, SourceStatus,
+    JsonLdSource, LlmPageSource, OpenPricesSource, PriceSource, RefreshResult, SourceConfig,
+    SourceStatus, Sources,
 };
 
 #[derive(Debug, thiserror::Error)]

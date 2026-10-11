@@ -380,28 +380,30 @@ pub struct SettingsUpdate {
     pub llm_model: Option<String>,
 }
 
-pub fn quote_dto(q: &financer_store::StoredQuote) -> PriceDto {
-    let PriceQuote {
-        item,
-        chain,
-        price,
-        valid_until,
-        is_offer,
-    } = q.quote.clone();
-    let info = financer_core::by_key(&item);
-    PriceDto {
-        item_name: info
-            .map(|i| i.name_de.to_string())
-            .unwrap_or_else(|| item.clone()),
-        reference_pack: financer_core::reference_label(&item).unwrap_or_default(),
-        item,
-        chain,
-        price_cents: price,
-        shelf_price_cents: q.shelf_price,
-        product_name: q.product_name.clone(),
-        is_offer,
-        valid_until,
-        source: q.source.clone(),
+impl PriceDto {
+    pub fn from_stored(q: &financer_store::StoredQuote) -> PriceDto {
+        let PriceQuote {
+            item,
+            chain,
+            price,
+            valid_until,
+            is_offer,
+        } = q.quote.clone();
+        let info = financer_core::Catalog::by_key(&item);
+        PriceDto {
+            item_name: info
+                .map(|i| i.name_de.to_string())
+                .unwrap_or_else(|| item.clone()),
+            reference_pack: financer_core::Catalog::reference_label(&item).unwrap_or_default(),
+            item,
+            chain,
+            price_cents: price,
+            shelf_price_cents: q.shelf_price,
+            product_name: q.product_name.clone(),
+            is_offer,
+            valid_until,
+            source: q.source.clone(),
+        }
     }
 }
 

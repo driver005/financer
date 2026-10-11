@@ -77,24 +77,29 @@ const CP1252_HIGH: [(char, u8); 27] = [
     ('Ÿ', 0x9F),
 ];
 
-fn cp1252_byte(c: char) -> Option<u8> {
-    match u32::from(c) {
-        0x80..=0x9F => None, // C1 controls are not produced by cp1252 decoding
-        n if n < 0x100 => Some(n as u8),
-        _ => CP1252_HIGH.iter().find(|(ch, _)| *ch == c).map(|(_, b)| *b),
-    }
-}
+/// Repairs text that `fints-rs` decoded with the wrong charset.
+pub(crate) struct TextRepair;
 
-/// Some banks (and the mock server) send UTF-8 that `fints-rs` decodes as Windows-1252, giving
-/// "ungÃ¼ltig" for "ungültig". Undo that when, and only when, the result is valid UTF-8.
-pub(crate) fn repair_text(s: &str) -> String {
-    if !s.contains('Ã') && !s.contains('Â') {
-        return s.to_string();
+impl TextRepair {
+    fn cp1252_byte(c: char) -> Option<u8> {
+        match u32::from(c) {
+            0x80..=0x9F => None, // C1 controls are not produced by cp1252 decoding
+            n if n < 0x100 => Some(n as u8),
+            _ => CP1252_HIGH.iter().find(|(ch, _)| *ch == c).map(|(_, b)| *b),
+        }
     }
-    let bytes: Option<Vec<u8>> = s.chars().map(cp1252_byte).collect();
-    bytes
-        .and_then(|b| String::from_utf8(b).ok())
-        .unwrap_or_else(|| s.to_string())
+
+    /// Some banks (and the mock server) send UTF-8 that `fints-rs` decodes as Windows-1252, giving
+    /// "ungÃ¼ltig" for "ungültig". Undo that when, and only when, the result is valid UTF-8.
+    pub(crate) fn repair_text(s: &str) -> String {
+        if !s.contains('Ã') && !s.contains('Â') {
+            return s.to_string();
+        }
+        let bytes: Option<Vec<u8>> = s.chars().map(Self::cp1252_byte).collect();
+        bytes
+            .and_then(|b| String::from_utf8(b).ok())
+            .unwrap_or_else(|| s.to_string())
+    }
 }
 
 /// Codes banks use for a wrong login or PIN. `fints-rs` only knows 9340; real banks commonly
@@ -103,92 +108,103 @@ const WRONG_PIN_CODES: [&str; 4] = ["9340", "9910", "9930", "9931"];
 /// Codes for a locked PIN or access.
 const LOCKED_CODES: [&str; 2] = ["9942", "9943"];
 
-fn classify_bank_error(code: Option<&str>, message: &str) -> BankError {
-    let text = repair_text(message);
-    let lower = text.to_lowercase();
-    let wrong_pin = code.is_some_and(|c| WRONG_PIN_CODES.contains(&c))
-        || (lower.contains("pin")
-            && ["ungültig", "falsch", "fehlerhaft", "invalid", "wrong"]
-                .iter()
-                .any(|w| lower.contains(w)));
-    let locked = code.is_some_and(|c| LOCKED_CODES.contains(&c))
-        || lower.contains("gesperrt")
-        || lower.contains("locked");
-    if locked {
-        BankError::Locked
-    } else if wrong_pin {
-        BankError::WrongPin
-    } else {
-        BankError::Rejected(text)
-    }
-}
+/// Maps `fints-rs` errors onto Financer's [`BankError`].
+pub(crate) struct ErrorMapper;
 
-fn map_error(e: FinTSError) -> BankError {
-    match e {
-        FinTSError::PinWrong => BankError::WrongPin,
-        FinTSError::AccountLocked => BankError::Locked,
-        FinTSError::TanTimeout => {
-            BankError::Rejected("the approval in the banking app did not arrive in time".into())
+impl ErrorMapper {
+    fn classify_bank_error(code: Option<&str>, message: &str) -> BankError {
+        let text = TextRepair::repair_text(message);
+        let lower = text.to_lowercase();
+        let wrong_pin = code.is_some_and(|c| WRONG_PIN_CODES.contains(&c))
+            || (lower.contains("pin")
+                && ["ungültig", "falsch", "fehlerhaft", "invalid", "wrong"]
+                    .iter()
+                    .any(|w| lower.contains(w)));
+        let locked = code.is_some_and(|c| LOCKED_CODES.contains(&c))
+            || lower.contains("gesperrt")
+            || lower.contains("locked");
+        if locked {
+            BankError::Locked
+        } else if wrong_pin {
+            BankError::WrongPin
+        } else {
+            BankError::Rejected(text)
         }
-        FinTSError::Auth(m) | FinTSError::TanRejected(m) => classify_bank_error(None, &m),
-        FinTSError::BankError { kind, message } => {
-            let code = match &kind {
-                fints::ResponseCodeKind::OtherError(c) => Some(c.as_str()),
-                _ => None,
-            };
-            classify_bank_error(code, &message)
+    }
+
+    fn map_error(e: FinTSError) -> BankError {
+        match e {
+            FinTSError::PinWrong => BankError::WrongPin,
+            FinTSError::AccountLocked => BankError::Locked,
+            FinTSError::TanTimeout => {
+                BankError::Rejected("the approval in the banking app did not arrive in time".into())
+            }
+            FinTSError::Auth(m) | FinTSError::TanRejected(m) => Self::classify_bank_error(None, &m),
+            FinTSError::BankError { kind, message } => {
+                let code = match &kind {
+                    fints::ResponseCodeKind::OtherError(c) => Some(c.as_str()),
+                    _ => None,
+                };
+                Self::classify_bank_error(code, &message)
+            }
+            FinTSError::Dialog(m) if m.contains("TAN still pending") => BankError::TanPending,
+            FinTSError::Dialog(m) => Self::classify_bank_error(None, &m),
+            other => BankError::Connection(other.to_string()),
         }
-        FinTSError::Dialog(m) if m.contains("TAN still pending") => BankError::TanPending,
-        FinTSError::Dialog(m) => classify_bank_error(None, &m),
-        other => BankError::Connection(other.to_string()),
     }
 }
 
-/// `-23.47` -> `-2347` cents. Amounts with more than two decimals are rounded.
-pub(crate) fn decimal_to_money(d: Decimal) -> Option<Money> {
-    (d * Decimal::from(100))
-        .round()
-        .to_i64()
-        .map(Money::from_cents)
-}
+/// Converts `fints-rs` values into Financer's types.
+pub(crate) struct FintsConverter;
 
-pub(crate) fn naive_to_date(d: chrono::NaiveDate) -> Option<Date> {
-    Date::from_calendar_date(
-        d.year(),
-        Month::try_from(d.month() as u8).ok()?,
-        d.day() as u8,
-    )
-    .ok()
-}
-
-/// Convert one fints transaction. `None` means skipped: pending, not EUR, or unreadable.
-pub(crate) fn convert_transaction(t: &fints::Transaction) -> Option<Transaction> {
-    if t.status != TransactionStatus::Booked || !t.currency.as_str().eq_ignore_ascii_case("EUR") {
-        return None;
+impl FintsConverter {
+    /// `-23.47` -> `-2347` cents. Amounts with more than two decimals are rounded.
+    pub(crate) fn decimal_to_money(d: Decimal) -> Option<Money> {
+        (d * Decimal::from(100))
+            .round()
+            .to_i64()
+            .map(Money::from_cents)
     }
-    Some(Transaction {
-        booking_date: naive_to_date(t.date)?,
-        amount: decimal_to_money(t.amount)?,
-        counterparty: t
-            .applicant_name
-            .clone()
-            .unwrap_or_default()
-            .trim()
-            .to_string(),
-        purpose: t
-            .purpose
-            .clone()
-            .or_else(|| t.posting_text.clone())
-            .unwrap_or_default()
-            .trim()
-            .to_string(),
-        counterparty_iban: t
-            .applicant_iban
-            .as_ref()
-            .map(|i| i.as_str().to_string())
-            .filter(|s| !s.is_empty()),
-        category: None,
-    })
+
+    pub(crate) fn naive_to_date(d: chrono::NaiveDate) -> Option<Date> {
+        Date::from_calendar_date(
+            d.year(),
+            Month::try_from(d.month() as u8).ok()?,
+            d.day() as u8,
+        )
+        .ok()
+    }
+
+    /// Convert one fints transaction. `None` means skipped: pending, not EUR, or unreadable.
+    pub(crate) fn convert_transaction(t: &fints::Transaction) -> Option<Transaction> {
+        if t.status != TransactionStatus::Booked || !t.currency.as_str().eq_ignore_ascii_case("EUR")
+        {
+            return None;
+        }
+        Some(Transaction {
+            booking_date: Self::naive_to_date(t.date)?,
+            amount: Self::decimal_to_money(t.amount)?,
+            counterparty: t
+                .applicant_name
+                .clone()
+                .unwrap_or_default()
+                .trim()
+                .to_string(),
+            purpose: t
+                .purpose
+                .clone()
+                .or_else(|| t.posting_text.clone())
+                .unwrap_or_default()
+                .trim()
+                .to_string(),
+            counterparty_iban: t
+                .applicant_iban
+                .as_ref()
+                .map(|i| i.as_str().to_string())
+                .filter(|s| !s.is_empty()),
+            category: None,
+        })
+    }
 }
 
 struct LivePending {
@@ -205,11 +221,11 @@ impl PendingSync for LivePending {
             .flow
             .confirm_and_fetch(&self.iban, &self.bic, self.days)
             .await
-            .map_err(map_error)?;
+            .map_err(ErrorMapper::map_error)?;
         let mut transactions = Vec::new();
         let mut skipped = 0;
         for t in &result.transactions {
-            match convert_transaction(t) {
+            match FintsConverter::convert_transaction(t) {
                 Some(tx) => transactions.push(tx),
                 None => skipped += 1,
             }
@@ -219,8 +235,8 @@ impl PendingSync for LivePending {
             .as_ref()
             .filter(|b| b.currency.as_str().eq_ignore_ascii_case("EUR"));
         Ok(BankData {
-            balance: balance.and_then(|b| decimal_to_money(b.amount)),
-            balance_date: balance.and_then(|b| naive_to_date(b.date)),
+            balance: balance.and_then(|b| FintsConverter::decimal_to_money(b.amount)),
+            balance_date: balance.and_then(|b| FintsConverter::naive_to_date(b.date)),
             transactions,
             skipped,
         })
@@ -262,7 +278,7 @@ impl BankClient for FintsBank {
                 Flow::initiate(params.blz.trim(), &user, &pin, &product, None, None, None).await
             }
         }
-        .map_err(map_error)?;
+        .map_err(ErrorMapper::map_error)?;
 
         // fints-rs polls decoupled TANs (pushTAN); a method that needs a typed TAN cannot be completed.
         if !challenge.decoupled && !challenge.no_tan_required {
@@ -290,46 +306,56 @@ mod tests {
     use fints::{Currency, Iban};
     use std::str::FromStr;
 
-    fn tx(amount: &str, currency: &str, status: TransactionStatus) -> fints::Transaction {
-        fints::Transaction {
-            date: chrono::NaiveDate::from_ymd_opt(2026, 3, 2).unwrap(),
-            valuta_date: None,
-            amount: Decimal::from_str(amount).unwrap(),
-            currency: Currency::new(currency),
-            applicant_name: Some("  REWE Markt GmbH ".into()),
-            applicant_iban: Some(Iban::new("DE02120300000000202051")),
-            applicant_bic: None,
-            purpose: Some("Kartenzahlung".into()),
-            posting_text: Some("KARTE".into()),
-            reference: None,
-            raw: serde_json::Value::Null,
-            status,
+    /// Builds fints transactions for the conversion tests.
+    struct Fixtures;
+
+    impl Fixtures {
+        fn tx(amount: &str, currency: &str, status: TransactionStatus) -> fints::Transaction {
+            fints::Transaction {
+                date: chrono::NaiveDate::from_ymd_opt(2026, 3, 2).unwrap(),
+                valuta_date: None,
+                amount: Decimal::from_str(amount).unwrap(),
+                currency: Currency::new(currency),
+                applicant_name: Some("  REWE Markt GmbH ".into()),
+                applicant_iban: Some(Iban::new("DE02120300000000202051")),
+                applicant_bic: None,
+                purpose: Some("Kartenzahlung".into()),
+                posting_text: Some("KARTE".into()),
+                reference: None,
+                raw: serde_json::Value::Null,
+                status,
+            }
         }
     }
 
     #[test]
     fn converts_amounts_without_floats() {
         assert_eq!(
-            decimal_to_money(Decimal::from_str("-23.47").unwrap()),
+            FintsConverter::decimal_to_money(Decimal::from_str("-23.47").unwrap()),
             Some(Money::from_cents(-2347))
         );
         assert_eq!(
-            decimal_to_money(Decimal::from_str("2500").unwrap()),
+            FintsConverter::decimal_to_money(Decimal::from_str("2500").unwrap()),
             Some(Money::from_cents(250_000))
         );
         assert_eq!(
-            decimal_to_money(Decimal::from_str("0.1").unwrap()),
+            FintsConverter::decimal_to_money(Decimal::from_str("0.1").unwrap()),
             Some(Money::from_cents(10))
         );
         assert_eq!(
-            decimal_to_money(Decimal::from_str("1234567.89").unwrap()),
+            FintsConverter::decimal_to_money(Decimal::from_str("1234567.89").unwrap()),
             Some(Money::from_cents(123_456_789))
         );
     }
 
     #[test]
     fn converts_a_booked_euro_transaction() {
-        let t = convert_transaction(&tx("-23.47", "EUR", TransactionStatus::Booked)).unwrap();
+        let t = FintsConverter::convert_transaction(&Fixtures::tx(
+            "-23.47",
+            "EUR",
+            TransactionStatus::Booked,
+        ))
+        .unwrap();
         assert_eq!(t.amount, Money::from_cents(-2347));
         assert_eq!(t.booking_date, time::macros::date!(2026 - 03 - 02));
         assert_eq!(t.counterparty, "REWE Markt GmbH");
@@ -343,32 +369,45 @@ mod tests {
 
     #[test]
     fn skips_pending_and_foreign_currency() {
-        assert!(convert_transaction(&tx("-1.00", "EUR", TransactionStatus::Pending)).is_none());
-        assert!(convert_transaction(&tx("-1.00", "USD", TransactionStatus::Booked)).is_none());
+        assert!(FintsConverter::convert_transaction(&Fixtures::tx(
+            "-1.00",
+            "EUR",
+            TransactionStatus::Pending
+        ))
+        .is_none());
+        assert!(FintsConverter::convert_transaction(&Fixtures::tx(
+            "-1.00",
+            "USD",
+            TransactionStatus::Booked
+        ))
+        .is_none());
     }
 
     #[test]
     fn falls_back_to_posting_text_for_purpose() {
-        let mut t = tx("-1.00", "EUR", TransactionStatus::Booked);
+        let mut t = Fixtures::tx("-1.00", "EUR", TransactionStatus::Booked);
         t.purpose = None;
-        assert_eq!(convert_transaction(&t).unwrap().purpose, "KARTE");
+        assert_eq!(
+            FintsConverter::convert_transaction(&t).unwrap().purpose,
+            "KARTE"
+        );
     }
 
     #[test]
     fn repairs_latin1_decoded_utf8_only_when_it_round_trips() {
-        assert_eq!(repair_text("Pin ungÃ¼ltig"), "Pin ungültig");
-        assert_eq!(repair_text("StraÃŸe"), "Straße");
-        assert_eq!(repair_text("Pin ungültig"), "Pin ungültig"); // already fine
-        assert_eq!(repair_text("Ärger"), "Ärger"); // a real capital Ä is not damage
-        assert_eq!(repair_text("Ã"), "Ã"); // not valid UTF-8 after the round trip: leave alone
-        assert_eq!(repair_text("plain"), "plain");
+        assert_eq!(TextRepair::repair_text("Pin ungÃ¼ltig"), "Pin ungültig");
+        assert_eq!(TextRepair::repair_text("StraÃŸe"), "Straße");
+        assert_eq!(TextRepair::repair_text("Pin ungültig"), "Pin ungültig"); // already fine
+        assert_eq!(TextRepair::repair_text("Ärger"), "Ärger"); // a real capital Ä is not damage
+        assert_eq!(TextRepair::repair_text("Ã"), "Ã"); // not valid UTF-8 after the round trip: leave alone
+        assert_eq!(TextRepair::repair_text("plain"), "plain");
     }
 
     #[test]
     fn recognises_wrong_pin_and_locked_by_code_or_text() {
         let kind = |c: &str| fints::ResponseCodeKind::OtherError(c.to_string());
         let err = |c: &str, m: &str| {
-            map_error(FinTSError::BankError {
+            ErrorMapper::map_error(FinTSError::BankError {
                 kind: kind(c),
                 message: m.into(),
             })
@@ -398,29 +437,29 @@ mod tests {
     #[test]
     fn maps_errors() {
         assert!(matches!(
-            map_error(FinTSError::PinWrong),
+            ErrorMapper::map_error(FinTSError::PinWrong),
             BankError::WrongPin
         ));
         assert!(matches!(
-            map_error(FinTSError::AccountLocked),
+            ErrorMapper::map_error(FinTSError::AccountLocked),
             BankError::Locked
         ));
         assert!(matches!(
-            map_error(FinTSError::TanTimeout),
+            ErrorMapper::map_error(FinTSError::TanTimeout),
             BankError::Rejected(_)
         ));
         assert!(matches!(
-            map_error(FinTSError::Auth("bad pin".into())),
+            ErrorMapper::map_error(FinTSError::Auth("bad pin".into())),
             BankError::Rejected(_)
         ));
         assert!(matches!(
-            map_error(FinTSError::Dialog(
+            ErrorMapper::map_error(FinTSError::Dialog(
                 "TAN still pending: user has not yet confirmed in banking app".into()
             )),
             BankError::TanPending
         ));
         assert!(matches!(
-            map_error(FinTSError::Transport("down".into())),
+            ErrorMapper::map_error(FinTSError::Transport("down".into())),
             BankError::Connection(_)
         ));
     }

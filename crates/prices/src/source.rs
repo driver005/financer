@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 use time::{Date, Duration};
 
 use crate::http::Http;
-use crate::jsonld::extract_offers;
-use crate::normalize::{normalize_all, NormalizeReport, QuoteDetail, RawOffer};
-use crate::off;
-use crate::pagetext::{chunks, html_to_text};
+use crate::jsonld::JsonLd;
+use crate::normalize::{NormalizeReport, Normalizer, QuoteDetail, RawOffer};
+use crate::off::OpenFoodFacts;
+use crate::pagetext::PageText;
 use crate::PriceError;
 
 #[async_trait]
@@ -43,7 +43,7 @@ impl PriceSource for JsonLdSource {
             if res.status >= 400 {
                 return Err(PriceError::Http(format!("{url} answered {}", res.status)));
             }
-            all.extend(extract_offers(
+            all.extend(JsonLd::extract_offers(
                 &res.body,
                 self.chain,
                 &self.name(),
@@ -88,17 +88,19 @@ struct PageProduct {
     valid_until: Option<String>,
 }
 
-fn json_object(text: &str) -> Option<&str> {
-    let (start, end) = (text.find('{')?, text.rfind('}')?);
-    (end > start).then(|| &text[start..=end])
-}
+impl LlmPageSource {
+    fn json_object(text: &str) -> Option<&str> {
+        let (start, end) = (text.find('{')?, text.rfind('}')?);
+        (end > start).then(|| &text[start..=end])
+    }
 
-fn price_appears(text: &str, price: &str) -> bool {
-    let p = price.trim().trim_end_matches('€').trim();
-    !p.is_empty()
-        && (text.contains(p)
-            || text.contains(&p.replace(',', "."))
-            || text.contains(&p.replace('.', ",")))
+    fn price_appears(text: &str, price: &str) -> bool {
+        let p = price.trim().trim_end_matches('€').trim();
+        !p.is_empty()
+            && (text.contains(p)
+                || text.contains(&p.replace(',', "."))
+                || text.contains(&p.replace('.', ",")))
+    }
 }
 
 #[async_trait]
@@ -117,14 +119,17 @@ impl PriceSource for LlmPageSource {
             if res.status >= 400 {
                 return Err(PriceError::Http(format!("{url} answered {}", res.status)));
             }
-            let text = html_to_text(&res.body);
-            for chunk in chunks(&text, CHUNK_CHARS).into_iter().take(MAX_CHUNKS) {
+            let text = PageText::html_to_text(&res.body);
+            for chunk in PageText::chunks(&text, CHUNK_CHARS)
+                .into_iter()
+                .take(MAX_CHUNKS)
+            {
                 let answer = llm
                     .complete_json(PAGE_SYSTEM, &format!("Page text:\n{chunk}"))
                     .await
                     .map_err(|e| PriceError::Http(format!("model call failed: {e}")))?;
-                let Some(parsed) =
-                    json_object(&answer).and_then(|j| serde_json::from_str::<PageAnswer>(j).ok())
+                let Some(parsed) = Self::json_object(&answer)
+                    .and_then(|j| serde_json::from_str::<PageAnswer>(j).ok())
                 else {
                     continue; // an unusable answer for one chunk must not lose the others
                 };
@@ -137,7 +142,7 @@ impl PriceSource for LlmPageSource {
                     if name.is_empty()
                         || name.chars().count() > 120
                         || !plausible
-                        || !price_appears(&chunk, &p.price)
+                        || !Self::price_appears(&chunk, &p.price)
                     {
                         continue;
                     }
@@ -183,18 +188,18 @@ impl PriceSource for OpenPricesSource {
         let oldest = self.today - Duration::days(self.max_age_days);
         let mut all = Vec::new();
         for (item, code) in &self.items {
-            let product = http.get(&off::product_url(code)).await?;
+            let product = http.get(&OpenFoodFacts::product_url(code)).await?;
             let Some(product) = (product.status < 400)
-                .then(|| off::parse_product(&product.body))
+                .then(|| OpenFoodFacts::parse_product(&product.body))
                 .flatten()
             else {
                 continue;
             };
-            let prices = http.get(&off::open_prices_url(code)).await?;
+            let prices = http.get(&OpenFoodFacts::open_prices_url(code)).await?;
             if prices.status >= 400 {
                 continue;
             }
-            for p in off::parse_open_prices(&prices.body) {
+            for p in OpenFoodFacts::parse_open_prices(&prices.body) {
                 // Only prices seen in one of the four chains are useful, and only recent ones.
                 let Some(chain) = p.store.as_deref().and_then(Chain::from_name) else {
                     continue;
@@ -237,7 +242,7 @@ pub enum SourceConfig {
     },
     OpenPrices {
         items: Vec<OpenPricesItem>,
-        #[serde(default = "default_max_age")]
+        #[serde(default = "SourceConfig::default_max_age")]
         max_age_days: i64,
     },
 }
@@ -248,52 +253,10 @@ pub struct OpenPricesItem {
     pub barcode: String,
 }
 
-fn default_max_age() -> i64 {
-    60
-}
-
-pub fn build_sources(
-    configs: &[SourceConfig],
-    today: Date,
-    llm: Option<Arc<dyn LlmProvider>>,
-) -> Vec<Box<dyn PriceSource>> {
-    configs
-        .iter()
-        .map(|c| -> Box<dyn PriceSource> {
-            match c {
-                SourceConfig::JsonLd {
-                    chain,
-                    urls,
-                    is_offer,
-                } => Box::new(JsonLdSource {
-                    chain: *chain,
-                    urls: urls.clone(),
-                    is_offer: *is_offer,
-                }),
-                SourceConfig::LlmPage {
-                    chain,
-                    urls,
-                    is_offer,
-                } => Box::new(LlmPageSource {
-                    chain: *chain,
-                    urls: urls.clone(),
-                    is_offer: *is_offer,
-                    llm: llm.clone(),
-                }),
-                SourceConfig::OpenPrices {
-                    items,
-                    max_age_days,
-                } => Box::new(OpenPricesSource {
-                    items: items
-                        .iter()
-                        .map(|i| (i.item.clone(), i.barcode.clone()))
-                        .collect(),
-                    max_age_days: *max_age_days,
-                    today,
-                }),
-            }
-        })
-        .collect()
+impl SourceConfig {
+    fn default_max_age() -> i64 {
+        60
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -311,35 +274,84 @@ pub struct RefreshResult {
     pub sources: Vec<SourceStatus>,
 }
 
-/// Run every source one after another (politely, never in parallel against one host). A
-/// failing source is reported and skipped; it never fails the refresh.
-pub async fn refresh(sources: &[Box<dyn PriceSource>], http: &dyn Http) -> RefreshResult {
-    let mut raws = Vec::new();
-    let mut statuses = Vec::new();
-    for s in sources {
-        match s.fetch(http).await {
-            Ok(offers) => {
-                statuses.push(SourceStatus {
-                    name: s.name(),
-                    ok: true,
-                    offers_found: offers.len(),
-                    error: None,
-                });
-                raws.extend(offers);
-            }
-            Err(e) => statuses.push(SourceStatus {
-                name: s.name(),
-                ok: false,
-                offers_found: 0,
-                error: Some(e.to_string()),
-            }),
-        }
+/// Building and running price sources.
+pub struct Sources;
+
+impl Sources {
+    pub fn build(
+        configs: &[SourceConfig],
+        today: Date,
+        llm: Option<Arc<dyn LlmProvider>>,
+    ) -> Vec<Box<dyn PriceSource>> {
+        configs
+            .iter()
+            .map(|c| -> Box<dyn PriceSource> {
+                match c {
+                    SourceConfig::JsonLd {
+                        chain,
+                        urls,
+                        is_offer,
+                    } => Box::new(JsonLdSource {
+                        chain: *chain,
+                        urls: urls.clone(),
+                        is_offer: *is_offer,
+                    }),
+                    SourceConfig::LlmPage {
+                        chain,
+                        urls,
+                        is_offer,
+                    } => Box::new(LlmPageSource {
+                        chain: *chain,
+                        urls: urls.clone(),
+                        is_offer: *is_offer,
+                        llm: llm.clone(),
+                    }),
+                    SourceConfig::OpenPrices {
+                        items,
+                        max_age_days,
+                    } => Box::new(OpenPricesSource {
+                        items: items
+                            .iter()
+                            .map(|i| (i.item.clone(), i.barcode.clone()))
+                            .collect(),
+                        max_age_days: *max_age_days,
+                        today,
+                    }),
+                }
+            })
+            .collect()
     }
-    let (quotes, normalize) = normalize_all(&raws);
-    RefreshResult {
-        quotes,
-        normalize,
-        sources: statuses,
+
+    /// Run every source one after another (politely, never in parallel against one host). A
+    /// failing source is reported and skipped; it never fails the refresh.
+    pub async fn refresh(sources: &[Box<dyn PriceSource>], http: &dyn Http) -> RefreshResult {
+        let mut raws = Vec::new();
+        let mut statuses = Vec::new();
+        for s in sources {
+            match s.fetch(http).await {
+                Ok(offers) => {
+                    statuses.push(SourceStatus {
+                        name: s.name(),
+                        ok: true,
+                        offers_found: offers.len(),
+                        error: None,
+                    });
+                    raws.extend(offers);
+                }
+                Err(e) => statuses.push(SourceStatus {
+                    name: s.name(),
+                    ok: false,
+                    offers_found: 0,
+                    error: Some(e.to_string()),
+                }),
+            }
+        }
+        let (quotes, normalize) = Normalizer::normalize_all(&raws);
+        RefreshResult {
+            quotes,
+            normalize,
+            sources: statuses,
+        }
     }
 }
 
@@ -372,7 +384,7 @@ mod tests {
                 is_offer: true,
             }),
         ];
-        let r = refresh(&sources, &http).await;
+        let r = Sources::refresh(&sources, &http).await;
 
         assert_eq!(r.quotes.len(), 1);
         assert_eq!(r.quotes[0].quote.item, "nudeln");
@@ -387,12 +399,12 @@ mod tests {
     async fn open_prices_filters_by_chain_and_age() {
         let http = FakeHttp::with(vec![
             (
-                &off::product_url("111"),
+                &OpenFoodFacts::product_url("111"),
                 200,
                 r#"{"status":1,"product":{"code":"111","product_name":"Vollmilch","quantity":"1 l"}}"#,
             ),
             (
-                &off::open_prices_url("111"),
+                &OpenFoodFacts::open_prices_url("111"),
                 200,
                 r#"{"items":[
                     {"product_code":"111","price":1.19,"currency":"EUR","date":"2026-03-01","location":{"osm_name":"REWE Markt"}},
@@ -413,7 +425,7 @@ mod tests {
             (Chain::Rewe, Money::from_cents(119), Some("milch"))
         );
 
-        let (quotes, _) = normalize_all(&raws);
+        let (quotes, _) = Normalizer::normalize_all(&raws);
         assert_eq!(quotes[0].quote.price, Money::from_cents(119));
     }
 
@@ -432,7 +444,7 @@ mod tests {
                 ..
             }
         ));
-        assert_eq!(build_sources(&cfg, date!(2026 - 03 - 05), None).len(), 2);
+        assert_eq!(Sources::build(&cfg, date!(2026 - 03 - 05), None).len(), 2);
         assert!(serde_json::from_str::<Vec<SourceConfig>>(r#"[{"type":"nope"}]"#).is_err());
     }
 
@@ -441,17 +453,21 @@ mod tests {
 <div class=\"tile\"><h3>Frische Vollmilch 3,5 %</h3><span>1 l</span><b>0,99 &euro;</b></div>\
 <div class=\"tile\"><h3>Gültig bis 08.03.</h3></div></body></html>";
 
-    fn page_source(
-        answers: Vec<Result<String, String>>,
-    ) -> (LlmPageSource, Arc<financer_llm::MockProvider>) {
-        let mock = Arc::new(financer_llm::MockProvider::with_answers(answers));
-        let src = LlmPageSource {
-            chain: Chain::Kaufland,
-            urls: vec!["https://shop.test/angebote".into()],
-            is_offer: true,
-            llm: Some(mock.clone()),
-        };
-        (src, mock)
+    struct Fixtures;
+
+    impl Fixtures {
+        fn page_source(
+            answers: Vec<Result<String, String>>,
+        ) -> (LlmPageSource, Arc<financer_llm::MockProvider>) {
+            let mock = Arc::new(financer_llm::MockProvider::with_answers(answers));
+            let src = LlmPageSource {
+                chain: Chain::Kaufland,
+                urls: vec!["https://shop.test/angebote".into()],
+                is_offer: true,
+                llm: Some(mock.clone()),
+            };
+            (src, mock)
+        }
     }
 
     #[tokio::test]
@@ -465,7 +481,7 @@ mod tests {
             {"name":"Gratis","price":"0,00","size":null,"valid_until":null},
             {"name":"Teuer","price":"99999,00","size":null,"valid_until":null},
             {"name":"Kaputt","price":"abc","size":null,"valid_until":null}]}"#;
-        let (src, mock) = page_source(vec![Ok(answer.into())]);
+        let (src, mock) = Fixtures::page_source(vec![Ok(answer.into())]);
         let offers = src.fetch(&http).await.unwrap();
         let names: Vec<_> = offers.iter().map(|o| o.name.as_str()).collect();
         assert_eq!(names, vec!["Barilla Spaghetti", "Frische Vollmilch 3,5 %"]);
@@ -484,9 +500,9 @@ mod tests {
     async fn llm_page_source_feeds_the_normal_pipeline() {
         let http = FakeHttp::with(vec![("https://shop.test/angebote", 200, OFFERS_PAGE)]);
         let answer = r#"{"products":[{"name":"Barilla Spaghetti","price":"1,29","size":"500 g","valid_until":null}]}"#;
-        let (src, _) = page_source(vec![Ok(answer.into())]);
+        let (src, _) = Fixtures::page_source(vec![Ok(answer.into())]);
         let sources: Vec<Box<dyn PriceSource>> = vec![Box::new(src)];
-        let r = refresh(&sources, &http).await;
+        let r = Sources::refresh(&sources, &http).await;
         assert_eq!(r.quotes.len(), 1);
         assert_eq!(
             (r.quotes[0].quote.item.as_str(), r.quotes[0].quote.price),
@@ -498,10 +514,10 @@ mod tests {
     #[tokio::test]
     async fn llm_page_source_tolerates_bad_answers_and_reports_missing_keys() {
         let http = FakeHttp::with(vec![("https://shop.test/angebote", 200, OFFERS_PAGE)]);
-        let (src, _) = page_source(vec![Ok("sorry, no JSON".into())]);
+        let (src, _) = Fixtures::page_source(vec![Ok("sorry, no JSON".into())]);
         assert!(src.fetch(&http).await.unwrap().is_empty());
 
-        let (src, _) = page_source(vec![Err("overloaded".into())]);
+        let (src, _) = Fixtures::page_source(vec![Err("overloaded".into())]);
         assert!(src.fetch(&http).await.is_err());
 
         let no_key = LlmPageSource {
@@ -514,7 +530,7 @@ mod tests {
         assert!(err.contains("LLM API key"), "{err}");
 
         let down = FakeHttp::with(vec![("https://shop.test/angebote", 503, "")]);
-        let (src, mock) = page_source(vec![]);
+        let (src, mock) = Fixtures::page_source(vec![]);
         assert!(src.fetch(&down).await.is_err());
         assert!(
             mock.requests.lock().unwrap().is_empty(),
@@ -524,10 +540,10 @@ mod tests {
 
     #[test]
     fn price_matching_accepts_either_decimal_mark_but_not_absent_prices() {
-        assert!(price_appears("nur 1,29 € heute", "1,29"));
-        assert!(price_appears("nur 1,29 € heute", "1.29"));
-        assert!(price_appears("nur 1.29 heute", "1,29 €"));
-        assert!(!price_appears("nur 1,29 € heute", "1,92"));
-        assert!(!price_appears("text", ""));
+        assert!(LlmPageSource::price_appears("nur 1,29 € heute", "1,29"));
+        assert!(LlmPageSource::price_appears("nur 1,29 € heute", "1.29"));
+        assert!(LlmPageSource::price_appears("nur 1.29 heute", "1,29 €"));
+        assert!(!LlmPageSource::price_appears("nur 1,29 € heute", "1,92"));
+        assert!(!LlmPageSource::price_appears("text", ""));
     }
 }

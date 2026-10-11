@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::transaction::{normalize_name, Transaction};
+use crate::transaction::{NameNormalizer, Transaction};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -28,54 +28,56 @@ struct Rule {
     category: Category,
 }
 
-const fn rule(needle: &'static str, category: Category) -> Rule {
-    Rule { needle, category }
+impl Rule {
+    const fn new(needle: &'static str, category: Category) -> Self {
+        Self { needle, category }
+    }
 }
 
 /// Substring rules on the normalized counterparty + purpose. First match wins, so more
 /// specific needles come before general ones.
 const DEFAULT_RULES: &[Rule] = &[
-    rule("gehalt", Category::Income),
-    rule("lohn", Category::Income),
-    rule("rewe", Category::Groceries),
-    rule("lidl", Category::Groceries),
-    rule("aldi", Category::Groceries),
-    rule("kaufland", Category::Groceries),
-    rule("edeka", Category::Groceries),
-    rule("penny", Category::Groceries),
-    rule("netto", Category::Groceries),
-    rule("dm drogerie", Category::Shopping),
-    rule("rossmann", Category::Shopping),
-    rule("amazon", Category::Shopping),
-    rule("lieferando", Category::Dining),
-    rule("restaurant", Category::Dining),
-    rule("mcdonald", Category::Dining),
-    rule("cafe", Category::Dining),
-    rule("bäckerei", Category::Dining),
-    rule("deutsche bahn", Category::Transport),
-    rule("db vertrieb", Category::Transport),
-    rule("aral", Category::Transport),
-    rule("shell", Category::Transport),
-    rule("tankstelle", Category::Transport),
-    rule("bvg", Category::Transport),
-    rule("miete", Category::Housing),
-    rule("stadtwerke", Category::Utilities),
-    rule("strom", Category::Utilities),
-    rule("telekom", Category::Utilities),
-    rule("vodafone", Category::Utilities),
-    rule("rundfunk", Category::Utilities),
-    rule("versicherung", Category::Insurance),
-    rule("allianz", Category::Insurance),
-    rule("apotheke", Category::Health),
-    rule("arzt", Category::Health),
-    rule("netflix", Category::Subscriptions),
-    rule("spotify", Category::Subscriptions),
-    rule("disney", Category::Subscriptions),
-    rule("kino", Category::Leisure),
-    rule("fitness", Category::Leisure),
-    rule("geldautomat", Category::Cash),
-    rule("bargeld", Category::Cash),
-    rule("sparplan", Category::Savings),
+    Rule::new("gehalt", Category::Income),
+    Rule::new("lohn", Category::Income),
+    Rule::new("rewe", Category::Groceries),
+    Rule::new("lidl", Category::Groceries),
+    Rule::new("aldi", Category::Groceries),
+    Rule::new("kaufland", Category::Groceries),
+    Rule::new("edeka", Category::Groceries),
+    Rule::new("penny", Category::Groceries),
+    Rule::new("netto", Category::Groceries),
+    Rule::new("dm drogerie", Category::Shopping),
+    Rule::new("rossmann", Category::Shopping),
+    Rule::new("amazon", Category::Shopping),
+    Rule::new("lieferando", Category::Dining),
+    Rule::new("restaurant", Category::Dining),
+    Rule::new("mcdonald", Category::Dining),
+    Rule::new("cafe", Category::Dining),
+    Rule::new("bäckerei", Category::Dining),
+    Rule::new("deutsche bahn", Category::Transport),
+    Rule::new("db vertrieb", Category::Transport),
+    Rule::new("aral", Category::Transport),
+    Rule::new("shell", Category::Transport),
+    Rule::new("tankstelle", Category::Transport),
+    Rule::new("bvg", Category::Transport),
+    Rule::new("miete", Category::Housing),
+    Rule::new("stadtwerke", Category::Utilities),
+    Rule::new("strom", Category::Utilities),
+    Rule::new("telekom", Category::Utilities),
+    Rule::new("vodafone", Category::Utilities),
+    Rule::new("rundfunk", Category::Utilities),
+    Rule::new("versicherung", Category::Insurance),
+    Rule::new("allianz", Category::Insurance),
+    Rule::new("apotheke", Category::Health),
+    Rule::new("arzt", Category::Health),
+    Rule::new("netflix", Category::Subscriptions),
+    Rule::new("spotify", Category::Subscriptions),
+    Rule::new("disney", Category::Subscriptions),
+    Rule::new("kino", Category::Leisure),
+    Rule::new("fitness", Category::Leisure),
+    Rule::new("geldautomat", Category::Cash),
+    Rule::new("bargeld", Category::Cash),
+    Rule::new("sparplan", Category::Savings),
 ];
 
 /// Rule-based categorizer. User corrections (`learn`) are keyed by normalized counterparty
@@ -93,17 +95,20 @@ impl Categorizer {
     /// Remember that this counterparty belongs to `category` from now on.
     pub fn learn(&mut self, counterparty: &str, category: Category) {
         self.overrides
-            .insert(normalize_name(counterparty), category);
+            .insert(NameNormalizer::normalize(counterparty), category);
     }
 
     pub fn categorize(&self, tx: &Transaction) -> Category {
-        if let Some(c) = self.overrides.get(&normalize_name(&tx.counterparty)) {
+        if let Some(c) = self
+            .overrides
+            .get(&NameNormalizer::normalize(&tx.counterparty))
+        {
             return *c;
         }
         let haystack = format!(
             "{} {}",
-            normalize_name(&tx.counterparty),
-            normalize_name(&tx.purpose)
+            NameNormalizer::normalize(&tx.counterparty),
+            NameNormalizer::normalize(&tx.purpose)
         );
         for r in DEFAULT_RULES {
             if haystack.contains(r.needle) {
@@ -124,14 +129,18 @@ mod tests {
     use crate::money::Money;
     use time::macros::date;
 
-    fn tx(counterparty: &str, purpose: &str, cents: i64) -> Transaction {
-        Transaction {
-            booking_date: date!(2026 - 03 - 02),
-            amount: Money::from_cents(cents),
-            counterparty: counterparty.into(),
-            purpose: purpose.into(),
-            counterparty_iban: None,
-            category: None,
+    struct Fixture;
+
+    impl Fixture {
+        fn tx(counterparty: &str, purpose: &str, cents: i64) -> Transaction {
+            Transaction {
+                booking_date: date!(2026 - 03 - 02),
+                amount: Money::from_cents(cents),
+                counterparty: counterparty.into(),
+                purpose: purpose.into(),
+                counterparty_iban: None,
+                category: None,
+            }
         }
     }
 
@@ -139,15 +148,15 @@ mod tests {
     fn matches_default_rules() {
         let c = Categorizer::new();
         assert_eq!(
-            c.categorize(&tx("REWE SAGT DANKE", "Kartenzahlung", -2347)),
+            c.categorize(&Fixture::tx("REWE SAGT DANKE", "Kartenzahlung", -2347)),
             Category::Groceries
         );
         assert_eq!(
-            c.categorize(&tx("Vermieter GmbH", "Miete März", -80000)),
+            c.categorize(&Fixture::tx("Vermieter GmbH", "Miete März", -80000)),
             Category::Housing
         );
         assert_eq!(
-            c.categorize(&tx("Arbeitgeber AG", "Gehalt 03/2026", 250000)),
+            c.categorize(&Fixture::tx("Arbeitgeber AG", "Gehalt 03/2026", 250000)),
             Category::Income
         );
     }
@@ -155,14 +164,20 @@ mod tests {
     #[test]
     fn unknown_falls_back_by_sign() {
         let c = Categorizer::new();
-        assert_eq!(c.categorize(&tx("Unbekannt", "", -500)), Category::Other);
-        assert_eq!(c.categorize(&tx("Oma", "Geschenk", 5000)), Category::Income);
+        assert_eq!(
+            c.categorize(&Fixture::tx("Unbekannt", "", -500)),
+            Category::Other
+        );
+        assert_eq!(
+            c.categorize(&Fixture::tx("Oma", "Geschenk", 5000)),
+            Category::Income
+        );
     }
 
     #[test]
     fn user_corrections_beat_rules() {
         let mut c = Categorizer::new();
-        let t = tx("Rewe Gutschein Shop", "", -1000);
+        let t = Fixture::tx("Rewe Gutschein Shop", "", -1000);
         assert_eq!(c.categorize(&t), Category::Groceries);
         c.learn("REWE gutschein shop", Category::Leisure);
         assert_eq!(c.categorize(&t), Category::Leisure);

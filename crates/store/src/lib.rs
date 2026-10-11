@@ -99,7 +99,7 @@ impl Store {
                 counterparty: Set(t.counterparty.clone()),
                 purpose: Set(t.purpose.clone()),
                 counterparty_iban: Set(t.counterparty_iban.clone()),
-                category: Set(t.category.map(category_name)),
+                category: Set(t.category.map(EnumName::category_name)),
                 ..Default::default()
             };
             let affected = tx_entity::Entity::insert(model)
@@ -126,7 +126,7 @@ impl Store {
         rows.into_iter()
             .map(|r| {
                 let category = match r.category {
-                    Some(name) => Some(parse_category(&name)?),
+                    Some(name) => Some(EnumName::parse_category(&name)?),
                     None => None,
                 };
                 Ok(StoredTransaction {
@@ -150,7 +150,7 @@ impl Store {
         budget_envelope::Entity::delete_many().exec(&txn).await?;
         for (category, limit) in &budget.envelopes {
             budget_envelope::Entity::insert(budget_envelope::ActiveModel {
-                category: Set(category_name(*category)),
+                category: Set(EnumName::category_name(*category)),
                 limit_cents: Set(limit.cents()),
             })
             .exec_without_returning(&txn)
@@ -164,7 +164,7 @@ impl Store {
         let mut budget = Budget::default();
         for row in budget_envelope::Entity::find().all(&self.db).await? {
             budget.envelopes.insert(
-                parse_category(&row.category)?,
+                EnumName::parse_category(&row.category)?,
                 Money::from_cents(row.limit_cents),
             );
         }
@@ -188,7 +188,7 @@ impl Store {
         for q in quotes {
             price_quote::Entity::insert(price_quote::ActiveModel {
                 item: Set(q.quote.item.clone()),
-                chain: Set(to_name(&q.quote.chain)),
+                chain: Set(EnumName::to_name(&q.quote.chain)),
                 price_cents: Set(q.quote.price.cents()),
                 shelf_price_cents: Set(q.shelf_price.cents()),
                 product_name: Set(q.product_name.clone()),
@@ -217,7 +217,7 @@ impl Store {
                 Ok(StoredQuote {
                     quote: PriceQuote {
                         item: r.item,
-                        chain: from_name::<Chain>(&r.chain)?,
+                        chain: EnumName::from_name::<Chain>(&r.chain)?,
                         price: Money::from_cents(r.price_cents),
                         valid_until: r.valid_until,
                         is_offer: r.is_offer,
@@ -341,26 +341,31 @@ impl Store {
     }
 }
 
-/// Stored form of an enum value: its serde name (`groceries`, `rewe`), so adding a variant
-/// needs no change here.
-fn to_name<T: serde::Serialize>(v: &T) -> String {
-    match serde_json::to_value(v) {
-        Ok(serde_json::Value::String(s)) => s,
-        _ => unreachable!("enums stored by name always serialize to a string"),
+/// Conversion between enum values and the names they are stored under.
+struct EnumName;
+
+impl EnumName {
+    /// Stored form of an enum value: its serde name (`groceries`, `rewe`), so adding a variant
+    /// needs no change here.
+    fn to_name<T: serde::Serialize>(v: &T) -> String {
+        match serde_json::to_value(v) {
+            Ok(serde_json::Value::String(s)) => s,
+            _ => unreachable!("enums stored by name always serialize to a string"),
+        }
     }
-}
 
-fn from_name<T: serde::de::DeserializeOwned>(name: &str) -> Result<T, StoreError> {
-    serde_json::from_value(serde_json::Value::String(name.to_string()))
-        .map_err(|_| StoreError::BadCategory(name.to_string()))
-}
+    fn from_name<T: serde::de::DeserializeOwned>(name: &str) -> Result<T, StoreError> {
+        serde_json::from_value(serde_json::Value::String(name.to_string()))
+            .map_err(|_| StoreError::BadCategory(name.to_string()))
+    }
 
-fn category_name(c: Category) -> String {
-    to_name(&c)
-}
+    fn category_name(c: Category) -> String {
+        Self::to_name(&c)
+    }
 
-fn parse_category(name: &str) -> Result<Category, StoreError> {
-    from_name(name)
+    fn parse_category(name: &str) -> Result<Category, StoreError> {
+        Self::from_name(name)
+    }
 }
 
 #[cfg(test)]
@@ -369,161 +374,166 @@ mod tests {
     use sea_orm::ConnectionTrait;
     use time::macros::date;
 
-    fn sample() -> Vec<Transaction> {
-        vec![
-            Transaction {
-                booking_date: date!(2026 - 03 - 02),
-                amount: Money::from_cents(-2347),
-                counterparty: "REWE SAGT DANKE".into(),
-                purpose: "Kartenzahlung".into(),
-                counterparty_iban: None,
-                category: Some(Category::Groceries),
-            },
-            Transaction {
-                booking_date: date!(2026 - 03 - 28),
-                amount: Money::from_cents(250_000),
-                counterparty: "Arbeitgeber AG".into(),
-                purpose: "Gehalt 03/2026".into(),
-                counterparty_iban: Some("DE02120300000000202051".into()),
-                category: Some(Category::Income),
-            },
-        ]
-    }
+    /// Shared test data and round-trip checks.
+    struct Fixtures;
 
-    async fn more_roundtrips(store: &Store) {
-        // quotes: refreshing a source replaces only that source's rows
-        let quote = |item: &str, chain, cents, source: &str| StoredQuote {
-            quote: PriceQuote {
-                item: item.into(),
-                chain,
-                price: Money::from_cents(cents),
-                valid_until: Some(date!(2026 - 03 - 08)),
-                is_offer: true,
-            },
-            product_name: "Produkt".into(),
-            shelf_price: Money::from_cents(cents + 10),
-            source: source.into(),
-            fetched_at: 1_800_000_000,
-        };
-        store
-            .replace_quotes(
-                &["a".into(), "b".into()],
-                &[
-                    quote("milch", Chain::Aldi, 99, "a"),
-                    quote("milch", Chain::Rewe, 119, "b"),
-                ],
-            )
-            .await
-            .unwrap();
-        store
-            .replace_quotes(&["a".into()], &[quote("milch", Chain::Aldi, 89, "a")])
-            .await
-            .unwrap();
-        let quotes = store.list_quotes().await.unwrap();
-        assert_eq!(quotes.len(), 2);
-        assert_eq!(
-            (quotes[0].quote.chain, quotes[0].quote.price),
-            (Chain::Aldi, Money::from_cents(89))
-        ); // cheapest first
-        assert_eq!(quotes[1].quote.chain, Chain::Rewe); // untouched source kept
-        assert_eq!(quotes[0].quote.valid_until, Some(date!(2026 - 03 - 08)));
-        assert!(quotes[0].quote.is_offer);
-        // a failed refresh (no sources reported OK) wipes nothing
-        store.replace_quotes(&[], &[]).await.unwrap();
-        assert_eq!(store.list_quotes().await.unwrap().len(), 2);
+    impl Fixtures {
+        fn sample() -> Vec<Transaction> {
+            vec![
+                Transaction {
+                    booking_date: date!(2026 - 03 - 02),
+                    amount: Money::from_cents(-2347),
+                    counterparty: "REWE SAGT DANKE".into(),
+                    purpose: "Kartenzahlung".into(),
+                    counterparty_iban: None,
+                    category: Some(Category::Groceries),
+                },
+                Transaction {
+                    booking_date: date!(2026 - 03 - 28),
+                    amount: Money::from_cents(250_000),
+                    counterparty: "Arbeitgeber AG".into(),
+                    purpose: "Gehalt 03/2026".into(),
+                    counterparty_iban: Some("DE02120300000000202051".into()),
+                    category: Some(Category::Income),
+                },
+            ]
+        }
 
-        // usual items
-        store
-            .set_usual_items(&[
-                BasketItem {
+        async fn more_roundtrips(store: &Store) {
+            // quotes: refreshing a source replaces only that source's rows
+            let quote = |item: &str, chain, cents, source: &str| StoredQuote {
+                quote: PriceQuote {
+                    item: item.into(),
+                    chain,
+                    price: Money::from_cents(cents),
+                    valid_until: Some(date!(2026 - 03 - 08)),
+                    is_offer: true,
+                },
+                product_name: "Produkt".into(),
+                shelf_price: Money::from_cents(cents + 10),
+                source: source.into(),
+                fetched_at: 1_800_000_000,
+            };
+            store
+                .replace_quotes(
+                    &["a".into(), "b".into()],
+                    &[
+                        quote("milch", Chain::Aldi, 99, "a"),
+                        quote("milch", Chain::Rewe, 119, "b"),
+                    ],
+                )
+                .await
+                .unwrap();
+            store
+                .replace_quotes(&["a".into()], &[quote("milch", Chain::Aldi, 89, "a")])
+                .await
+                .unwrap();
+            let quotes = store.list_quotes().await.unwrap();
+            assert_eq!(quotes.len(), 2);
+            assert_eq!(
+                (quotes[0].quote.chain, quotes[0].quote.price),
+                (Chain::Aldi, Money::from_cents(89))
+            ); // cheapest first
+            assert_eq!(quotes[1].quote.chain, Chain::Rewe); // untouched source kept
+            assert_eq!(quotes[0].quote.valid_until, Some(date!(2026 - 03 - 08)));
+            assert!(quotes[0].quote.is_offer);
+            // a failed refresh (no sources reported OK) wipes nothing
+            store.replace_quotes(&[], &[]).await.unwrap();
+            assert_eq!(store.list_quotes().await.unwrap().len(), 2);
+
+            // usual items
+            store
+                .set_usual_items(&[
+                    BasketItem {
+                        item: "milch".into(),
+                        quantity: 2,
+                    },
+                    BasketItem {
+                        item: "brot".into(),
+                        quantity: 1,
+                    },
+                ])
+                .await
+                .unwrap();
+            store
+                .set_usual_items(&[BasketItem {
                     item: "milch".into(),
-                    quantity: 2,
-                },
-                BasketItem {
-                    item: "brot".into(),
-                    quantity: 1,
-                },
-            ])
-            .await
-            .unwrap();
-        store
-            .set_usual_items(&[BasketItem {
-                item: "milch".into(),
-                quantity: 3,
-            }])
-            .await
-            .unwrap();
-        assert_eq!(
-            store.usual_items().await.unwrap(),
-            vec![BasketItem {
-                item: "milch".into(),
-                quantity: 3
-            }]
-        );
+                    quantity: 3,
+                }])
+                .await
+                .unwrap();
+            assert_eq!(
+                store.usual_items().await.unwrap(),
+                vec![BasketItem {
+                    item: "milch".into(),
+                    quantity: 3
+                }]
+            );
 
-        // receipts dedupe by fingerprint
-        let id = store
-            .add_receipt(
-                "fp1",
-                Some(date!(2026 - 03 - 02)),
-                Some("REWE"),
-                "{\"x\":1}",
-            )
-            .await
-            .unwrap();
-        assert!(id.is_some());
-        assert_eq!(
-            store.add_receipt("fp1", None, None, "{}").await.unwrap(),
-            None
-        );
-        let receipts = store.list_receipts().await.unwrap();
-        assert_eq!(
-            (
-                receipts.len(),
-                receipts[0].merchant.as_deref(),
-                receipts[0].json.as_str()
-            ),
-            (1, Some("REWE"), "{\"x\":1}")
-        );
-        assert!(store.delete_receipt(id.unwrap()).await.unwrap());
-        assert!(!store.delete_receipt(id.unwrap()).await.unwrap());
+            // receipts dedupe by fingerprint
+            let id = store
+                .add_receipt(
+                    "fp1",
+                    Some(date!(2026 - 03 - 02)),
+                    Some("REWE"),
+                    "{\"x\":1}",
+                )
+                .await
+                .unwrap();
+            assert!(id.is_some());
+            assert_eq!(
+                store.add_receipt("fp1", None, None, "{}").await.unwrap(),
+                None
+            );
+            let receipts = store.list_receipts().await.unwrap();
+            assert_eq!(
+                (
+                    receipts.len(),
+                    receipts[0].merchant.as_deref(),
+                    receipts[0].json.as_str()
+                ),
+                (1, Some("REWE"), "{\"x\":1}")
+            );
+            assert!(store.delete_receipt(id.unwrap()).await.unwrap());
+            assert!(!store.delete_receipt(id.unwrap()).await.unwrap());
 
-        // settings upsert
-        assert_eq!(store.get_setting("habit_mode").await.unwrap(), None);
-        store.set_setting("habit_mode", "manual").await.unwrap();
-        store.set_setting("habit_mode", "receipts").await.unwrap();
-        assert_eq!(
-            store.get_setting("habit_mode").await.unwrap().as_deref(),
-            Some("receipts")
-        );
-    }
+            // settings upsert
+            assert_eq!(store.get_setting("habit_mode").await.unwrap(), None);
+            store.set_setting("habit_mode", "manual").await.unwrap();
+            store.set_setting("habit_mode", "receipts").await.unwrap();
+            assert_eq!(
+                store.get_setting("habit_mode").await.unwrap().as_deref(),
+                Some("receipts")
+            );
+        }
 
-    async fn roundtrip(url: &str) {
-        let store = Store::connect(url).await.unwrap();
-        let txs = sample();
-        assert_eq!(store.insert_new_transactions(&txs).await.unwrap(), 2);
-        // importing the same period again must not duplicate
-        assert_eq!(store.insert_new_transactions(&txs).await.unwrap(), 0);
+        async fn roundtrip(url: &str) {
+            let store = Store::connect(url).await.unwrap();
+            let txs = Self::sample();
+            assert_eq!(store.insert_new_transactions(&txs).await.unwrap(), 2);
+            // importing the same period again must not duplicate
+            assert_eq!(store.insert_new_transactions(&txs).await.unwrap(), 0);
 
-        let listed = store.list_transactions().await.unwrap();
-        assert_eq!(listed.len(), 2);
-        assert_eq!(listed[0].transaction.counterparty, "Arbeitgeber AG"); // newest first
-        assert_eq!(listed[0].transaction.category, Some(Category::Income));
-        assert_eq!(listed[1].transaction, txs[0]);
+            let listed = store.list_transactions().await.unwrap();
+            assert_eq!(listed.len(), 2);
+            assert_eq!(listed[0].transaction.counterparty, "Arbeitgeber AG"); // newest first
+            assert_eq!(listed[0].transaction.category, Some(Category::Income));
+            assert_eq!(listed[1].transaction, txs[0]);
 
-        let mut budget = Budget::default();
-        budget
-            .envelopes
-            .insert(Category::Groceries, Money::from_cents(40_000));
-        store.save_budget(&budget).await.unwrap();
-        budget
-            .envelopes
-            .insert(Category::Dining, Money::from_cents(6_000));
-        store.save_budget(&budget).await.unwrap();
-        let loaded = store.load_budget().await.unwrap();
-        assert_eq!(loaded.envelopes, budget.envelopes);
+            let mut budget = Budget::default();
+            budget
+                .envelopes
+                .insert(Category::Groceries, Money::from_cents(40_000));
+            store.save_budget(&budget).await.unwrap();
+            budget
+                .envelopes
+                .insert(Category::Dining, Money::from_cents(6_000));
+            store.save_budget(&budget).await.unwrap();
+            let loaded = store.load_budget().await.unwrap();
+            assert_eq!(loaded.envelopes, budget.envelopes);
 
-        more_roundtrips(&store).await;
+            Self::more_roundtrips(&store).await;
+        }
     }
 
     #[tokio::test]
@@ -545,7 +555,7 @@ mod tests {
 
     #[tokio::test]
     async fn sqlite_roundtrip() {
-        roundtrip("sqlite::memory:").await;
+        Fixtures::roundtrip("sqlite::memory:").await;
     }
 
     #[tokio::test]
@@ -553,7 +563,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("financer-store-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let url = format!("sqlite://{}?mode=rwc", dir.join("t.db").display());
-        roundtrip(&url).await;
+        Fixtures::roundtrip(&url).await;
         // reopening runs migrations again without error and keeps data
         let store = Store::connect(&url).await.unwrap();
         assert_eq!(store.list_transactions().await.unwrap().len(), 2);
@@ -584,7 +594,7 @@ mod tests {
                 .unwrap();
         }
         drop(store);
-        roundtrip(&url).await;
+        Fixtures::roundtrip(&url).await;
     }
 
     #[test]
@@ -594,9 +604,12 @@ mod tests {
             Category::Subscriptions,
             Category::Other,
         ] {
-            assert_eq!(parse_category(&category_name(c)).unwrap(), c);
+            assert_eq!(
+                EnumName::parse_category(&EnumName::category_name(c)).unwrap(),
+                c
+            );
         }
-        assert_eq!(category_name(Category::Groceries), "groceries");
-        assert!(parse_category("nope").is_err());
+        assert_eq!(EnumName::category_name(Category::Groceries), "groceries");
+        assert!(EnumName::parse_category("nope").is_err());
     }
 }

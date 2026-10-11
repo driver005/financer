@@ -3,9 +3,7 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
-use financer_api::{
-    router, AppState, FakeHttp, LlmKeys, MockProvider, PriceSourceConfig, TokenHash,
-};
+use financer_api::{Api, AppState, FakeHttp, LlmKeys, MockProvider, PriceSourceConfig, TokenHash};
 use financer_core::Chain;
 use financer_store::Store;
 use http_body_util::BodyExt;
@@ -14,105 +12,119 @@ use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
 
-fn page(items: &[(&str, &str, &str)]) -> String {
-    let products: Vec<String> = items
-        .iter()
-        .map(|(name, price, size)| {
-            format!(
-                r#"{{"@type":"Product","name":"{name}","size":"{size}","offers":{{"@type":"Offer","price":"{price}","priceCurrency":"EUR"}}}}"#
-            )
+/// Test fixtures: fake shops, an in-memory app and request helpers.
+struct Fixture;
+
+impl Fixture {
+    fn page(items: &[(&str, &str, &str)]) -> String {
+        let products: Vec<String> = items
+            .iter()
+            .map(|(name, price, size)| {
+                format!(
+                    r#"{{"@type":"Product","name":"{name}","size":"{size}","offers":{{"@type":"Offer","price":"{price}","priceCurrency":"EUR"}}}}"#
+                )
+            })
+            .collect();
+        format!(
+            r#"<script type="application/ld+json">[{}]</script>"#,
+            products.join(",")
+        )
+    }
+
+    fn sources() -> Vec<PriceSourceConfig> {
+        vec![
+            PriceSourceConfig::JsonLd {
+                chain: Chain::Aldi,
+                urls: vec!["https://aldi.test/offers".into()],
+                is_offer: true,
+            },
+            PriceSourceConfig::JsonLd {
+                chain: Chain::Lidl,
+                urls: vec!["https://lidl.test/offers".into()],
+                is_offer: false,
+            },
+        ]
+    }
+
+    fn fake_web() -> Arc<FakeHttp> {
+        Arc::new(FakeHttp::with(vec![
+            (
+                "https://aldi.test/offers",
+                200,
+                &Self::page(&[
+                    ("Vollmilch", "0.89", "1 l"),
+                    ("Spaghetti", "0.89", "500 g"),
+                    ("Playstation", "499.00", "1 Stück"),
+                ]),
+            ),
+            (
+                "https://lidl.test/offers",
+                200,
+                &Self::page(&[
+                    ("Vollmilch", "0.99", "1 l"),
+                    ("Spaghetti", "1.58", "1 kg"),
+                    ("Passierte Tomaten", "0.55", "500 ml"),
+                ]),
+            ),
+        ]))
+    }
+
+    async fn app_with(state: impl FnOnce(AppState) -> AppState) -> Router {
+        let store = Store::connect("sqlite::memory:").await.unwrap();
+        Api::router(state(AppState::new(store)), TokenHash::new(TOKEN))
+    }
+
+    async fn app() -> Router {
+        Fixture::app_with(|s| {
+            s.with_http(Fixture::fake_web())
+                .with_price_sources(Fixture::sources())
         })
-        .collect();
-    format!(
-        r#"<script type="application/ld+json">[{}]</script>"#,
-        products.join(",")
-    )
-}
+        .await
+    }
 
-fn sources() -> Vec<PriceSourceConfig> {
-    vec![
-        PriceSourceConfig::JsonLd {
-            chain: Chain::Aldi,
-            urls: vec!["https://aldi.test/offers".into()],
-            is_offer: true,
-        },
-        PriceSourceConfig::JsonLd {
-            chain: Chain::Lidl,
-            urls: vec!["https://lidl.test/offers".into()],
-            is_offer: false,
-        },
-    ]
-}
-
-fn fake_web() -> Arc<FakeHttp> {
-    Arc::new(FakeHttp::with(vec![
+    async fn send(
+        app: &Router,
+        method: Method,
+        uri: &str,
+        body: Option<Value>,
+    ) -> (StatusCode, Value) {
+        let mut req = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+        let body = match body {
+            Some(b) => {
+                req = req.header(header::CONTENT_TYPE, "application/json");
+                Body::from(b.to_string())
+            }
+            None => Body::empty(),
+        };
+        let res = app.clone().oneshot(req.body(body).unwrap()).await.unwrap();
+        let status = res.status();
+        let bytes = res.into_body().collect().await.unwrap().to_bytes();
         (
-            "https://aldi.test/offers",
-            200,
-            &page(&[
-                ("Vollmilch", "0.89", "1 l"),
-                ("Spaghetti", "0.89", "500 g"),
-                ("Playstation", "499.00", "1 Stück"),
-            ]),
-        ),
-        (
-            "https://lidl.test/offers",
-            200,
-            &page(&[
-                ("Vollmilch", "0.99", "1 l"),
-                ("Spaghetti", "1.58", "1 kg"),
-                ("Passierte Tomaten", "0.55", "500 ml"),
-            ]),
-        ),
-    ]))
-}
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    }
 
-async fn app_with(state: impl FnOnce(AppState) -> AppState) -> Router {
-    let store = Store::connect("sqlite::memory:").await.unwrap();
-    router(state(AppState::new(store)), TokenHash::new(TOKEN))
-}
-
-async fn app() -> Router {
-    app_with(|s| s.with_http(fake_web()).with_price_sources(sources())).await
-}
-
-async fn send(app: &Router, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
-    let mut req = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
-    let body = match body {
-        Some(b) => {
-            req = req.header(header::CONTENT_TYPE, "application/json");
-            Body::from(b.to_string())
-        }
-        None => Body::empty(),
-    };
-    let res = app.clone().oneshot(req.body(body).unwrap()).await.unwrap();
-    let status = res.status();
-    let bytes = res.into_body().collect().await.unwrap().to_bytes();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-    )
-}
-
-async fn get(app: &Router, uri: &str) -> (StatusCode, Value) {
-    send(app, Method::GET, uri, None).await
+    async fn get(app: &Router, uri: &str) -> (StatusCode, Value) {
+        Fixture::send(app, Method::GET, uri, None).await
+    }
 }
 
 #[tokio::test]
 async fn refresh_needs_sources() {
-    let app = app_with(|s| s).await;
-    let (status, body) = send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let app = Fixture::app_with(|s| s).await;
+    let (status, body) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert!(body["error"].as_str().unwrap().contains("no price sources"));
 }
 
 #[tokio::test]
 async fn refresh_normalizes_and_prices_are_comparable() {
-    let app = app().await;
-    let (status, report) = send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let app = Fixture::app().await;
+    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(report["stored"], 5);
     assert_eq!(report["unmatched"], 1); // the Playstation
@@ -122,7 +134,7 @@ async fn refresh_normalizes_and_prices_are_comparable() {
         .iter()
         .all(|s| s["ok"] == true));
 
-    let (_, milk) = get(&app, "/v1/prices?item=milch").await;
+    let (_, milk) = Fixture::get(&app, "/v1/prices?item=milch").await;
     let milk = milk.as_array().unwrap();
     assert_eq!(milk.len(), 2);
     assert_eq!(
@@ -133,7 +145,7 @@ async fn refresh_normalizes_and_prices_are_comparable() {
     assert_eq!(milk[0]["is_offer"], true);
 
     // Lidl sells 1 kg for 1,58: per 500 g reference pack that is 0,79, cheaper than Aldi's 0,89
-    let (_, pasta) = get(&app, "/v1/prices?item=nudeln").await;
+    let (_, pasta) = Fixture::get(&app, "/v1/prices?item=nudeln").await;
     let pasta = pasta.as_array().unwrap();
     assert_eq!(
         (pasta[0]["chain"].as_str(), pasta[0]["price_cents"].as_i64()),
@@ -144,9 +156,13 @@ async fn refresh_normalizes_and_prices_are_comparable() {
 
 #[tokio::test]
 async fn a_failing_source_keeps_its_old_prices() {
-    let http = fake_web();
-    let app = app_with(|s| s.with_http(http.clone()).with_price_sources(sources())).await;
-    send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let http = Fixture::fake_web();
+    let app = Fixture::app_with(|s| {
+        s.with_http(http.clone())
+            .with_price_sources(Fixture::sources())
+    })
+    .await;
+    Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
 
     http.routes.lock().unwrap().insert(
         "https://lidl.test/offers".into(),
@@ -155,7 +171,7 @@ async fn a_failing_source_keeps_its_old_prices() {
             body: String::new(),
         }),
     );
-    let (status, report) = send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
     assert_eq!(status, StatusCode::OK);
     let lidl = report["sources"]
         .as_array()
@@ -172,8 +188,8 @@ async fn a_failing_source_keeps_its_old_prices() {
 
 #[tokio::test]
 async fn basket_validation_and_affordability() {
-    let app = app().await;
-    send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let app = Fixture::app().await;
+    Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
 
     for bad in [
         json!([{"item": "kaviar", "quantity": 1}]),
@@ -181,11 +197,13 @@ async fn basket_validation_and_affordability() {
         json!([{"item": "milch", "quantity": 1}, {"item": "milch", "quantity": 2}]),
     ] {
         assert_eq!(
-            send(&app, Method::PUT, "/v1/basket", Some(bad)).await.0,
+            Fixture::send(&app, Method::PUT, "/v1/basket", Some(bad))
+                .await
+                .0,
             StatusCode::BAD_REQUEST
         );
     }
-    let (status, basket) = send(
+    let (status, basket) = Fixture::send(
         &app,
         Method::PUT,
         "/v1/basket",
@@ -197,7 +215,7 @@ async fn basket_validation_and_affordability() {
     assert_eq!(basket["items"][0]["name"], "Milch");
 
     // basket: 2 milk + 1 pasta. Aldi 2*0,89+0,89 = 2,67; Lidl 2*0,99+0,79 = 2,77
-    let (status, a) = get(&app, "/v1/affordability?budget_cents=1000").await;
+    let (status, a) = Fixture::get(&app, "/v1/affordability?budget_cents=1000").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(a["budget_source"], "request");
     let aldi = a["per_chain"]
@@ -221,28 +239,30 @@ async fn basket_validation_and_affordability() {
     assert!(a["staples"].as_array().unwrap().len() <= 20);
 
     assert_eq!(
-        get(&app, "/v1/affordability?budget_cents=-5").await.0,
+        Fixture::get(&app, "/v1/affordability?budget_cents=-5")
+            .await
+            .0,
         StatusCode::BAD_REQUEST
     );
 }
 
 #[tokio::test]
 async fn affordability_defaults_to_the_groceries_envelope() {
-    let app = app().await;
-    send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let app = Fixture::app().await;
+    Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
     // no limit yet
-    let (status, body) = get(&app, "/v1/affordability").await;
+    let (status, body) = Fixture::get(&app, "/v1/affordability").await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(body["error"].as_str().unwrap().contains("groceries limit"));
 
-    send(
+    Fixture::send(
         &app,
         Method::PUT,
         "/v1/budget/envelopes",
         Some(json!([{"category":"groceries","limit_cents":30000}])),
     )
     .await;
-    let (status, a) = get(&app, "/v1/affordability").await;
+    let (status, a) = Fixture::get(&app, "/v1/affordability").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(a["budget_source"], "groceries_envelope");
     assert_eq!(a["budget_cents"], 30000); // nothing spent yet
@@ -254,8 +274,8 @@ const RECEIPT: &str =
 
 #[tokio::test]
 async fn receipts_feed_the_basket() {
-    let app = app().await;
-    let (status, r) = send(
+    let app = Fixture::app().await;
+    let (status, r) = Fixture::send(
         &app,
         Method::POST,
         "/v1/receipts",
@@ -274,7 +294,7 @@ async fn receipts_feed_the_basket() {
     assert_eq!(r["items"].as_array().unwrap().len(), 2);
     let id = r["id"].as_i64().unwrap();
 
-    let (_, again) = send(
+    let (_, again) = Fixture::send(
         &app,
         Method::POST,
         "/v1/receipts",
@@ -283,12 +303,17 @@ async fn receipts_feed_the_basket() {
     .await;
     assert_eq!(again["duplicate"], true);
     assert_eq!(
-        get(&app, "/v1/receipts").await.1.as_array().unwrap().len(),
+        Fixture::get(&app, "/v1/receipts")
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
         1
     );
 
     assert_eq!(
-        send(
+        Fixture::send(
             &app,
             Method::POST,
             "/v1/receipts",
@@ -300,15 +325,18 @@ async fn receipts_feed_the_basket() {
     );
 
     // habit mode decides where the basket comes from
-    assert_eq!(get(&app, "/v1/basket").await.1["source"], "starter");
-    send(
+    assert_eq!(
+        Fixture::get(&app, "/v1/basket").await.1["source"],
+        "starter"
+    );
+    Fixture::send(
         &app,
         Method::PUT,
         "/v1/settings",
         Some(json!({"habit_mode": "receipts"})),
     )
     .await;
-    let (_, basket) = get(&app, "/v1/basket").await;
+    let (_, basket) = Fixture::get(&app, "/v1/basket").await;
     assert_eq!(basket["source"], "receipts");
     let keys: Vec<_> = basket["items"]
         .as_array()
@@ -319,28 +347,31 @@ async fn receipts_feed_the_basket() {
     assert_eq!(keys, vec!["milch", "nudeln"]);
 
     assert_eq!(
-        send(&app, Method::DELETE, &format!("/v1/receipts/{id}"), None)
+        Fixture::send(&app, Method::DELETE, &format!("/v1/receipts/{id}"), None)
             .await
             .0,
         StatusCode::NO_CONTENT
     );
     assert_eq!(
-        send(&app, Method::DELETE, &format!("/v1/receipts/{id}"), None)
+        Fixture::send(&app, Method::DELETE, &format!("/v1/receipts/{id}"), None)
             .await
             .0,
         StatusCode::NOT_FOUND
     );
-    assert_eq!(get(&app, "/v1/basket").await.1["source"], "starter"); // nothing left to learn from
+    assert_eq!(
+        Fixture::get(&app, "/v1/basket").await.1["source"],
+        "starter"
+    ); // nothing left to learn from
 }
 
 #[tokio::test]
 async fn recipes_rank_by_what_you_buy() {
-    let app = app().await;
-    send(&app, Method::POST, "/v1/prices/refresh", None).await;
-    send(&app, Method::PUT, "/v1/basket", Some(json!([
+    let app = Fixture::app().await;
+    Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    Fixture::send(&app, Method::PUT, "/v1/basket", Some(json!([
         {"item":"nudeln","quantity":1},{"item":"tomaten-passiert","quantity":1},{"item":"zwiebeln","quantity":1},{"item":"knoblauch","quantity":1}
     ]))).await;
-    let (status, r) = get(&app, "/v1/recipes?limit=3").await;
+    let (status, r) = Fixture::get(&app, "/v1/recipes?limit=3").await;
     assert_eq!(status, StatusCode::OK);
     let first = &r[0];
     assert_eq!(first["id"], "spaghetti-tomatensosse");
@@ -348,7 +379,7 @@ async fn recipes_rank_by_what_you_buy() {
     assert!(first["ingredients"][0]["name"].as_str().is_some());
     assert_eq!(r.as_array().unwrap().len(), 3);
 
-    let (_, veg) = get(&app, "/v1/recipes?tag=vegan&limit=50").await;
+    let (_, veg) = Fixture::get(&app, "/v1/recipes?tag=vegan&limit=50").await;
     assert!(veg
         .as_array()
         .unwrap()
@@ -362,8 +393,9 @@ const IDEAS: &str = r#"{"recipes":[{"title":"Nudelpfanne","summary":"Schnell","m
 #[tokio::test]
 async fn ideas_need_a_key_and_use_the_selected_provider() {
     // no key
-    let app = app().await;
-    let (status, body) = send(&app, Method::POST, "/v1/recipes/ideas", Some(json!({}))).await;
+    let app = Fixture::app().await;
+    let (status, body) =
+        Fixture::send(&app, Method::POST, "/v1/recipes/ideas", Some(json!({}))).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert!(body["error"]
         .as_str()
@@ -373,7 +405,7 @@ async fn ideas_need_a_key_and_use_the_selected_provider() {
     // key + mock provider; switching to OpenAI asks for the OpenAI key
     let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
     let seen2 = seen.clone();
-    let app = app_with(|s| {
+    let app = Fixture::app_with(|s| {
         s.with_llm_keys(LlmKeys {
             claude: Some("sk-claude".into()),
             openai: None,
@@ -387,7 +419,7 @@ async fn ideas_need_a_key_and_use_the_selected_provider() {
         }))
     })
     .await;
-    let (status, ideas) = send(
+    let (status, ideas) = Fixture::send(
         &app,
         Method::POST,
         "/v1/recipes/ideas",
@@ -398,14 +430,15 @@ async fn ideas_need_a_key_and_use_the_selected_provider() {
     assert_eq!(ideas[0]["title"], "Nudelpfanne");
     assert_eq!(seen.lock().unwrap()[0].0, financer_llm::Provider::Claude);
 
-    send(
+    Fixture::send(
         &app,
         Method::PUT,
         "/v1/settings",
         Some(json!({"llm_provider": "open_ai", "llm_model": "gpt-5.4-mini"})),
     )
     .await;
-    let (status, body) = send(&app, Method::POST, "/v1/recipes/ideas", Some(json!({}))).await;
+    let (status, body) =
+        Fixture::send(&app, Method::POST, "/v1/recipes/ideas", Some(json!({}))).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert!(body["error"]
         .as_str()
@@ -415,7 +448,7 @@ async fn ideas_need_a_key_and_use_the_selected_provider() {
 
 #[tokio::test]
 async fn provider_failures_are_bad_gateway() {
-    let app = app_with(|s| {
+    let app = Fixture::app_with(|s| {
         s.with_llm_keys(LlmKeys {
             claude: Some("k".into()),
             openai: None,
@@ -427,20 +460,20 @@ async fn provider_failures_are_bad_gateway() {
         }))
     })
     .await;
-    let (status, _) = send(&app, Method::POST, "/v1/recipes/ideas", Some(json!({}))).await;
+    let (status, _) = Fixture::send(&app, Method::POST, "/v1/recipes/ideas", Some(json!({}))).await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
 }
 
 #[tokio::test]
 async fn settings_are_validated_and_never_expose_keys() {
-    let app = app_with(|s| {
+    let app = Fixture::app_with(|s| {
         s.with_llm_keys(LlmKeys {
             claude: Some("sk-very-secret".into()),
             openai: None,
         })
     })
     .await;
-    let (status, s) = get(&app, "/v1/settings").await;
+    let (status, s) = Fixture::get(&app, "/v1/settings").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         (s["habit_mode"].clone(), s["llm_provider"].clone()),
@@ -461,11 +494,13 @@ async fn settings_are_validated_and_never_expose_keys() {
         json!({"llm_model": "x\ny"}),
     ] {
         assert_eq!(
-            send(&app, Method::PUT, "/v1/settings", Some(bad)).await.0,
+            Fixture::send(&app, Method::PUT, "/v1/settings", Some(bad))
+                .await
+                .0,
             StatusCode::BAD_REQUEST
         );
     }
-    let (_, s) = send(
+    let (_, s) = Fixture::send(
         &app,
         Method::PUT,
         "/v1/settings",
@@ -480,23 +515,23 @@ async fn settings_are_validated_and_never_expose_keys() {
 
 #[tokio::test]
 async fn catalog_and_best_prices() {
-    let app = app().await;
-    let (_, cat) = get(&app, "/v1/catalog").await;
+    let app = Fixture::app().await;
+    let (_, cat) = Fixture::get(&app, "/v1/catalog").await;
     assert!(cat
         .as_array()
         .unwrap()
         .iter()
         .any(|i| i["key"] == "milch" && i["reference_pack"] == "1 l"));
 
-    send(&app, Method::POST, "/v1/prices/refresh", None).await;
-    send(
+    Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    Fixture::send(
         &app,
         Method::PUT,
         "/v1/basket",
         Some(json!([{"item":"milch","quantity":1}])),
     )
     .await;
-    let (_, best) = get(&app, "/v1/prices/best").await;
+    let (_, best) = Fixture::get(&app, "/v1/prices/best").await;
     assert_eq!(
         (
             best[0]["chain"].clone(),
@@ -509,7 +544,7 @@ async fn catalog_and_best_prices() {
 
 #[tokio::test]
 async fn new_routes_need_the_token() {
-    let app = app().await;
+    let app = Fixture::app().await;
     for uri in [
         "/v1/prices",
         "/v1/basket",
@@ -533,57 +568,65 @@ async fn new_routes_need_the_token() {
 const SCANNED: &str =
     "REWE Markt GmbH\nVOLLMILCH 1,19 B\nSPAGHETTI 500G 0,89 A\nSUMME 2,08\n02.03.26\n";
 
-fn scan_body() -> Value {
-    json!({"image_base64": "QUJDREVGRw==", "mime_type": "image/jpeg"})
-}
+impl Fixture {
+    fn scan_body() -> Value {
+        json!({"image_base64": "QUJDREVGRw==", "mime_type": "image/jpeg"})
+    }
 
-async fn scan_app(
-    answers: Vec<Result<String, String>>,
-) -> (Router, Arc<std::sync::Mutex<Vec<(String, usize)>>>) {
-    let provider = Arc::new(MockProvider::with_answers(answers));
-    let images = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let (p2, i2) = (provider.clone(), images.clone());
-    let app = app_with(move |s| {
-        s.with_llm_keys(LlmKeys {
-            claude: Some("k".into()),
-            openai: None,
+    async fn scan_app(
+        answers: Vec<Result<String, String>>,
+    ) -> (Router, Arc<std::sync::Mutex<Vec<(String, usize)>>>) {
+        let provider = Arc::new(MockProvider::with_answers(answers));
+        let images = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (p2, i2) = (provider.clone(), images.clone());
+        let app = Fixture::app_with(move |s| {
+            s.with_llm_keys(LlmKeys {
+                claude: Some("k".into()),
+                openai: None,
+            })
+            .with_llm_factory(Arc::new(move |_| {
+                struct Shared(
+                    Arc<MockProvider>,
+                    Arc<std::sync::Mutex<Vec<(String, usize)>>>,
+                );
+                #[async_trait::async_trait]
+                impl financer_llm::LlmProvider for Shared {
+                    async fn complete_json(
+                        &self,
+                        s: &str,
+                        u: &str,
+                    ) -> Result<String, financer_llm::LlmError> {
+                        self.0.complete_json(s, u).await
+                    }
+                    async fn describe_image(
+                        &self,
+                        s: &str,
+                        u: &str,
+                        mime: &str,
+                        b64: &str,
+                    ) -> Result<String, financer_llm::LlmError> {
+                        self.1.lock().unwrap().push((mime.to_string(), b64.len()));
+                        self.0.describe_image(s, u, mime, b64).await
+                    }
+                }
+                Ok(Box::new(Shared(p2.clone(), i2.clone())))
+            }))
         })
-        .with_llm_factory(Arc::new(move |_| {
-            struct Shared(
-                Arc<MockProvider>,
-                Arc<std::sync::Mutex<Vec<(String, usize)>>>,
-            );
-            #[async_trait::async_trait]
-            impl financer_llm::LlmProvider for Shared {
-                async fn complete_json(
-                    &self,
-                    s: &str,
-                    u: &str,
-                ) -> Result<String, financer_llm::LlmError> {
-                    self.0.complete_json(s, u).await
-                }
-                async fn describe_image(
-                    &self,
-                    s: &str,
-                    u: &str,
-                    mime: &str,
-                    b64: &str,
-                ) -> Result<String, financer_llm::LlmError> {
-                    self.1.lock().unwrap().push((mime.to_string(), b64.len()));
-                    self.0.describe_image(s, u, mime, b64).await
-                }
-            }
-            Ok(Box::new(Shared(p2.clone(), i2.clone())))
-        }))
-    })
-    .await;
-    (app, images)
+        .await;
+        (app, images)
+    }
 }
 
 #[tokio::test]
 async fn scanning_a_photo_transcribes_parses_and_stores() {
-    let (app, images) = scan_app(vec![Ok(SCANNED.into())]).await;
-    let (status, body) = send(&app, Method::POST, "/v1/receipts/scan", Some(scan_body())).await;
+    let (app, images) = Fixture::scan_app(vec![Ok(SCANNED.into())]).await;
+    let (status, body) = Fixture::send(
+        &app,
+        Method::POST,
+        "/v1/receipts/scan",
+        Some(Fixture::scan_body()),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["text"], SCANNED);
     assert_eq!(
@@ -599,14 +642,19 @@ async fn scanning_a_photo_transcribes_parses_and_stores() {
         &[("image/jpeg".to_string(), 12)]
     );
     assert_eq!(
-        get(&app, "/v1/receipts").await.1.as_array().unwrap().len(),
+        Fixture::get(&app, "/v1/receipts")
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
         1
     );
 }
 
 #[tokio::test]
 async fn scan_rejects_bad_input_before_calling_the_model() {
-    let (app, images) = scan_app(vec![Ok(SCANNED.into())]).await;
+    let (app, images) = Fixture::scan_app(vec![Ok(SCANNED.into())]).await;
     for bad in [
         json!({"image_base64": "QUJD", "mime_type": "application/zip"}),
         json!({"image_base64": "", "mime_type": "image/png"}),
@@ -614,7 +662,7 @@ async fn scan_rejects_bad_input_before_calling_the_model() {
         json!({"image_base64": "A".repeat(11_500_000), "mime_type": "image/png"}),
     ] {
         assert_eq!(
-            send(&app, Method::POST, "/v1/receipts/scan", Some(bad))
+            Fixture::send(&app, Method::POST, "/v1/receipts/scan", Some(bad))
                 .await
                 .0,
             StatusCode::BAD_REQUEST
@@ -628,29 +676,51 @@ async fn scan_rejects_bad_input_before_calling_the_model() {
 
 #[tokio::test]
 async fn scan_handles_non_receipts_and_empty_transcripts() {
-    let (app, _) = scan_app(vec![Ok("NONE".into()), Ok("just some words".into())]).await;
-    let (status, body) = send(&app, Method::POST, "/v1/receipts/scan", Some(scan_body())).await;
+    let (app, _) = Fixture::scan_app(vec![Ok("NONE".into()), Ok("just some words".into())]).await;
+    let (status, body) = Fixture::send(
+        &app,
+        Method::POST,
+        "/v1/receipts/scan",
+        Some(Fixture::scan_body()),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(body["error"]
         .as_str()
         .unwrap()
         .contains("does not look like a receipt"));
-    let (status, body) = send(&app, Method::POST, "/v1/receipts/scan", Some(scan_body())).await;
+    let (status, body) = Fixture::send(
+        &app,
+        Method::POST,
+        "/v1/receipts/scan",
+        Some(Fixture::scan_body()),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(body["error"].as_str().unwrap().contains("no items"));
     assert_eq!(
-        get(&app, "/v1/receipts").await.1.as_array().unwrap().len(),
+        Fixture::get(&app, "/v1/receipts")
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
         0
     );
 }
 
 #[tokio::test]
 async fn scan_needs_a_key_and_a_model_that_can_see() {
-    let app = app_with(|s| s).await;
+    let app = Fixture::app_with(|s| s).await;
     assert_eq!(
-        send(&app, Method::POST, "/v1/receipts/scan", Some(scan_body()))
-            .await
-            .0,
+        Fixture::send(
+            &app,
+            Method::POST,
+            "/v1/receipts/scan",
+            Some(Fixture::scan_body())
+        )
+        .await
+        .0,
         StatusCode::SERVICE_UNAVAILABLE
     );
 
@@ -661,7 +731,7 @@ async fn scan_needs_a_key_and_a_model_that_can_see() {
             Ok("{}".into())
         }
     }
-    let app = app_with(|s| {
+    let app = Fixture::app_with(|s| {
         s.with_llm_keys(LlmKeys {
             claude: Some("k".into()),
             openai: None,
@@ -669,7 +739,13 @@ async fn scan_needs_a_key_and_a_model_that_can_see() {
         .with_llm_factory(Arc::new(|_| Ok(Box::new(Blind))))
     })
     .await;
-    let (status, body) = send(&app, Method::POST, "/v1/receipts/scan", Some(scan_body())).await;
+    let (status, body) = Fixture::send(
+        &app,
+        Method::POST,
+        "/v1/receipts/scan",
+        Some(Fixture::scan_body()),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert!(body["error"]
         .as_str()
@@ -698,7 +774,7 @@ async fn llm_page_sources_fill_prices_when_a_provider_is_configured() {
         urls: vec!["https://kaufland.test/angebote".into()],
         is_offer: true,
     }];
-    let app = app_with(move |s| {
+    let app = Fixture::app_with(move |s| {
         s.with_http(http)
             .with_price_sources(sources)
             .with_llm_keys(LlmKeys {
@@ -712,13 +788,13 @@ async fn llm_page_sources_fill_prices_when_a_provider_is_configured() {
             }))
     })
     .await;
-    let (status, report) = send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         report["stored"], 2,
         "the invented 3,33 price is not on the page and must be dropped"
     );
-    let (_, milk) = get(&app, "/v1/prices?item=milch").await;
+    let (_, milk) = Fixture::get(&app, "/v1/prices?item=milch").await;
     assert_eq!(
         (
             milk[0]["chain"].clone(),
@@ -741,8 +817,8 @@ async fn llm_page_sources_without_a_key_report_why() {
         urls: vec!["https://kaufland.test/angebote".into()],
         is_offer: true,
     }];
-    let app = app_with(move |s| s.with_http(http).with_price_sources(sources)).await;
-    let (status, report) = send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let app = Fixture::app_with(move |s| s.with_http(http).with_price_sources(sources)).await;
+    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(report["stored"], 0);
     assert!(report["sources"][0]["error"]
@@ -753,8 +829,8 @@ async fn llm_page_sources_without_a_key_report_why() {
 
 #[tokio::test]
 async fn digital_receipts_as_pdf_are_read_like_photos() {
-    let (app, images) = scan_app(vec![Ok(SCANNED.into())]).await;
-    let (status, body) = send(
+    let (app, images) = Fixture::scan_app(vec![Ok(SCANNED.into())]).await;
+    let (status, body) = Fixture::send(
         &app,
         Method::POST,
         "/v1/receipts/scan",

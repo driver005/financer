@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use financer_core::{by_key, Money, PriceQuote};
+use financer_core::{Catalog, Money, PriceQuote};
 use serde::Serialize;
 
 use crate::Recipe;
@@ -35,120 +35,129 @@ pub struct RecipeMatch {
     pub coverage_percent: u32,
 }
 
-fn is_pantry(key: &str) -> bool {
-    by_key(key).is_some_and(|i| i.pantry)
-}
+/// Ranks recipes against what the user buys, what is on offer and what the rest costs.
+pub struct RecipeMatcher;
 
-fn cheapest(quotes: &[PriceQuote], item: &str) -> Option<Money> {
-    quotes
-        .iter()
-        .filter(|q| q.item == item)
-        .map(|q| q.price)
-        .min()
-}
+impl RecipeMatcher {
+    fn is_pantry(key: &str) -> bool {
+        Catalog::by_key(key).is_some_and(|i| i.pantry)
+    }
 
-pub fn rank_recipes(recipes: &[Recipe], input: &MatchInput<'_>) -> Vec<RecipeMatch> {
-    let mut out: Vec<RecipeMatch> = recipes
-        .iter()
-        .filter(|r| input.tag.is_none_or(|t| r.tags.iter().any(|x| x == t)))
-        .filter_map(|r| {
-            let needed: Vec<&str> = r
-                .ingredients
-                .iter()
-                .map(|i| i.item.as_str())
-                .filter(|k| !is_pantry(k))
-                .collect();
-            if needed.is_empty() {
-                return None;
-            }
-            let (have, missing): (Vec<&str>, Vec<&str>) = needed
-                .iter()
-                .copied()
-                .partition(|k| input.usual.contains(*k));
+    fn cheapest(quotes: &[PriceQuote], item: &str) -> Option<Money> {
+        quotes
+            .iter()
+            .filter(|q| q.item == item)
+            .map(|q| q.price)
+            .min()
+    }
 
-            let mut missing_cost = Money::ZERO;
-            let mut unpriced = Vec::new();
-            for k in &missing {
-                match cheapest(input.quotes, k) {
-                    Some(p) => missing_cost += p,
-                    None => unpriced.push(k.to_string()),
-                }
-            }
-            if input.budget.is_some_and(|b| missing_cost > b) {
-                return None;
-            }
-            Some(RecipeMatch {
-                recipe: r.clone(),
-                coverage_percent: (have.len() * 100 / needed.len()) as u32,
-                on_offer: missing
+    pub fn rank_recipes(recipes: &[Recipe], input: &MatchInput<'_>) -> Vec<RecipeMatch> {
+        let mut out: Vec<RecipeMatch> = recipes
+            .iter()
+            .filter(|r| input.tag.is_none_or(|t| r.tags.iter().any(|x| x == t)))
+            .filter_map(|r| {
+                let needed: Vec<&str> = r
+                    .ingredients
                     .iter()
-                    .filter(|k| input.on_offer.contains(**k))
-                    .map(|k| k.to_string())
-                    .collect(),
-                have: have.iter().map(|k| k.to_string()).collect(),
-                missing: missing.iter().map(|k| k.to_string()).collect(),
-                missing_cost,
-                unpriced,
-            })
-        })
-        .collect();
+                    .map(|i| i.item.as_str())
+                    .filter(|k| !Self::is_pantry(k))
+                    .collect();
+                if needed.is_empty() {
+                    return None;
+                }
+                let (have, missing): (Vec<&str>, Vec<&str>) = needed
+                    .iter()
+                    .copied()
+                    .partition(|k| input.usual.contains(*k));
 
-    out.sort_by(|a, b| {
-        b.coverage_percent
-            .cmp(&a.coverage_percent)
-            .then(b.on_offer.len().cmp(&a.on_offer.len()))
-            .then(a.missing_cost.cmp(&b.missing_cost))
-            .then(a.recipe.minutes.cmp(&b.recipe.minutes))
-            .then(a.recipe.id.cmp(&b.recipe.id))
-    });
-    out
+                let mut missing_cost = Money::ZERO;
+                let mut unpriced = Vec::new();
+                for k in &missing {
+                    match Self::cheapest(input.quotes, k) {
+                        Some(p) => missing_cost += p,
+                        None => unpriced.push(k.to_string()),
+                    }
+                }
+                if input.budget.is_some_and(|b| missing_cost > b) {
+                    return None;
+                }
+                Some(RecipeMatch {
+                    recipe: r.clone(),
+                    coverage_percent: (have.len() * 100 / needed.len()) as u32,
+                    on_offer: missing
+                        .iter()
+                        .filter(|k| input.on_offer.contains(**k))
+                        .map(|k| k.to_string())
+                        .collect(),
+                    have: have.iter().map(|k| k.to_string()).collect(),
+                    missing: missing.iter().map(|k| k.to_string()).collect(),
+                    missing_cost,
+                    unpriced,
+                })
+            })
+            .collect();
+
+        out.sort_by(|a, b| {
+            b.coverage_percent
+                .cmp(&a.coverage_percent)
+                .then(b.on_offer.len().cmp(&a.on_offer.len()))
+                .then(a.missing_cost.cmp(&b.missing_cost))
+                .then(a.recipe.minutes.cmp(&b.recipe.minutes))
+                .then(a.recipe.id.cmp(&b.recipe.id))
+        });
+        out
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{bundled, Ingredient};
+    use crate::Ingredient;
     use financer_core::Chain;
 
-    fn set(items: &[&str]) -> HashSet<String> {
-        items.iter().map(|s| s.to_string()).collect()
-    }
+    struct Fixtures;
 
-    fn quote(item: &str, cents: i64) -> PriceQuote {
-        PriceQuote {
-            item: item.into(),
-            chain: Chain::Aldi,
-            price: Money::from_cents(cents),
-            valid_until: None,
-            is_offer: false,
+    impl Fixtures {
+        fn set(items: &[&str]) -> HashSet<String> {
+            items.iter().map(|s| s.to_string()).collect()
         }
-    }
 
-    fn recipe(id: &str, items: &[&str], minutes: u32) -> Recipe {
-        Recipe {
-            id: id.into(),
-            title: id.into(),
-            minutes,
-            servings: 2,
-            tags: vec!["vegetarisch".into()],
-            ingredients: items
-                .iter()
-                .map(|i| Ingredient {
-                    item: i.to_string(),
-                    amount: "1".into(),
-                })
-                .collect(),
-            steps: vec!["kochen".into()],
+        fn quote(item: &str, cents: i64) -> PriceQuote {
+            PriceQuote {
+                item: item.into(),
+                chain: Chain::Aldi,
+                price: Money::from_cents(cents),
+                valid_until: None,
+                is_offer: false,
+            }
+        }
+
+        fn recipe(id: &str, items: &[&str], minutes: u32) -> Recipe {
+            Recipe {
+                id: id.into(),
+                title: id.into(),
+                minutes,
+                servings: 2,
+                tags: vec!["vegetarisch".into()],
+                ingredients: items
+                    .iter()
+                    .map(|i| Ingredient {
+                        item: i.to_string(),
+                        amount: "1".into(),
+                    })
+                    .collect(),
+                steps: vec!["kochen".into()],
+            }
         }
     }
 
     #[test]
     fn ranks_by_coverage_and_ignores_pantry_items() {
         let recipes = vec![
-            recipe("a", &["nudeln", "tomaten-passiert", "salz", "oel"], 20),
-            recipe("b", &["reis", "paprika", "mais", "salz"], 20),
+            Fixtures::recipe("a", &["nudeln", "tomaten-passiert", "salz", "oel"], 20),
+            Fixtures::recipe("b", &["reis", "paprika", "mais", "salz"], 20),
         ];
-        let usual = set(&["nudeln", "tomaten-passiert"]);
+        let usual = Fixtures::set(&["nudeln", "tomaten-passiert"]);
         let none = HashSet::new();
         let input = MatchInput {
             usual: &usual,
@@ -157,7 +166,7 @@ mod tests {
             budget: None,
             tag: None,
         };
-        let ranked = rank_recipes(&recipes, &input);
+        let ranked = RecipeMatcher::rank_recipes(&recipes, &input);
         assert_eq!(ranked[0].recipe.id, "a");
         assert_eq!(ranked[0].coverage_percent, 100); // salz and oel are pantry, not "missing"
         assert!(ranked[0].missing.is_empty());
@@ -167,13 +176,13 @@ mod tests {
 
     #[test]
     fn prices_missing_items_and_reports_unpriced_ones() {
-        let recipes = vec![recipe("b", &["reis", "paprika", "mais"], 20)];
-        let usual = set(&["reis"]);
+        let recipes = vec![Fixtures::recipe("b", &["reis", "paprika", "mais"], 20)];
+        let usual = Fixtures::set(&["reis"]);
         let none = HashSet::new();
         let quotes = vec![
-            quote("paprika", 199),
-            quote("paprika", 149),
-            quote("reis", 99),
+            Fixtures::quote("paprika", 199),
+            Fixtures::quote("paprika", 149),
+            Fixtures::quote("reis", 99),
         ];
         let input = MatchInput {
             usual: &usual,
@@ -182,18 +191,18 @@ mod tests {
             budget: None,
             tag: None,
         };
-        let r = &rank_recipes(&recipes, &input)[0];
+        let r = &RecipeMatcher::rank_recipes(&recipes, &input)[0];
         assert_eq!(r.missing_cost, Money::from_cents(149)); // cheapest paprika
         assert_eq!(r.unpriced, vec!["mais"]);
     }
 
     #[test]
     fn budget_and_tag_filter() {
-        let mut vegan = recipe("v", &["linsen"], 30);
+        let mut vegan = Fixtures::recipe("v", &["linsen"], 30);
         vegan.tags = vec!["vegan".into()];
-        let recipes = vec![recipe("a", &["tofu"], 10), vegan];
+        let recipes = vec![Fixtures::recipe("a", &["tofu"], 10), vegan];
         let none = HashSet::new();
-        let quotes = vec![quote("tofu", 250), quote("linsen", 150)];
+        let quotes = vec![Fixtures::quote("tofu", 250), Fixtures::quote("linsen", 150)];
 
         let input = MatchInput {
             usual: &none,
@@ -202,7 +211,7 @@ mod tests {
             budget: Some(Money::from_cents(200)),
             tag: None,
         };
-        let ids: Vec<_> = rank_recipes(&recipes, &input)
+        let ids: Vec<_> = RecipeMatcher::rank_recipes(&recipes, &input)
             .iter()
             .map(|r| r.recipe.id.clone())
             .collect();
@@ -215,14 +224,17 @@ mod tests {
             budget: None,
             tag: Some("vegan"),
         };
-        assert_eq!(rank_recipes(&recipes, &input).len(), 1);
+        assert_eq!(RecipeMatcher::rank_recipes(&recipes, &input).len(), 1);
     }
 
     #[test]
     fn offers_break_ties() {
-        let recipes = vec![recipe("a", &["tofu"], 10), recipe("b", &["lachs"], 10)];
+        let recipes = vec![
+            Fixtures::recipe("a", &["tofu"], 10),
+            Fixtures::recipe("b", &["lachs"], 10),
+        ];
         let none = HashSet::new();
-        let offer = set(&["lachs"]);
+        let offer = Fixtures::set(&["lachs"]);
         let input = MatchInput {
             usual: &none,
             on_offer: &offer,
@@ -230,12 +242,15 @@ mod tests {
             budget: None,
             tag: None,
         };
-        assert_eq!(rank_recipes(&recipes, &input)[0].recipe.id, "b");
+        assert_eq!(
+            RecipeMatcher::rank_recipes(&recipes, &input)[0].recipe.id,
+            "b"
+        );
     }
 
     #[test]
     fn works_on_the_bundled_dataset() {
-        let usual = set(&["nudeln", "tomaten-passiert", "zwiebeln", "knoblauch"]);
+        let usual = Fixtures::set(&["nudeln", "tomaten-passiert", "zwiebeln", "knoblauch"]);
         let none = HashSet::new();
         let input = MatchInput {
             usual: &usual,
@@ -244,7 +259,7 @@ mod tests {
             budget: None,
             tag: None,
         };
-        let ranked = rank_recipes(bundled(), &input);
+        let ranked = RecipeMatcher::rank_recipes(Recipe::bundled(), &input);
         assert_eq!(ranked[0].recipe.id, "spaghetti-tomatensosse");
         assert_eq!(ranked[0].coverage_percent, 100);
     }
