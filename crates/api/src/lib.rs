@@ -6,6 +6,7 @@ mod dto;
 mod export;
 mod grocery;
 mod routes;
+mod watchdog;
 
 use std::sync::Arc;
 
@@ -157,6 +158,9 @@ impl AppState {
         grocery::recipe_ideas,
         grocery::get_settings,
         grocery::put_settings,
+        watchdog::subscriptions,
+        watchdog::alerts,
+        watchdog::dismiss_alert,
     ),
     components(schemas(
         dto::TransactionDto,
@@ -201,6 +205,15 @@ impl AppState {
         dto::IdeaIngredientDto,
         dto::SettingsDto,
         dto::SettingsUpdate,
+        watchdog::SubscriptionDto,
+        watchdog::UpcomingChargeDto,
+        watchdog::PriceHikeDto,
+        watchdog::DuplicateSubscriptionDto,
+        watchdog::StaleSubscriptionDto,
+        watchdog::SubscriptionsDto,
+        watchdog::AlertDto,
+        watchdog::AlertsDto,
+        watchdog::AlertDismissedDto,
     )),
     modifiers(&BearerAuth)
 )]
@@ -261,6 +274,9 @@ impl Api {
                 "/settings",
                 get(grocery::get_settings).put(grocery::put_settings),
             )
+            .route("/subscriptions", get(watchdog::subscriptions))
+            .route("/alerts", get(watchdog::alerts))
+            .route("/alerts/{id}/dismiss", post(watchdog::dismiss_alert))
             // An unknown API path is an API error, never a web page (see `Api::with_web_app`).
             .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
             .layer(middleware::from_fn_with_state(

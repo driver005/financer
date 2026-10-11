@@ -8,6 +8,7 @@ mod m20261011_000003_create_price_quotes;
 mod m20261011_000004_create_usual_items;
 mod m20261011_000005_create_receipts;
 mod m20261011_000006_create_settings;
+mod m20261012_000300_create_alert_dismissals;
 
 pub struct Migrator;
 
@@ -21,6 +22,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261011_000004_create_usual_items::Migration),
             Box::new(m20261011_000005_create_receipts::Migration),
             Box::new(m20261011_000006_create_settings::Migration),
+            Box::new(m20261012_000300_create_alert_dismissals::Migration),
         ]
     }
 }

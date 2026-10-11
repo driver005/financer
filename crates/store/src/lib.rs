@@ -1,6 +1,7 @@
 //! Persistence for Financer. One entity and migration set serves both SQLite (embedded
 //! on the phone, or a single-file server) and PostgreSQL; the backend is chosen by URL.
 
+mod alerts;
 pub mod entity;
 pub mod migration;
 
@@ -12,6 +13,7 @@ use sea_orm::{
 };
 use sea_orm_migration::MigratorTrait;
 
+pub use alerts::AlertDismissal;
 pub use sea_orm::DatabaseBackend;
 
 use entity::{
