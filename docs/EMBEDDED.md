@@ -11,11 +11,13 @@ reach it, and your data stays in the app's private storage (SQLite).
 | `crates/embedded` (start, in-process request handling, persistence, malformed input) | built and tested on the host (6 tests) |
 | UniFFI interface (`Backend.start`, `handle`, `refreshPrices`) | Kotlin and Swift bindings generate from the built library (checked in CI) |
 | App transport (`EmbeddedTransport`), settings, mode switch, backup export/import | tested in Node and in the browser build (the mode reports "not available in this build") |
-| Cross-compiling to Android/iOS, the native module, running on a device | **not done**: needs the Android NDK or Xcode. The development environment could not download the NDK (its host is blocked there) and has no macOS |
+| Cross-compiling `crates/embedded` | **Android: passes** on a GitHub runner with a real NDK (arm64 phones and the x86_64 emulator), see `.github/workflows/native.yml`. iOS: first attempt failed at link time (an iOS-version mismatch in the TLS libraries); the deployment target is now pinned and a retry is being checked (see the workflow's latest run). Only the Rust library is built, not the app |
+| The UniFFI React Native module, an app build that includes the library, running on a device | **not done**: needs a custom app build and a device |
 | Background price refresh (`expo-background-task`, registered when the on-phone backend starts; also refreshes on app open) | written, typechecks and bundles; **never run on a device** |
 
-So the Rust half and the app half are in place and tested; the native build in the middle is
-the part you will have to run and debug on your machine.
+So the Rust half and the app half are in place and tested, and the Rust library cross-compiles
+for Android. What is left is wiring the library into the app build and running it on a device,
+which you will have to do and debug on your machine.
 
 ## Limits you cannot code around
 
