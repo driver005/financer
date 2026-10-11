@@ -660,6 +660,7 @@ async fn build_llm(state: &AppState) -> Result<Box<dyn financer_llm::LlmProvider
         provider,
         model,
         api_key,
+        base_url: None,
     })
     .map_err(|e| ApiError::Unavailable(e.to_string()))
 }

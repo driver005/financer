@@ -7,8 +7,8 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use genai::adapter::AdapterKind;
 use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ChatResponseFormat, ContentPart};
-use genai::resolver::{AuthData, AuthResolver};
-use genai::{Client, ModelIden};
+use genai::resolver::{AuthData, AuthResolver, Endpoint, ServiceTargetResolver};
+use genai::{Client, ModelIden, ServiceTarget};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +43,10 @@ pub struct LlmSettings {
     #[serde(default)]
     pub model: String,
     pub api_key: String,
+    /// Use another API endpoint, e.g. a gateway or an OpenAI-compatible server
+    /// (`https://host/v1/`). Empty or absent means the provider's own.
+    #[serde(default)]
+    pub base_url: Option<String>,
 }
 
 // Never print the key, even in `{:?}` logs.
@@ -52,6 +56,7 @@ impl fmt::Debug for LlmSettings {
             .field("provider", &self.provider)
             .field("model", &self.model)
             .field("api_key", &"<redacted>")
+            .field("base_url", &self.base_url)
             .finish()
     }
 }
@@ -97,15 +102,38 @@ impl GenaiProvider {
         if key.is_empty() {
             return Err(LlmError::MissingKey(settings.provider));
         }
+        let auth_key = key.clone();
         let auth = AuthResolver::from_resolver_fn(
             move |_: ModelIden| -> Result<Option<AuthData>, genai::resolver::Error> {
-                Ok(Some(AuthData::from_single(key.clone())))
+                Ok(Some(AuthData::from_single(auth_key.clone())))
             },
         );
-        let client = Client::builder()
+        let mut builder = Client::builder()
             .with_adapter_kind(settings.provider.adapter())
-            .with_auth_resolver(auth)
-            .build();
+            .with_auth_resolver(auth);
+        if let Some(url) = settings
+            .base_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+        {
+            // The endpoint must end in '/' because genai appends the path to it.
+            let mut url = url.to_string();
+            if !url.ends_with('/') {
+                url.push('/');
+            }
+            let target = ServiceTargetResolver::from_resolver_fn(
+                move |t: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
+                    Ok(ServiceTarget {
+                        endpoint: Endpoint::from_owned(url.clone()),
+                        auth: AuthData::from_single(key.clone()),
+                        model: t.model,
+                    })
+                },
+            );
+            builder = builder.with_service_target_resolver(target);
+        }
+        let client = builder.build();
         let model = match settings.model.trim() {
             "" => settings.provider.default_model().to_string(),
             m => m.to_string(),
@@ -216,6 +244,7 @@ mod tests {
             provider: Provider::Claude,
             model: String::new(),
             api_key: "sk-secret-123".into(),
+            base_url: None,
         };
         let shown = format!("{s:?}");
         assert!(!shown.contains("sk-secret-123"));
@@ -228,6 +257,7 @@ mod tests {
             provider: Provider::OpenAi,
             model: String::new(),
             api_key: "  ".into(),
+            base_url: None,
         };
         assert!(matches!(
             GenaiProvider::new(&s),

@@ -165,6 +165,7 @@ async fn probe() -> Result<(), String> {
             provider,
             model: String::new(),
             api_key: key?,
+            base_url: None,
         };
         financer_llm::provider_for(&settings).ok().map(Arc::from)
     });
