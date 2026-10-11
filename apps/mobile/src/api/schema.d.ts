@@ -40,6 +40,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/bank/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["bank_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/bank/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Log in to the bank and ask for approval. Approve in your Sparkasse app, then call confirm. */
+        post: operations["start_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/bank/sync/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check whether you approved in the banking app; if so, import. Answers 409 while still
+         *     waiting: keep calling every few seconds.
+         */
+        post: operations["confirm_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/basket": {
         parameters: {
             query?: never;
@@ -340,6 +393,24 @@ export interface components {
             /** @description Cheapest items that fit the budget (at most 20). */
             staples: components["schemas"]["StapleDto"][];
         };
+        BankStatus: {
+            /** Format: int64 */
+            balance_cents?: number | null;
+            /** Format: date */
+            balance_date?: string | null;
+            bic?: string | null;
+            /** @description Non-secret details of the last sync, to prefill the form. */
+            blz?: string | null;
+            /** @description False until the server has a FinTS product id. */
+            configured: boolean;
+            iban?: string | null;
+            /**
+             * Format: int64
+             * @description Unix seconds of the last successful sync.
+             */
+            last_sync_at?: number | null;
+            user_id?: string | null;
+        };
         BasketDto: {
             items: components["schemas"]["BasketItemOutDto"][];
             /** @description `manual`, `receipts` or `starter` (a generic basket used until habits are known). */
@@ -608,6 +679,39 @@ export interface components {
             /** Format: int64 */
             price_cents: number;
         };
+        SyncDone: {
+            /** Format: int64 */
+            balance_cents?: number | null;
+            /** Format: date */
+            balance_date?: string | null;
+            duplicates: number;
+            imported: number;
+            /** @description Transactions left out (pending, or not in EUR). */
+            skipped: number;
+        };
+        SyncRequest: {
+            /** @description Leave empty to use the bank's own BIC. */
+            bic?: string | null;
+            /** @description Bank code (BLZ). */
+            blz: string;
+            /**
+             * Format: int32
+             * @description Days of history to fetch (default 90, 1 to 365).
+             */
+            days?: number | null;
+            iban: string;
+            /** @description Online banking PIN. Held in memory until you approve, never stored or logged. */
+            pin: string;
+            /** @description Online banking login name. */
+            user_id: string;
+        };
+        SyncStarted: {
+            /** @description Text from the bank, e.g. "Bitte bestätigen Sie die Anfrage in Ihrer S-pushTAN-App". */
+            challenge: string;
+            /** @description True if the bank needs no approval; confirm right away. */
+            no_tan_required: boolean;
+            sync_id: string;
+        };
         TransactionDto: {
             /**
              * Format: int64
@@ -681,6 +785,133 @@ export interface operations {
             };
             /** @description No budget given and no groceries limit set */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    bank_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankStatus"];
+                };
+            };
+        };
+    };
+    start_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncStarted"];
+                };
+            };
+            /** @description Rejected by the bank, or a TAN method that is not supported */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Could not reach the bank */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No FinTS product id configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    confirm_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sync_id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncDone"];
+                };
+            };
+            /** @description Rejected by the bank */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown or expired sync */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not approved yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Could not reach the bank */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

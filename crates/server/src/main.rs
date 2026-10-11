@@ -6,6 +6,7 @@
 //! - `FINANCER_BIND`               listen address (default `127.0.0.1:8080`; put HTTPS in front)
 //! - `FINANCER_PRICE_SOURCES`      path to a JSON file listing price sources (see docs/PRICES.md)
 //! - `FINANCER_REFRESH_HOURS`      hours between automatic price refreshes (default 24, 0 = off)
+//! - `FINANCER_FINTS_PRODUCT_ID`   FinTS product id from the Deutsche Kreditwirtschaft; enables live Sparkasse sync
 //! - `FINANCER_ANTHROPIC_API_KEY`  enables recipe ideas with Claude
 //! - `FINANCER_OPENAI_API_KEY`     enables recipe ideas with OpenAI
 //!
@@ -95,13 +96,18 @@ async fn run() -> Result<(), String> {
         .map_err(|e| format!("cannot open database: {e}"))?;
     tracing::info!(backend = ?store.backend(), price_sources = sources.len(), "database ready");
 
-    let state = AppState::new(store)
+    let mut state = AppState::new(store)
         .with_http(polite_http()?)
         .with_price_sources(sources.clone())
         .with_llm_keys(LlmKeys {
             claude: env_key("FINANCER_ANTHROPIC_API_KEY"),
             openai: env_key("FINANCER_OPENAI_API_KEY"),
         });
+
+    if let Some(product_id) = env_key("FINANCER_FINTS_PRODUCT_ID") {
+        state = state.with_bank(Arc::new(financer_fints::FintsBank::new(&product_id)));
+        tracing::info!("live bank sync enabled (FinTS)");
+    }
 
     if refresh_hours > 0 && !sources.is_empty() {
         let state = state.clone();

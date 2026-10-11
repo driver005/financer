@@ -38,6 +38,7 @@ export default function RootLayout() {
           {/* reachable from Settings, not shown in the tab bar */}
           <Tabs.Screen name="basket" options={{ href: null, title: "Usual items" }} />
           <Tabs.Screen name="receipts" options={{ href: null, title: "Receipts" }} />
+          <Tabs.Screen name="sync" options={{ href: null, title: "Sync with Sparkasse" }} />
         </Tabs>
       </ApiProvider>
     </PaperProvider>

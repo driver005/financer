@@ -95,6 +95,174 @@
         ]
       }
     },
+    "/v1/bank/status": {
+      "get": {
+        "tags": [
+          "bank"
+        ],
+        "operationId": "bank_status",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/sync": {
+      "post": {
+        "tags": [
+          "bank"
+        ],
+        "summary": "Log in to the bank and ask for approval. Approve in your Sparkasse app, then call confirm.",
+        "operationId": "start_sync",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncStarted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected by the bank, or a TAN method that is not supported",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Could not reach the bank",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No FinTS product id configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/sync/{id}/confirm": {
+      "post": {
+        "tags": [
+          "bank"
+        ],
+        "summary": "Check whether you approved in the banking app; if so, import. Answers 409 while still\nwaiting: keep calling every few seconds.",
+        "operationId": "confirm_sync",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "sync_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncDone"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected by the bank",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown or expired sync",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not approved yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Could not reach the bank",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/basket": {
       "get": {
         "tags": [
@@ -928,6 +1096,65 @@
               "$ref": "#/components/schemas/StapleDto"
             },
             "description": "Cheapest items that fit the budget (at most 20)."
+          }
+        }
+      },
+      "BankStatus": {
+        "type": "object",
+        "required": [
+          "configured"
+        ],
+        "properties": {
+          "balance_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "balance_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "bic": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "blz": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Non-secret details of the last sync, to prefill the form."
+          },
+          "configured": {
+            "type": "boolean",
+            "description": "False until the server has a FinTS product id."
+          },
+          "iban": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_sync_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds of the last successful sync."
+          },
+          "user_id": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -1787,6 +2014,106 @@
           "price_cents": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "SyncDone": {
+        "type": "object",
+        "required": [
+          "imported",
+          "duplicates",
+          "skipped"
+        ],
+        "properties": {
+          "balance_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "balance_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "duplicates": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "imported": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "description": "Transactions left out (pending, or not in EUR).",
+            "minimum": 0
+          }
+        }
+      },
+      "SyncRequest": {
+        "type": "object",
+        "required": [
+          "blz",
+          "user_id",
+          "pin",
+          "iban"
+        ],
+        "properties": {
+          "bic": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Leave empty to use the bank's own BIC."
+          },
+          "blz": {
+            "type": "string",
+            "description": "Bank code (BLZ)."
+          },
+          "days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Days of history to fetch (default 90, 1 to 365).",
+            "minimum": 0
+          },
+          "iban": {
+            "type": "string"
+          },
+          "pin": {
+            "type": "string",
+            "description": "Online banking PIN. Held in memory until you approve, never stored or logged."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Online banking login name."
+          }
+        }
+      },
+      "SyncStarted": {
+        "type": "object",
+        "required": [
+          "sync_id",
+          "challenge",
+          "no_tan_required"
+        ],
+        "properties": {
+          "challenge": {
+            "type": "string",
+            "description": "Text from the bank, e.g. \"Bitte bestätigen Sie die Anfrage in Ihrer S-pushTAN-App\"."
+          },
+          "no_tan_required": {
+            "type": "boolean",
+            "description": "True if the bank needs no approval; confirm right away."
+          },
+          "sync_id": {
+            "type": "string"
           }
         }
       },

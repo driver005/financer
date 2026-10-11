@@ -2,7 +2,7 @@ import { File } from "expo-file-system";
 import * as DocumentPicker from "expo-document-picker";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, Text, View } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { Link, useFocusEffect } from "expo-router";
 
 import type { Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -65,7 +65,11 @@ export default function Transactions() {
         <NeedsSetup />
       ) : (
         <>
-          <Button label="Import Sparkasse CSV" onPress={importCsv} disabled={busy} />
+          <Link href="/sync" asChild>
+            <Button label="Sync with Sparkasse" icon="bank-transfer" onPress={() => {}} />
+          </Link>
+          <View style={{ height: 8 }} />
+          <Button label="Import Sparkasse CSV" icon="file-delimited-outline" mode="outlined" onPress={importCsv} disabled={busy} />
           {message ? <Text style={{ color: c.muted, marginVertical: 8 }}>{message}</Text> : null}
           <FlatList
             style={{ marginTop: 8 }}

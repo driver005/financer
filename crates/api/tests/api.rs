@@ -243,6 +243,9 @@ fn openapi_document_lists_every_route() {
     let paths = doc["paths"].as_object().unwrap();
     for p in [
         "/health",
+        "/v1/bank/sync",
+        "/v1/bank/sync/{id}/confirm",
+        "/v1/bank/status",
         "/v1/prices",
         "/v1/prices/best",
         "/v1/prices/refresh",

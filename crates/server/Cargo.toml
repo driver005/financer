@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 financer-api = { path = "../api" }
+financer-fints = { path = "../fints" }
 financer-prices = { path = "../prices" }
 financer-store = { path = "../store" }
 serde_json.workspace = true

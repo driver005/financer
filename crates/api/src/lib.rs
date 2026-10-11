@@ -1,6 +1,7 @@
 //! REST API shared by the hosted server and the embedded on-phone backend.
 
 mod auth;
+mod bank;
 mod dto;
 mod grocery;
 mod routes;
@@ -12,6 +13,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::middleware;
 use axum::routing::{delete, get, post};
 use axum::Router;
+use financer_fints::{BankClient, UnconfiguredBank};
 use financer_llm::{provider_for, LlmError, LlmProvider, LlmSettings};
 use financer_prices::{Http, HttpResponse, PriceError, SourceConfig};
 use financer_store::Store;
@@ -19,6 +21,7 @@ use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 
 pub use auth::TokenHash;
+pub use financer_fints::{BankClient as BankClientTrait, BankData, BankError, MockBank};
 pub use financer_llm::MockProvider;
 pub use financer_prices::{FakeHttp, SourceConfig as PriceSourceConfig};
 
@@ -50,6 +53,10 @@ impl Http for NoNetwork {
 #[derive(Clone)]
 pub struct AppState {
     pub store: Store,
+    pub(crate) bank: Arc<dyn BankClient>,
+    pub(crate) bank_configured: bool,
+    pub(crate) pending_sync: Arc<tokio::sync::Mutex<Option<bank::PendingEntry>>>,
+    pub(crate) sync_ttl: std::time::Duration,
     pub(crate) http: Arc<dyn Http>,
     pub(crate) price_sources: Arc<Vec<SourceConfig>>,
     pub(crate) llm_keys: LlmKeys,
@@ -60,11 +67,28 @@ impl AppState {
     pub fn new(store: Store) -> Self {
         Self {
             store,
+            bank: Arc::new(UnconfiguredBank),
+            bank_configured: false,
+            pending_sync: Arc::new(tokio::sync::Mutex::new(None)),
+            sync_ttl: bank::DEFAULT_SYNC_TTL,
             http: Arc::new(NoNetwork),
             price_sources: Arc::new(Vec::new()),
             llm_keys: LlmKeys::default(),
             llm: Arc::new(provider_for),
         }
+    }
+
+    /// The bank client used for live sync (the server passes the real FinTS client).
+    pub fn with_bank(mut self, bank: Arc<dyn BankClient>) -> Self {
+        self.bank = bank;
+        self.bank_configured = true;
+        self
+    }
+
+    /// How long a started sync may wait for approval.
+    pub fn with_sync_ttl(mut self, ttl: std::time::Duration) -> Self {
+        self.sync_ttl = ttl;
+        self
     }
 
     /// HTTP client used for price refreshes (the server passes a polite, robots-aware one).
@@ -102,6 +126,9 @@ impl AppState {
         routes::get_envelopes,
         routes::put_envelopes,
         routes::budget_status,
+        bank::start_sync,
+        bank::confirm_sync,
+        bank::bank_status,
         grocery::refresh_prices,
         grocery::list_prices,
         grocery::best_prices,
@@ -126,6 +153,10 @@ impl AppState {
         dto::EnvelopeStatusDto,
         dto::DisposableDto,
         dto::ErrorBody,
+        dto::SyncRequest,
+        dto::SyncStarted,
+        dto::SyncDone,
+        dto::BankStatus,
         dto::PriceDto,
         dto::SourceStatusDto,
         dto::RefreshReportDto,
@@ -179,6 +210,9 @@ pub fn router(state: AppState, token: TokenHash) -> Router {
             get(routes::get_envelopes).put(routes::put_envelopes),
         )
         .route("/budget/status", get(routes::budget_status))
+        .route("/bank/sync", post(bank::start_sync))
+        .route("/bank/sync/{id}/confirm", post(bank::confirm_sync))
+        .route("/bank/status", get(bank::bank_status))
         .route("/prices", get(grocery::list_prices))
         .route("/prices/best", get(grocery::best_prices))
         .route("/prices/refresh", post(grocery::refresh_prices))

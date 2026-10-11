@@ -15,6 +15,8 @@ use crate::AppState;
 pub enum ApiError {
     BadRequest(String),
     NotFound,
+    /// The request is fine but cannot be completed yet (e.g. TAN not approved).
+    Conflict(String),
     /// A feature that is not set up (no price sources, no LLM key).
     Unavailable(String),
     /// An upstream service failed.
@@ -34,6 +36,7 @@ impl IntoResponse for ApiError {
         let (status, msg) = match self {
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
             ApiError::NotFound => (StatusCode::NOT_FOUND, "not found".to_string()),
+            ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
             ApiError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m),
             ApiError::BadGateway(m) => (StatusCode::BAD_GATEWAY, m),
             ApiError::Internal => (

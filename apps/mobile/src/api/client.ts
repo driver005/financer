@@ -18,6 +18,10 @@ export type RecipeMatch = components["schemas"]["RecipeMatchDto"];
 export type Idea = components["schemas"]["IdeaDto"];
 export type Settings = components["schemas"]["SettingsDto"];
 export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
+export type BankStatus = components["schemas"]["BankStatus"];
+export type SyncStarted = components["schemas"]["SyncStarted"];
+export type SyncDone = components["schemas"]["SyncDone"];
+export type SyncRequest = components["schemas"]["SyncRequest"];
 export type Chain = "aldi" | "lidl" | "kaufland" | "rewe";
 
 export type ApiConfig = { baseUrl: string; token: string };
@@ -165,5 +169,18 @@ export class Api {
 
   saveSettings(update: SettingsUpdate) {
     return this.json<Settings>("/v1/settings", "PUT", update);
+  }
+
+  bankStatus() {
+    return this.request<BankStatus>("/v1/bank/status");
+  }
+
+  startSync(req: SyncRequest) {
+    return this.json<SyncStarted>("/v1/bank/sync", "POST", req);
+  }
+
+  /** Throws `ApiError` with status 409 while the approval in the banking app is still missing. */
+  confirmSync(id: string) {
+    return this.request<SyncDone>(`/v1/bank/sync/${encodeURIComponent(id)}/confirm`, { method: "POST" });
   }
 }
