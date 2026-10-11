@@ -31,3 +31,4 @@ deploy/.env
 node_modules/
 .expo/
 deploy/config/sources.json
+.sandbox-ca.crt
