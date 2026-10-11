@@ -13,6 +13,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: What do the endpoints really return?
+        run: |
+          UA="financer-probe/0.1 (personal grocery planner; diagnostics from a CI run)"
+          for h in world.openfoodfacts.org prices.openfoodfacts.org; do
+            echo "=== robots.txt of $h"; curl -sS -A "$UA" -m 20 "https://$h/robots.txt" | head -40
+          done
+          echo "=== Open Prices sample"
+          curl -sS -A "$UA" -m 20 -w '\nHTTP %{http_code}\n' "https://prices.openfoodfacts.org/api/v1/prices?product_code=3017620422003&currency=EUR&order_by=-date&size=2" | head -c 2500
+          for u in https://www.lidl.de/c/billiger-montag/a10006065 https://www.aldi-nord.de/angebote.html; do
+            echo "=== $u"
+            curl -sS -L -A "$UA" -m 30 -o page.html -w 'HTTP %{http_code}, %{size_download} bytes\n' "$u"
+            echo "ld+json blocks: $(grep -c 'application/ld+json' page.html)"
+            echo "Product mentions: $(grep -o '"@type":"Product"' page.html | wc -l)"
+            grep -o '<title>[^<]*' page.html | head -1
+          done
+
   probe:
     runs-on: ubuntu-latest
     steps:
