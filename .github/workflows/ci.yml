@@ -34,10 +34,13 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
-      - name: FinTS client against the fints-rs mock bank (real protocol)
+      - name: FinTS client against the fints-rs mock bank (real protocol, incl. pushTAN approval)
         run: |
           cargo install fints-rs --version 0.2.0 --features server --bin fints-server --root "$RUNNER_TEMP/fints" --locked
-          FINTS_MOCK_SERVER="$RUNNER_TEMP/fints/bin/fints-server" cargo test -p financer-fints --test mock_bank
+          crates/fints/tests/mock/build.sh "$RUNNER_TEMP/fints-decoupled"
+          FINTS_MOCK_SERVER="$RUNNER_TEMP/fints/bin/fints-server" \
+          FINTS_MOCK_DECOUPLED="$RUNNER_TEMP/fints-decoupled/fints-server" \
+            cargo test -p financer-fints --test mock_bank
       - name: Native bindings still generate (Kotlin and Swift)
         run: |
           cargo build -p financer-embedded --features bindgen-cli

@@ -26,11 +26,19 @@ clear message.
 - **Verified against the `fints-rs` mock bank** (real FinTS 3.0 messages, run in CI): login,
   dialogs, balance, and MT940 transaction parsing through to Financer's types; a wrong PIN is
   recognised; an unreachable bank is a connection error.
+- **Verified against a simulated pushTAN bank:** the stock mock stubs TANs, so
+  `crates/fints/tests/mock/decoupled-tan.patch` implements the decoupled flow it was meant to have
+  (login answers 0030/3955 with a challenge, polls answer 3956 until the approval time, then
+  0020). Against that, the real client code shows the bank's challenge text, keeps answering
+  "pending" while you have not approved, and delivers the data once you have. Build it with
+  `crates/fints/tests/mock/build.sh <dir>`.
 - **Verified with mocks of my own trait:** the whole approval flow in the API (waiting, 409 until
   approved, expiry, import, no duplicates, the PIN never in a response).
-- **Not verified, because the mock bank cannot do it:** TAN challenges and the polling for your
-  approval. The mock answers TAN requests with a stub. This is the part most likely to need work
-  on a first live run.
+- **Still unverified:** how a *real* Sparkasse words and sequences its pushTAN messages. The
+  simulation follows the FinTS 3.0 flow as `fints-rs` implements it (0030/3955, `HITAN`,
+  `HKTAN` process S, 3956, 0020); a bank that deviates (a different TAN medium to pick, TAN
+  already required at login for every request, or a different code on approval) is the most
+  likely thing to need work on a first live run.
 - **Never run against a real Sparkasse:** that needs your product ID and credentials. Things that
   differ per bank: TAN medium selection, how far back the bank lets you read without extra
   approval (often 90 days), and the BIC. Errors from the bank are shown in the app.

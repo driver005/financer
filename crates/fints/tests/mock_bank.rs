@@ -2,16 +2,20 @@
 //! FinTS 3.0 mock server: real protocol messages, TAN polling and MT940 parsing, but a
 //! simulated bank.
 //!
-//! **What this does not cover:** the mock answers TAN requests with a stub ("silently accept"),
-//! so TAN challenges and polling are *not* exercised here, only login, dialogs, balance,
-//! MT940 transactions and a wrong PIN. It also does not enforce its "locked PIN" or its error
-//! injection flags, so locked accounts are only covered by unit tests on real response codes.
+//! The stock mock answers TAN requests with a stub ("silently accept"), so the tests that need a
+//! pushTAN approval run against a patched build (`mock/build.sh`, see `FINTS_MOCK_DECOUPLED`
+//! below). It also does not enforce its "locked PIN" or its error injection flags, so locked
+//! accounts are only covered by unit tests on real response codes.
 //!
-//! Needs the mock server binary, so these tests skip unless `FINTS_MOCK_SERVER` points at it:
+//! Needs the mock server binary, so these tests skip unless `FINTS_MOCK_SERVER` points at the
+//! stock one (login, balance, transactions, wrong PIN) and `FINTS_MOCK_DECOUPLED` at the patched
+//! one built by `mock/build.sh` (pushTAN approval):
 //!
 //! ```sh
 //! cargo install fints-rs --version 0.2.0 --features server --bin fints-server --root /tmp/fints
-//! FINTS_MOCK_SERVER=/tmp/fints/bin/fints-server cargo test -p financer-fints --test mock_bank
+//! mock/build.sh /tmp/fints-decoupled
+//! FINTS_MOCK_SERVER=/tmp/fints/bin/fints-server FINTS_MOCK_DECOUPLED=/tmp/fints-decoupled/fints-server \
+//!   cargo test -p financer-fints --test mock_bank
 //! ```
 #![cfg(feature = "live")]
 
@@ -28,7 +32,11 @@ struct Server {
 
 impl Server {
     fn start(args: &[&str]) -> Option<Server> {
-        let bin = std::env::var("FINTS_MOCK_SERVER").ok()?;
+        Self::start_with("FINTS_MOCK_SERVER", args)
+    }
+
+    fn start_with(env_var: &str, args: &[&str]) -> Option<Server> {
+        let bin = std::env::var(env_var).ok()?;
         let mut child = Command::new(bin)
             .args(["--port", "0", "--print-ready"])
             .args(args)
@@ -124,6 +132,84 @@ async fn a_wrong_pin_is_reported_as_wrong_pin() {
             other.map(|_| ()).map_err(|e| e.to_string())
         ),
     }
+}
+
+macro_rules! decoupled_or_skip {
+    ($args:expr) => {
+        match Server::start_with("FINTS_MOCK_DECOUPLED", $args) {
+            Some(s) => s,
+            None => {
+                eprintln!(
+                    "skipping: set FINTS_MOCK_DECOUPLED to the binary built by mock/build.sh"
+                );
+                return;
+            }
+        }
+    };
+}
+
+#[tokio::test]
+async fn pushtan_sync_waits_for_approval_then_returns_data() {
+    // the mock "approves" 2 seconds after the login
+    let server = decoupled_or_skip!(&["--tan-mode", "decoupled", "--auto-confirm-secs", "2"]);
+    let (mut pending, challenge) = bank(&server)
+        .start(&params("1234"))
+        .await
+        .expect("login and challenge");
+    assert!(!challenge.no_tan_required, "the bank asked for an approval");
+    assert!(
+        challenge.text.contains("pushTAN"),
+        "the bank's challenge text is passed on: {:?}",
+        challenge.text
+    );
+
+    // not approved yet: the same pending sync can be polled again and again
+    for _ in 0..2 {
+        assert!(matches!(
+            pending.confirm().await,
+            Err(BankError::TanPending)
+        ));
+    }
+
+    // poll like the app does (every few seconds) until the approval arrives
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    let data = loop {
+        match pending.confirm().await {
+            Ok(d) => break d,
+            Err(BankError::TanPending) if std::time::Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(500)).await
+            }
+            Err(e) => panic!("unexpected error while polling: {e}"),
+        }
+    };
+    assert_eq!(
+        data.balance.expect("balance after approval").cents(),
+        152_342
+    );
+    assert_eq!(data.transactions.len(), 3);
+}
+
+#[tokio::test]
+async fn an_approval_that_never_comes_stays_pending_without_errors() {
+    let server = decoupled_or_skip!(&["--tan-mode", "decoupled", "--auto-confirm-secs", "3600"]);
+    let (mut pending, challenge) = bank(&server).start(&params("1234")).await.expect("login");
+    assert!(!challenge.no_tan_required);
+    for i in 0..6 {
+        assert!(
+            matches!(pending.confirm().await, Err(BankError::TanPending)),
+            "poll {i}"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+}
+
+#[tokio::test]
+async fn a_wrong_pin_never_reaches_the_approval_step() {
+    let server = decoupled_or_skip!(&["--tan-mode", "decoupled", "--auto-confirm-secs", "1"]);
+    assert!(matches!(
+        bank(&server).start(&params("0000")).await,
+        Err(BankError::WrongPin)
+    ));
 }
 
 #[tokio::test]
