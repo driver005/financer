@@ -43,7 +43,12 @@ you host (or the desktop bundle on your network). `eas.json` is where that would
 
 ## What was and was not tested
 
-- The workflow file passes `actionlint`. The pieces were run locally: the web export, the server
-  serving it, and the start script.
-- It has **not** been run on GitHub's runners yet, so the first run may need small fixes.
-- The EAS (phone) jobs have never run; they need your Expo account.
+- The workflow file passes `actionlint`.
+- A test run on GitHub's own runners built the web app and the desktop bundles for Linux,
+  macOS (Apple silicon and Intel) and Windows, and the Linux bundle was also assembled and run
+  locally (start script, web app, API, token). The Windows and macOS bundles were built but
+  **not started** on those systems.
+- The Docker job and the release job (attaching files to a GitHub release) have **not run**; they
+  only run for a published tag or a manual `docker` run.
+- The EAS (phone) jobs skip themselves without `EXPO_TOKEN` (that path was exercised); the build
+  itself has never run, since it needs your Expo account.
