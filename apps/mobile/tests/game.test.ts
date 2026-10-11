@@ -78,3 +78,20 @@ describe("coach", () => {
     assert.match(coachMessage({ ...base, streakDays: 3 }), /3-day streak/);
   });
 });
+
+import { moodFor } from "../src/game";
+
+describe("mood", () => {
+  const base = { streakDays: 0, allowanceCents: 1000, spentTodayCents: 0 };
+  it("is worried over the goal, cheering on a win or a week-long streak, otherwise happy", () => {
+    assert.equal(moodFor(base), "happy");
+    assert.equal(moodFor({ ...base, spentTodayCents: 1001 }), "worried");
+    assert.equal(moodFor({ ...base, spentTodayCents: 1000 }), "happy");
+    assert.equal(moodFor({ ...base, streakDays: 7 }), "cheer");
+    assert.equal(moodFor({ ...base, celebrating: true }), "cheer");
+    // worry beats cheering: an overspent day is not a win
+    assert.equal(moodFor({ ...base, spentTodayCents: 2000, streakDays: 9, celebrating: true }), "worried");
+    // no limit set: nothing to be worried about
+    assert.equal(moodFor({ streakDays: 0, allowanceCents: 0, spentTodayCents: 5000 }), "happy");
+  });
+});

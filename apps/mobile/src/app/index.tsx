@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useToast } from "heroui-native";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ScrollView, Text as RNText, View } from "react-native";
 
 import { Mascot } from "@/components/Mascot";
@@ -9,7 +9,7 @@ import { ChunkyButton } from "@/components/kit";
 import { Bar, Body, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
 import { useApi } from "@/api/config";
 import { formatCents } from "@/format";
-import { coachMessage, dailyAllowance, level, quests, spentOn, streak, xp, type Progress, type Quest } from "@/game";
+import { coachMessage, dailyAllowance, level, moodFor, quests, spentOn, streak, xp, type Progress, type Quest } from "@/game";
 import { useScreenData } from "@/hooks";
 import { getSecret, setSecret } from "@/api/storage";
 import { celebrate } from "@/native/haptics";
@@ -74,6 +74,7 @@ export default function Today() {
   const router = useRouter();
   const p = usePalette();
   const { toast } = useToast();
+  const [celebrating, setCelebrating] = useState(false);
   const { data, error } = useScreenData<TodayData>(async (a) => {
     const [txs, envelopes, basket, prices, receipts] = await Promise.all([
       a.transactions(),
@@ -123,6 +124,8 @@ export default function Today() {
       if (fresh.length === 0) return;
       await setSecret(SEEN_KEY, JSON.stringify(doneIds));
       celebrate();
+      setCelebrating(true);
+      setTimeout(() => setCelebrating(false), 4000);
       toast.show({
         variant: "success",
         label: `Quest complete! +${fresh.length * 10} XP 🎉`,
@@ -153,6 +156,7 @@ export default function Today() {
           </View>
 
           <Mascot
+            mood={moodFor({ streakDays: days, allowanceCents: allowance, spentTodayCents: spentToday, celebrating })}
             message={coachMessage({ progress: data.progress, streakDays: days, allowanceCents: allowance, spentTodayCents: spentToday })}
           />
 

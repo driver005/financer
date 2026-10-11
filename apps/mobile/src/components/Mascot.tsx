@@ -2,10 +2,17 @@ import { useEffect } from "react";
 import { Text as RNText, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 
+import type { Mood } from "@/game";
 import { usePalette } from "@/theme";
 
+const BADGE: Record<Mood, string | null> = { happy: null, cheer: "🎉", worried: "💦" };
+
 /** Penny the piggy bank: bobs gently and talks in a speech bubble. */
-export function Mascot({ message }: { message: string }) {
+/**
+ * Penny the piggy bank. Today this is an emoji that bobs and reacts to `mood`; the plan is to
+ * replace the emoji with a Rive mascot (docs/MASCOT.md), which takes the same `mood` input.
+ */
+export function Mascot({ message, mood = "happy" }: { message: string; mood?: Mood }) {
   const p = usePalette();
   const y = useSharedValue(0);
   useEffect(() => {
@@ -36,6 +43,7 @@ export function Mascot({ message }: { message: string }) {
         ]}
       >
         <RNText style={{ fontSize: 40 }}>🐷</RNText>
+        {BADGE[mood] ? <RNText style={{ position: "absolute", top: -6, right: -4, fontSize: 24 }}>{BADGE[mood]}</RNText> : null}
       </Animated.View>
       <View
         accessibilityRole="text"

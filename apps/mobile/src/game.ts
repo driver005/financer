@@ -110,3 +110,17 @@ export function coachMessage(args: {
   if (spentTodayCents === 0) return "Nothing spent on groceries yet today. Smart shopping starts with a plan!";
   return "Still inside today's goal. Keep going!";
 }
+
+export type Mood = "happy" | "cheer" | "worried";
+
+/** The mascot's mood: worried over today's goal, cheering on a long streak or a fresh win. */
+export function moodFor(args: {
+  streakDays: number;
+  allowanceCents: number;
+  spentTodayCents: number;
+  celebrating?: boolean;
+}): Mood {
+  if (args.allowanceCents > 0 && args.spentTodayCents > args.allowanceCents) return "worried";
+  if (args.celebrating || args.streakDays >= 7) return "cheer";
+  return "happy";
+}
