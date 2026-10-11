@@ -3,6 +3,7 @@
 //! - `FINANCER_API_TOKEN`          required, at least 32 characters; the app sends it as a bearer token
 //! - `FINANCER_DATABASE_URL`       `postgres://user:pass@host/db` or `sqlite://path?mode=rwc`
 //!   (default `sqlite://financer.db?mode=rwc`)
+//! - `FINANCER_WEB_DIR`           serve a built web app (`expo export --platform web`) at `/`
 //! - `FINANCER_BIND`               listen address (default `127.0.0.1:8080`; put HTTPS in front)
 //! - `FINANCER_PRICE_SOURCES`      path to a JSON file listing price sources (see docs/PRICES.md)
 //! - `FINANCER_REFRESH_HOURS`      hours between automatic price refreshes (default 24, 0 = off)
@@ -124,7 +125,17 @@ async fn run() -> Result<(), String> {
         });
     }
 
-    let app = router(state, TokenHash::new(&token));
+    let mut app = router(state, TokenHash::new(&token));
+    if let Some(dir) = std::env::var("FINANCER_WEB_DIR")
+        .ok()
+        .filter(|d| !d.is_empty())
+    {
+        if !std::path::Path::new(&dir).join("index.html").is_file() {
+            return Err(format!("FINANCER_WEB_DIR={dir} has no index.html"));
+        }
+        tracing::info!("serving the web app from {dir}");
+        app = financer_api::with_web_app(app, dir);
+    }
     let listener = tokio::net::TcpListener::bind(&bind)
         .await
         .map_err(|e| format!("cannot bind {bind}: {e}"))?;

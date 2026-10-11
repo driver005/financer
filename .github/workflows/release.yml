@@ -1,0 +1,213 @@
+name: Release builds
+
+# Builds everything you can install or run:
+#   - desktop bundles for Windows, macOS (Apple silicon and Intel) and Linux
+#     (server + the web app, started with one double-click; see deploy/desktop/README.txt)
+#   - the web app on its own (a zip)
+#   - a Docker image on ghcr.io (for your own server)
+#   - the Android app (APK) and iOS app through EAS Build (needs the EXPO_TOKEN secret)
+# Run it by pushing a version tag (git tag v1.0.0 && git push --tags), or by hand from the
+# Actions tab ("Run workflow"). Details and one-time setup: docs/RELEASE.md.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: What to build
+        type: choice
+        default: all
+        options: [all, desktop-web-docker, mobile]
+      eas_profile:
+        description: EAS build profile for the phone apps (see apps/mobile/eas.json)
+        type: choice
+        default: preview
+        options: [preview, device, production]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  web:
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms != 'mobile'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - run: npx expo export --platform web --output-dir dist
+        env:
+          CI: "1"
+      - run: cd dist && zip -qr ../financer-web.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: apps/mobile/financer-web.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-files
+          path: apps/mobile/dist
+          retention-days: 1
+
+  desktop:
+    needs: web
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x64, os: ubuntu-latest, exe: "", start: start.sh }
+          - { name: macos-arm64, os: macos-latest, exe: "", start: start.sh }
+          - { name: macos-x64, os: macos-15-intel, exe: "", start: start.sh }
+          - { name: windows-x64, os: windows-latest, exe: ".exe", start: start.bat }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p financer-server
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-files
+          path: web-files
+      - name: Assemble the bundle
+        run: |
+          dir="financer-desktop-${{ matrix.name }}"
+          mkdir "$dir"
+          cp "target/release/financer-server${{ matrix.exe }}" "$dir/"
+          cp -r web-files "$dir/web"
+          cp "deploy/desktop/${{ matrix.start }}" deploy/desktop/README.txt "$dir/"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a -tzip "$dir.zip" "$dir" >/dev/null
+          else
+            tar czf "$dir.tar.gz" "$dir"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}
+          path: |
+            financer-desktop-*.zip
+            financer-desktop-*.tar.gz
+          if-no-files-found: error
+
+  docker:
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms != 'mobile'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/financer-server
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  mobile:
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms != 'desktop-web-docker'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # an iOS problem (for example missing Apple credentials) must not stop Android
+      matrix:
+        platform: [android, ios]
+    env:
+      PROFILE: ${{ inputs.eas_profile || 'preview' }}
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - name: Is the EXPO_TOKEN secret set?
+        id: gate
+        working-directory: .
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -n "$EXPO_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Phone build skipped::Add the EXPO_TOKEN secret to build the ${{ matrix.platform }} app (docs/RELEASE.md)."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.enabled == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+        if: steps.gate.outputs.enabled == 'true'
+      - uses: expo/expo-github-action@v8
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Build on EAS (waits until it is done)
+        if: steps.gate.outputs.enabled == 'true'
+        run: eas build --platform ${{ matrix.platform }} --profile "$PROFILE" --non-interactive --json > build.json
+      - name: Download the app
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          url=$(jq -r '.[0].artifacts.buildUrl // empty' build.json)
+          test -n "$url" || { echo "no build URL in the EAS answer"; cat build.json; exit 1; }
+          file="financer-${{ matrix.platform }}-$PROFILE.${url##*.}"
+          curl -fsSL -o "$file" "$url"
+          echo "APP_FILE=$file" >> "$GITHUB_ENV"
+          echo "### ${{ matrix.platform }} ($PROFILE)" >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.[0].buildDetailsPageUrl // empty' build.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          name: app-${{ matrix.platform }}
+          path: apps/mobile/${{ env.APP_FILE }}
+
+  release:
+    # Only for version tags: attach everything that was built to a GitHub release.
+    if: startsWith(github.ref, 'refs/tags/') && !cancelled() && needs.desktop.result == 'success' && needs.web.result == 'success'
+    needs: [web, desktop, docker, mobile]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: "{desktop-*,web,app-*}"
+          merge-multiple: true
+      - run: ls -lh dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

@@ -1,6 +1,6 @@
 import { Link } from "expo-router";
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Platform, ScrollView, View } from "react-native";
 import { HelperText, List, SegmentedButtons, Text, TextInput } from "@/components/kit";
 
 import { Api, type ExportData } from "@/api/client";
@@ -9,11 +9,20 @@ import { Body, Button, Card, Screen, Title, useColors } from "@/components/ui";
 import { pickTextFile, shareTextFile } from "@/native/files";
 import { useScreenData } from "@/hooks";
 
+/**
+ * The packaged web app is served by the server itself (FINANCER_WEB_DIR), so its own address
+ * is the server address. Not in development, where the page comes from the Expo dev server.
+ */
+function defaultServerUrl(): string {
+  if (Platform.OS !== "web" || process.env.NODE_ENV !== "production") return "";
+  return globalThis.location?.origin ?? "";
+}
+
 export default function SettingsScreen() {
   const { config, api, save, clear, mode, setMode, embeddedAvailable, embedded, saveEmbedded, embeddedError } = useApi();
   const c = useColors();
   const { data: settings, setData: setSettings, error } = useScreenData((a) => a.settings());
-  const [baseUrl, setBaseUrl] = useState("");
+  const [baseUrl, setBaseUrl] = useState(defaultServerUrl);
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -167,7 +176,7 @@ export default function SettingsScreen() {
               label="Forget this server"
               onPress={() => {
                 void clear();
-                setBaseUrl("");
+                setBaseUrl(defaultServerUrl());
                 setToken("");
                 setStatus(null);
               }}

@@ -257,6 +257,8 @@ pub fn router(state: AppState, token: TokenHash) -> Router {
             "/settings",
             get(grocery::get_settings).put(grocery::put_settings),
         )
+        // An unknown API path is an API error, never a web page (see `with_web_app`).
+        .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
         .layer(middleware::from_fn_with_state(token, auth::require_token));
 
     Router::new()
@@ -265,6 +267,15 @@ pub fn router(state: AppState, token: TokenHash) -> Router {
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// Also serve a built web app (`expo export --platform web`) from `dir`: files as they are, and
+/// `index.html` for any other path so the app's own routes survive a reload. `/health` and
+/// `/v1` are untouched; an unknown `/v1` path is still an API error, never the web page.
+pub fn with_web_app(app: Router, dir: impl AsRef<std::path::Path>) -> Router {
+    use tower_http::services::{ServeDir, ServeFile};
+    let dir = dir.as_ref();
+    app.fallback_service(ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html"))))
 }
 
 /// Refresh all configured price sources now. Returns a one-line summary for logs; used by the

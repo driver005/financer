@@ -22,6 +22,7 @@ SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](d
 | Embedded on-phone backend | Rust side built and tested; bindings generate; background refresh task written; the **native build and device run are not done** ([docs/EMBEDDED.md](docs/EMBEDDED.md)) |
 | Backup / move between server and phone | export and import of your data as one JSON file (no secrets), idempotent; tested, including through the browser |
 | App | HeroUI Native (Tailwind classes via Uniwind) with a playful, Duolingo-style look: bright purple palette with orange and gold accents (light and dark), chunky 3D buttons with haptics, thick-bordered cards, animated progress bars, and a **Today** tab with a mascot (Penny), a daily grocery goal, a streak, XP/levels and five quests. The streak, goal, XP and quests are **computed from your real data** (transactions, limits, usual items, prices, receipts), nothing is stored separately or invented ([`src/game.ts`](apps/mobile/src/game.ts), unit-tested). Typechecks, 28 Node tests, bundles for iOS/Android/web, and the web build was driven in a real browser against the real server (every screen, both colour schemes, and a quest being completed); **never run on a phone**. In the web build HeroUI logs harmless `colorKit` warnings (its hover colours use CSS `color-mix`) and renders each toast twice on top of each other |
+| Release builds (GitHub workflow: desktop bundles for Windows/macOS/Linux, web zip, Docker image, Android APK and iOS via EAS) | [docs/RELEASE.md](docs/RELEASE.md); lints clean and the desktop bundle was assembled and run locally, but the workflow has **not run on GitHub yet** and the phone jobs need your Expo account |
 | Deployment (Docker, Caddy HTTPS, Postgres profile) | the image **was built and run** (161 MB, non-root user, health and auth work, data survives a restart, runs against a PostgreSQL container). The real `deploy/docker-compose.yml` **was brought up with Caddy**: HTTPS on a local certificate, HTTP redirects to HTTPS, no token gives 401, the API port is not reachable from outside Caddy, and imported data survives `down`/`up`. Caveats: in this sandbox the server image was assembled from a host-built binary on Ubuntu instead of the Dockerfile's own Rust build stage (the sandbox proxy blocks that), and Caddy used `localhost` with its own CA, so **a real domain with Let's Encrypt was not tried**. Trying it exposed that the SQLite setup failed without a `POSTGRES_PASSWORD`; fixed |
 
 ## Run it
@@ -41,6 +42,7 @@ Settings (environment variables; the full list is at the top of `crates/server/s
 | `FINANCER_DATABASE_URL` | `postgres://user:pass@host/db` or `sqlite://path?mode=rwc` (default `sqlite://financer.db?mode=rwc`) |
 | `FINANCER_BIND` | listen address, default `127.0.0.1:8080` (put HTTPS in front) |
 | `FINANCER_PRICE_SOURCES` | path to a JSON file of price sources |
+| `FINANCER_WEB_DIR` | serve a built web app (`expo export --platform web`) at `/`, same address as the API |
 | `FINANCER_FINTS_PRODUCT_ID` | enables live Sparkasse sync |
 | `FINANCER_ANTHROPIC_API_KEY`, `FINANCER_OPENAI_API_KEY` | enable recipe ideas and receipt photo scan |
 
@@ -83,7 +85,7 @@ crates/server     hosted binary
 crates/embedded   the same backend as a library for the phone (UniFFI)
 apps/mobile       Expo app (routes in src/app)
 deploy/           Dockerfile, compose, Caddyfile
-docs/             FINTS.md, PRICES.md, EMBEDDED.md
+docs/             FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
 ```
 
 ## Security notes

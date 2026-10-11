@@ -23,7 +23,7 @@ subtle = "2"
 thiserror.workspace = true
 time.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
-tower-http = { version = "0.6", features = ["trace", "limit"] }
+tower-http = { version = "0.6", features = ["trace", "limit", "fs"] }
 tracing = "0.1"
 uuid = { version = "1", features = ["v4"] }
 utoipa = { version = "5", features = ["time"] }
