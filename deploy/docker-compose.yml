@@ -1,0 +1,63 @@
+# SQLite (single file, cheapest):   docker compose -f deploy/docker-compose.yml up -d
+# PostgreSQL:                       docker compose -f deploy/docker-compose.yml --profile postgres up -d
+#
+# Required in deploy/.env (never commit it):
+#   FINANCER_API_TOKEN=<at least 32 random characters, e.g. `openssl rand -hex 32`>
+#   DOMAIN=financer.example.com
+# Optional: FINANCER_FINTS_PRODUCT_ID, FINANCER_ANTHROPIC_API_KEY, FINANCER_OPENAI_API_KEY, FINANCER_PRICE_SOURCES
+# For PostgreSQL also: POSTGRES_PASSWORD=<random>  and  FINANCER_DATABASE_URL=postgres://financer:<same password>@postgres/financer
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        REGISTRY: ${REGISTRY:-docker.io/library/}  # mirror.gcr.io/library/ if Docker Hub rate-limits you
+    restart: unless-stopped
+    environment:
+      FINANCER_API_TOKEN: ${FINANCER_API_TOKEN:?set FINANCER_API_TOKEN in deploy/.env}
+      FINANCER_DATABASE_URL: ${FINANCER_DATABASE_URL:-sqlite:///data/financer.db?mode=rwc}
+      # Optional features (leave empty to keep them off):
+      FINANCER_FINTS_PRODUCT_ID: ${FINANCER_FINTS_PRODUCT_ID:-}
+      FINANCER_ANTHROPIC_API_KEY: ${FINANCER_ANTHROPIC_API_KEY:-}
+      FINANCER_OPENAI_API_KEY: ${FINANCER_OPENAI_API_KEY:-}
+      # e.g. /config/sources.json, with the file in deploy/config/ (see docs/PRICES.md)
+      FINANCER_PRICE_SOURCES: ${FINANCER_PRICE_SOURCES:-}
+      FINANCER_REFRESH_HOURS: ${FINANCER_REFRESH_HOURS:-24}
+      RUST_LOG: info
+    volumes:
+      - financer-data:/data
+      - ./config:/config:ro
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - server
+
+  postgres:
+    image: postgres:16
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: financer
+      POSTGRES_DB: financer
+      # empty is fine without the postgres profile; the postgres image refuses to start with an empty password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  financer-data:
+  caddy-data:
+  postgres-data:

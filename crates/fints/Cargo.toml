@@ -1,0 +1,27 @@
+[package]
+name = "financer-fints"
+description = "Bank data sources: Sparkasse CSV-CAMT import now, FinTS sync later"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["live"]
+# The real FinTS client (fints-rs). Disable to build without it, e.g. for tests of other crates.
+live = ["dep:fints-rs", "dep:chrono", "dep:rust_decimal"]
+
+[dependencies]
+financer-core = { path = "../core" }
+async-trait = "0.1"
+chrono = { version = "0.4", optional = true }
+csv = "1"
+fints-rs = { version = "0.2", optional = true }
+rust_decimal = { version = "1", optional = true }
+thiserror.workspace = true
+time.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+
+[dev-dependencies]
+serde_json.workspace = true
+time.workspace = true

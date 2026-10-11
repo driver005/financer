@@ -1,0 +1,91 @@
+--- a/src/bin/server.rs
++++ b/src/bin/server.rs
+@@ -459,6 +459,16 @@
+     Some((segno, version))
+ }
+ 
++/// The TAN process of an HKTAN segment: `4` (start), `S` (poll), `2` (submit TAN), ...
++fn hktan_process(message: &[u8]) -> Option<String> {
++    let prefix = b"HKTAN:";
++    let pos = message.windows(prefix.len()).position(|w| w == prefix)?;
++    let seg = &message[pos..];
++    let end = seg.iter().position(|&b| b == b'\'')?;
++    let text = std::str::from_utf8(&seg[..end]).ok()?;
++    text.split('+').nth(1).map(str::to_string)
++}
++
+ /// Extract HKVVB BPD and UPD versions
+ fn extract_hkvvb_versions(message: &[u8]) -> Option<(String, String)> {
+     // HKVVB:\d+:3+{bpd_ver}+{upd_ver}+...
+@@ -568,7 +578,7 @@
+ 
+ async fn make_answer(
+     state: &mut ServerState,
+-    _dialog_id: &str,
++    dialog_id: &str,
+     message: &[u8],
+ ) -> Vec<u8> {
+     // Get the inner message (from HNVSD or the raw message if it's a simple error)
+@@ -615,7 +625,19 @@
+             responses.push(b"3920::Zugelassene TAN-Verfahren fur den Benutzer:942".to_vec());
+             responses.push(b"0901::*PIN gultig.".to_vec());
+         }
+-        responses.push(b"0020::*Dialoginitialisierung erfolgreich".to_vec());
++        // Decoupled TAN (pushTAN): the init asked for a TAN (HKTAN process 4), so answer with
++        // "approval needed" and a challenge instead of opening the dialog.
++        let decoupled_init = state.config.tan_mode == TanMode::Decoupled && !is_temp_locked && has_segment(message, "HKTAN");
++        if decoupled_init {
++            responses.push(b"0030::Auftrag empfangen - Sicherheitsfreigabe erforderlich".to_vec());
++            responses.push(b"3955::Sicherheitsfreigabe in der App erforderlich".to_vec());
++            let deadline = Instant::now() + Duration::from_secs(state.config.auto_confirm_secs);
++            if let Some(d) = state.dialogs.get_mut(dialog_id) {
++                d.tan_state = TanState::Pending { confirmed_at: Some(deadline) };
++            }
++        } else {
++            responses.push(b"0020::*Dialoginitialisierung erfolgreich".to_vec());
++        }
+ 
+         // Build HIRMS
+         let hirms = {
+@@ -628,6 +650,12 @@
+         for seg in &segments {
+             result.extend_from_slice(seg);
+         }
++        if decoupled_init {
++            let hktan_segno = extract_seg_num_ver(message, "HKTAN").map(|(n, _)| n).unwrap_or_else(|| "4".to_string());
++            result.extend_from_slice(
++                format!("HITAN:5:7:{hktan_segno}+4++TASKREF42+Bitte geben Sie den Auftrag in Ihrer S-pushTAN-App frei'").as_bytes(),
++            );
++        }
+     }
+ 
+     // Handle HKSYN — synchronization
+@@ -739,9 +767,25 @@
+         }
+     }
+ 
+-    // Handle HKTAN — TAN processing (just acknowledge)
+-    if has_segment(message, "HKTAN") {
+-        // Silently accept per Python mock
++    // Handle HKTAN. Process S polls a decoupled TAN: "not yet" until the approval deadline has
++    // passed, then confirmed. Anything else is silently accepted, as before.
++    if has_segment(message, "HKTAN") && hktan_process(message).as_deref() == Some("S") {
++        let segno = extract_seg_num_ver(message, "HKTAN").map(|(n, _)| n).unwrap_or_else(|| "3".to_string());
++        let pending_until = match state.dialogs.get(dialog_id).map(|d| &d.tan_state) {
++            Some(TanState::Pending { confirmed_at: Some(t) }) => Some(*t),
++            _ => None,
++        };
++        match pending_until {
++            Some(t) if Instant::now() < t => {
++                result.extend_from_slice(format!("HIRMS::2:{segno}+3956::Freigabe noch nicht erfolgt'").as_bytes());
++            }
++            _ => {
++                if let Some(d) = state.dialogs.get_mut(dialog_id) {
++                    d.tan_state = TanState::Confirmed;
++                }
++                result.extend_from_slice(format!("HIRMS::2:{segno}+0020::*Auftrag ausgefuehrt'").as_bytes());
++            }
++        }
+     }
+ 
+     // Handle HKEND — dialog end

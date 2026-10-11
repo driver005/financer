@@ -1,0 +1,12 @@
+[package]
+name = "financer-receipts"
+description = "Parse receipt text into line items and derive usual items from receipts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+financer-core = { path = "../core" }
+serde.workspace = true
+time.workspace = true

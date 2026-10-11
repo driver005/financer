@@ -1,0 +1,35 @@
+[package]
+name = "financer-api"
+description = "REST API: Axum router and services shared by the hosted server and the embedded on-phone backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+financer-core = { path = "../core" }
+financer-fints = { path = "../fints" }
+financer-llm = { path = "../llm" }
+financer-prices = { path = "../prices" }
+financer-receipts = { path = "../receipts" }
+financer-recipes = { path = "../recipes" }
+financer-store = { path = "../store" }
+async-trait = "0.1"
+axum = { version = "0.8", default-features = false, features = ["json", "query", "tokio", "http1"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+subtle = "2"
+thiserror.workspace = true
+time.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tower-http = { version = "0.6", features = ["trace", "limit", "fs"] }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }
+utoipa = { version = "5", features = ["time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "test-util"] }
+financer-core = { path = "../core" }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

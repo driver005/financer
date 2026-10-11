@@ -22,3 +22,13 @@ rustc-ice-*.txt
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Local secrets
+deploy/.env
+*.db
+*.db-shm
+*.db-wal
+node_modules/
+.expo/
+deploy/config/sources.json
+.sandbox-ca.crt

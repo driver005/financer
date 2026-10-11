@@ -1,0 +1,15 @@
+[package]
+name = "financer-core"
+description = "Domain logic: money, categorizer, recurring detection, budget and basket engines"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
