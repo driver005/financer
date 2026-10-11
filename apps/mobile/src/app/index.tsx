@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, Text as RNText, View } from "react-native";
 
 import { Mascot } from "@/components/Mascot";
+import { WatchdogCard } from "@/components/Watchdog";
 import { ChunkyButton } from "@/components/kit";
 import { Bar, Body, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
 import { useApi } from "@/api/config";
@@ -189,6 +190,8 @@ export default function Today() {
               </>
             )}
           </Card>
+
+          <WatchdogCard />
 
           <Card>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
