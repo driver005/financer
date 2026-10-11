@@ -11,6 +11,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      args:
+        REGISTRY: ${REGISTRY:-docker.io/library/}  # mirror.gcr.io/library/ if Docker Hub rate-limits you
     restart: unless-stopped
     environment:
       FINANCER_API_TOKEN: ${FINANCER_API_TOKEN:?set FINANCER_API_TOKEN in deploy/.env}
@@ -50,7 +52,8 @@ services:
     environment:
       POSTGRES_USER: financer
       POSTGRES_DB: financer
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      # empty is fine without the postgres profile; the postgres image refuses to start with an empty password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
