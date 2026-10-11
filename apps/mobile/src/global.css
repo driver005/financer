@@ -1,0 +1,50 @@
+@import "tailwindcss";
+@import "uniwind";
+@import "heroui-native/styles";
+
+@source "../node_modules/heroui-native/lib";
+
+/* Calm green palette. Keep in sync with src/theme.ts, which the few JS-only colour
+   users (tab bar, icons) read. */
+@layer theme {
+  :root {
+    @variant light {
+      --background: #f6fbf6;
+      --foreground: #151d18;
+      --surface: #ffffff;
+      --surface-secondary: #eef5ee;
+      --surface-tertiary: #e2ebe3;
+      --muted: #5b6a60;
+      --default: #e3ece5;
+      --default-foreground: #151d18;
+      --accent: #1b6b4a;
+      --accent-foreground: #ffffff;
+      --field-background: #ffffff;
+      --field-border: #bfc9c1;
+      --border: #d3ddd5;
+      --separator: #cdd8cf;
+      --success: #1b6b4a;
+      --danger: #ba1a1a;
+      --segment: #ffffff;
+    }
+    @variant dark {
+      --background: #0f1512;
+      --foreground: #e3eae5;
+      --surface: #17201b;
+      --surface-secondary: #1f2a23;
+      --surface-tertiary: #26332b;
+      --muted: #a9b6ad;
+      --default: #26332b;
+      --default-foreground: #e3eae5;
+      --accent: #5fbf8d;
+      --accent-foreground: #04170e;
+      --field-background: #17201b;
+      --field-border: #404943;
+      --border: #2a362e;
+      --separator: #33413a;
+      --success: #7fd9a8;
+      --danger: #ffb4ab;
+      --segment: #2e3d34;
+    }
+  }
+}

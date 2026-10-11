@@ -1,7 +1,7 @@
 import { Link } from "expo-router";
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { HelperText, List, SegmentedButtons, Text, TextInput } from "react-native-paper";
+import { HelperText, List, SegmentedButtons, Text, TextInput } from "@/components/kit";
 
 import { Api, type ExportData } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -194,10 +194,10 @@ export default function SettingsScreen() {
                 Your bank only shows "REWE, 23,47 €", not what was in the bag. "Estimate" uses a generic basket.
               </Text>
               <Link href="/basket" asChild>
-                <List.Item title="Edit my usual items" left={(p) => <List.Icon {...p} icon="format-list-checks" />} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+                <List.Item title="Edit my usual items" left={() => <List.Icon icon="format-list-checks" />} right={() => <List.Icon icon="chevron-right" />} />
               </Link>
               <Link href="/receipts" asChild>
-                <List.Item title="Receipts" left={(p) => <List.Icon {...p} icon="receipt-text-outline" />} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+                <List.Item title="Receipts" left={() => <List.Icon icon="receipt-text-outline" />} right={() => <List.Icon icon="chevron-right" />} />
               </Link>
             </Card>
 

@@ -1,64 +1,65 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Link } from "expo-router";
-import type { ReactNode } from "react";
-import { StyleSheet, View, type ViewStyle } from "react-native";
-import {
-  ActivityIndicator,
-  Button as PaperButton,
-  Card as PaperCard,
-  ProgressBar,
-  Text,
-  useTheme,
-} from "react-native-paper";
+import { Button as HButton, Card as HCard } from "heroui-native";
+import type { ComponentProps, ReactNode } from "react";
+import { View, type StyleProp, type ViewStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/** Colours used by the screens, taken from the active Paper (Material 3) theme. */
+import { ActivityIndicator, Text } from "@/components/kit";
+import { usePalette } from "@/theme";
+
+/** Colours used by the screens, taken from the active (light or dark) palette. */
 export function useColors() {
-  const { colors, dark } = useTheme();
+  const p = usePalette();
   return {
-    bg: colors.background,
-    card: colors.surface,
-    text: colors.onSurface,
-    muted: colors.onSurfaceVariant,
-    border: colors.outlineVariant,
-    accent: colors.primary,
-    bad: colors.error,
-    good: dark ? "#7fd9a8" : "#1b6b4a",
+    bg: p.background,
+    card: p.surface,
+    text: p.text,
+    muted: p.muted,
+    border: p.border,
+    accent: p.accent,
+    bad: p.bad,
+    good: p.good,
   };
 }
 
 export function Screen({ children }: { children: ReactNode }) {
-  const c = useColors();
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["top", "left", "right"]}>
-      <View style={styles.screen}>{children}</View>
+    <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
+      <View className="flex-1 px-4">{children}</View>
     </SafeAreaView>
   );
 }
 
-export function Card({ children, style }: { children: ReactNode; style?: ViewStyle }) {
+export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
-    <PaperCard mode="contained" style={[styles.card, style]}>
-      <PaperCard.Content>{children}</PaperCard.Content>
-    </PaperCard>
+    <HCard className="mb-2.5 rounded-2xl" style={style}>
+      <HCard.Body>{children}</HCard.Body>
+    </HCard>
   );
 }
 
 export function Title({ children }: { children: ReactNode }) {
   return (
-    <Text variant="headlineMedium" style={styles.title} accessibilityRole="header">
+    <Text variant="headlineMedium" style={{ marginVertical: 12 }} accessibilityRole="header">
       {children}
     </Text>
   );
 }
 
 export function Body({ children, muted, bold }: { children: ReactNode; muted?: boolean; bold?: boolean }) {
-  const c = useColors();
   return (
-    <Text variant="bodyLarge" style={{ color: muted ? c.muted : c.text, fontWeight: bold ? "600" : "400" }}>
+    <Text
+      variant="bodyLarge"
+      className={muted ? "text-muted" : undefined}
+      style={{ fontWeight: bold ? "600" : "400", ...(muted ? { opacity: 1 } : null) }}
+    >
       {children}
     </Text>
   );
 }
+
+type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 export function Button({
   label,
@@ -73,22 +74,30 @@ export function Button({
   icon?: string;
   mode?: "contained" | "outlined" | "text" | "contained-tonal";
 }) {
+  const p = usePalette();
+  const variant = mode === "contained" ? "primary" : mode === "outlined" ? "outline" : mode === "text" ? "ghost" : "secondary";
   return (
-    <PaperButton mode={mode} icon={icon} onPress={onPress} disabled={disabled} style={styles.button}>
-      {label}
-    </PaperButton>
+    <HButton variant={variant} onPress={onPress} isDisabled={disabled} className="rounded-xl" accessibilityLabel={label}>
+      {icon ? (
+        <MaterialCommunityIcons name={icon as IconName} size={18} color={variant === "primary" ? "#ffffff" : p.text} />
+      ) : null}
+      <HButton.Label>{label}</HButton.Label>
+    </HButton>
   );
 }
 
-/**
- * Progress bar with a fixed 4px box. Paper's ProgressBar wraps itself in `height: 100%` on
- * web, which grows inside a flex column and pushes the content below it far away.
- */
+/** Thin progress bar. `progress` is 0..1; `color` overrides the accent. */
 export function Bar({ progress, color, marginTop = 6 }: { progress: number; color?: string; marginTop?: number }) {
   const c = useColors();
+  const pct = Math.max(0, Math.min(1, progress)) * 100;
   return (
-    <View style={{ height: 4, marginTop, borderRadius: 4, overflow: "hidden" }}>
-      <ProgressBar progress={Math.max(0, Math.min(1, progress))} color={color ?? c.accent} />
+    <View
+      className="h-1.5 overflow-hidden rounded-full bg-default"
+      style={{ marginTop }}
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(pct) }}
+    >
+      <View style={{ width: `${pct}%`, height: "100%", backgroundColor: color ?? c.accent }} />
     </View>
   );
 }
@@ -112,10 +121,3 @@ export function NeedsSetup() {
     </Card>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, paddingHorizontal: 16 },
-  card: { marginBottom: 10 },
-  title: { fontWeight: "700", marginVertical: 12 },
-  button: { borderRadius: 12 },
-});

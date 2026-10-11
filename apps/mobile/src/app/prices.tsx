@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
-import { Chip, List, Searchbar, Snackbar, Text } from "react-native-paper";
+import { Chip, List, Searchbar, Snackbar, Text } from "@/components/kit";
 
 import type { Price } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -90,7 +90,7 @@ export default function Prices() {
                     description={`${p.product_name} (${formatCents(p.shelf_price_cents)} on the shelf)${
                       p.valid_until ? ` · until ${formatDate(p.valid_until)}` : ""
                     }`}
-                    left={(props) => <List.Icon {...props} icon={i === 0 ? "star" : "store-outline"} color={i === 0 ? c.good : undefined} />}
+                    left={() => <List.Icon icon={i === 0 ? "star" : "store-outline"} color={i === 0 ? c.good : undefined} />}
                     right={() => (p.is_offer ? <Chip compact>Offer</Chip> : null)}
                     accessibilityLabel={`${chainLabel(p.chain)} ${formatCents(p.price_cents)} for ${g.name}${i === 0 ? ", cheapest" : ""}`}
                   />

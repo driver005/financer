@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { FlatList, View } from "react-native";
-import { Chip, HelperText, List, Text, TextInput, useTheme } from "react-native-paper";
+import { Chip, HelperText, List, Text, TextInput } from "@/components/kit";
 
 import type { Idea, RecipeMatch } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -88,7 +88,6 @@ export default function Recipes() {
 }
 
 function RecipeCard({ recipe: r, muted }: { recipe: RecipeMatch; muted: string }) {
-  const cardBg = useTheme().colors.surfaceVariant;
   const names = new Map(r.ingredients.map((i) => [i.item, i.name]));
   const nameOf = (k: string) => names.get(k) ?? k;
   return (
@@ -110,7 +109,7 @@ function RecipeCard({ recipe: r, muted }: { recipe: RecipeMatch; muted: string }
       {r.on_offer.length ? (
         <Text variant="bodyMedium" style={{ marginTop: 4 }}>On offer now: {r.on_offer.map(nameOf).join(", ")}</Text>
       ) : null}
-      <List.Accordion title="Ingredients and steps" titleStyle={{ fontSize: 14 }} style={{ paddingHorizontal: 0, backgroundColor: cardBg }}>
+      <List.Accordion title="Ingredients and steps">
         {r.ingredients.map((i) => (
           <List.Item key={i.item} title={i.name} description={i.amount} />
         ))}
@@ -123,13 +122,12 @@ function RecipeCard({ recipe: r, muted }: { recipe: RecipeMatch; muted: string }
 }
 
 function IdeaCard({ idea }: { idea: Idea }) {
-  const cardBg = useTheme().colors.surfaceVariant;
   return (
     <Card>
       <Text variant="titleMedium">{idea.title}</Text>
       <Text variant="bodyMedium" style={{ marginVertical: 4 }}>{idea.summary}</Text>
       <Text variant="bodySmall">{idea.minutes} min · {idea.servings} servings</Text>
-      <List.Accordion title="Ingredients and steps" titleStyle={{ fontSize: 14 }} style={{ paddingHorizontal: 0, backgroundColor: cardBg }}>
+      <List.Accordion title="Ingredients and steps">
         {idea.ingredients.map((i, n) => (
           <List.Item key={`${i.name}-${n}`} title={i.name} description={i.amount} />
         ))}

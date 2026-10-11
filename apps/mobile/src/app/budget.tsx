@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { HelperText, Text, TextInput } from "react-native-paper";
+import { HelperText, Text, TextInput } from "@/components/kit";
 
 import type { Disposable, EnvelopeStatus } from "@/api/client";
 import { useApi } from "@/api/config";

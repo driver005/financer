@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { ActivityIndicator, HelperText, Switch, Text, TextInput } from "react-native-paper";
+import { ActivityIndicator, HelperText, Switch, Text, TextInput } from "@/components/kit";
 
 import { ApiError } from "@/api/client";
 import { useApi } from "@/api/config";

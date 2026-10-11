@@ -1,11 +1,13 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { useColorScheme, type ColorValue } from "react-native";
-import { PaperProvider } from "react-native-paper";
+import { type ColorValue } from "react-native";
+import { HeroUINativeProvider } from "heroui-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { ApiProvider } from "@/api/config";
 import "@/native/background"; // defines the background task at startup
-import { themes } from "@/theme";
+import "@/global.css";
+import { usePalette } from "@/theme";
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -19,16 +21,17 @@ function tab(title: string, icon: IconName) {
 }
 
 export default function RootLayout() {
-  const theme = useColorScheme() === "dark" ? themes.dark : themes.light;
+  const p = usePalette();
   return (
-    <PaperProvider theme={theme}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <HeroUINativeProvider>
       <ApiProvider>
         <Tabs
           screenOptions={{
             headerShown: false,
-            tabBarActiveTintColor: theme.colors.primary,
-            tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
-            tabBarStyle: { backgroundColor: theme.colors.surface },
+            tabBarActiveTintColor: p.accent,
+            tabBarInactiveTintColor: p.muted,
+            tabBarStyle: { backgroundColor: p.surface },
           }}
         >
           <Tabs.Screen name="index" options={tab("Spending", "swap-vertical")} />
@@ -42,6 +45,7 @@ export default function RootLayout() {
           <Tabs.Screen name="sync" options={{ href: null, title: "Sync with Sparkasse" }} />
         </Tabs>
       </ApiProvider>
-    </PaperProvider>
+    </HeroUINativeProvider>
+    </GestureHandlerRootView>
   );
 }

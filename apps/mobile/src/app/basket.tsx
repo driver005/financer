@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, View } from "react-native";
-import { HelperText, IconButton, List, Searchbar, Text } from "react-native-paper";
+import { HelperText, IconButton, List, Searchbar, Text } from "@/components/kit";
 
 import type { BasketItem, CatalogItem } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -82,7 +82,7 @@ export default function BasketScreen() {
                   key={m.key}
                   title={m.name}
                   description={m.reference_pack}
-                  left={(p) => <List.Icon {...p} icon="plus-circle-outline" />}
+                  left={() => <List.Icon icon="plus-circle-outline" />}
                   onPress={() => {
                     setItems((l) => [...l, { item: m.key, quantity: 1 }]);
                     setQuery("");

@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { FlatList, View } from "react-native";
-import { HelperText, IconButton, Text, TextInput } from "react-native-paper";
+import { HelperText, IconButton, Text, TextInput } from "@/components/kit";
 
 import type { Receipt } from "@/api/client";
 import { useApi } from "@/api/config";

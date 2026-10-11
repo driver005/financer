@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { View } from "react-native";
-import { Chip, HelperText, List, Text, TextInput } from "react-native-paper";
+import { Chip, HelperText, List, Text, TextInput } from "@/components/kit";
 
 import type { Affordability } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -91,7 +91,7 @@ export function Afford() {
                     ? `No price for ${p.missing.length} of your items`
                     : `${formatCents(p.basket_cents)} per basket · ${p.baskets}× = ${p.days_covered} days`
                 }
-                left={(props) => <List.Icon {...props} icon={p === cheapestComplete ? "star" : "store-outline"} />}
+                left={() => <List.Icon icon={p === cheapestComplete ? "star" : "store-outline"} />}
                 accessibilityLabel={`${chainLabel(p.chain)}: ${formatCents(p.basket_cents)} per basket`}
               />
             ))

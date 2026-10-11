@@ -4,7 +4,7 @@ Personal finance and grocery planner for one person with a Sparkasse account. It
 spending, keeps a budget, shows what the budget can buy, compares Lidl / Aldi / Kaufland / Rewe
 prices, and suggests recipes from what you normally buy.
 
-**Stack:** Expo (TypeScript, React Native Paper) app + Rust backend (Axum) on PostgreSQL or
+**Stack:** Expo (TypeScript, HeroUI Native) app + Rust backend (Axum) on PostgreSQL or
 SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](docs/EMBEDDED.md)).
 
 ## What works, and how sure I am
@@ -21,7 +21,7 @@ SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](d
 | Recipes | 23 bundled German recipes ranked by your items, offers and cost; "surprise me" ideas from Claude or OpenAI (switchable), tested with a mock model, and the Claude and OpenAI request/response formats (JSON mode, image upload, auth headers) are checked against local fakes of both APIs; **never run against the real providers (no API key)** |
 | Embedded on-phone backend | Rust side built and tested; bindings generate; background refresh task written; the **native build and device run are not done** ([docs/EMBEDDED.md](docs/EMBEDDED.md)) |
 | Backup / move between server and phone | export and import of your data as one JSON file (no secrets), idempotent; tested, including through the browser |
-| App | typechecks, 15 Node tests, bundles for iOS/Android/web, and the web build was driven in a real browser against the real server; **never run on a phone** |
+| App | HeroUI Native (Tailwind classes via Uniwind), light and dark, all screens; typechecks, 18 Node tests, bundles for iOS/Android/web, and the web build was driven in a real browser against the real server (screenshots of every screen in both modes); **never run on a phone**. In the web build HeroUI logs harmless `colorKit` warnings (its hover colours use CSS `color-mix`) |
 | Deployment (Docker, Caddy HTTPS, Postgres profile) | the image **was built and run**: 161 MB, non-root user, health and auth work, data survives a container restart, and it runs against a PostgreSQL container. The Caddy/HTTPS part (needs a real domain) and `docker compose up` as a whole were not run |
 
 ## Run it

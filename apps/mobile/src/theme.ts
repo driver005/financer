@@ -1,48 +1,32 @@
-import { MD3DarkTheme, MD3LightTheme, type MD3Theme } from "react-native-paper";
+import { useColorScheme } from "react-native";
 
 // A calm green seed colour: money-positive without looking like a casino.
-const light: MD3Theme = {
-  ...MD3LightTheme,
-  colors: {
-    ...MD3LightTheme.colors,
-    primary: "#1b6b4a",
-    onPrimary: "#ffffff",
-    primaryContainer: "#b7f1d1",
-    onPrimaryContainer: "#002113",
-    secondary: "#4d6357",
-    secondaryContainer: "#cfe9d9",
-    onSecondaryContainer: "#0a1f14",
-    background: "#f6fbf6",
-    surface: "#f6fbf6",
-    surfaceVariant: "#dbe5dd",
-    onSurfaceVariant: "#404943",
-    outline: "#707973",
-    outlineVariant: "#bfc9c1",
-    error: "#ba1a1a",
-    elevation: { level0: "transparent", level1: "#eef5ee", level2: "#e8f0e9", level3: "#e2ebe3", level4: "#e0e9e1", level5: "#dce6de" },
-  },
+// Mirrors the CSS variables in global.css (the components read those; this is for the few
+// places that need a colour value in JS, such as the tab bar and icons).
+const light = {
+  background: "#f6fbf6",
+  surface: "#ffffff",
+  text: "#151d18",
+  muted: "#5b6a60",
+  border: "#d3ddd5",
+  accent: "#1b6b4a",
+  bad: "#ba1a1a",
+  good: "#1b6b4a",
 };
 
-const dark: MD3Theme = {
-  ...MD3DarkTheme,
-  colors: {
-    ...MD3DarkTheme.colors,
-    primary: "#9bd4b5",
-    onPrimary: "#003824",
-    primaryContainer: "#00513a",
-    onPrimaryContainer: "#b7f1d1",
-    secondary: "#b3ccbc",
-    secondaryContainer: "#354b3d",
-    onSecondaryContainer: "#cfe9d9",
-    background: "#0f1512",
-    surface: "#0f1512",
-    surfaceVariant: "#404943",
-    onSurfaceVariant: "#bfc9c1",
-    outline: "#8a938c",
-    outlineVariant: "#404943",
-    error: "#ffb4ab",
-    elevation: { level0: "transparent", level1: "#17201b", level2: "#1b251f", level3: "#1f2a23", level4: "#212c25", level5: "#242f28" },
-  },
+const dark: typeof light = {
+  background: "#0f1512",
+  surface: "#17201b",
+  text: "#e3eae5",
+  muted: "#a9b6ad",
+  border: "#2a362e",
+  accent: "#5fbf8d",
+  bad: "#ffb4ab",
+  good: "#7fd9a8",
 };
 
-export const themes = { light, dark };
+export const palette = { light, dark };
+
+export function usePalette() {
+  return useColorScheme() === "dark" ? dark : light;
+}
