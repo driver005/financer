@@ -22,7 +22,7 @@ SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](d
 | Embedded on-phone backend | Rust side built and tested; bindings generate; the **native build and device run are not done** ([docs/EMBEDDED.md](docs/EMBEDDED.md)) |
 | Backup / move between server and phone | export and import of your data as one JSON file (no secrets), idempotent; tested, including through the browser |
 | App | typechecks, 15 Node tests, bundles for iOS/Android/web, and the web build was driven in a real browser against the real server; **never run on a phone** |
-| Deployment (Docker, Caddy HTTPS, Postgres profile) | files validated with `docker compose config`; the **image was never built or deployed** here |
+| Deployment (Docker, Caddy HTTPS, Postgres profile) | compose file validated with `docker compose config`; the release build from the Dockerfile's exact copy set works and the binary starts; the **image itself was never built or deployed** (no Docker daemon here) |
 
 ## Run it
 
