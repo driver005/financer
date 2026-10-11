@@ -186,17 +186,15 @@ impl<H: Http> PoliteHttp<H> {
         tokio::time::sleep_until(wait_until).await;
     }
 
-    async fn robots_for(&self, url: &Url, host: &str) -> Result<Robots, PriceError> {
-        if let Some(r) = self.robots.lock().expect("robots lock").get(host) {
+    /// robots.txt rules for the origin (scheme, host and port) of `url`, fetched once.
+    async fn robots_for(&self, url: &Url) -> Result<Robots, PriceError> {
+        let origin = url.origin().ascii_serialization();
+        if let Some(r) = self.robots.lock().expect("robots lock").get(&origin) {
             return Ok(r.clone());
         }
-        let robots_url = format!(
-            "{}://{}/robots.txt",
-            url.scheme(),
-            url.host_str().unwrap_or(host)
-        );
-        self.wait_turn(host).await;
-        let rules = match self.inner.get(&robots_url).await {
+        let host = origin.clone();
+        self.wait_turn(&host).await;
+        let rules = match self.inner.get(&format!("{origin}/robots.txt")).await {
             Ok(res) if res.status < 300 => Robots::parse(&res.body, &self.agent_token),
             Ok(res) if res.status < 500 => Robots::default(), // 4xx: no robots.txt, everything allowed
             // 5xx or unreachable: be conservative and do not fetch (and do not cache the failure)
@@ -215,7 +213,7 @@ impl<H: Http> PoliteHttp<H> {
         self.robots
             .lock()
             .expect("robots lock")
-            .insert(host.to_string(), rules.clone());
+            .insert(origin, rules.clone());
         Ok(rules)
     }
 }
@@ -228,12 +226,13 @@ impl<H: Http> Http for PoliteHttp<H> {
         if !matches!(parsed.scheme(), "http" | "https") {
             return Err(PriceError::Http(format!("unsupported scheme in {url:?}")));
         }
-        let host = parsed
-            .host_str()
-            .ok_or_else(|| PriceError::Http(format!("no host in {url:?}")))?
-            .to_string();
+        if !parsed.has_host() {
+            return Err(PriceError::Http(format!("no host in {url:?}")));
+        }
+        // rate limits and robots rules are per origin: the same host on another port is another site
+        let host = parsed.origin().ascii_serialization();
 
-        let robots = self.robots_for(&parsed, &host).await?;
+        let robots = self.robots_for(&parsed).await?;
         let path_and_query = match parsed.query() {
             Some(q) => format!("{}?{q}", parsed.path()),
             None => parsed.path().to_string(),
@@ -390,6 +389,29 @@ Disallow: /blocked
             .lock()
             .unwrap()
             .contains(&"https://b.test/x".to_string()));
+    }
+
+    #[tokio::test]
+    async fn robots_url_keeps_the_port_and_scheme() {
+        let fake = FakeHttp::with(vec![
+            (
+                "http://127.0.0.1:9100/robots.txt",
+                200,
+                "User-agent: *\nDisallow: /nope\n",
+            ),
+            ("http://127.0.0.1:9100/offers", 200, "ok"),
+        ]);
+        let http = PoliteHttp::new(fake, "financer", Duration::ZERO);
+        assert_eq!(
+            http.get("http://127.0.0.1:9100/offers").await.unwrap().body,
+            "ok"
+        );
+        assert!(matches!(
+            http.get("http://127.0.0.1:9100/nope").await,
+            Err(PriceError::Blocked(_))
+        ));
+        let log = http.inner.log.lock().unwrap().clone();
+        assert_eq!(log[0], "http://127.0.0.1:9100/robots.txt");
     }
 
     #[tokio::test]

@@ -1,7 +1,7 @@
-import * as SecureStore from "expo-secure-store";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Api, type ApiConfig } from "./client";
+import { deleteSecret, getSecret, setSecret } from "./storage";
 
 const KEY = "financer.api-config";
 
@@ -23,7 +23,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const raw = await SecureStore.getItemAsync(KEY);
+        const raw = await getSecret(KEY);
         if (raw) setConfig(JSON.parse(raw) as ApiConfig);
       } catch {
         // unreadable or missing: start unconfigured
@@ -34,12 +34,12 @@ export function ApiProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const save = useCallback(async (next: ApiConfig) => {
-    await SecureStore.setItemAsync(KEY, JSON.stringify(next));
+    await setSecret(KEY, JSON.stringify(next));
     setConfig(next);
   }, []);
 
   const clear = useCallback(async () => {
-    await SecureStore.deleteItemAsync(KEY);
+    await deleteSecret(KEY);
     setConfig(null);
   }, []);
 

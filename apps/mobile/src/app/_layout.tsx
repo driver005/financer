@@ -26,12 +26,18 @@ export default function RootLayout() {
           screenOptions={{
             headerShown: false,
             tabBarActiveTintColor: theme.colors.primary,
+            tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
             tabBarStyle: { backgroundColor: theme.colors.surface },
           }}
         >
-          <Tabs.Screen name="index" options={tab("Transactions", "swap-vertical")} />
+          <Tabs.Screen name="index" options={tab("Spending", "swap-vertical")} />
           <Tabs.Screen name="budget" options={tab("Budget", "wallet-outline")} />
+          <Tabs.Screen name="prices" options={tab("Prices", "tag-multiple-outline")} />
+          <Tabs.Screen name="recipes" options={tab("Recipes", "chef-hat")} />
           <Tabs.Screen name="settings" options={tab("Settings", "cog-outline")} />
+          {/* reachable from Settings, not shown in the tab bar */}
+          <Tabs.Screen name="basket" options={{ href: null, title: "Usual items" }} />
+          <Tabs.Screen name="receipts" options={{ href: null, title: "Receipts" }} />
         </Tabs>
       </ApiProvider>
     </PaperProvider>

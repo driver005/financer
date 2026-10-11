@@ -1,17 +1,22 @@
+import { Link } from "expo-router";
 import { useEffect, useState } from "react";
-import { Text, TextInput } from "react-native";
+import { ScrollView, View } from "react-native";
+import { HelperText, List, SegmentedButtons, Text, TextInput } from "react-native-paper";
 
 import { Api } from "@/api/client";
 import { useApi } from "@/api/config";
 import { Body, Button, Card, Screen, Title, useColors } from "@/components/ui";
+import { useScreenData } from "@/hooks";
 
-export default function Settings() {
-  const { config, save, clear } = useApi();
+export default function SettingsScreen() {
+  const { config, api, save, clear } = useApi();
   const c = useColors();
+  const { data: settings, setData: setSettings, error } = useScreenData((a) => a.settings());
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [model, setModel] = useState("");
 
   useEffect(() => {
     if (config) {
@@ -19,25 +24,19 @@ export default function Settings() {
       setToken(config.token);
     }
   }, [config]);
-
-  const input = {
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: 8,
-    padding: 10,
-    color: c.text,
-    marginTop: 4,
-    marginBottom: 12,
-  } as const;
+  useEffect(() => {
+    if (settings) setModel(settings.llm_model);
+  }, [settings]);
 
   async function test() {
     setBusy(true);
     setStatus(null);
     try {
-      const api = new Api({ baseUrl: baseUrl.trim(), token: token.trim() });
-      if (!(await api.health())) throw new Error("Server answered, but not as a Financer server");
-      await api.transactions(); // needs the token
-      await save({ baseUrl: baseUrl.trim(), token: token.trim() });
+      const next = { baseUrl: baseUrl.trim(), token: token.trim() };
+      const probe = new Api(next);
+      if (!(await probe.health())) throw new Error("Server answered, but not as a Financer server");
+      await probe.transactions(); // needs the token
+      await save(next);
       setStatus("Connected. Settings saved.");
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Could not connect");
@@ -46,47 +45,133 @@ export default function Settings() {
     }
   }
 
+  async function update(patch: Parameters<Api["saveSettings"]>[0]) {
+    if (!api) return;
+    try {
+      setSettings(await api.saveSettings(patch));
+      setStatus(null);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Could not save");
+    }
+  }
+
+  const keyConfigured =
+    settings && (settings.llm_provider === "claude" ? settings.claude_key_configured : settings.openai_key_configured);
+
   return (
     <Screen>
       <Title>Settings</Title>
-      <Card>
-        <Body bold>Server</Body>
-        <Text style={{ color: c.muted, marginTop: 8 }}>Address (use https://)</Text>
-        <TextInput
-          value={baseUrl}
-          onChangeText={setBaseUrl}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          placeholder="https://financer.example.com"
-          placeholderTextColor={c.muted}
-          style={input}
-        />
-        <Text style={{ color: c.muted }}>API token</Text>
-        <TextInput
-          value={token}
-          onChangeText={setToken}
-          autoCapitalize="none"
-          autoCorrect={false}
-          secureTextEntry
-          placeholder="FINANCER_API_TOKEN of your server"
-          placeholderTextColor={c.muted}
-          style={input}
-        />
-        <Button label={busy ? "Connecting…" : "Test and save"} onPress={test} disabled={busy || !baseUrl.trim() || !token.trim()} />
-        {status ? <Text style={{ color: c.muted, marginTop: 10 }}>{status}</Text> : null}
-      </Card>
-      {config ? (
-        <Button
-          label="Forget this server"
-          onPress={() => {
-            void clear();
-            setBaseUrl("");
-            setToken("");
-            setStatus(null);
-          }}
-        />
-      ) : null}
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+        <Card>
+          <Text variant="titleMedium">Server</Text>
+          <TextInput
+            mode="outlined"
+            label="Address (use https://)"
+            accessibilityLabel="Address (use https://)"
+            value={baseUrl}
+            onChangeText={setBaseUrl}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            placeholder="https://financer.example.com"
+            style={{ marginTop: 8 }}
+          />
+          <TextInput
+            mode="outlined"
+            label="API token"
+            accessibilityLabel="API token"
+            value={token}
+            onChangeText={setToken}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            style={{ marginTop: 8 }}
+          />
+          <View style={{ marginTop: 12 }}>
+            <Button label={busy ? "Connecting…" : "Test and save"} icon="server-network" onPress={test} disabled={busy || !baseUrl.trim() || !token.trim()} />
+          </View>
+          {config ? (
+            <Button
+              mode="text"
+              label="Forget this server"
+              onPress={() => {
+                void clear();
+                setBaseUrl("");
+                setToken("");
+                setStatus(null);
+              }}
+            />
+          ) : null}
+        </Card>
+
+        {api && settings ? (
+          <>
+            <Card>
+              <Text variant="titleMedium">How should I learn what you buy?</Text>
+              <SegmentedButtons
+                style={{ marginTop: 12 }}
+                value={settings.habit_mode}
+                onValueChange={(v) => update({ habit_mode: v })}
+                buttons={[
+                  { value: "manual", label: "My list" },
+                  { value: "receipts", label: "Receipts" },
+                  { value: "spending", label: "Estimate" },
+                ]}
+              />
+              <Text variant="bodySmall" style={{ color: c.muted, marginTop: 8 }}>
+                Your bank only shows "REWE, 23,47 €", not what was in the bag. "Estimate" uses a generic basket.
+              </Text>
+              <Link href="/basket" asChild>
+                <List.Item title="Edit my usual items" left={(p) => <List.Icon {...p} icon="format-list-checks" />} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+              </Link>
+              <Link href="/receipts" asChild>
+                <List.Item title="Receipts" left={(p) => <List.Icon {...p} icon="receipt-text-outline" />} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+              </Link>
+            </Card>
+
+            <Card>
+              <Text variant="titleMedium">Recipe ideas by AI</Text>
+              <SegmentedButtons
+                style={{ marginTop: 12 }}
+                value={settings.llm_provider}
+                onValueChange={(v) => update({ llm_provider: v })}
+                buttons={[
+                  { value: "claude", label: "Claude" },
+                  { value: "open_ai", label: "OpenAI" },
+                ]}
+              />
+              <TextInput
+                mode="outlined"
+                label="Model (empty = default)"
+                accessibilityLabel="Model (empty = default)"
+                value={model}
+                onChangeText={setModel}
+                onEndEditing={() => model !== settings.llm_model && update({ llm_model: model })}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={{ marginTop: 12 }}
+              />
+              <HelperText type={keyConfigured ? "info" : "error"} visible>
+                {keyConfigured
+                  ? "An API key is configured on the server."
+                  : settings.llm_provider === "claude"
+                    ? "No key yet: set FINANCER_ANTHROPIC_API_KEY on the server."
+                    : "No key yet: set FINANCER_OPENAI_API_KEY on the server."}
+              </HelperText>
+              <Text variant="bodySmall" style={{ color: c.muted }}>
+                Only item names, offers, diet and budget are sent, never bank data.
+              </Text>
+            </Card>
+
+            <Card>
+              <Body>
+                {settings.price_sources} price source{settings.price_sources === 1 ? "" : "s"} configured on the server.
+              </Body>
+            </Card>
+          </>
+        ) : null}
+        {status || error ? <HelperText type="info" visible>{status ?? error}</HelperText> : null}
+      </ScrollView>
     </Screen>
   );
 }

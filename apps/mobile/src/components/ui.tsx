@@ -1,12 +1,19 @@
 import { Link } from "expo-router";
 import type { ReactNode } from "react";
 import { StyleSheet, View, type ViewStyle } from "react-native";
-import { ActivityIndicator, Button as PaperButton, Card as PaperCard, Text, useTheme } from "react-native-paper";
+import {
+  ActivityIndicator,
+  Button as PaperButton,
+  Card as PaperCard,
+  ProgressBar,
+  Text,
+  useTheme,
+} from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 /** Colours used by the screens, taken from the active Paper (Material 3) theme. */
 export function useColors() {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   return {
     bg: colors.background,
     card: colors.surface,
@@ -15,7 +22,7 @@ export function useColors() {
     border: colors.outlineVariant,
     accent: colors.primary,
     bad: colors.error,
-    good: "#1b8a56",
+    good: dark ? "#7fd9a8" : "#1b6b4a",
   };
 }
 
@@ -70,6 +77,19 @@ export function Button({
     <PaperButton mode={mode} icon={icon} onPress={onPress} disabled={disabled} style={styles.button}>
       {label}
     </PaperButton>
+  );
+}
+
+/**
+ * Progress bar with a fixed 4px box. Paper's ProgressBar wraps itself in `height: 100%` on
+ * web, which grows inside a flex column and pushes the content below it far away.
+ */
+export function Bar({ progress, color, marginTop = 6 }: { progress: number; color?: string; marginTop?: number }) {
+  const c = useColors();
+  return (
+    <View style={{ height: 4, marginTop, borderRadius: 4, overflow: "hidden" }}>
+      <ProgressBar progress={Math.max(0, Math.min(1, progress))} color={color ?? c.accent} />
+    </View>
   );
 }
 

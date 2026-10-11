@@ -60,7 +60,7 @@ export default function Transactions() {
 
   return (
     <Screen>
-      <Title>Transactions</Title>
+      <Title>Spending</Title>
       {!api ? (
         <NeedsSetup />
       ) : (

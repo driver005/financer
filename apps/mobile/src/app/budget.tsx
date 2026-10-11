@@ -1,11 +1,13 @@
-import { useCallback, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, TextInput, View } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { ScrollView, View } from "react-native";
+import { HelperText, Text, TextInput } from "react-native-paper";
 
 import type { Disposable, EnvelopeStatus } from "@/api/client";
 import { useApi } from "@/api/config";
-import { Body, Button, Card, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
+import { Afford } from "@/components/Afford";
+import { Bar, Body, Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { formatCents, parseEuroInput } from "@/format";
+import { useScreenData } from "@/hooks";
 
 // Categories that can have a monthly limit (income and savings are not spending).
 const CATEGORIES = [
@@ -13,43 +15,32 @@ const CATEGORIES = [
   "subscriptions", "health", "leisure", "shopping", "cash", "other",
 ] as const;
 
+type BudgetData = { disposable: Disposable; limits: Record<string, string>; status: EnvelopeStatus[] };
+
 export default function Budget() {
   const { api, loaded } = useApi();
   const c = useColors();
-  const [disposable, setDisposable] = useState<Disposable | null>(null);
-  const [status, setStatus] = useState<EnvelopeStatus[]>([]);
+  const { data, error, busy, reload } = useScreenData<BudgetData>(async (a) => {
+    const now = new Date();
+    const [disposable, envelopes, status] = await Promise.all([
+      a.disposable(),
+      a.envelopes(),
+      a.budgetStatus(now.getFullYear(), now.getMonth() + 1),
+    ]);
+    const limits = Object.fromEntries(
+      envelopes.map((e) => [e.category, (e.limit_cents / 100).toFixed(2).replace(".", ",")]),
+    );
+    return { disposable, limits, status };
+  });
   const [limits, setLimits] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!api) return;
-    setBusy(true);
-    try {
-      const now = new Date();
-      const [d, envelopes, st] = await Promise.all([
-        api.disposable(),
-        api.envelopes(),
-        api.budgetStatus(now.getFullYear(), now.getMonth() + 1),
-      ]);
-      setDisposable(d);
-      setStatus(st);
-      setLimits(Object.fromEntries(envelopes.map((e) => [e.category, (e.limit_cents / 100).toFixed(2).replace(".", ",")])));
-      setMessage(null);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not load budget");
-    } finally {
-      setBusy(false);
-    }
-  }, [api]);
+  useEffect(() => {
+    if (data) setLimits(data.limits);
+  }, [data]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load]),
-  );
-
-  async function save() {
+  const save = useCallback(async () => {
     if (!api) return;
     const envelopes = [];
     for (const category of CATEGORIES) {
@@ -62,18 +53,19 @@ export default function Budget() {
       }
       envelopes.push({ category, limit_cents: cents });
     }
-    setBusy(true);
+    setSaving(true);
     try {
       await api.saveEnvelopes(envelopes);
-      await load();
+      await reload();
       setMessage("Budget saved");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Could not save budget");
-      setBusy(false);
+    } finally {
+      setSaving(false);
     }
-  }
+  }, [api, limits, reload]);
 
-  if (!loaded) return <Screen><ActivityIndicator style={{ marginTop: 40 }} /></Screen>;
+  if (!loaded) return <Screen><Loading /></Screen>;
 
   return (
     <Screen>
@@ -81,48 +73,61 @@ export default function Budget() {
       {!api ? (
         <NeedsSetup />
       ) : (
-        <ScrollView keyboardShouldPersistTaps="handled">
-          {disposable ? (
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+          <Afford />
+
+          {data ? (
             <Card>
-              <Body bold>Per month (from recurring payments)</Body>
-              <Row label="Income" value={formatCents(disposable.monthly_income_cents)} />
-              <Row label="Fixed costs" value={formatCents(-disposable.monthly_fixed_costs_cents)} />
-              <Row label="Left to budget" value={formatCents(disposable.disposable_cents)} bold />
+              <Text variant="titleMedium">Per month (from recurring payments)</Text>
+              <Row label="Income" value={formatCents(data.disposable.monthly_income_cents)} />
+              <Row label="Fixed costs" value={formatCents(-data.disposable.monthly_fixed_costs_cents)} />
+              <Row label="Left to budget" value={formatCents(data.disposable.disposable_cents)} bold />
             </Card>
+          ) : busy ? (
+            <Loading />
           ) : null}
 
           <Card>
-            <Body bold>Monthly limits</Body>
+            <Text variant="titleMedium">Monthly limits</Text>
             {CATEGORIES.map((cat) => {
-              const s = status.find((x) => x.category === cat);
+              const s = data?.status.find((x) => x.category === cat);
               const over = s ? s.remaining_cents < 0 : false;
+              const progress = s && s.limit_cents > 0 ? Math.min(1, s.spent_cents / s.limit_cents) : 0;
               return (
-                <View key={cat} style={{ marginTop: 10 }}>
+                <View key={cat} style={{ marginTop: 14 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <Text style={{ color: c.text, flex: 1, textTransform: "capitalize" }}>{cat}</Text>
+                    <Text variant="bodyLarge" style={{ flex: 1, textTransform: "capitalize" }}>{cat}</Text>
                     <TextInput
+                      mode="outlined"
+                      dense
                       value={limits[cat] ?? ""}
                       onChangeText={(t) => setLimits((l) => ({ ...l, [cat]: t }))}
                       placeholder="–"
-                      placeholderTextColor={c.muted}
                       keyboardType="decimal-pad"
+                      right={<TextInput.Affix text="€" />}
+                      style={{ width: 120 }}
                       accessibilityLabel={`Monthly limit for ${cat} in euro`}
-                      style={{ borderWidth: 1, borderColor: c.border, borderRadius: 8, padding: 8, width: 100, color: c.text, textAlign: "right" }}
                     />
                   </View>
                   {s ? (
-                    <Text style={{ color: over ? c.bad : c.muted, fontSize: 13, marginTop: 2 }}>
-                      {formatCents(s.spent_cents)} spent · {over ? `${formatCents(-s.remaining_cents)} over` : `${formatCents(s.remaining_cents)} left`}
-                    </Text>
+                    <>
+                      <Bar progress={progress} color={over ? c.bad : c.accent} />
+                      <Text variant="bodySmall" style={{ color: over ? c.bad : c.muted, marginTop: 2 }}>
+                        {formatCents(s.spent_cents)} spent ·{" "}
+                        {over ? `${formatCents(-s.remaining_cents)} over` : `${formatCents(s.remaining_cents)} left`}
+                      </Text>
+                    </>
                   ) : null}
                 </View>
               );
             })}
-            <View style={{ marginTop: 14 }}>
-              <Button label="Save limits" onPress={save} disabled={busy} />
+            <View style={{ marginTop: 16 }}>
+              <Button label="Save limits" icon="content-save-outline" onPress={save} disabled={saving} />
             </View>
+            <HelperText type={message?.startsWith("Budget saved") ? "info" : "error"} visible={!!(message ?? error)}>
+              {message ?? error}
+            </HelperText>
           </Card>
-          {message ? <Text style={{ color: c.muted, marginBottom: 16 }}>{message}</Text> : null}
         </ScrollView>
       )}
     </Screen>
