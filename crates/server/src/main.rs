@@ -1,21 +1,36 @@
 //! Configuration (environment variables):
 //!
-//! - `FINANCER_API_TOKEN`    required, at least 32 characters; the app sends it as a bearer token
-//! - `FINANCER_DATABASE_URL` `postgres://user:pass@host/db` or `sqlite://path?mode=rwc`
+//! - `FINANCER_API_TOKEN`          required, at least 32 characters; the app sends it as a bearer token
+//! - `FINANCER_DATABASE_URL`       `postgres://user:pass@host/db` or `sqlite://path?mode=rwc`
 //!   (default `sqlite://financer.db?mode=rwc`)
-//! - `FINANCER_BIND`         listen address (default `127.0.0.1:8080`; put HTTPS in front)
+//! - `FINANCER_BIND`               listen address (default `127.0.0.1:8080`; put HTTPS in front)
+//! - `FINANCER_PRICE_SOURCES`      path to a JSON file listing price sources (see docs/PRICES.md)
+//! - `FINANCER_REFRESH_HOURS`      hours between automatic price refreshes (default 24, 0 = off)
+//! - `FINANCER_ANTHROPIC_API_KEY`  enables recipe ideas with Claude
+//! - `FINANCER_OPENAI_API_KEY`     enables recipe ideas with OpenAI
 //!
-//! `financer-server --print-openapi` prints the OpenAPI document and exits.
+//! Commands: `--print-openapi` prints the OpenAPI document; `--probe-prices` fetches every
+//! configured price source once and reports what it found, without touching the database.
 
-use financer_api::{router, AppState, TokenHash};
+use std::sync::Arc;
+use std::time::Duration;
+
+use financer_api::{router, AppState, LlmKeys, PriceSourceConfig, TokenHash};
+use financer_prices::{build_sources, refresh, PoliteHttp, ReqwestHttp};
 use financer_store::Store;
 use tracing_subscriber::EnvFilter;
 
 const MIN_TOKEN_LEN: usize = 32;
+const USER_AGENT: &str =
+    "financer-personal/0.1 (personal use; +https://github.com/driver005/financer)";
+const AGENT_TOKEN: &str = "financer";
+/// Pause between requests to the same host.
+const REQUEST_GAP: Duration = Duration::from_secs(3);
 
 #[tokio::main]
 async fn main() {
-    if std::env::args().any(|a| a == "--print-openapi") {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--print-openapi") {
         println!("{}", financer_api::openapi_json());
         return;
     }
@@ -26,10 +41,33 @@ async fn main() {
         )
         .init();
 
-    if let Err(e) = run().await {
+    let result = if args.iter().any(|a| a == "--probe-prices") {
+        probe().await
+    } else {
+        run().await
+    };
+    if let Err(e) = result {
         eprintln!("financer-server: {e}");
         std::process::exit(1);
     }
+}
+
+fn load_sources() -> Result<Vec<PriceSourceConfig>, String> {
+    let Ok(path) = std::env::var("FINANCER_PRICE_SOURCES") else {
+        return Ok(Vec::new());
+    };
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("cannot read FINANCER_PRICE_SOURCES {path}: {e}"))?;
+    serde_json::from_str(&text).map_err(|e| format!("invalid price sources in {path}: {e}"))
+}
+
+fn polite_http() -> Result<Arc<PoliteHttp<ReqwestHttp>>, String> {
+    let inner = ReqwestHttp::new(USER_AGENT).map_err(|e| e.to_string())?;
+    Ok(Arc::new(PoliteHttp::new(inner, AGENT_TOKEN, REQUEST_GAP)))
+}
+
+fn env_key(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|k| !k.trim().is_empty())
 }
 
 async fn run() -> Result<(), String> {
@@ -43,13 +81,43 @@ async fn run() -> Result<(), String> {
     let db_url = std::env::var("FINANCER_DATABASE_URL")
         .unwrap_or_else(|_| "sqlite://financer.db?mode=rwc".into());
     let bind = std::env::var("FINANCER_BIND").unwrap_or_else(|_| "127.0.0.1:8080".into());
+    let refresh_hours: u64 = match std::env::var("FINANCER_REFRESH_HOURS") {
+        Ok(v) => v
+            .trim()
+            .parse()
+            .map_err(|_| "FINANCER_REFRESH_HOURS must be a whole number".to_string())?,
+        Err(_) => 24,
+    };
+    let sources = load_sources()?;
 
     let store = Store::connect(&db_url)
         .await
         .map_err(|e| format!("cannot open database: {e}"))?;
-    tracing::info!(backend = ?store.backend(), "database ready");
+    tracing::info!(backend = ?store.backend(), price_sources = sources.len(), "database ready");
 
-    let app = router(AppState { store }, TokenHash::new(&token));
+    let state = AppState::new(store)
+        .with_http(polite_http()?)
+        .with_price_sources(sources.clone())
+        .with_llm_keys(LlmKeys {
+            claude: env_key("FINANCER_ANTHROPIC_API_KEY"),
+            openai: env_key("FINANCER_OPENAI_API_KEY"),
+        });
+
+    if refresh_hours > 0 && !sources.is_empty() {
+        let state = state.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            loop {
+                match financer_api::refresh_prices_summary(&state).await {
+                    Ok(summary) => tracing::info!("price refresh: {summary}"),
+                    Err(e) => tracing::warn!("price refresh failed: {e}"),
+                }
+                tokio::time::sleep(Duration::from_secs(refresh_hours * 3600)).await;
+            }
+        });
+    }
+
+    let app = router(state, TokenHash::new(&token));
     let listener = tokio::net::TcpListener::bind(&bind)
         .await
         .map_err(|e| format!("cannot bind {bind}: {e}"))?;
@@ -60,4 +128,45 @@ async fn run() -> Result<(), String> {
         })
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Fetch every configured source once and print what came back. This is how to check, from
+/// the machine that will run the server, which retailer pages are reachable and parsable.
+async fn probe() -> Result<(), String> {
+    let configs = load_sources()?;
+    if configs.is_empty() {
+        return Err(
+            "no price sources: set FINANCER_PRICE_SOURCES to a JSON file (see docs/PRICES.md)"
+                .into(),
+        );
+    }
+    let http = polite_http()?;
+    let sources = build_sources(&configs, time::OffsetDateTime::now_utc().date());
+    let result = refresh(&sources, http.as_ref()).await;
+
+    let samples: Vec<_> = result
+        .quotes
+        .iter()
+        .take(5)
+        .map(|q| {
+            format!(
+                "{} @ {:?}: {} for {} ({})",
+                q.quote.item, q.quote.chain, q.quote.price, q.product_name, q.shelf_price
+            )
+        })
+        .collect();
+    let report = serde_json::json!({
+        "sources": result.sources,
+        "quotes_usable": result.quotes.len(),
+        "skipped": result.normalize,
+        "samples": samples,
+    });
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+    );
+    if result.sources.iter().any(|s| !s.ok) {
+        return Err("at least one source failed".into());
+    }
+    Ok(())
 }

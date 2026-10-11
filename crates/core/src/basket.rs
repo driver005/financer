@@ -16,6 +16,22 @@ pub enum Chain {
     Rewe,
 }
 
+impl Chain {
+    /// Recognise a chain in a merchant, store or location name ("REWE Markt GmbH", "Aldi Süd").
+    pub fn from_name(name: &str) -> Option<Chain> {
+        let n = name.to_lowercase();
+        [
+            ("rewe", Chain::Rewe),
+            ("lidl", Chain::Lidl),
+            ("aldi", Chain::Aldi),
+            ("kaufland", Chain::Kaufland),
+        ]
+        .into_iter()
+        .find(|(needle, _)| n.contains(needle))
+        .map(|(_, c)| c)
+    }
+}
+
 /// A price for one canonical item ("generic item key", e.g. `vollmilch-3.5-1l`) at one chain.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PriceQuote {
@@ -299,6 +315,17 @@ mod tests {
             q("nudeln", Chain::Rewe, 129),
         ];
         (items, quotes)
+    }
+
+    #[test]
+    fn recognises_chains_by_name() {
+        assert_eq!(Chain::from_name("REWE Markt GmbH"), Some(Chain::Rewe));
+        assert_eq!(Chain::from_name("Aldi Süd"), Some(Chain::Aldi));
+        assert_eq!(
+            Chain::from_name("Kaufland Filiale 123"),
+            Some(Chain::Kaufland)
+        );
+        assert_eq!(Chain::from_name("Edeka"), None);
     }
 
     #[test]

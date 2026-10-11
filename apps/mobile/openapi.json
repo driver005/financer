@@ -30,6 +30,143 @@
         }
       }
     },
+    "/v1/affordability": {
+      "get": {
+        "tags": [
+          "grocery"
+        ],
+        "summary": "What the budget buys: how long your usual basket lasts per chain, the cheapest items that\nfit, and the cheapest way to split the shopping.",
+        "operationId": "affordability",
+        "parameters": [
+          {
+            "name": "budget_cents",
+            "in": "path",
+            "description": "Budget in cents. Default: what is left of this month's groceries limit.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "days_per_basket",
+            "in": "path",
+            "description": "Days one basket lasts (default 7).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffordabilityDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No budget given and no groceries limit set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/basket": {
+      "get": {
+        "tags": [
+          "grocery"
+        ],
+        "operationId": "get_basket",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasketDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "grocery"
+        ],
+        "summary": "Replace your hand-maintained list of usual items (used in `manual` habit mode).",
+        "operationId": "put_basket",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BasketItemDto"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasketDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown item, bad quantity or duplicate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/budget/disposable": {
       "get": {
         "tags": [
@@ -195,6 +332,383 @@
         ]
       }
     },
+    "/v1/catalog": {
+      "get": {
+        "tags": [
+          "grocery"
+        ],
+        "summary": "All items prices and recipes can refer to.",
+        "operationId": "catalog",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogItemDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/prices": {
+      "get": {
+        "tags": [
+          "grocery"
+        ],
+        "summary": "Current prices per chain, cheapest first within each item.",
+        "operationId": "list_prices",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "path",
+            "description": "Only this catalog item.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/prices/best": {
+      "get": {
+        "tags": [
+          "grocery"
+        ],
+        "summary": "For each item of your basket, the cheapest chain right now.",
+        "operationId": "best_prices",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PickDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/prices/refresh": {
+      "post": {
+        "tags": [
+          "grocery"
+        ],
+        "summary": "Fetch all configured price sources and store the result. A source that fails keeps its old\nprices.",
+        "operationId": "refresh_prices",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshReportDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No price sources configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts": {
+      "get": {
+        "tags": [
+          "grocery"
+        ],
+        "operationId": "list_receipts",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceiptDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "grocery"
+        ],
+        "summary": "Upload text recognised from a receipt photo. Your usual items are learned from receipts\nwhen the habit mode is `receipts`.",
+        "operationId": "upload_receipt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No items recognised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/{id}": {
+      "delete": {
+        "tags": [
+          "grocery"
+        ],
+        "operationId": "delete_receipt",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Receipt id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "No such receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/recipes": {
+      "get": {
+        "tags": [
+          "grocery"
+        ],
+        "summary": "Bundled recipes ranked by how much of them you already buy, what is on offer and what the\nrest costs.",
+        "operationId": "recipes",
+        "parameters": [
+          {
+            "name": "budget_cents",
+            "in": "path",
+            "description": "Hide recipes whose missing ingredients cost more than this.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "description": "Only recipes with this tag, e.g. `vegetarisch`.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "At most this many (default 10, max 50).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecipeMatchDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/recipes/ideas": {
+      "post": {
+        "tags": [
+          "grocery"
+        ],
+        "summary": "New recipe ideas from Claude or OpenAI, based on your usual items and current offers. Only\nitem names, the budget and your diet note are sent, never bank data.",
+        "operationId": "recipe_ideas",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeasRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IdeaDto"
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The provider failed or returned nothing usable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No API key configured for the selected provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/recurring": {
       "get": {
         "tags": [
@@ -212,6 +726,74 @@
                   "items": {
                     "$ref": "#/components/schemas/RecurringDto"
                   }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/settings": {
+      "get": {
+        "tags": [
+          "grocery"
+        ],
+        "operationId": "get_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "grocery"
+        ],
+        "operationId": "put_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid value",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -302,6 +884,173 @@
   },
   "components": {
     "schemas": {
+      "AffordabilityDto": {
+        "type": "object",
+        "required": [
+          "budget_cents",
+          "budget_source",
+          "basket_source",
+          "per_chain",
+          "staples"
+        ],
+        "properties": {
+          "basket_source": {
+            "type": "string"
+          },
+          "budget_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "budget_source": {
+            "type": "string",
+            "description": "`request` or `groceries_envelope`."
+          },
+          "per_chain": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChainAffordabilityDto"
+            }
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlanDto",
+                "description": "Best way to buy the basket, if every item has a price somewhere."
+              }
+            ]
+          },
+          "staples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StapleDto"
+            },
+            "description": "Cheapest items that fit the budget (at most 20)."
+          }
+        }
+      },
+      "BasketDto": {
+        "type": "object",
+        "required": [
+          "source",
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BasketItemOutDto"
+            }
+          },
+          "source": {
+            "type": "string",
+            "description": "`manual`, `receipts` or `starter` (a generic basket used until habits are known)."
+          }
+        }
+      },
+      "BasketItemDto": {
+        "type": "object",
+        "required": [
+          "item",
+          "quantity"
+        ],
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "Catalog key, e.g. `milch`."
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Packs of the reference size per shopping period (1 to 99).",
+            "minimum": 0
+          }
+        }
+      },
+      "BasketItemOutDto": {
+        "type": "object",
+        "required": [
+          "item",
+          "name",
+          "reference_pack",
+          "quantity"
+        ],
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "reference_pack": {
+            "type": "string"
+          }
+        }
+      },
+      "CatalogItemDto": {
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "reference_pack"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reference_pack": {
+            "type": "string"
+          }
+        }
+      },
+      "ChainAffordabilityDto": {
+        "type": "object",
+        "required": [
+          "chain",
+          "basket_cents",
+          "baskets",
+          "days_covered",
+          "missing"
+        ],
+        "properties": {
+          "basket_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "baskets": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Whole baskets the budget pays for.",
+            "minimum": 0
+          },
+          "chain": {
+            "type": "string",
+            "example": "lidl"
+          },
+          "days_covered": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Basket items this chain has no price for."
+          }
+        }
+      },
       "DisposableDto": {
         "type": "object",
         "required": [
@@ -381,6 +1130,87 @@
           }
         }
       },
+      "IdeaDto": {
+        "type": "object",
+        "required": [
+          "title",
+          "summary",
+          "minutes",
+          "servings",
+          "ingredients",
+          "steps"
+        ],
+        "properties": {
+          "ingredients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IdeaIngredientDto"
+            }
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "servings": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "IdeaIngredientDto": {
+        "type": "object",
+        "required": [
+          "name",
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "IdeasRequest": {
+        "type": "object",
+        "properties": {
+          "budget_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "diet": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "ImportReport": {
         "type": "object",
         "required": [
@@ -405,6 +1235,355 @@
               "$ref": "#/components/schemas/SkippedRowDto"
             },
             "description": "Rows that could not be read, with the reason."
+          }
+        }
+      },
+      "PickDto": {
+        "type": "object",
+        "required": [
+          "item",
+          "name",
+          "chain",
+          "price_cents",
+          "is_offer",
+          "saving_vs_next_cents"
+        ],
+        "properties": {
+          "chain": {
+            "type": "string"
+          },
+          "is_offer": {
+            "type": "boolean"
+          },
+          "item": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "saving_vs_next_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How much more the next-cheapest chain charges."
+          },
+          "valid_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "PlanDto": {
+        "type": "object",
+        "required": [
+          "stops",
+          "total_cents"
+        ],
+        "properties": {
+          "single_chain_total_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanStopDto"
+            }
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PlanStopDto": {
+        "type": "object",
+        "required": [
+          "chain",
+          "items"
+        ],
+        "properties": {
+          "chain": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PickDto"
+            }
+          }
+        }
+      },
+      "PriceDto": {
+        "type": "object",
+        "required": [
+          "item",
+          "item_name",
+          "reference_pack",
+          "chain",
+          "price_cents",
+          "shelf_price_cents",
+          "product_name",
+          "is_offer",
+          "source"
+        ],
+        "properties": {
+          "chain": {
+            "type": "string",
+            "example": "aldi"
+          },
+          "is_offer": {
+            "type": "boolean"
+          },
+          "item": {
+            "type": "string",
+            "description": "Catalog key, e.g. `milch`."
+          },
+          "item_name": {
+            "type": "string"
+          },
+          "price_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Price of the reference pack."
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "reference_pack": {
+            "type": "string",
+            "description": "Pack all prices of this item are normalised to, e.g. `1 l`."
+          },
+          "shelf_price_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Price of the product as listed on the shelf."
+          },
+          "source": {
+            "type": "string"
+          },
+          "valid_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "ReceiptDto": {
+        "type": "object",
+        "required": [
+          "duplicate",
+          "items",
+          "reconciles"
+        ],
+        "properties": {
+          "chain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "rewe"
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "duplicate": {
+            "type": "boolean",
+            "description": "True if this exact receipt was uploaded before (nothing new was stored)."
+          },
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceiptItemDto"
+            }
+          },
+          "merchant": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reconciles": {
+            "type": "boolean",
+            "description": "Items add up to the printed total; if false, ask the user to check the receipt."
+          },
+          "total_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "ReceiptItemDto": {
+        "type": "object",
+        "required": [
+          "text",
+          "quantity",
+          "line_total_cents"
+        ],
+        "properties": {
+          "item": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Catalog key when recognised."
+          },
+          "line_total_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "ReceiptUpload": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text recognised from the receipt photo."
+          }
+        }
+      },
+      "RecipeIngredientDto": {
+        "type": "object",
+        "required": [
+          "item",
+          "name",
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "item": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "RecipeMatchDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "minutes",
+          "servings",
+          "tags",
+          "ingredients",
+          "steps",
+          "coverage_percent",
+          "have",
+          "missing",
+          "on_offer",
+          "missing_cost_cents",
+          "unpriced"
+        ],
+        "properties": {
+          "coverage_percent": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Share of the ingredients you already buy, 0 to 100.",
+            "minimum": 0
+          },
+          "have": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "ingredients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecipeIngredientDto"
+            }
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "missing_cost_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Full-pack price of the missing ingredients that have a known price."
+          },
+          "on_offer": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "servings": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "unpriced": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -439,6 +1618,105 @@
           }
         }
       },
+      "RefreshReportDto": {
+        "type": "object",
+        "required": [
+          "sources",
+          "stored",
+          "unmatched",
+          "no_size",
+          "size_mismatch",
+          "bad_price"
+        ],
+        "properties": {
+          "bad_price": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "no_size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size_mismatch": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceStatusDto"
+            }
+          },
+          "stored": {
+            "type": "integer",
+            "description": "Quotes stored after this refresh.",
+            "minimum": 0
+          },
+          "unmatched": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SettingsDto": {
+        "type": "object",
+        "required": [
+          "habit_mode",
+          "llm_provider",
+          "llm_model",
+          "claude_key_configured",
+          "openai_key_configured",
+          "price_sources"
+        ],
+        "properties": {
+          "claude_key_configured": {
+            "type": "boolean"
+          },
+          "habit_mode": {
+            "type": "string",
+            "description": "`manual`, `receipts` or `spending`."
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "Empty means the provider's default model."
+          },
+          "llm_provider": {
+            "type": "string",
+            "description": "`claude` or `open_ai`."
+          },
+          "openai_key_configured": {
+            "type": "boolean"
+          },
+          "price_sources": {
+            "type": "integer",
+            "description": "Number of configured price sources.",
+            "minimum": 0
+          }
+        }
+      },
+      "SettingsUpdate": {
+        "type": "object",
+        "properties": {
+          "habit_mode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "llm_model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "llm_provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "SkippedRowDto": {
         "type": "object",
         "required": [
@@ -453,6 +1731,62 @@
           },
           "reason": {
             "type": "string"
+          }
+        }
+      },
+      "SourceStatusDto": {
+        "type": "object",
+        "required": [
+          "name",
+          "ok",
+          "offers_found"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "offers_found": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StapleDto": {
+        "type": "object",
+        "required": [
+          "item",
+          "name",
+          "chain",
+          "price_cents",
+          "max_packs"
+        ],
+        "properties": {
+          "chain": {
+            "type": "string"
+          },
+          "item": {
+            "type": "string"
+          },
+          "max_packs": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "price_cents": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

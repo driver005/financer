@@ -2,24 +2,92 @@
 
 mod auth;
 mod dto;
+mod grocery;
 mod routes;
 
+use std::sync::Arc;
+
+use async_trait::async_trait;
 use axum::extract::DefaultBodyLimit;
 use axum::middleware;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::Router;
+use financer_llm::{provider_for, LlmError, LlmProvider, LlmSettings};
+use financer_prices::{Http, HttpResponse, PriceError, SourceConfig};
 use financer_store::Store;
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 
 pub use auth::TokenHash;
+pub use financer_llm::MockProvider;
+pub use financer_prices::{FakeHttp, SourceConfig as PriceSourceConfig};
 
 /// Largest request body accepted (CSV exports of many years stay well below this).
 const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
 
+/// API keys for the LLM providers. They live on the server (environment), never in the app.
+#[derive(Clone, Default)]
+pub struct LlmKeys {
+    pub claude: Option<String>,
+    pub openai: Option<String>,
+}
+
+type LlmFactory = Arc<dyn Fn(&LlmSettings) -> Result<Box<dyn LlmProvider>, LlmError> + Send + Sync>;
+
+/// Used until a real HTTP client is configured, so a misconfigured server fails loudly
+/// instead of silently fetching nothing.
+struct NoNetwork;
+
+#[async_trait]
+impl Http for NoNetwork {
+    async fn get(&self, _url: &str) -> Result<HttpResponse, PriceError> {
+        Err(PriceError::Http(
+            "network access for price sources is not configured".into(),
+        ))
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub store: Store,
+    pub(crate) http: Arc<dyn Http>,
+    pub(crate) price_sources: Arc<Vec<SourceConfig>>,
+    pub(crate) llm_keys: LlmKeys,
+    pub(crate) llm: LlmFactory,
+}
+
+impl AppState {
+    pub fn new(store: Store) -> Self {
+        Self {
+            store,
+            http: Arc::new(NoNetwork),
+            price_sources: Arc::new(Vec::new()),
+            llm_keys: LlmKeys::default(),
+            llm: Arc::new(provider_for),
+        }
+    }
+
+    /// HTTP client used for price refreshes (the server passes a polite, robots-aware one).
+    pub fn with_http(mut self, http: Arc<dyn Http>) -> Self {
+        self.http = http;
+        self
+    }
+
+    pub fn with_price_sources(mut self, sources: Vec<SourceConfig>) -> Self {
+        self.price_sources = Arc::new(sources);
+        self
+    }
+
+    pub fn with_llm_keys(mut self, keys: LlmKeys) -> Self {
+        self.llm_keys = keys;
+        self
+    }
+
+    /// Replace how LLM providers are built (tests use a mock).
+    pub fn with_llm_factory(mut self, factory: LlmFactory) -> Self {
+        self.llm = factory;
+        self
+    }
 }
 
 #[derive(OpenApi)]
@@ -34,6 +102,20 @@ pub struct AppState {
         routes::get_envelopes,
         routes::put_envelopes,
         routes::budget_status,
+        grocery::refresh_prices,
+        grocery::list_prices,
+        grocery::best_prices,
+        grocery::catalog,
+        grocery::get_basket,
+        grocery::put_basket,
+        grocery::upload_receipt,
+        grocery::list_receipts,
+        grocery::delete_receipt,
+        grocery::affordability,
+        grocery::recipes,
+        grocery::recipe_ideas,
+        grocery::get_settings,
+        grocery::put_settings,
     ),
     components(schemas(
         dto::TransactionDto,
@@ -44,6 +126,29 @@ pub struct AppState {
         dto::EnvelopeStatusDto,
         dto::DisposableDto,
         dto::ErrorBody,
+        dto::PriceDto,
+        dto::SourceStatusDto,
+        dto::RefreshReportDto,
+        dto::BasketItemDto,
+        dto::BasketDto,
+        dto::BasketItemOutDto,
+        dto::CatalogItemDto,
+        dto::ReceiptUpload,
+        dto::ReceiptItemDto,
+        dto::ReceiptDto,
+        dto::ChainAffordabilityDto,
+        dto::StapleDto,
+        dto::PlanStopDto,
+        dto::PickDto,
+        dto::PlanDto,
+        dto::AffordabilityDto,
+        dto::RecipeMatchDto,
+        dto::RecipeIngredientDto,
+        dto::IdeasRequest,
+        dto::IdeaDto,
+        dto::IdeaIngredientDto,
+        dto::SettingsDto,
+        dto::SettingsUpdate,
     )),
     modifiers(&BearerAuth)
 )]
@@ -74,6 +179,23 @@ pub fn router(state: AppState, token: TokenHash) -> Router {
             get(routes::get_envelopes).put(routes::put_envelopes),
         )
         .route("/budget/status", get(routes::budget_status))
+        .route("/prices", get(grocery::list_prices))
+        .route("/prices/best", get(grocery::best_prices))
+        .route("/prices/refresh", post(grocery::refresh_prices))
+        .route("/catalog", get(grocery::catalog))
+        .route("/basket", get(grocery::get_basket).put(grocery::put_basket))
+        .route(
+            "/receipts",
+            get(grocery::list_receipts).post(grocery::upload_receipt),
+        )
+        .route("/receipts/{id}", delete(grocery::delete_receipt))
+        .route("/affordability", get(grocery::affordability))
+        .route("/recipes", get(grocery::recipes))
+        .route("/recipes/ideas", post(grocery::recipe_ideas))
+        .route(
+            "/settings",
+            get(grocery::get_settings).put(grocery::put_settings),
+        )
         .layer(middleware::from_fn_with_state(token, auth::require_token));
 
     Router::new()
@@ -82,6 +204,29 @@ pub fn router(state: AppState, token: TokenHash) -> Router {
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// Refresh all configured price sources now. Returns a one-line summary for logs; used by the
+/// server's scheduler.
+pub async fn refresh_prices_summary(state: &AppState) -> Result<String, String> {
+    match grocery::refresh_prices_now(state).await {
+        Ok(r) => {
+            let failed: Vec<_> = r
+                .sources
+                .iter()
+                .filter(|s| !s.ok)
+                .map(|s| s.name.as_str())
+                .collect();
+            Ok(format!(
+                "{} quotes stored, {} source(s) failed {:?}",
+                r.stored,
+                failed.len(),
+                failed
+            ))
+        }
+        Err(routes::ApiError::Unavailable(m)) => Err(m),
+        Err(_) => Err("price refresh failed".into()),
+    }
 }
 
 pub fn openapi_json() -> String {

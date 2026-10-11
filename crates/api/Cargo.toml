@@ -9,7 +9,12 @@ rust-version.workspace = true
 [dependencies]
 financer-core = { path = "../core" }
 financer-fints = { path = "../fints" }
+financer-llm = { path = "../llm" }
+financer-prices = { path = "../prices" }
+financer-receipts = { path = "../receipts" }
+financer-recipes = { path = "../recipes" }
 financer-store = { path = "../store" }
+async-trait = "0.1"
 axum = { version = "0.8", default-features = false, features = ["json", "query", "tokio", "http1"] }
 serde.workspace = true
 serde_json.workspace = true
@@ -23,5 +28,6 @@ tracing = "0.1"
 utoipa = { version = "5", features = ["time"] }
 
 [dev-dependencies]
+financer-core = { path = "../core" }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"

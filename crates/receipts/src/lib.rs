@@ -71,19 +71,6 @@ const SKIP_WORDS: &[&str] = &[
     "danke",
 ];
 
-fn detect_chain(merchant: &str) -> Option<Chain> {
-    let m = merchant.to_lowercase();
-    [
-        ("rewe", Chain::Rewe),
-        ("lidl", Chain::Lidl),
-        ("aldi", Chain::Aldi),
-        ("kaufland", Chain::Kaufland),
-    ]
-    .into_iter()
-    .find(|(name, _)| m.contains(name))
-    .map(|(_, c)| c)
-}
-
 /// `1,19`, `-0,50`, `1,19B`, `1,19*` -> money. Rejects anything that is not a plain amount.
 fn parse_amount(token: &str) -> Option<Money> {
     let t = token.trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '*');
@@ -152,7 +139,7 @@ pub fn parse_receipt(text: &str) -> ParsedReceipt {
         .filter(|l| !l.is_empty())
         .collect();
     let merchant = lines.first().map(|s| s.to_string());
-    let chain = merchant.as_deref().and_then(detect_chain);
+    let chain = merchant.as_deref().and_then(Chain::from_name);
     let date = lines.iter().find_map(|l| parse_date(l));
 
     let mut items: Vec<ReceiptItem> = Vec::new();

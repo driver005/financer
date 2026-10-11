@@ -20,6 +20,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/affordability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the budget buys: how long your usual basket lasts per chain, the cheapest items that
+         *     fit, and the cheapest way to split the shopping.
+         */
+        get: operations["affordability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/basket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_basket"];
+        /** Replace your hand-maintained list of usual items (used in `manual` habit mode). */
+        put: operations["put_basket"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/budget/disposable": {
         parameters: {
             query?: never;
@@ -71,6 +108,153 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** All items prices and recipes can refer to. */
+        get: operations["catalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current prices per chain, cheapest first within each item. */
+        get: operations["list_prices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/prices/best": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** For each item of your basket, the cheapest chain right now. */
+        get: operations["best_prices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/prices/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch all configured price sources and store the result. A source that fails keeps its old
+         *     prices.
+         */
+        post: operations["refresh_prices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_receipts"];
+        put?: never;
+        /**
+         * Upload text recognised from a receipt photo. Your usual items are learned from receipts
+         *     when the habit mode is `receipts`.
+         */
+        post: operations["upload_receipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete_receipt"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recipes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bundled recipes ranked by how much of them you already buy, what is on offer and what the
+         *     rest costs.
+         */
+        get: operations["recipes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recipes/ideas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * New recipe ideas from Claude or OpenAI, based on your usual items and current offers. Only
+         *     item names, the budget and your diet note are sent, never bank data.
+         */
+        post: operations["recipe_ideas"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/recurring": {
         parameters: {
             query?: never;
@@ -81,6 +265,22 @@ export interface paths {
         /** Payments that repeat on a steady rhythm and amount (rent, salary, subscriptions). */
         get: operations["recurring"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_settings"];
+        put: operations["put_settings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -129,6 +329,58 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AffordabilityDto: {
+            basket_source: string;
+            /** Format: int64 */
+            budget_cents: number;
+            /** @description `request` or `groceries_envelope`. */
+            budget_source: string;
+            per_chain: components["schemas"]["ChainAffordabilityDto"][];
+            plan?: null | components["schemas"]["PlanDto"];
+            /** @description Cheapest items that fit the budget (at most 20). */
+            staples: components["schemas"]["StapleDto"][];
+        };
+        BasketDto: {
+            items: components["schemas"]["BasketItemOutDto"][];
+            /** @description `manual`, `receipts` or `starter` (a generic basket used until habits are known). */
+            source: string;
+        };
+        BasketItemDto: {
+            /** @description Catalog key, e.g. `milch`. */
+            item: string;
+            /**
+             * Format: int32
+             * @description Packs of the reference size per shopping period (1 to 99).
+             */
+            quantity: number;
+        };
+        BasketItemOutDto: {
+            item: string;
+            name: string;
+            /** Format: int32 */
+            quantity: number;
+            reference_pack: string;
+        };
+        CatalogItemDto: {
+            key: string;
+            name: string;
+            reference_pack: string;
+        };
+        ChainAffordabilityDto: {
+            /** Format: int64 */
+            basket_cents: number;
+            /**
+             * Format: int32
+             * @description Whole baskets the budget pays for.
+             */
+            baskets: number;
+            /** @example lidl */
+            chain: string;
+            /** Format: int32 */
+            days_covered: number;
+            /** @description Basket items this chain has no price for. */
+            missing: string[];
+        };
         DisposableDto: {
             /** Format: int64 */
             disposable_cents: number;
@@ -162,6 +414,26 @@ export interface components {
         ErrorBody: {
             error: string;
         };
+        IdeaDto: {
+            ingredients: components["schemas"]["IdeaIngredientDto"][];
+            /** Format: int32 */
+            minutes: number;
+            /** Format: int32 */
+            servings: number;
+            steps: string[];
+            summary: string;
+            title: string;
+        };
+        IdeaIngredientDto: {
+            amount: string;
+            name: string;
+        };
+        IdeasRequest: {
+            /** Format: int64 */
+            budget_cents?: number | null;
+            count?: number | null;
+            diet?: string | null;
+        };
         ImportReport: {
             /** @description Rows already stored (same date, amount, counterparty and purpose). */
             duplicates: number;
@@ -169,6 +441,115 @@ export interface components {
             imported: number;
             /** @description Rows that could not be read, with the reason. */
             skipped: components["schemas"]["SkippedRowDto"][];
+        };
+        PickDto: {
+            chain: string;
+            is_offer: boolean;
+            item: string;
+            name: string;
+            /** Format: int64 */
+            price_cents: number;
+            /**
+             * Format: int64
+             * @description How much more the next-cheapest chain charges.
+             */
+            saving_vs_next_cents: number;
+            /** Format: date */
+            valid_until?: string | null;
+        };
+        PlanDto: {
+            /** Format: int64 */
+            single_chain_total_cents?: number | null;
+            stops: components["schemas"]["PlanStopDto"][];
+            /** Format: int64 */
+            total_cents: number;
+        };
+        PlanStopDto: {
+            chain: string;
+            items: components["schemas"]["PickDto"][];
+        };
+        PriceDto: {
+            /** @example aldi */
+            chain: string;
+            is_offer: boolean;
+            /** @description Catalog key, e.g. `milch`. */
+            item: string;
+            item_name: string;
+            /**
+             * Format: int64
+             * @description Price of the reference pack.
+             */
+            price_cents: number;
+            product_name: string;
+            /** @description Pack all prices of this item are normalised to, e.g. `1 l`. */
+            reference_pack: string;
+            /**
+             * Format: int64
+             * @description Price of the product as listed on the shelf.
+             */
+            shelf_price_cents: number;
+            source: string;
+            /** Format: date */
+            valid_until?: string | null;
+        };
+        ReceiptDto: {
+            /** @example rewe */
+            chain?: string | null;
+            /** Format: date */
+            date?: string | null;
+            /** @description True if this exact receipt was uploaded before (nothing new was stored). */
+            duplicate: boolean;
+            /** Format: int64 */
+            id?: number | null;
+            items: components["schemas"]["ReceiptItemDto"][];
+            merchant?: string | null;
+            /** @description Items add up to the printed total; if false, ask the user to check the receipt. */
+            reconciles: boolean;
+            /** Format: int64 */
+            total_cents?: number | null;
+        };
+        ReceiptItemDto: {
+            /** @description Catalog key when recognised. */
+            item?: string | null;
+            /** Format: int64 */
+            line_total_cents: number;
+            /** Format: int32 */
+            quantity: number;
+            text: string;
+        };
+        ReceiptUpload: {
+            /** @description Text recognised from the receipt photo. */
+            text: string;
+        };
+        RecipeIngredientDto: {
+            amount: string;
+            item: string;
+            name: string;
+        };
+        RecipeMatchDto: {
+            /**
+             * Format: int32
+             * @description Share of the ingredients you already buy, 0 to 100.
+             */
+            coverage_percent: number;
+            have: string[];
+            id: string;
+            ingredients: components["schemas"]["RecipeIngredientDto"][];
+            /** Format: int32 */
+            minutes: number;
+            missing: string[];
+            /**
+             * Format: int64
+             * @description Full-pack price of the missing ingredients that have a known price.
+             */
+            missing_cost_cents: number;
+            on_offer: string[];
+            /** Format: int32 */
+            servings: number;
+            steps: string[];
+            tags: string[];
+            title: string;
+            unpriced: string[];
         };
         RecurringDto: {
             /** Format: int64 */
@@ -181,10 +562,51 @@ export interface components {
             /** Format: date */
             next_expected: string;
         };
+        RefreshReportDto: {
+            bad_price: number;
+            no_size: number;
+            size_mismatch: number;
+            sources: components["schemas"]["SourceStatusDto"][];
+            /** @description Quotes stored after this refresh. */
+            stored: number;
+            unmatched: number;
+        };
+        SettingsDto: {
+            claude_key_configured: boolean;
+            /** @description `manual`, `receipts` or `spending`. */
+            habit_mode: string;
+            /** @description Empty means the provider's default model. */
+            llm_model: string;
+            /** @description `claude` or `open_ai`. */
+            llm_provider: string;
+            openai_key_configured: boolean;
+            /** @description Number of configured price sources. */
+            price_sources: number;
+        };
+        SettingsUpdate: {
+            habit_mode?: string | null;
+            llm_model?: string | null;
+            llm_provider?: string | null;
+        };
         SkippedRowDto: {
             /** Format: int64 */
             line: number;
             reason: string;
+        };
+        SourceStatusDto: {
+            error?: string | null;
+            name: string;
+            offers_found: number;
+            ok: boolean;
+        };
+        StapleDto: {
+            chain: string;
+            item: string;
+            /** Format: int32 */
+            max_packs: number;
+            name: string;
+            /** Format: int64 */
+            price_cents: number;
         };
         TransactionDto: {
             /**
@@ -231,6 +653,90 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    affordability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Budget in cents. Default: what is left of this month's groceries limit. */
+                budget_cents: number | null;
+                /** @description Days one basket lasts (default 7). */
+                days_per_basket: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AffordabilityDto"];
+                };
+            };
+            /** @description No budget given and no groceries limit set */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_basket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BasketDto"];
+                };
+            };
+        };
+    };
+    put_basket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BasketItemDto"][];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BasketDto"];
+                };
+            };
+            /** @description Unknown item, bad quantity or duplicate */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -337,6 +843,242 @@ export interface operations {
             };
         };
     };
+    catalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogItemDto"][];
+                };
+            };
+        };
+    };
+    list_prices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Only this catalog item. */
+                item: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceDto"][];
+                };
+            };
+        };
+    };
+    best_prices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickDto"][];
+                };
+            };
+        };
+    };
+    refresh_prices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshReportDto"];
+                };
+            };
+            /** @description No price sources configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_receipts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptDto"][];
+                };
+            };
+        };
+    };
+    upload_receipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiptUpload"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptDto"];
+                };
+            };
+            /** @description No items recognised */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_receipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Receipt id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such receipt */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    recipes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Hide recipes whose missing ingredients cost more than this. */
+                budget_cents: number | null;
+                /** @description Only recipes with this tag, e.g. `vegetarisch`. */
+                tag: string | null;
+                /** @description At most this many (default 10, max 50). */
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeMatchDto"][];
+                };
+            };
+        };
+    };
+    recipe_ideas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdeasRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdeaDto"][];
+                };
+            };
+            /** @description The provider failed or returned nothing usable */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No API key configured for the selected provider */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     recurring: {
         parameters: {
             query?: never;
@@ -352,6 +1094,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecurringDto"][];
+                };
+            };
+        };
+    };
+    get_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsDto"];
+                };
+            };
+        };
+    };
+    put_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsDto"];
+                };
+            };
+            /** @description Invalid value */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

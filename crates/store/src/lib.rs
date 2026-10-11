@@ -4,17 +4,19 @@
 pub mod entity;
 pub mod migration;
 
-use financer_core::{Budget, Category, Money, Transaction};
+use financer_core::{BasketItem, Budget, Category, Chain, Money, PriceQuote, Transaction};
 use sea_orm::sea_query::OnConflict;
 use sea_orm::{
-    ActiveValue::Set, ConnectOptions, Database, DatabaseConnection, DbErr, EntityTrait, QueryOrder,
-    TransactionTrait,
+    ActiveValue::Set, ColumnTrait, ConnectOptions, Database, DatabaseConnection, DbErr,
+    EntityTrait, QueryFilter, QueryOrder, TransactionTrait,
 };
 use sea_orm_migration::MigratorTrait;
 
 pub use sea_orm::DatabaseBackend;
 
-use entity::{budget_envelope, transaction as tx_entity};
+use entity::{
+    budget_envelope, price_quote, receipt, setting, transaction as tx_entity, usual_item,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -22,6 +24,26 @@ pub enum StoreError {
     Db(#[from] DbErr),
     #[error("unknown category in database: {0:?}")]
     BadCategory(String),
+}
+
+/// A price quote as stored, with the detail the UI shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredQuote {
+    pub quote: PriceQuote,
+    pub product_name: String,
+    pub shelf_price: Money,
+    pub source: String,
+    /// Unix seconds.
+    pub fetched_at: i64,
+}
+
+/// A scanned receipt as stored. `json` is the parsed receipt; the API layer owns its shape.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredReceipt {
+    pub id: i64,
+    pub date: Option<time::Date>,
+    pub merchant: Option<String>,
+    pub json: String,
 }
 
 /// A transaction as stored, with its database id.
@@ -146,20 +168,196 @@ impl Store {
         }
         Ok(budget)
     }
-}
 
-/// Stored form of a category: its serde name (`groceries`), so adding a variant to
-/// `Category` needs no change here.
-fn category_name(c: Category) -> String {
-    match serde_json::to_value(c) {
-        Ok(serde_json::Value::String(s)) => s,
-        _ => unreachable!("Category always serializes to a string"),
+    /// Replace the stored quotes of every source in `refreshed_sources` with `quotes`. Sources
+    /// that failed to refresh keep their old quotes instead of being wiped.
+    pub async fn replace_quotes(
+        &self,
+        refreshed_sources: &[String],
+        quotes: &[StoredQuote],
+    ) -> Result<(), StoreError> {
+        let txn = self.db.begin().await?;
+        if !refreshed_sources.is_empty() {
+            price_quote::Entity::delete_many()
+                .filter(price_quote::Column::Source.is_in(refreshed_sources.iter().cloned()))
+                .exec(&txn)
+                .await?;
+        }
+        for q in quotes {
+            price_quote::Entity::insert(price_quote::ActiveModel {
+                item: Set(q.quote.item.clone()),
+                chain: Set(to_name(&q.quote.chain)),
+                price_cents: Set(q.quote.price.cents()),
+                shelf_price_cents: Set(q.shelf_price.cents()),
+                product_name: Set(q.product_name.clone()),
+                valid_until: Set(q.quote.valid_until),
+                is_offer: Set(q.quote.is_offer),
+                source: Set(q.source.clone()),
+                fetched_at: Set(q.fetched_at),
+                ..Default::default()
+            })
+            .exec_without_returning(&txn)
+            .await?;
+        }
+        txn.commit().await?;
+        Ok(())
+    }
+
+    pub async fn list_quotes(&self) -> Result<Vec<StoredQuote>, StoreError> {
+        price_quote::Entity::find()
+            .order_by_asc(price_quote::Column::Item)
+            .order_by_asc(price_quote::Column::PriceCents)
+            .order_by_asc(price_quote::Column::Id)
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|r| {
+                Ok(StoredQuote {
+                    quote: PriceQuote {
+                        item: r.item,
+                        chain: from_name::<Chain>(&r.chain)?,
+                        price: Money::from_cents(r.price_cents),
+                        valid_until: r.valid_until,
+                        is_offer: r.is_offer,
+                    },
+                    product_name: r.product_name,
+                    shelf_price: Money::from_cents(r.shelf_price_cents),
+                    source: r.source,
+                    fetched_at: r.fetched_at,
+                })
+            })
+            .collect()
+    }
+
+    /// Replace the hand-maintained list of items you usually buy.
+    pub async fn set_usual_items(&self, items: &[BasketItem]) -> Result<(), StoreError> {
+        let txn = self.db.begin().await?;
+        usual_item::Entity::delete_many().exec(&txn).await?;
+        for it in items {
+            usual_item::Entity::insert(usual_item::ActiveModel {
+                item: Set(it.item.clone()),
+                quantity: Set(it.quantity as i32),
+            })
+            .exec_without_returning(&txn)
+            .await?;
+        }
+        txn.commit().await?;
+        Ok(())
+    }
+
+    pub async fn usual_items(&self) -> Result<Vec<BasketItem>, StoreError> {
+        Ok(usual_item::Entity::find()
+            .order_by_asc(usual_item::Column::Item)
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|r| BasketItem {
+                item: r.item,
+                quantity: r.quantity.max(1) as u32,
+            })
+            .collect())
+    }
+
+    /// Store a parsed receipt. Returns `None` when the same receipt is already stored.
+    pub async fn add_receipt(
+        &self,
+        fingerprint: &str,
+        date: Option<time::Date>,
+        merchant: Option<&str>,
+        json: &str,
+    ) -> Result<Option<i64>, StoreError> {
+        let res = receipt::Entity::insert(receipt::ActiveModel {
+            fingerprint: Set(fingerprint.to_string()),
+            receipt_date: Set(date),
+            merchant: Set(merchant.map(str::to_string)),
+            json: Set(json.to_string()),
+            ..Default::default()
+        })
+        .on_conflict(
+            OnConflict::column(receipt::Column::Fingerprint)
+                .do_nothing()
+                .to_owned(),
+        )
+        .exec_without_returning(&self.db)
+        .await?;
+        if res == 0 {
+            return Ok(None);
+        }
+        let row = receipt::Entity::find()
+            .filter(receipt::Column::Fingerprint.eq(fingerprint))
+            .one(&self.db)
+            .await?;
+        Ok(row.map(|r| r.id))
+    }
+
+    /// Newest receipts first.
+    pub async fn list_receipts(&self) -> Result<Vec<StoredReceipt>, StoreError> {
+        Ok(receipt::Entity::find()
+            .order_by_desc(receipt::Column::ReceiptDate)
+            .order_by_desc(receipt::Column::Id)
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|r| StoredReceipt {
+                id: r.id,
+                date: r.receipt_date,
+                merchant: r.merchant,
+                json: r.json,
+            })
+            .collect())
+    }
+
+    pub async fn delete_receipt(&self, id: i64) -> Result<bool, StoreError> {
+        Ok(receipt::Entity::delete_by_id(id)
+            .exec(&self.db)
+            .await?
+            .rows_affected
+            > 0)
+    }
+
+    pub async fn get_setting(&self, key: &str) -> Result<Option<String>, StoreError> {
+        Ok(setting::Entity::find_by_id(key.to_string())
+            .one(&self.db)
+            .await?
+            .map(|r| r.value))
+    }
+
+    pub async fn set_setting(&self, key: &str, value: &str) -> Result<(), StoreError> {
+        setting::Entity::insert(setting::ActiveModel {
+            key: Set(key.to_string()),
+            value: Set(value.to_string()),
+        })
+        .on_conflict(
+            OnConflict::column(setting::Column::Key)
+                .update_column(setting::Column::Value)
+                .to_owned(),
+        )
+        .exec_without_returning(&self.db)
+        .await?;
+        Ok(())
     }
 }
 
-fn parse_category(name: &str) -> Result<Category, StoreError> {
+/// Stored form of an enum value: its serde name (`groceries`, `rewe`), so adding a variant
+/// needs no change here.
+fn to_name<T: serde::Serialize>(v: &T) -> String {
+    match serde_json::to_value(v) {
+        Ok(serde_json::Value::String(s)) => s,
+        _ => unreachable!("enums stored by name always serialize to a string"),
+    }
+}
+
+fn from_name<T: serde::de::DeserializeOwned>(name: &str) -> Result<T, StoreError> {
     serde_json::from_value(serde_json::Value::String(name.to_string()))
         .map_err(|_| StoreError::BadCategory(name.to_string()))
+}
+
+fn category_name(c: Category) -> String {
+    to_name(&c)
+}
+
+fn parse_category(name: &str) -> Result<Category, StoreError> {
+    from_name(name)
 }
 
 #[cfg(test)]
@@ -189,6 +387,114 @@ mod tests {
         ]
     }
 
+    async fn more_roundtrips(store: &Store) {
+        // quotes: refreshing a source replaces only that source's rows
+        let quote = |item: &str, chain, cents, source: &str| StoredQuote {
+            quote: PriceQuote {
+                item: item.into(),
+                chain,
+                price: Money::from_cents(cents),
+                valid_until: Some(date!(2026 - 03 - 08)),
+                is_offer: true,
+            },
+            product_name: "Produkt".into(),
+            shelf_price: Money::from_cents(cents + 10),
+            source: source.into(),
+            fetched_at: 1_800_000_000,
+        };
+        store
+            .replace_quotes(
+                &["a".into(), "b".into()],
+                &[
+                    quote("milch", Chain::Aldi, 99, "a"),
+                    quote("milch", Chain::Rewe, 119, "b"),
+                ],
+            )
+            .await
+            .unwrap();
+        store
+            .replace_quotes(&["a".into()], &[quote("milch", Chain::Aldi, 89, "a")])
+            .await
+            .unwrap();
+        let quotes = store.list_quotes().await.unwrap();
+        assert_eq!(quotes.len(), 2);
+        assert_eq!(
+            (quotes[0].quote.chain, quotes[0].quote.price),
+            (Chain::Aldi, Money::from_cents(89))
+        ); // cheapest first
+        assert_eq!(quotes[1].quote.chain, Chain::Rewe); // untouched source kept
+        assert_eq!(quotes[0].quote.valid_until, Some(date!(2026 - 03 - 08)));
+        assert!(quotes[0].quote.is_offer);
+        // a failed refresh (no sources reported OK) wipes nothing
+        store.replace_quotes(&[], &[]).await.unwrap();
+        assert_eq!(store.list_quotes().await.unwrap().len(), 2);
+
+        // usual items
+        store
+            .set_usual_items(&[
+                BasketItem {
+                    item: "milch".into(),
+                    quantity: 2,
+                },
+                BasketItem {
+                    item: "brot".into(),
+                    quantity: 1,
+                },
+            ])
+            .await
+            .unwrap();
+        store
+            .set_usual_items(&[BasketItem {
+                item: "milch".into(),
+                quantity: 3,
+            }])
+            .await
+            .unwrap();
+        assert_eq!(
+            store.usual_items().await.unwrap(),
+            vec![BasketItem {
+                item: "milch".into(),
+                quantity: 3
+            }]
+        );
+
+        // receipts dedupe by fingerprint
+        let id = store
+            .add_receipt(
+                "fp1",
+                Some(date!(2026 - 03 - 02)),
+                Some("REWE"),
+                "{\"x\":1}",
+            )
+            .await
+            .unwrap();
+        assert!(id.is_some());
+        assert_eq!(
+            store.add_receipt("fp1", None, None, "{}").await.unwrap(),
+            None
+        );
+        let receipts = store.list_receipts().await.unwrap();
+        assert_eq!(
+            (
+                receipts.len(),
+                receipts[0].merchant.as_deref(),
+                receipts[0].json.as_str()
+            ),
+            (1, Some("REWE"), "{\"x\":1}")
+        );
+        assert!(store.delete_receipt(id.unwrap()).await.unwrap());
+        assert!(!store.delete_receipt(id.unwrap()).await.unwrap());
+
+        // settings upsert
+        assert_eq!(store.get_setting("habit_mode").await.unwrap(), None);
+        store.set_setting("habit_mode", "manual").await.unwrap();
+        store.set_setting("habit_mode", "receipts").await.unwrap();
+        assert_eq!(
+            store.get_setting("habit_mode").await.unwrap().as_deref(),
+            Some("receipts")
+        );
+    }
+
     async fn roundtrip(url: &str) {
         let store = Store::connect(url).await.unwrap();
         let txs = sample();
@@ -213,6 +519,8 @@ mod tests {
         store.save_budget(&budget).await.unwrap();
         let loaded = store.load_budget().await.unwrap();
         assert_eq!(loaded.envelopes, budget.envelopes);
+
+        more_roundtrips(&store).await;
     }
 
     #[tokio::test]
@@ -257,11 +565,21 @@ mod tests {
             return;
         };
         let store = Store::connect(&url).await.unwrap();
-        store
-            .db
-            .execute_unprepared("DELETE FROM transactions")
-            .await
-            .unwrap();
+        // start from empty tables so the test can be run again against the same database
+        for table in [
+            "transactions",
+            "budget_envelopes",
+            "price_quotes",
+            "usual_items",
+            "receipts",
+            "settings",
+        ] {
+            store
+                .db
+                .execute_unprepared(&format!("DELETE FROM {table}"))
+                .await
+                .unwrap();
+        }
         drop(store);
         roundtrip(&url).await;
     }

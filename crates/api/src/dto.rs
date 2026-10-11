@@ -130,3 +130,277 @@ pub struct DisposableDto {
 pub struct ErrorBody {
     pub error: String,
 }
+
+// ---- groceries: prices, basket, receipts, affordability, recipes, settings ----
+
+use financer_core::{Chain, PriceQuote};
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PriceDto {
+    /// Catalog key, e.g. `milch`.
+    pub item: String,
+    pub item_name: String,
+    /// Pack all prices of this item are normalised to, e.g. `1 l`.
+    pub reference_pack: String,
+    #[schema(value_type = String, example = "aldi")]
+    pub chain: Chain,
+    /// Price of the reference pack.
+    #[schema(value_type = i64)]
+    pub price_cents: Money,
+    /// Price of the product as listed on the shelf.
+    #[schema(value_type = i64)]
+    pub shelf_price_cents: Money,
+    pub product_name: String,
+    pub is_offer: bool,
+    #[schema(value_type = Option<String>, format = Date)]
+    pub valid_until: Option<Date>,
+    pub source: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SourceStatusDto {
+    pub name: String,
+    pub ok: bool,
+    pub offers_found: usize,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RefreshReportDto {
+    pub sources: Vec<SourceStatusDto>,
+    /// Quotes stored after this refresh.
+    pub stored: usize,
+    pub unmatched: usize,
+    pub no_size: usize,
+    pub size_mismatch: usize,
+    pub bad_price: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BasketItemDto {
+    /// Catalog key, e.g. `milch`.
+    pub item: String,
+    /// Packs of the reference size per shopping period (1 to 99).
+    pub quantity: u32,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct BasketDto {
+    /// `manual`, `receipts` or `starter` (a generic basket used until habits are known).
+    pub source: String,
+    pub items: Vec<BasketItemOutDto>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct BasketItemOutDto {
+    pub item: String,
+    pub name: String,
+    pub reference_pack: String,
+    pub quantity: u32,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CatalogItemDto {
+    pub key: String,
+    pub name: String,
+    pub reference_pack: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ReceiptUpload {
+    /// Text recognised from the receipt photo.
+    pub text: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ReceiptItemDto {
+    pub text: String,
+    pub quantity: u32,
+    #[schema(value_type = i64)]
+    pub line_total_cents: Money,
+    /// Catalog key when recognised.
+    pub item: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ReceiptDto {
+    pub id: Option<i64>,
+    /// True if this exact receipt was uploaded before (nothing new was stored).
+    pub duplicate: bool,
+    pub merchant: Option<String>,
+    #[schema(value_type = Option<String>, example = "rewe")]
+    pub chain: Option<Chain>,
+    #[schema(value_type = Option<String>, format = Date)]
+    pub date: Option<Date>,
+    pub items: Vec<ReceiptItemDto>,
+    #[schema(value_type = Option<i64>)]
+    pub total_cents: Option<Money>,
+    /// Items add up to the printed total; if false, ask the user to check the receipt.
+    pub reconciles: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ChainAffordabilityDto {
+    #[schema(value_type = String, example = "lidl")]
+    pub chain: Chain,
+    #[schema(value_type = i64)]
+    pub basket_cents: Money,
+    /// Whole baskets the budget pays for.
+    pub baskets: u32,
+    pub days_covered: u32,
+    /// Basket items this chain has no price for.
+    pub missing: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StapleDto {
+    pub item: String,
+    pub name: String,
+    #[schema(value_type = String)]
+    pub chain: Chain,
+    #[schema(value_type = i64)]
+    pub price_cents: Money,
+    pub max_packs: u32,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PlanStopDto {
+    #[schema(value_type = String)]
+    pub chain: Chain,
+    pub items: Vec<PickDto>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PickDto {
+    pub item: String,
+    pub name: String,
+    #[schema(value_type = String)]
+    pub chain: Chain,
+    #[schema(value_type = i64)]
+    pub price_cents: Money,
+    pub is_offer: bool,
+    #[schema(value_type = Option<String>, format = Date)]
+    pub valid_until: Option<Date>,
+    /// How much more the next-cheapest chain charges.
+    #[schema(value_type = i64)]
+    pub saving_vs_next_cents: Money,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PlanDto {
+    pub stops: Vec<PlanStopDto>,
+    #[schema(value_type = i64)]
+    pub total_cents: Money,
+    #[schema(value_type = Option<i64>)]
+    pub single_chain_total_cents: Option<Money>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AffordabilityDto {
+    #[schema(value_type = i64)]
+    pub budget_cents: Money,
+    /// `request` or `groceries_envelope`.
+    pub budget_source: String,
+    pub basket_source: String,
+    pub per_chain: Vec<ChainAffordabilityDto>,
+    /// Cheapest items that fit the budget (at most 20).
+    pub staples: Vec<StapleDto>,
+    /// Best way to buy the basket, if every item has a price somewhere.
+    pub plan: Option<PlanDto>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RecipeMatchDto {
+    pub id: String,
+    pub title: String,
+    pub minutes: u32,
+    pub servings: u32,
+    pub tags: Vec<String>,
+    pub ingredients: Vec<RecipeIngredientDto>,
+    pub steps: Vec<String>,
+    /// Share of the ingredients you already buy, 0 to 100.
+    pub coverage_percent: u32,
+    pub have: Vec<String>,
+    pub missing: Vec<String>,
+    pub on_offer: Vec<String>,
+    /// Full-pack price of the missing ingredients that have a known price.
+    #[schema(value_type = i64)]
+    pub missing_cost_cents: Money,
+    pub unpriced: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RecipeIngredientDto {
+    pub item: String,
+    pub name: String,
+    pub amount: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct IdeasRequest {
+    pub count: Option<usize>,
+    pub diet: Option<String>,
+    pub budget_cents: Option<i64>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct IdeaDto {
+    pub title: String,
+    pub summary: String,
+    pub minutes: u32,
+    pub servings: u32,
+    pub ingredients: Vec<IdeaIngredientDto>,
+    pub steps: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct IdeaIngredientDto {
+    pub name: String,
+    pub amount: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SettingsDto {
+    /// `manual`, `receipts` or `spending`.
+    pub habit_mode: String,
+    /// `claude` or `open_ai`.
+    pub llm_provider: String,
+    /// Empty means the provider's default model.
+    pub llm_model: String,
+    pub claude_key_configured: bool,
+    pub openai_key_configured: bool,
+    /// Number of configured price sources.
+    pub price_sources: usize,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SettingsUpdate {
+    pub habit_mode: Option<String>,
+    pub llm_provider: Option<String>,
+    pub llm_model: Option<String>,
+}
+
+pub fn quote_dto(q: &financer_store::StoredQuote) -> PriceDto {
+    let PriceQuote {
+        item,
+        chain,
+        price,
+        valid_until,
+        is_offer,
+    } = q.quote.clone();
+    let info = financer_core::by_key(&item);
+    PriceDto {
+        item_name: info
+            .map(|i| i.name_de.to_string())
+            .unwrap_or_else(|| item.clone()),
+        reference_pack: financer_core::reference_label(&item).unwrap_or_default(),
+        item,
+        chain,
+        price_cents: price,
+        shelf_price_cents: q.shelf_price,
+        product_name: q.product_name.clone(),
+        is_offer,
+        valid_until,
+        source: q.source.clone(),
+    }
+}

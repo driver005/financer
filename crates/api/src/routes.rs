@@ -14,6 +14,11 @@ use crate::AppState;
 /// Anything a handler can fail with; mapped to a JSON `{"error": ...}` body.
 pub enum ApiError {
     BadRequest(String),
+    NotFound,
+    /// A feature that is not set up (no price sources, no LLM key).
+    Unavailable(String),
+    /// An upstream service failed.
+    BadGateway(String),
     Internal,
 }
 
@@ -28,6 +33,9 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, msg) = match self {
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
+            ApiError::NotFound => (StatusCode::NOT_FOUND, "not found".to_string()),
+            ApiError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m),
+            ApiError::BadGateway(m) => (StatusCode::BAD_GATEWAY, m),
             ApiError::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal error".to_string(),

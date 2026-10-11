@@ -12,6 +12,7 @@ sea-orm = { version = "2", default-features = false, features = ["sqlx-sqlite", 
 sea-orm-migration = { version = "2", default-features = false, features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-rustls"] }
 thiserror.workspace = true
 async-trait = "0.1"
+serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

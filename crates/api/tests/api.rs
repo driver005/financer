@@ -11,7 +11,7 @@ const TOKEN: &str = "test-token";
 
 async fn app() -> Router {
     let store = Store::connect("sqlite::memory:").await.unwrap();
-    router(AppState { store }, TokenHash::new(TOKEN))
+    router(AppState::new(store), TokenHash::new(TOKEN))
 }
 
 async fn call(
@@ -243,6 +243,17 @@ fn openapi_document_lists_every_route() {
     let paths = doc["paths"].as_object().unwrap();
     for p in [
         "/health",
+        "/v1/prices",
+        "/v1/prices/best",
+        "/v1/prices/refresh",
+        "/v1/catalog",
+        "/v1/basket",
+        "/v1/receipts",
+        "/v1/receipts/{id}",
+        "/v1/affordability",
+        "/v1/recipes",
+        "/v1/recipes/ideas",
+        "/v1/settings",
         "/v1/transactions",
         "/v1/transactions/import",
         "/v1/recurring",

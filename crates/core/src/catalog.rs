@@ -281,6 +281,35 @@ pub const CATALOG: &[GenericItem] = &[
     ),
 ];
 
+/// Size of the reference pack all prices of an item are normalised to, in thousandths of
+/// the item's base unit (kg, l or piece): `1000` is 1 kg / 1 l / 1 piece. Chains sell
+/// different pack sizes, so a quote is always converted to this pack before comparing.
+pub fn reference_milli(key: &str) -> u32 {
+    match key {
+        "eier" => 10_000,
+        "nudeln" | "mehl" | "haferflocken" | "linsen" | "quark" | "tofu" | "zucker" | "salz" => 500,
+        "butter" | "kaese-gouda" | "mozzarella" | "parmesan" | "joghurt" | "champignons"
+        | "hackfleisch" | "haehnchenbrust" | "lachs" | "bacon" | "spinat" | "brokkoli"
+        | "schokolade" | "kekse" | "kaffee" | "tomatenmark" | "curry" | "pfeffer" => 250,
+        "sahne" | "kokosmilch" | "tomaten-passiert" => 500,
+        "broetchen" | "wuerstchen" | "toilettenpapier" => 4_000,
+        _ => 1_000,
+    }
+}
+
+/// `500 g`, `1 l`, `10 Stück`: the reference pack as shown to the user.
+pub fn reference_label(key: &str) -> Option<String> {
+    let item = by_key(key)?;
+    let milli = reference_milli(key);
+    Some(match item.unit {
+        Unit::Piece => format!("{} Stück", milli / 1000),
+        Unit::Kilogram if milli < 1000 => format!("{milli} g"),
+        Unit::Kilogram => format!("{} kg", milli / 1000),
+        Unit::Liter if milli < 1000 => format!("{milli} ml"),
+        Unit::Liter => format!("{} l", milli / 1000),
+    })
+}
+
 pub fn by_key(key: &str) -> Option<&'static GenericItem> {
     CATALOG.iter().find(|i| i.key == key)
 }
@@ -341,6 +370,26 @@ mod tests {
             match_product("Apfelsaft naturtrüb").map(|i| i.key),
             Some("apfelsaft")
         );
+    }
+
+    #[test]
+    fn reference_packs_are_sensible_for_every_item() {
+        for i in CATALOG {
+            let m = reference_milli(i.key);
+            assert!(m > 0, "{}", i.key);
+            assert!(reference_label(i.key).is_some());
+            if i.unit != Unit::Piece {
+                assert!(m <= 5_000, "{} reference pack is unreasonably large", i.key);
+            }
+        }
+        assert_eq!(reference_label("milch").as_deref(), Some("1 l"));
+        assert_eq!(reference_label("nudeln").as_deref(), Some("500 g"));
+        assert_eq!(reference_label("eier").as_deref(), Some("10 Stück"));
+        assert_eq!(
+            reference_label("tomaten-passiert").as_deref(),
+            Some("500 ml")
+        );
+        assert_eq!(reference_label("nope"), None);
     }
 
     #[test]
