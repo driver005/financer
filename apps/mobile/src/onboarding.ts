@@ -91,7 +91,6 @@ export type Draft = {
   demoLoaded?: boolean;
   /** Money step: bookings the user imported from a CSV file. */
   csvImported?: number;
-  bankSynced?: boolean;
   /** Safety step. */
   lockOn?: boolean;
   notifyKinds?: string[];
@@ -127,7 +126,6 @@ export function sanitizeDraft(raw: unknown): Draft {
   if (HABIT_MODES.includes(r.habitMode as HabitMode)) d.habitMode = r.habitMode as HabitMode;
   if (r.demoLoaded === true) d.demoLoaded = true;
   if (isInt(r.csvImported, 0, 10_000_000)) d.csvImported = r.csvImported;
-  if (r.bankSynced === true) d.bankSynced = true;
   if (typeof r.lockOn === "boolean") d.lockOn = r.lockOn;
   if (Array.isArray(r.notifyKinds)) d.notifyKinds = r.notifyKinds.filter((k): k is string => typeof k === "string").slice(0, 8);
   return d;
@@ -172,8 +170,10 @@ export function parsePostalCode(input: string): Parsed<string | null> {
 
 /** An optional euro amount; empty is fine (`value: null`). */
 export function parseBudget(input: string): Parsed<number | null> {
-  if (input.trim() === "") return { ok: true, value: null };
-  const cents = parseEuroInput(input);
+  const typed = input.trim();
+  if (typed === "") return { ok: true, value: null };
+  // a phone keyboard may offer a decimal point: "59.90" means 59,90 here, not 5990
+  const cents = parseEuroInput(/^\d+\.\d{1,2}$/.test(typed) ? typed.replace(".", ",") : typed);
   if (cents === null) return { ok: false, error: "Enter an amount like 60 or 59,90." };
   if (cents <= 0) return { ok: false, error: "The budget has to be more than 0." };
   if (cents > MAX_BUDGET_CENTS) return { ok: false, error: "That is more than 10.000 EUR. Check the amount." };
@@ -277,6 +277,37 @@ export function groceryLimitFor(draft: Draft, today: string): number | null {
   return null;
 }
 
+// ---- the profile that outlives the setup ----
+
+/**
+ * What the app has no server-side field for: household size, stores, postal code. It is kept on
+ * the device (key `financer.profile`) so it survives the end of the setup, which forgets its draft.
+ */
+export type Profile = { householdSize?: number; chains?: Chain[]; postalCode?: string };
+
+export function parseProfile(raw: string | null | undefined): Profile {
+  if (!raw) return {};
+  try {
+    const d = sanitizeDraft(JSON.parse(raw));
+    const p: Profile = {};
+    if (d.householdSize !== undefined) p.householdSize = d.householdSize;
+    if (d.chains !== undefined) p.chains = d.chains;
+    if (d.postalCode !== undefined) p.postalCode = d.postalCode;
+    return p;
+  } catch {
+    return {};
+  }
+}
+
+/** The stored profile with the answers of this run on top; unanswered questions keep what was there. */
+export function mergeProfile(existing: Profile, draft: Draft): Profile {
+  const next: Profile = { ...existing };
+  if (draft.householdSize !== undefined) next.householdSize = draft.householdSize;
+  if (draft.chains !== undefined) next.chains = draft.chains;
+  if (draft.postalCode !== undefined) next.postalCode = draft.postalCode;
+  return next;
+}
+
 // ---- applying the answers ----
 
 export type EnvelopeLike = { category: string; limit_cents: number };
@@ -340,7 +371,7 @@ export function mascotFor(step: StepId, draft: Draft, build: BuildInfo): MascotL
       return { message: "Your bank only shows the total, not the bag. How should I learn?", mood: "happy" };
     case "money":
       if (draft.demoLoaded) return { message: "Demo data is in. Have a look at Today, all of it is labelled DEMO.", mood: "cheer" };
-      if ((draft.csvImported ?? 0) > 0 || draft.bankSynced) return { message: "Your bookings are in. Now we can do real maths!", mood: "cheer" };
+      if ((draft.csvImported ?? 0) > 0) return { message: "Your bookings are in. Now we can do real maths!", mood: "cheer" };
       return { message: "Want numbers to play with? Everything here is optional.", mood: "happy" };
     case "safety":
       return { message: "Two small things: a lock for the app, and nudges when they help.", mood: "happy" };
@@ -375,7 +406,6 @@ export function recapRows(draft: Draft, build: BuildInfo): RecapRow[] {
   }
   if (draft.demoLoaded) rows.push({ label: "Bookings", value: "Demo data (labelled DEMO)" });
   else if ((draft.csvImported ?? 0) > 0) rows.push({ label: "Bookings", value: `${draft.csvImported} imported from CSV` });
-  else if (draft.bankSynced) rows.push({ label: "Bookings", value: "Synced from your bank" });
   if (build.platform !== "web") {
     if (draft.lockOn) rows.push({ label: "App lock", value: "On" });
     if (draft.notifyKinds && draft.notifyKinds.length) rows.push({ label: "Reminders", value: `${draft.notifyKinds.length} on` });
@@ -387,7 +417,7 @@ export type FirstQuest = { title: string; hint: string; route: "/spending" | "/m
 
 /** With bookings in the app the next useful thing is planning the week; without, adding bookings. */
 export function firstQuest(draft: Draft): FirstQuest {
-  const hasBookings = draft.demoLoaded || (draft.csvImported ?? 0) > 0 || draft.bankSynced;
+  const hasBookings = draft.demoLoaded || (draft.csvImported ?? 0) > 0;
   return hasBookings
     ? { title: "Plan this week", hint: "Pick meals and see what the shop costs at your stores.", route: "/mealplan" }
     : { title: "Add your first transaction", hint: "Import a CSV or sync your bank so Today has numbers.", route: "/spending" };

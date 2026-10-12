@@ -8,6 +8,8 @@ import {
   clampHousehold,
   entryAction,
   firstQuest,
+  mergeProfile,
+  parseProfile,
   groceryLimitFor,
   mascotFor,
   monthlyGroceryCents,
@@ -122,6 +124,8 @@ describe("validation", () => {
     assert.deepEqual(parseBudget(""), { ok: true, value: null });
     assert.deepEqual(parseBudget("60"), { ok: true, value: 6000 });
     assert.deepEqual(parseBudget("59,90"), { ok: true, value: 5990 });
+    assert.deepEqual(parseBudget("59.90"), { ok: true, value: 5990 }); // decimal point from a phone keyboard
+    assert.deepEqual(parseBudget("1.234"), { ok: true, value: 123400 }); // thousands separator
     assert.equal(parseBudget("abc").ok, false);
     assert.equal(parseBudget("0").ok, false);
     assert.equal(parseBudget("20000").ok, false);
@@ -194,6 +198,25 @@ describe("savings levels", () => {
     assert.equal(groceryLimitFor({ groceryBudgetCents: 6000, groceryCadence: "weekly" }, "2026-10-12"), 26000);
     assert.equal(groceryLimitFor({ groceryBudgetCents: 30000 }, "2026-10-12"), 30000);
     assert.equal(groceryLimitFor({}, "2026-10-12"), null);
+  });
+});
+
+describe("profile", () => {
+  it("keeps earlier answers the new run did not give", () => {
+    const before = { householdSize: 2, chains: ["lidl"] as Draft["chains"], postalCode: "10115" };
+    assert.deepEqual(mergeProfile(before, {}), before);
+    assert.deepEqual(mergeProfile(before, { householdSize: 3, chains: [] }), { householdSize: 3, chains: [], postalCode: "10115" });
+    assert.deepEqual(mergeProfile({}, { payday: 5, intensity: "casual" }), {});
+  });
+
+  it("reads a stored profile defensively", () => {
+    assert.deepEqual(parseProfile(null), {});
+    assert.deepEqual(parseProfile("{bad"), {});
+    assert.deepEqual(parseProfile(JSON.stringify({ householdSize: 4, chains: ["aldi", "x"], postalCode: "80331", payday: 3 })), {
+      householdSize: 4,
+      chains: ["aldi"],
+      postalCode: "80331",
+    });
   });
 });
 

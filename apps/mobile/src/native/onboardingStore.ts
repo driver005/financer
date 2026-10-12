@@ -1,11 +1,31 @@
 import { deleteSecret, getSecret, setSecret } from "@/api/storage";
-import { newState, parseState, serializeState, type OnboardingState, type Stored } from "@/onboarding";
+import { mergeProfile, newState, parseProfile, parseState, serializeState, type Draft, type OnboardingState, type Profile, type Stored } from "@/onboarding";
 
-// Two small keys in the same storage the rest of the app uses (secure storage on a phone,
+// A few small keys in the same storage the rest of the app uses (secure storage on a phone,
 // localStorage in the browser). The state is saved after every step, so killing the app resumes
 // where it was; the flag is what stops the setup from showing again.
 export const ONBOARDING_STATE_KEY = "financer.onboarding.state";
 export const ONBOARDING_DONE_KEY = "financer.onboarding.done";
+/** Household size, stores and postal code: kept on the device after the setup (see `Profile`). */
+export const PROFILE_KEY = "financer.profile";
+
+export async function loadProfile(): Promise<Profile> {
+  try {
+    return parseProfile(await getSecret(PROFILE_KEY));
+  } catch {
+    return {};
+  }
+}
+
+/** Remember the profile answers of this run (others stay as they were). */
+export async function saveProfile(draft: Draft): Promise<void> {
+  try {
+    const next = mergeProfile(await loadProfile(), draft);
+    if (Object.keys(next).length) await setSecret(PROFILE_KEY, JSON.stringify(next));
+  } catch {
+    // a convenience: the setup does not fail over it
+  }
+}
 
 /** What is stored. Storage that cannot be read counts as "not done, nothing started". */
 export async function loadOnboarding(): Promise<NonNullable<Stored>> {

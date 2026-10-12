@@ -9,6 +9,7 @@ import { AppLockOverlay } from "@/components/AppLockOverlay";
 import { BackupOnOpen } from "@/components/BackupOnOpen";
 import "@/native/background"; // defines the background task at startup
 import { NotificationSync } from "@/components/NotificationSync";
+import { OnboardingGate } from "@/components/OnboardingGate";
 import "@/global.css";
 import { usePalette } from "@/theme";
 
@@ -30,6 +31,7 @@ export default function RootLayout() {
       <HeroUINativeProvider config={{ toast: { defaultProps: { placement: "bottom" } } }}>
       <ApiProvider>
         <NotificationSync />
+        <OnboardingGate />
         <Tabs
           screenOptions={{
             headerShown: false,
@@ -55,6 +57,8 @@ export default function RootLayout() {
           <Tabs.Screen name="alerts" options={{ href: null, title: "Alerts" }} />
           <Tabs.Screen name="trophies" options={{ href: null, title: "Trophies" }} />
           <Tabs.Screen name="scan" options={{ href: null, title: "Scan a product" }} />
+          {/* first-run setup: full screen, no tab bar */}
+          <Tabs.Screen name="onboarding" options={{ href: null, title: "Setup", tabBarStyle: { display: "none" } }} />
         </Tabs>
         <BackupOnOpen />
         <AppLockOverlay />

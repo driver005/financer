@@ -1,4 +1,4 @@
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Platform, ScrollView, View } from "react-native";
 import { HelperText, List, SegmentedButtons, Text, TextInput } from "@/components/kit";
@@ -12,6 +12,7 @@ import { BackupCard } from "@/components/BackupCard";
 import { LockCard } from "@/components/LockCard";
 import { Body, Button, Card, Screen, Title, useColors } from "@/components/ui";
 import { pickTextFile, shareTextFile } from "@/native/files";
+import { startReplay } from "@/native/onboardingStore";
 import { useScreenData } from "@/hooks";
 
 /**
@@ -26,6 +27,7 @@ function defaultServerUrl(): string {
 export default function SettingsScreen() {
   const { config, api, save, clear, mode, setMode, embeddedAvailable, embedded, saveEmbedded, embeddedError } = useApi();
   const c = useColors();
+  const router = useRouter();
   const { data: settings, setData: setSettings, error } = useScreenData((a) => a.settings());
   const [baseUrl, setBaseUrl] = useState(defaultServerUrl);
   const [token, setToken] = useState("");
@@ -286,6 +288,22 @@ export default function SettingsScreen() {
         <NotificationsCard />
         <AboutCard />
         <LockCard />
+        <Card>
+          <Text variant="titleMedium">Setup</Text>
+          <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
+            Walk through the first-run questions again: where your data lives, household, payday, savings level and reminders. Nothing is changed unless you answer.
+          </Text>
+          <View style={{ marginTop: 12 }}>
+            <Button
+              mode="outlined"
+              label="Replay setup"
+              icon="replay"
+              onPress={() => {
+                void startReplay().then(() => router.push("/onboarding"));
+              }}
+            />
+          </View>
+        </Card>
         {status || error ? <HelperText type="info" visible>{status ?? error}</HelperText> : null}
       </ScrollView>
     </Screen>
