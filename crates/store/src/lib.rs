@@ -5,6 +5,7 @@ mod alerts;
 pub mod entity;
 mod mealplan;
 pub mod migration;
+mod receipt_sources;
 mod rules;
 
 use financer_core::{BasketItem, Budget, Category, Chain, Money, PriceQuote, Transaction};
@@ -17,6 +18,7 @@ use sea_orm_migration::MigratorTrait;
 
 pub use alerts::AlertDismissal;
 pub use mealplan::StoredMealDay;
+pub use receipt_sources::{NewReceipt, ReceiptMeta, SourceState};
 pub use rules::{SplitOutcome, StoredSplit, UnknownMerchant};
 pub use sea_orm::DatabaseBackend;
 
@@ -274,28 +276,17 @@ impl Store {
         merchant: Option<&str>,
         json: &str,
     ) -> Result<Option<i64>, StoreError> {
-        let res = receipt::Entity::insert(receipt::ActiveModel {
-            fingerprint: Set(fingerprint.to_string()),
-            receipt_date: Set(date),
-            merchant: Set(merchant.map(str::to_string)),
-            json: Set(json.to_string()),
-            ..Default::default()
+        self.add_receipt_from(&NewReceipt {
+            fingerprint,
+            date,
+            merchant,
+            json,
+            source: "manual",
+            retailer: None,
+            total_cents: None,
+            time: None,
         })
-        .on_conflict(
-            OnConflict::column(receipt::Column::Fingerprint)
-                .do_nothing()
-                .to_owned(),
-        )
-        .exec_without_returning(&self.db)
-        .await?;
-        if res == 0 {
-            return Ok(None);
-        }
-        let row = receipt::Entity::find()
-            .filter(receipt::Column::Fingerprint.eq(fingerprint))
-            .one(&self.db)
-            .await?;
-        Ok(row.map(|r| r.id))
+        .await
     }
 
     /// Newest receipts first.
