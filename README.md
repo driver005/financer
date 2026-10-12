@@ -36,6 +36,8 @@ SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](d
 
 ## Run it
 
+For development, `make setup && make dev` starts the server and the web app together ([docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)). By hand:
+
 Server (SQLite, local):
 
 ```sh
@@ -52,6 +54,7 @@ Settings (environment variables; the full list is at the top of `crates/server/s
 | `FINANCER_BIND` | listen address, default `127.0.0.1:8080` (put HTTPS in front) |
 | `FINANCER_PRICE_SOURCES` | path to a JSON file of price sources |
 | `FINANCER_WEB_DIR` | serve a built web app (`expo export --platform web`) at `/`, same address as the API |
+| `FINANCER_CORS_ORIGIN` | development only: origins (comma-separated) whose browsers may call the API, used by `make dev` |
 | `FINANCER_FINTS_PRODUCT_ID` | enables live Sparkasse sync |
 | `FINANCER_ANTHROPIC_API_KEY`, `FINANCER_OPENAI_API_KEY` | enable recipe ideas and receipt photo scan |
 

@@ -32,3 +32,6 @@ node_modules/
 .expo/
 deploy/config/sources.json
 .sandbox-ca.crt
+
+# Local development state (make dev): database, token, own settings
+.dev/
