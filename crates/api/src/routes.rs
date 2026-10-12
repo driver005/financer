@@ -27,6 +27,21 @@ pub enum ApiError {
     Internal,
 }
 
+impl ApiError {
+    /// The text of the error, for logs.
+    pub(crate) fn message(&self) -> String {
+        match self {
+            ApiError::BadRequest(m)
+            | ApiError::Conflict(m)
+            | ApiError::TooManyRequests(m)
+            | ApiError::Unavailable(m)
+            | ApiError::BadGateway(m) => m.clone(),
+            ApiError::NotFound => "not found".to_string(),
+            ApiError::Internal => "internal error".to_string(),
+        }
+    }
+}
+
 impl From<financer_store::StoreError> for ApiError {
     fn from(e: financer_store::StoreError) -> Self {
         tracing::error!("store error: {e}");

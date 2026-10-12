@@ -1625,6 +1625,7 @@ dependencies = [
  "axum",
  "financer-api",
  "financer-config",
+ "financer-core",
  "financer-fints",
  "financer-llm",
  "financer-prices",

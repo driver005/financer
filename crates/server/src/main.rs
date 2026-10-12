@@ -29,8 +29,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use financer_api::{Api, AppState, LlmKeys, PriceSourceConfig, TokenHash};
+use financer_api::{Api, AppState, BankConnection, LlmKeys, PriceSourceConfig, TokenHash};
 use financer_config::{Config, Loaded, Loader, ProcessEnv, ProviderChoice, Renderer};
+use financer_core::StoreAlias;
 use financer_prices::{PoliteHttp, ReqwestHttp, Sources};
 use financer_store::Store;
 use tracing_subscriber::EnvFilter;
@@ -186,6 +187,36 @@ impl Server {
         }
     }
 
+    fn store_aliases(config: &Config) -> Vec<StoreAlias> {
+        config
+            .stores
+            .iter()
+            .map(|s| StoreAlias {
+                chain: s.chain.clone(),
+                patterns: s.patterns.to_vec(),
+            })
+            .collect()
+    }
+
+    fn bank_connections(config: &Config) -> Vec<BankConnection> {
+        config
+            .bank
+            .accounts
+            .iter()
+            .map(|a| BankConnection {
+                name: a.name.trim().to_string(),
+                bank_code: a.bank_code.trim().to_string(),
+                login: a.login.trim().to_string(),
+                iban: a.iban.split_whitespace().collect(),
+                bic: a.bic.clone().filter(|b| !b.trim().is_empty()),
+                fints_url: a.fints_url.clone().filter(|u| !u.trim().is_empty()),
+                pin_env: a.pin_env.clone().filter(|v| !v.trim().is_empty()),
+                sync_every_hours: a.sync_every_hours,
+                since_days: a.since_days,
+            })
+            .collect()
+    }
+
     fn secret(s: &financer_config::Setting<Option<financer_config::Secret>>) -> Option<String> {
         s.value.as_ref().map(|k| k.expose().to_string())
     }
@@ -221,11 +252,27 @@ impl Server {
                 claude: Self::secret(&config.llm.anthropic_api_key),
                 openai: Self::secret(&config.llm.openai_api_key),
             })
-            .with_default_llm_provider(config.llm.provider.value.map(Self::llm_provider));
+            .with_default_llm_provider(config.llm.provider.value.map(Self::llm_provider))
+            .with_store_aliases(&Self::store_aliases(config))
+            .with_bank_connections(Self::bank_connections(config));
 
         if let Some(product_id) = Self::secret(&config.bank.fints_product_id) {
             state = state.with_bank(Arc::new(financer_fints::FintsBank::new(&product_id)));
             tracing::info!("live bank sync enabled (FinTS)");
+        }
+
+        if !config.bank.accounts.is_empty() {
+            if Self::secret(&config.bank.fints_product_id).is_some() {
+                tracing::info!(
+                    "{} bank connection(s) from the config file; scheduled syncs wait for your approval in the banking app",
+                    config.bank.accounts.len()
+                );
+                tokio::spawn(Api::run_bank_scheduler(state.clone()));
+            } else {
+                tracing::warn!(
+                    "bank accounts are configured but there is no FinTS product id, so they cannot sync"
+                );
+            }
         }
 
         if refresh_hours > 0 && !sources.is_empty() {

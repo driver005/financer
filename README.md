@@ -33,6 +33,9 @@ SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](d
 | Notifications, version stamping, dependency and nightly checks | notification planning logic tested, **scheduling and permissions never run**; release builds carry the tag's version; Android release signing is **untested** |
 | Release builds (GitHub workflow: every release has two variants, **compact** (Android APK / iOS Simulator app with the backend inside) and **server + client** (desktop bundles, Docker image, web zip, client APK / iOS Simulator app; iPhone builds via EAS)) | [docs/RELEASE.md](docs/RELEASE.md); the web and desktop bundles built on GitHub's runners for Linux, macOS (both) and Windows, the Linux bundle was run locally, and an **installable Android APK builds on a runner without an Expo account** (never installed on a device); the Docker, release-attach and phone jobs have **not run** (the phone jobs need your Expo account) |
 | Deployment (Docker, Caddy HTTPS, Postgres profile) | the image **was built and run** (161 MB, non-root user, health and auth work, data survives a restart, runs against a PostgreSQL container). The real `deploy/docker-compose.yml` **was brought up with Caddy**: HTTPS on a local certificate, HTTP redirects to HTTPS, no token gives 401, the API port is not reachable from outside Caddy, and imported data survives `down`/`up`. Caveats: in this sandbox the server image was assembled from a host-built binary on Ubuntu instead of the Dockerfile's own Rust build stage (the sandbox proxy blocks that), and Caddy used `localhost` with its own CA, so **a real domain with Let's Encrypt was not tried**. Trying it exposed that the SQLite setup failed without a `POSTGRES_PASSWORD`; fixed |
+| Server config file (`financer.toml`) | optional TOML next to the environment variables (environment wins); `${NAME}` references for secrets, unknown keys are errors, `--check-config` and `--print-config` (secrets hidden). Unit-tested (precedence, interpolation, redaction, defaults equal to the old behavior) and the real binary was started with it; the compose, desktop-script and `make dev` changes were checked by reading/dry-run only, **docker compose was not re-run** ([docs/CONFIG.md](docs/CONFIG.md)) |
+| Scheduled bank sync from the config | `[[bank.accounts]]` in `financer.toml`; the server logs in on a schedule (when the PIN is in an environment variable) and waits for your pushTAN approval, shown in Settings > Bank connections; a refused login is never retried by itself. Tested with a scripted bank (approval wait, idempotent import, scheduler, no retry after a wrong PIN, no secret in any response); **never run against a real bank**, and the Settings card was never run on a device or in a browser ([docs/FINTS.md](docs/FINTS.md)) |
+| What I spend at each supermarket | built-in German chains plus your own `[[stores]]` spellings, per payday period with share, visits, average basket and change against the comparable earlier range; matcher, aggregation and endpoints tested on realistic booking texts; the Stores screen typechecks and is unit-tested but was **never run on a device or in a browser**, and the built-in spellings were not checked against a real account ([docs/STORES.md](docs/STORES.md)) |
 
 ## Run it
 
@@ -104,7 +107,7 @@ crates/server     hosted binary
 crates/embedded   the same backend as a library for the phone (UniFFI)
 apps/mobile       Expo app (routes in src/app)
 deploy/           Dockerfile, compose, Caddyfile
-docs/             CONFIG.md, CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
+docs/             CONFIG.md, STORES.md, CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
 ```
 
 ## Security notes
