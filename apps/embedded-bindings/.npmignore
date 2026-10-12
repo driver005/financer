@@ -1,0 +1,3 @@
+# Present so that npm ignores .gitignore: the generated files (ubrn output, the Rust library)
+# are gitignored but must be copied into the app by `npm install --install-links`.
+node_modules/
