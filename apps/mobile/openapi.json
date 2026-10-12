@@ -932,6 +932,53 @@
         ]
       }
     },
+    "/v1/prices/ean/{ean}": {
+      "get": {
+        "tags": [
+          "scan"
+        ],
+        "summary": "What a scanned barcode costs at Lidl, Aldi, Kaufland and Rewe: the best stored price per\nchain, recent Open Prices observations, unit prices and the cheapest chain. A valid barcode\nnobody has a price for answers `200` with no chains and a note.",
+        "operationId": "ean_lookup",
+        "parameters": [
+          {
+            "name": "ean",
+            "in": "path",
+            "description": "EAN-8, EAN-13 or UPC-A, with a valid check digit",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EanLookupDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a valid barcode (digits, length or check digit)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/prices/refresh": {
       "post": {
         "tags": [
@@ -2488,6 +2535,82 @@
           }
         }
       },
+      "ChainPriceDto": {
+        "type": "object",
+        "description": "The best known price of the scanned product at one chain.",
+        "required": [
+          "chain",
+          "scope",
+          "price_cents",
+          "is_offer",
+          "source"
+        ],
+        "properties": {
+          "chain": {
+            "type": "string",
+            "example": "lidl"
+          },
+          "is_offer": {
+            "type": "boolean"
+          },
+          "observed_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Day the price was seen (Open Prices), if known."
+          },
+          "pack": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pack the price is for, for example `500 g` (scope `item`: the reference pack)."
+          },
+          "price_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Shelf price of the scanned pack for scope `product`, price of the reference pack for\nscope `item`."
+          },
+          "product_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "description": "`product`: a shelf price seen for exactly this barcode. `item`: the cheapest stored price\nfor the catalog item (for example milk), per reference pack; not necessarily this brand."
+          },
+          "source": {
+            "type": "string",
+            "description": "`open-prices` for a live observation, or the name of the stored price source."
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`kg` or `l`."
+          },
+          "unit_price_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Price of one kg or l in cents, where the pack size is known."
+          },
+          "valid_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          }
+        }
+      },
       "DisposableDto": {
         "type": "object",
         "required": [
@@ -2528,6 +2651,107 @@
           },
           "second": {
             "$ref": "#/components/schemas/SubscriptionDto"
+          }
+        }
+      },
+      "EanLookupDto": {
+        "type": "object",
+        "required": [
+          "ean",
+          "kind",
+          "chains",
+          "tied_cheapest",
+          "observations",
+          "live_lookup",
+          "notes"
+        ],
+        "properties": {
+          "chains": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChainPriceDto"
+            },
+            "description": "One entry per chain with a known price, cheapest first."
+          },
+          "cheapest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The cheapest chain; absent on a tie, or when the chains cannot be compared.",
+            "example": "aldi"
+          },
+          "compared_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the chains were compared on: `unit_price`, `reference_pack` or `pack_price`;\nabsent when their prices have nothing in common."
+          },
+          "ean": {
+            "type": "string",
+            "description": "The barcode in the form used by Open Prices (UPC-A gets a leading 0)."
+          },
+          "item": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Catalog key (see `GET /v1/catalog`), when the product is a known kind of item; usable in\nthe usual items (`PUT /v1/basket`)."
+          },
+          "item_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "description": "`ean8`, `upc_a` or `ean13`."
+          },
+          "live_lookup": {
+            "type": "boolean",
+            "description": "True when Open Prices answered for this request."
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Plain-language remarks: what is missing and why."
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ObservationDto"
+            },
+            "description": "Recent Open Prices observations, newest first."
+          },
+          "pack": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pack size as printed, for example `500 g`."
+          },
+          "product_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference_pack": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tied_cheapest": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Chains sharing the lowest price when there is a tie."
           }
         }
       },
@@ -2855,6 +3079,53 @@
           "transactions_known": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "ObservationDto": {
+        "type": "object",
+        "description": "A crowdsourced Open Prices observation.",
+        "required": [
+          "price_cents",
+          "date"
+        ],
+        "properties": {
+          "chain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Lidl, Aldi, Kaufland or Rewe when the store is one of them.",
+            "example": "rewe"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "price_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "store": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Store name as recorded, if any."
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`kg` or `l`, with `unit_price_cents`."
+          },
+          "unit_price_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           }
         }
       },

@@ -12,6 +12,9 @@ export type Disposable = components["schemas"]["DisposableDto"];
 export type BudgetPeriod = components["schemas"]["PeriodDto"];
 export type SafeToSpend = components["schemas"]["SafeToSpendDto"];
 export type Price = components["schemas"]["PriceDto"];
+export type EanLookup = components["schemas"]["EanLookupDto"];
+export type ChainPrice = components["schemas"]["ChainPriceDto"];
+export type Observation = components["schemas"]["ObservationDto"];
 export type RefreshReport = components["schemas"]["RefreshReportDto"];
 export type Pick = components["schemas"]["PickDto"];
 export type CatalogItem = components["schemas"]["CatalogItemDto"];
@@ -145,6 +148,11 @@ export class Api {
 
   prices(item?: string) {
     return this.request<Price[]>(`/v1/prices${item ? `?item=${encodeURIComponent(item)}` : ""}`);
+  }
+
+  /** What a scanned barcode (EAN-8, EAN-13, UPC-A) costs per chain. 400 for an invalid barcode. */
+  eanLookup(ean: string) {
+    return this.request<EanLookup>(`/v1/prices/ean/${encodeURIComponent(ean)}`);
   }
 
   refreshPrices() {

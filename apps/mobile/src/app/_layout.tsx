@@ -48,6 +48,7 @@ export default function RootLayout() {
           <Tabs.Screen name="rules" options={{ href: null, title: "Rules" }} />
           <Tabs.Screen name="subscriptions" options={{ href: null, title: "Subscriptions" }} />
           <Tabs.Screen name="alerts" options={{ href: null, title: "Alerts" }} />
+          <Tabs.Screen name="scan" options={{ href: null, title: "Scan a product" }} />
         </Tabs>
       </ApiProvider>
     </HeroUINativeProvider>
