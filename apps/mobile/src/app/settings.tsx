@@ -6,6 +6,8 @@ import { HelperText, List, SegmentedButtons, Text, TextInput } from "@/component
 import { Api, type ExportData } from "@/api/client";
 import { useApi } from "@/api/config";
 import { PaydayPicker } from "@/components/PaydayPicker";
+import { AboutCard } from "@/components/AboutCard";
+import { NotificationsCard } from "@/components/NotificationsCard";
 import { Body, Button, Card, Screen, Title, useColors } from "@/components/ui";
 import { pickTextFile, shareTextFile } from "@/native/files";
 import { useScreenData } from "@/hooks";
@@ -277,6 +279,8 @@ export default function SettingsScreen() {
             </Card>
           </>
         ) : null}
+        <NotificationsCard />
+        <AboutCard />
         {status || error ? <HelperText type="info" visible>{status ?? error}</HelperText> : null}
       </ScrollView>
     </Screen>
