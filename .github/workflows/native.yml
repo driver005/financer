@@ -127,7 +127,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
@@ -148,7 +148,7 @@ jobs:
         run: |
           xcodebuild -workspace *.xcworkspace -scheme "$(basename *.xcworkspace .xcworkspace)" \
             -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO build | tail -40
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 build | tail -40
           exit ${PIPESTATUS[0]}
 
   # The first real run of the on-phone backend: install the APK from android-app on an x86_64
