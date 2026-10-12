@@ -1,14 +1,22 @@
-import { useCallback, useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
-import { HelperText, SegmentedButtons, Text, TextInput } from "@/components/kit";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { RefreshControl, ScrollView, Text as RNText, View } from "react-native";
+import { HelperText, SegmentedButtons, TextInput } from "@/components/kit";
 
 import type { BudgetPeriod, Disposable, EnvelopeStatus } from "@/api/client";
 import { useApi } from "@/api/config";
 import { Afford } from "@/components/Afford";
-import { Bar, Body, Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
-import { formatCents, parseEuroInput } from "@/format";
+import { CompareBars } from "@/components/Charts";
+import { EmptyState } from "@/components/EmptyState";
+import { Money } from "@/components/Money";
+import { IconBadge, ListGroup, ListRow } from "@/components/rows";
+import { SkeletonList } from "@/components/Skeleton";
+import { Bar, Button, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { categoryIcon, categoryLabel } from "@/categoryIcons";
+import { compareSummary, topCategories } from "@/charts";
+import { parseEuroInput, spokenMoney } from "@/format";
 import { useScreenData } from "@/hooks";
 import { localIsoDate, periodLabel } from "@/period";
+import { space, typography, usePalette } from "@/theme";
 
 // Categories that can have a monthly limit (income and savings are not spending).
 const CATEGORIES = [
@@ -26,7 +34,7 @@ type BudgetData = {
 
 export default function Budget() {
   const { api, loaded } = useApi();
-  const c = useColors();
+  const p = usePalette();
   const { data, error, busy, reload } = useScreenData<BudgetData>(async (a) => {
     const today = localIsoDate();
     const [disposable, envelopes, current, previous, statusNow, statusBefore] = await Promise.all([
@@ -82,34 +90,63 @@ export default function Budget() {
     }
   }, [api, limits, reload]);
 
+  const compare = useMemo(() => (data ? topCategories(data.status.current, data.status.previous, 5) : []), [data]);
+
   if (!loaded) return <Screen><Loading /></Screen>;
+
+  const left = data?.disposable.disposable_cents ?? 0;
+  const currentPeriod = data?.period.current;
 
   return (
     <Screen>
-      <Title>Budget</Title>
+      <Title subtitle={currentPeriod ? periodLabel(currentPeriod) : undefined}>Budget</Title>
       {!api ? (
         <NeedsSetup />
       ) : (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: space.xl }}
+          refreshControl={<RefreshControl refreshing={busy && !!data} onRefresh={() => void reload()} tintColor={p.accent} />}
+        >
+          {data ? (
+            <>
+              <Card>
+                <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>Left to budget per month</RNText>
+                <View style={{ marginTop: space.xs }}>
+                  <Money cents={left} variant="display" tone={left < 0 ? "bad" : "plain"} label={`Left to budget per month: ${spokenMoney(left)}`} />
+                </View>
+                <RNText style={[typography.caption, { color: p.muted, marginTop: space.xs }]}>From your recurring payments: income minus fixed costs.</RNText>
+              </Card>
+              <ListGroup>
+                <ListRow icon="cash-plus" iconTone="good" title="Income" value={<Money cents={data.disposable.monthly_income_cents} variant="bodyStrong" signed />} />
+                <ListRow icon="home-clock-outline" iconTone="accent" title="Fixed costs" value={<Money cents={-data.disposable.monthly_fixed_costs_cents} variant="bodyStrong" tone="plain" />} />
+              </ListGroup>
+
+              {compare.length > 0 ? (
+                <Card>
+                  <RNText accessibilityRole="header" style={[typography.heading, { color: p.text }]}>This period against last</RNText>
+                  <RNText style={[typography.caption, { color: p.muted, marginTop: 2, marginBottom: space.lg }]}>Your biggest categories with a limit.</RNText>
+                  <CompareBars rows={compare} summary={compareSummary(compare)} />
+                </Card>
+              ) : null}
+            </>
+          ) : error ? (
+            <EmptyState title="Could not load your budget" message={error} mood="worried" actionLabel="Try again" actionIcon="refresh" onAction={() => void reload()} />
+          ) : (
+            <View style={{ gap: space.md, marginBottom: space.md }}>
+              <SkeletonList rows={2} />
+            </View>
+          )}
+
           <Afford />
 
-          {data ? (
-            <Card>
-              <Text variant="titleMedium">Per month (from recurring payments)</Text>
-              <Row label="Income" value={formatCents(data.disposable.monthly_income_cents)} />
-              <Row label="Fixed costs" value={formatCents(-data.disposable.monthly_fixed_costs_cents)} />
-              <Row label="Left to budget" value={formatCents(data.disposable.disposable_cents)} bold />
-            </Card>
-          ) : busy ? (
-            <Loading />
-          ) : null}
-
           <Card>
-            <Text variant="titleMedium">Limits per budget period</Text>
+            <RNText accessibilityRole="header" style={[typography.heading, { color: p.text }]}>Limits per budget period</RNText>
             {shown ? (
               <>
                 <SegmentedButtons
-                  style={{ marginTop: 12 }}
+                  style={{ marginTop: space.md }}
                   value={which}
                   onValueChange={setWhich}
                   buttons={[
@@ -117,14 +154,14 @@ export default function Budget() {
                     { value: "previous", label: "Last period" },
                   ]}
                 />
-                <Text variant="bodyMedium" style={{ marginTop: 8, fontWeight: "700" }} accessibilityLabel={`Budget period ${periodLabel(shown)}`}>
+                <RNText style={[typography.bodyStrong, { color: p.text, marginTop: space.md }]} accessibilityLabel={`Budget period ${periodLabel(shown)}`}>
                   {periodLabel(shown)}
                   {which === "current" ? ` · ${shown.days_left} ${shown.days_left === 1 ? "day" : "days"} left` : ""}
-                </Text>
+                </RNText>
                 {shown.payday > 1 ? (
-                  <Text variant="bodySmall" style={{ color: c.muted }}>
+                  <RNText style={[typography.caption, { color: p.muted }]}>
                     Your budget month starts on day {shown.payday} (change it in Settings).
-                  </Text>
+                  </RNText>
                 ) : null}
               </>
             ) : null}
@@ -132,10 +169,12 @@ export default function Budget() {
               const s = data?.status[which].find((x) => x.category === cat);
               const over = s ? s.remaining_cents < 0 : false;
               const progress = s && s.limit_cents > 0 ? Math.min(1, s.spent_cents / s.limit_cents) : 0;
+              const ic = categoryIcon(cat);
               return (
-                <View key={cat} style={{ marginTop: 14 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <Text variant="bodyLarge" style={{ flex: 1, textTransform: "capitalize" }}>{cat}</Text>
+                <View key={cat} style={{ marginTop: space.lg }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+                    <IconBadge icon={ic.icon} tone={ic.tone} size={36} />
+                    <RNText numberOfLines={2} style={[typography.bodyStrong, { color: p.text, flex: 1 }]}>{categoryLabel(cat)}</RNText>
                     <TextInput
                       mode="outlined"
                       dense
@@ -150,17 +189,24 @@ export default function Budget() {
                   </View>
                   {s ? (
                     <>
-                      <Bar progress={progress} color={over ? c.bad : c.accent} />
-                      <Text variant="bodySmall" style={{ color: over ? c.bad : c.muted, marginTop: 2 }}>
-                        {formatCents(s.spent_cents)} spent ·{" "}
-                        {over ? `${formatCents(-s.remaining_cents)} over` : `${formatCents(s.remaining_cents)} left`}
-                      </Text>
+                      <Bar
+                        progress={progress}
+                        color={over ? p.bad : p.accent}
+                        marginTop={space.sm}
+                        accessibilityLabel={`${categoryLabel(cat)}: ${Math.round(progress * 100)} percent of the limit used`}
+                      />
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs, alignItems: "center" }}>
+                        <Money cents={s.spent_cents} variant="caption" tone="muted" />
+                        <RNText style={[typography.caption, { color: over ? p.bad : p.muted }]}>spent ·</RNText>
+                        <Money cents={over ? -s.remaining_cents : s.remaining_cents} variant="caption" tone={over ? "bad" : "muted"} />
+                        <RNText style={[typography.caption, { color: over ? p.bad : p.muted }]}>{over ? "over" : "left"}</RNText>
+                      </View>
                     </>
                   ) : null}
                 </View>
               );
             })}
-            <View style={{ marginTop: 16 }}>
+            <View style={{ marginTop: space.xl }}>
               <Button label="Save limits" icon="content-save-outline" onPress={save} disabled={saving} />
             </View>
             <HelperText type={message?.startsWith("Budget saved") ? "info" : "error"} visible={!!(message ?? error)}>
@@ -170,14 +216,5 @@ export default function Budget() {
         </ScrollView>
       )}
     </Screen>
-  );
-}
-
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
-  return (
-    <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
-      <Body muted={!bold} bold={bold}>{label}</Body>
-      <Body bold={bold}>{value}</Body>
-    </View>
   );
 }

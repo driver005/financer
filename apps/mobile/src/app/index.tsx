@@ -2,25 +2,29 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useToast } from "heroui-native";
 import { useEffect, useState } from "react";
-import { ScrollView, Text as RNText, View } from "react-native";
+import { RefreshControl, ScrollView, Text as RNText, View } from "react-native";
 
 import { ForecastCard } from "@/components/ForecastCard";
 import { Mascot } from "@/components/Mascot";
 import { SafeToSpendCard } from "@/components/SafeToSpendCard";
 import { TrophiesCard } from "@/components/TrophiesCard";
 import { WatchdogCard } from "@/components/Watchdog";
+import { EmptyState } from "@/components/EmptyState";
 import { ChunkyButton } from "@/components/kit";
+import { Money } from "@/components/Money";
+import { StatusPill } from "@/components/rows";
+import { SkeletonHero, SkeletonList } from "@/components/Skeleton";
 import { Bar, Body, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
 import type { Forecast, SafeToSpend } from "@/api/client";
 import { useApi } from "@/api/config";
-import { formatCents } from "@/format";
+import { formatMoney } from "@/format";
 import { computeRewards, coachMessage, dailyAllowanceOn, freshBadges, level, moodFor, quests, spentOn, xp, type Progress, type Quest } from "@/game";
 import { useScreenData } from "@/hooks";
-import { localIsoDate } from "@/period";
+import { MONTH_NAMES, localIsoDate } from "@/period";
 import { getSavingsGoal } from "@/savingsGoal";
 import { getSecret, setSecret } from "@/api/storage";
 import { celebrate } from "@/native/haptics";
-import { usePalette } from "@/theme";
+import { space, typography, usePalette } from "@/theme";
 
 const SEEN_KEY = "financer.quests.seen";
 // Quests already celebrated since the app started. Module level (not per component) so a
@@ -30,15 +34,23 @@ const BADGES_SEEN_KEY = "financer.badges.seen";
 // The same guard for badges (see `freshBadges`).
 const celebratedBadges = new Set<string>();
 
-function Pill({ icon, text, color, label }: { icon: string; text: string; color: string; label: string }) {
-  const p = usePalette();
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** `2026-10-12` -> `Monday, 12 October`. */
+function longDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}, ${d} ${MONTH_NAMES[m - 1]}`;
+}
+
+function Pill({ icon, text, color, bg, label }: { icon: string; text: string; color: string; bg: string; label: string }) {
   return (
     <View
+      accessible
       accessibilityLabel={label}
-      style={{ flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 2, borderColor: p.border, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: p.surface }}
+      style={{ flexDirection: "row", alignItems: "center", gap: space.xs, borderRadius: 999, paddingHorizontal: space.md, minHeight: 32, backgroundColor: bg }}
     >
-      <RNText style={{ fontSize: 16 }}>{icon}</RNText>
-      <RNText style={{ color, fontSize: 15, fontWeight: "800" }}>{text}</RNText>
+      <RNText style={{ fontSize: 15 }}>{icon}</RNText>
+      <RNText style={{ color, fontSize: 14, lineHeight: 20, fontWeight: "800" }}>{text}</RNText>
     </View>
   );
 }
@@ -46,12 +58,12 @@ function Pill({ icon, text, color, label }: { icon: string; text: string; color:
 function QuestRow({ quest, onGo }: { quest: Quest; onGo: () => void }) {
   const p = usePalette();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }} accessibilityLabel={`${quest.title}${quest.done ? ", done" : ""}`}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.sm, minHeight: 56 }} accessibilityLabel={`${quest.title}${quest.done ? ", done" : ""}`}>
       <View
         style={{
-          width: 30,
-          height: 30,
-          borderRadius: 15,
+          width: 32,
+          height: 32,
+          borderRadius: 16,
           alignItems: "center",
           justifyContent: "center",
           backgroundColor: quest.done ? p.fill : "transparent",
@@ -61,11 +73,11 @@ function QuestRow({ quest, onGo }: { quest: Quest; onGo: () => void }) {
       >
         {quest.done ? <MaterialCommunityIcons name="check-bold" size={18} color="#ffffff" /> : null}
       </View>
-      <View style={{ flex: 1 }}>
-        <RNText style={{ color: p.text, fontSize: 16, fontWeight: "800", textDecorationLine: quest.done ? "line-through" : "none", opacity: quest.done ? 0.6 : 1 }}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <RNText style={[typography.bodyStrong, { color: p.text, textDecorationLine: quest.done ? "line-through" : "none", opacity: quest.done ? 0.6 : 1 }]}>
           {quest.title}
         </RNText>
-        <RNText style={{ color: p.muted, fontSize: 13 }}>{quest.hint}</RNText>
+        <RNText style={[typography.caption, { color: p.muted }]}>{quest.hint}</RNText>
       </View>
       {quest.done ? null : <ChunkyButton compact label="Go" onPress={onGo} />}
     </View>
@@ -87,7 +99,7 @@ export default function Today() {
   const p = usePalette();
   const { toast } = useToast();
   const [celebrating, setCelebrating] = useState(false);
-  const { data, error } = useScreenData<TodayData>(async (a) => {
+  const { data, error, busy, reload } = useScreenData<TodayData>(async (a) => {
     const [txs, envelopes, basket, prices, receipts, safe, forecast, savingsGoal] = await Promise.all([
       a.transactions(),
       a.envelopes(),
@@ -192,32 +204,51 @@ export default function Today() {
 
   const over = allowance > 0 && spentToday > allowance;
   const barColor = over ? p.bad : spentToday > allowance * 0.8 ? p.orange : p.fill;
+  const goalLeft = Math.max(0, allowance - spentToday);
 
   return (
     <Screen>
-      <Title>Today</Title>
+      <Title
+        subtitle={longDate(today)}
+        right={
+          data ? (
+            <View style={{ flexDirection: "row", gap: space.sm }}>
+              <Pill icon="🔥" text={`${days}`} color={p.warn} bg={p.warnSoft} label={`Streak: ${days} days`} />
+              {rewards ? (
+                <Pill
+                  icon="❄️"
+                  text={`${rewards.streak.freezes}`}
+                  color={p.blue}
+                  bg={p.blueSoft}
+                  label={`${rewards.streak.freezes} streak freeze${rewards.streak.freezes === 1 ? "" : "s"}`}
+                />
+              ) : null}
+            </View>
+          ) : null
+        }
+      >
+        Today
+      </Title>
       {!api ? (
         <NeedsSetup />
       ) : !data ? (
-        error ? <Body muted>{error}</Body> : <Loading />
+        error ? (
+          <EmptyState title="Could not load your numbers" message={error} mood="worried" actionLabel="Try again" actionIcon="refresh" onAction={() => void reload()} />
+        ) : (
+          <View style={{ gap: space.md }}>
+            <SkeletonHero />
+            <SkeletonList rows={2} />
+          </View>
+        )
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: space.xl }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void reload()} tintColor={p.accent} />}
+        >
           <SafeToSpendCard data={data.safe} />
           <ForecastCard data={data.forecast} />
-
-          <View style={{ flexDirection: "row", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-            <Pill icon="🔥" text={`${days}`} color={p.orange} label={`Streak: ${days} days`} />
-            {rewards ? (
-              <Pill
-                icon="❄️"
-                text={`${rewards.streak.freezes}`}
-                color={p.blue}
-                label={`${rewards.streak.freezes} streak freeze${rewards.streak.freezes === 1 ? "" : "s"}`}
-              />
-            ) : null}
-            <Pill icon="⚡" text={`${points} XP`} color={p.gold} label={`${points} experience points`} />
-            <Pill icon="🏅" text={`Lvl ${lvl.level} ${lvl.title}`} color={p.blue} label={`Level ${lvl.level}, ${lvl.title}`} />
-          </View>
+          <WatchdogCard />
 
           <Mascot
             mood={moodFor({ streakDays: days, allowanceCents: allowance, spentTodayCents: spentToday, celebrating, freezeUsedToday: rewards?.streak.frozenToday })}
@@ -231,46 +262,55 @@ export default function Today() {
           />
 
           <Card>
-            <RNText style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1 }}>NEXT LEVEL</RNText>
-            <Bar progress={lvl.into / lvl.size} color={p.gold} />
-            <RNText style={{ color: p.muted, fontSize: 13, marginTop: 6 }}>
-              {lvl.into} / {lvl.size} XP to level {lvl.level + 1}
-            </RNText>
-          </Card>
-
-          <Card>
-            <RNText style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1 }}>TODAY'S GROCERY GOAL</RNText>
+            <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>Today's grocery goal</RNText>
             {allowance > 0 ? (
               <>
-                <RNText style={{ color: p.text, fontSize: 26, fontWeight: "800", marginTop: 4 }}>
-                  {formatCents(Math.max(0, allowance - spentToday))} left
-                </RNText>
-                <Bar progress={spentToday / allowance} color={barColor} height={14} />
-                <RNText style={{ color: p.muted, fontSize: 13, marginTop: 6 }}>
-                  {formatCents(spentToday)} spent of {formatCents(allowance)} a day
+                <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.sm, marginTop: space.xs, flexWrap: "wrap" }}>
+                  <Money cents={goalLeft} variant="heading" tone={over ? "bad" : "plain"} style={{ fontSize: 26, lineHeight: 32 }} />
+                  <RNText style={[typography.label, { color: p.muted }]}>left</RNText>
+                </View>
+                <Bar
+                  progress={spentToday / allowance}
+                  color={barColor}
+                  height={14}
+                  marginTop={space.sm}
+                  accessibilityLabel={`${Math.round((spentToday / allowance) * 100)} percent of today's grocery goal spent`}
+                />
+                <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>
+                  {formatMoney(spentToday)} spent of {formatMoney(allowance)} a day
                 </RNText>
               </>
             ) : (
               <>
                 <Body muted>Set a grocery limit and it becomes a daily goal here.</Body>
-                <View style={{ marginTop: 12 }}>
+                <View style={{ marginTop: space.md }}>
                   <ChunkyButton label="Set a limit" onPress={() => router.push("/budget")} />
                 </View>
               </>
             )}
           </Card>
 
-          <WatchdogCard />
+          <Card>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.md }}>
+              <RNText style={[typography.heading, { color: p.text, flexShrink: 1 }]}>Level {lvl.level}</RNText>
+              <StatusPill tone="gold" icon="lightning-bolt" label={`${points} XP`} accessibilityLabel={`${points} experience points`} />
+            </View>
+            <RNText style={[typography.label, { color: p.muted }]}>{lvl.title}</RNText>
+            <Bar progress={lvl.into / lvl.size} color={p.gold} marginTop={space.md} accessibilityLabel={`${lvl.into} of ${lvl.size} experience points to level ${lvl.level + 1}`} />
+            <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>
+              {lvl.into} / {lvl.size} XP to level {lvl.level + 1}
+            </RNText>
+          </Card>
 
           {rewards ? <TrophiesCard rewards={rewards} /> : null}
 
           <Card>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <RNText style={{ color: p.text, fontSize: 18, fontWeight: "800" }}>Quests</RNText>
-              <RNText style={{ color: p.muted, fontWeight: "800" }}>{doneCount} / {list.length}</RNText>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.md }}>
+              <RNText accessibilityRole="header" style={[typography.heading, { color: p.text }]}>Quests</RNText>
+              <StatusPill tone="accent" label={`${doneCount} / ${list.length}`} accessibilityLabel={`${doneCount} of ${list.length} quests done`} />
             </View>
-            <Bar progress={doneCount / Math.max(1, list.length)} />
-            <View style={{ marginTop: 6 }}>
+            <Bar progress={doneCount / Math.max(1, list.length)} marginTop={space.md} accessibilityLabel={`${doneCount} of ${list.length} quests done`} />
+            <View style={{ marginTop: space.sm }}>
               {list.map((q) => (
                 <QuestRow key={q.id} quest={q} onGo={() => router.push(q.route)} />
               ))}
