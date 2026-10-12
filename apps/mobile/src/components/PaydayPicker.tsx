@@ -31,8 +31,8 @@ export function PaydayPicker({ value, onChange }: { value: number; onChange: (da
               accessibilityLabel={day === 1 ? "Day 1, calendar month" : `Day ${day}`}
               accessibilityState={{ checked: on }}
               style={{
-                width: 40,
-                height: 40,
+                width: 44,
+                height: 44,
                 borderRadius: 12,
                 alignItems: "center",
                 justifyContent: "center",

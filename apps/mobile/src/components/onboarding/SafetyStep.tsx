@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Linking, Platform, View } from "react-native";
 
 import { useApi } from "@/api/config";
-import { ChunkyButton, HelperText, Switch, Text } from "@/components/kit";
+import { ChunkyButton, Switch, Text } from "@/components/kit";
+import { FieldMessage } from "@/components/settings/SettingsKit";
 import { ChoiceCard, FieldLabel, StepFrame } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
 import { Card, useColors } from "@/components/ui";
@@ -119,16 +120,16 @@ export function SafetyStep({ ctx }: { ctx: StepCtx }) {
             accessibilityLabel="Lock the app"
           />
         </View>
-        {lockReason && !lock.state.enabled ? <HelperText type="info" visible>{lockReason}</HelperText> : null}
-        {lock.notice ? <HelperText type="error" visible>{lock.notice}</HelperText> : null}
-        {lockMessage ? <HelperText type="error" visible>{lockMessage}</HelperText> : null}
+        {lockReason && !lock.state.enabled ? <FieldMessage tone="info">{lockReason}</FieldMessage> : null}
+        {lock.notice ? <FieldMessage tone="error">{lock.notice}</FieldMessage> : null}
+        {lockMessage ? <FieldMessage tone="error">{lockMessage}</FieldMessage> : null}
       </Card>
 
       <FieldLabel>Reminders</FieldLabel>
       {supported === false ? (
-        <HelperText type="info" visible>
+        <FieldMessage tone="info">
           {Platform.OS === "web" ? "Reminders need the phone app." : "This build does not include notifications."}
-        </HelperText>
+        </FieldMessage>
       ) : (
         <>
           <Text variant="bodySmall" style={{ color: c.muted, marginBottom: 10 }}>
@@ -150,7 +151,7 @@ export function SafetyStep({ ctx }: { ctx: StepCtx }) {
               <ChunkyButton outline icon="cog-outline" label="Open phone settings" onPress={() => void Linking.openSettings()} />
             </View>
           ) : null}
-          {notifyMessage ? <HelperText type="info" visible>{notifyMessage}</HelperText> : null}
+          {notifyMessage ? <FieldMessage tone="info">{notifyMessage}</FieldMessage> : null}
           <Text variant="bodySmall" style={{ color: c.muted, marginTop: 8 }}>
             The evening message and payday reminder are scheduled in advance and may arrive a few minutes off. Price drops are looked for when you open the app and when the system lets Financer run in the background, so they can come late.
           </Text>

@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { Text as RNText, View } from "react-native";
 
 import { useApi } from "@/api/config";
-import { ChunkyButton, HelperText } from "@/components/kit";
+import { ChunkyButton } from "@/components/kit";
+import { FieldMessage } from "@/components/settings/SettingsKit";
 import { FieldLabel, StepFrame } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
 import { celebrate } from "@/native/haptics";
@@ -87,7 +88,7 @@ export function FinishStep({ ctx }: { ctx: StepCtx }) {
       ) : (
         <RNText style={{ color: p.muted, fontSize: 15 }}>You skipped every question. Nothing was changed, and you can set it all up later in Settings.</RNText>
       )}
-      <HelperText type={saved.kind === "failed" ? "error" : "info"} visible>{status}</HelperText>
+      <FieldMessage tone={saved.kind === "failed" ? "error" : "info"}>{status}</FieldMessage>
       {saved.kind === "failed" ? <ChunkyButton outline icon="refresh" label="Try saving again" onPress={() => void save()} /> : null}
 
       <FieldLabel>Your first quest</FieldLabel>

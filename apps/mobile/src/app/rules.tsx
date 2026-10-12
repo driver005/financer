@@ -3,9 +3,9 @@ import { KeyboardAvoidingView, Platform, ScrollView, Text as RNText, View } from
 
 import type { Rule } from "@/api/client";
 import { useApi } from "@/api/config";
-import { CategoryPicker } from "@/components/CategoryPicker";
 import { TextInput } from "@/components/kit";
 import {
+  ChoiceChips,
   DangerButton,
   EmptyState,
   FieldMessage,
@@ -19,6 +19,7 @@ import { ChunkyButton, Text } from "@/components/kit";
 import { useScreenData } from "@/hooks";
 import { usePalette } from "@/theme";
 import {
+  CATEGORIES,
   EMPTY_DRAFT,
   describeRule,
   draftFromRule,
@@ -279,7 +280,7 @@ function RuleForm({
         />
       </View>
       <RNText style={label}>…use this category</RNText>
-      <CategoryPicker value={draft.category} onChange={(category) => set({ category })} />
+      <ChoiceChips groupLabel="Category" options={CATEGORIES} value={draft.category} onChange={(category) => set({ category })} />
       {error ? <FieldMessage tone="error">{error}</FieldMessage> : null}
       <View style={{ marginTop: 16, gap: 4 }}>
         <Button label="Save rule" icon="content-save-outline" onPress={onSave} disabled={busy} />

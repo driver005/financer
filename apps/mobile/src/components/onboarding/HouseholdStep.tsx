@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { View } from "react-native";
 
-import { Chip, HelperText, SegmentedButtons, TextInput } from "@/components/kit";
-import { FieldLabel, NumberTiles, Note, StepFrame } from "@/components/onboarding/Frame";
+import { TextInput } from "@/components/kit";
+import { FieldMessage, Segmented } from "@/components/settings/SettingsKit";
+import { FieldLabel, NumberTiles, Note, StepFrame, ToggleChip } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
 import { CHAINS, CHAIN_NAMES, HOUSEHOLD_MAX, mascotFor, parseBudget, parsePostalCode, type Cadence } from "@/onboarding";
 
@@ -53,7 +54,7 @@ export function HouseholdStep({ ctx }: { ctx: StepCtx }) {
       />
 
       <FieldLabel>Grocery budget</FieldLabel>
-      <SegmentedButtons<Cadence>
+      <Segmented<Cadence>
         value={cadence}
         onValueChange={(v) => update({ groceryCadence: v })}
         buttons={[
@@ -73,7 +74,7 @@ export function HouseholdStep({ ctx }: { ctx: StepCtx }) {
           error={!budget.ok}
           right={<TextInput.Affix text="€" />}
         />
-        {!budget.ok ? <HelperText type="error" visible>{budget.error}</HelperText> : null}
+        {!budget.ok ? <FieldMessage tone="error">{budget.error}</FieldMessage> : null}
       </View>
       <Note icon="help-circle-outline">Why we ask: your budget is the starting point for the daily number on the next screen. Leave it empty and I will suggest one.</Note>
 
@@ -82,14 +83,12 @@ export function HouseholdStep({ ctx }: { ctx: StepCtx }) {
         {CHAINS.map((c) => {
           const on = chains.includes(c);
           return (
-            <Chip
+            <ToggleChip
               key={c}
+              label={CHAIN_NAMES[c]}
               selected={on}
-              accessibilityLabel={`${CHAIN_NAMES[c]}${on ? ", selected" : ""}`}
               onPress={() => update({ chains: on ? chains.filter((x) => x !== c) : CHAINS.filter((x) => x === c || chains.includes(x)) })}
-            >
-              {CHAIN_NAMES[c]}
-            </Chip>
+            />
           );
         })}
       </View>
@@ -107,7 +106,7 @@ export function HouseholdStep({ ctx }: { ctx: StepCtx }) {
         placeholder="10115"
         error={!postalCheck.ok}
       />
-      {!postalCheck.ok ? <HelperText type="error" visible>{postalCheck.error}</HelperText> : null}
+      {!postalCheck.ok ? <FieldMessage tone="error">{postalCheck.error}</FieldMessage> : null}
       <Note icon="map-marker-outline">
         Why we ask: prices differ a little by region. It stays on this device with your setup. Today's price sources cover whole chains, so it does not change any numbers yet.
       </Note>

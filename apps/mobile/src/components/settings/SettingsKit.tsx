@@ -166,6 +166,7 @@ export function SettingsRow({
       accessibilityLabel={accessibilityLabel ?? [title, value, subtitle].filter(Boolean).join(", ")}
       accessibilityHint={accessibilityHint}
       accessibilityState={accessibilityState}
+      aria-expanded={accessibilityState?.expanded}
       style={({ pressed }) => [rowStyle, { backgroundColor: pressed ? p.surfaceAlt : "transparent" }]}
     >
       {body}
@@ -516,6 +517,53 @@ export function Segmented<T extends string>({
           accessibilityState={{ checked: b.value === value }}
         />
       ))}
+    </View>
+  );
+}
+
+/** Pick one of several short options as wrapping pills, each at least 44 high. */
+export function ChoiceChips({
+  options,
+  value,
+  onChange,
+  groupLabel,
+}: {
+  options: readonly string[];
+  value: string;
+  onChange: (next: string) => void;
+  groupLabel: string;
+}) {
+  const p = usePalette();
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel={groupLabel}>
+      {options.map((o) => {
+        const on = o === value;
+        return (
+          <Pressable
+            key={o}
+            onPress={() => {
+              if (on) return;
+              tap();
+              onChange(o);
+            }}
+            accessibilityRole="radio"
+            accessibilityLabel={o}
+            accessibilityState={{ checked: on }}
+            style={{
+              minHeight: 44,
+              paddingHorizontal: 14,
+              borderRadius: 22,
+              borderWidth: 2,
+              borderColor: on ? p.accent : p.border,
+              backgroundColor: on ? p.accent : p.surface,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <RNText style={{ color: on ? p.onAccent : p.text, fontSize: 14, fontWeight: "700" }}>{o}</RNText>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

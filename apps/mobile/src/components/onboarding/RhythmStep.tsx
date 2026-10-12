@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Text as RNText, View } from "react-native";
 
 import { useApi } from "@/api/config";
-import { HelperText, TextInput } from "@/components/kit";
+import { TextInput } from "@/components/kit";
+import { FieldMessage } from "@/components/settings/SettingsKit";
 import { PaydayPicker } from "@/components/PaydayPicker";
 import { ChoiceCard, FieldLabel, Note, StepFrame } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
@@ -107,7 +108,7 @@ export function RhythmStep({ ctx }: { ctx: StepCtx }) {
             error={!allowance.ok}
             right={<TextInput.Affix text="€ a day" />}
           />
-          {!allowance.ok ? <HelperText type="error" visible>{allowance.error}</HelperText> : null}
+          {!allowance.ok ? <FieldMessage tone="error">{allowance.error}</FieldMessage> : null}
           {daily !== null && limit !== null ? (
             <View
               style={{ marginTop: 12, padding: 14, borderRadius: 20, borderWidth: 2, borderColor: p.border, backgroundColor: p.surface }}
