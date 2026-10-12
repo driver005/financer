@@ -10,6 +10,8 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "apps/embedded-bindings/**"
+      - "apps/mobile/scripts/enable-embedded.sh"
       - ".github/workflows/native.yml"
   workflow_dispatch:
 
@@ -59,3 +61,52 @@ jobs:
             cargo build --release -p financer-embedded --locked --target "$t"
           done
       - run: ls -lh target/aarch64-apple-ios/release/libfinancer_embedded.* target/aarch64-apple-ios-sim/release/libfinancer_embedded.*
+
+  # The whole chain for the Android app with the backend inside: Rust -> bindings (ubrn jsi2) ->
+  # Expo prebuild -> Gradle. It proves the app compiles and links with the library; it does not
+  # run it on a device.
+  android-app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Build the Rust library and generate the bindings
+        run: scripts/enable-embedded.sh android
+      - name: Typecheck against the generated bindings
+        run: npx tsc --noEmit
+      - name: Generate the native Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: "1"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+      - run: |
+          mkdir out
+          cp android/app/build/outputs/apk/release/*.apk out/financer-android-embedded.apk
+          ls -lh out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-android-embedded-apk
+          path: apps/mobile/out/financer-android-embedded.apk
+          retention-days: 7

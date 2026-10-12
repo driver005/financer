@@ -1,0 +1,8 @@
+# Everything below is produced by `ubrn` (see apps/mobile/scripts/enable-embedded.sh)
+/src/
+/android/
+/ios/
+/cpp/
+/*.podspec
+/node_modules/
+/package-lock.json

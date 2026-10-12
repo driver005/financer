@@ -1,0 +1,10 @@
+# Generates the bindings of crates/embedded for React Native (flavour jsi2). Run through
+# apps/mobile/scripts/enable-embedded.sh; see docs/EMBEDDED.md.
+rust:
+  directory: ../..
+  manifestPath: crates/embedded/Cargo.toml
+jsi2:
+  ts: src/generated
+  androidTargets: [arm64-v8a, x86_64]
+  minIosVersion: "15.1"
+  bundleIdPrefix: app.financer
