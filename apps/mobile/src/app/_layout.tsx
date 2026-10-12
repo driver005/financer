@@ -5,6 +5,8 @@ import { HeroUINativeProvider } from "heroui-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { ApiProvider } from "@/api/config";
+import { AppLockOverlay } from "@/components/AppLockOverlay";
+import { BackupOnOpen } from "@/components/BackupOnOpen";
 import "@/native/background"; // defines the background task at startup
 import { NotificationSync } from "@/components/NotificationSync";
 import "@/global.css";
@@ -51,6 +53,8 @@ export default function RootLayout() {
           <Tabs.Screen name="subscriptions" options={{ href: null, title: "Subscriptions" }} />
           <Tabs.Screen name="alerts" options={{ href: null, title: "Alerts" }} />
         </Tabs>
+        <BackupOnOpen />
+        <AppLockOverlay />
       </ApiProvider>
     </HeroUINativeProvider>
     </GestureHandlerRootView>

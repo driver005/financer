@@ -78,6 +78,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/backup/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a passphrase-encrypted backup of everything that is yours (see `/v1/export`). */
+        post: operations["create_backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/backup/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decrypt a backup and merge it like `/v1/import`. A wrong passphrase or damaged file is a
+         *     400 and changes nothing.
+         */
+        post: operations["restore_backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/bank/status": {
         parameters: {
             query?: never;
@@ -786,6 +823,21 @@ export interface components {
         ApplyReport: {
             /** @description Transactions whose category changed. Transactions you categorized by hand are skipped. */
             changed: number;
+        };
+        BackupCreateRequest: {
+            /** @description At least 8 characters. Not stored anywhere: without it the backup cannot be opened. */
+            passphrase: string;
+        };
+        BackupDto: {
+            /** @description The encrypted backup (an `age` file), base64-encoded. */
+            data_base64: string;
+            receipts: number;
+            transactions: number;
+        };
+        BackupRestoreRequest: {
+            /** @description The encrypted backup, base64-encoded, as returned by the create endpoint. */
+            data_base64: string;
+            passphrase: string;
         };
         BankStatus: {
             /** Format: int64 */
@@ -1620,6 +1672,70 @@ export interface operations {
             };
             /** @description No such alert */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupCreateRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupDto"];
+                };
+            };
+            /** @description Passphrase too short */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    restore_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupRestoreRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReportDto"];
+                };
+            };
+            /** @description Wrong passphrase, damaged file or not a valid backup */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -43,6 +43,7 @@ export type UpcomingCharge = components["schemas"]["UpcomingChargeDto"];
 export type PriceHike = components["schemas"]["PriceHikeDto"];
 export type Alert = components["schemas"]["AlertDto"];
 export type AlertList = components["schemas"]["AlertsDto"];
+export type EncryptedBackup = components["schemas"]["BackupDto"];
 export type Chain = "aldi" | "lidl" | "kaufland" | "rewe";
 
 export class ApiError extends Error {
@@ -230,6 +231,16 @@ export class Api {
 
   importData(data: ExportData) {
     return this.json<ImportSummary>("/v1/import", "POST", data);
+  }
+
+  /** The same data as `exportData`, encrypted with a passphrase (an `age` file, base64). */
+  createBackup(passphrase: string) {
+    return this.json<EncryptedBackup>("/v1/backup/create", "POST", { passphrase });
+  }
+
+  /** Merge an encrypted backup; a wrong passphrase or damaged file is a 400 and changes nothing. */
+  restoreBackup(passphrase: string, dataBase64: string) {
+    return this.json<ImportSummary>("/v1/backup/restore", "POST", { passphrase, data_base64: dataBase64 });
   }
 
   bankStatus() {

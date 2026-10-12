@@ -1,6 +1,7 @@
 //! REST API shared by the hosted server and the embedded on-phone backend.
 
 mod auth;
+mod backup;
 mod bank;
 mod budget_period;
 mod categorization;
@@ -144,6 +145,8 @@ impl AppState {
         budget_period::safe_to_spend,
         export::export_data,
         export::import_data,
+        backup::create_backup,
+        backup::restore_backup,
         bank::start_sync,
         bank::confirm_sync,
         bank::bank_status,
@@ -195,6 +198,9 @@ impl AppState {
         dto::ExportSettings,
         dto::ExportDto,
         dto::ImportReportDto,
+        backup::BackupCreateRequest,
+        backup::BackupDto,
+        backup::BackupRestoreRequest,
         dto::SyncRequest,
         dto::SyncStarted,
         dto::SyncDone,
@@ -285,6 +291,8 @@ impl Api {
             .route("/budget/safe-to-spend", get(budget_period::safe_to_spend))
             .route("/export", get(export::export_data))
             .route("/import", post(export::import_data))
+            .route("/backup/create", post(backup::create_backup))
+            .route("/backup/restore", post(backup::restore_backup))
             .route("/bank/sync", post(bank::start_sync))
             .route("/bank/sync/{id}/confirm", post(bank::confirm_sync))
             .route("/bank/status", get(bank::bank_status))

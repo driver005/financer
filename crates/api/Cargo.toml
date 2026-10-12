@@ -14,7 +14,9 @@ financer-prices = { path = "../prices" }
 financer-receipts = { path = "../receipts" }
 financer-recipes = { path = "../recipes" }
 financer-store = { path = "../store" }
+age = { version = "0.11", default-features = false }
 async-trait = "0.1"
+base64 = "0.22"
 axum = { version = "0.8", default-features = false, features = ["json", "query", "tokio", "http1"] }
 serde.workspace = true
 serde_json.workspace = true
