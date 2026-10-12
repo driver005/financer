@@ -19,7 +19,8 @@ import {
 } from "@/bankConnections";
 import { ActivityIndicator, HelperText, Text, TextInput } from "@/components/kit";
 import { Badge } from "@/components/Watchdog";
-import { Body, Button, Card, useColors } from "@/components/ui";
+import { SettingsPanel } from "@/components/settings/SettingsKit";
+import { Body, Button, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
 
 /**
@@ -109,9 +110,17 @@ export function BankConnectionsCard() {
   }
 
   const embedded = mode === "embedded";
+  // One line for the closed row; open by default only when something needs the user's attention.
+  const attention = list.find((conn) => conn.state === "needs_approval" || conn.state === "syncing" || conn.state === "error");
+  const first = attention ?? list[0];
+  const summary =
+    list.length === 0
+      ? "Not set up in financer.toml"
+      : list.length === 1
+        ? `${first.name} · ${stateLabel(first)}`
+        : `${list.length} accounts${attention ? ` · ${attention.name}: ${stateLabel(attention)}` : ""}`;
   return (
-    <Card>
-      <Text variant="titleMedium">Bank connections</Text>
+    <SettingsPanel icon="bank-transfer" title="Bank connections" summary={summary} defaultOpen={attention !== undefined}>
       {list.length === 0 ? (
         <>
           <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
@@ -218,6 +227,6 @@ export function BankConnectionsCard() {
           })}
         </>
       )}
-    </Card>
+    </SettingsPanel>
   );
 }

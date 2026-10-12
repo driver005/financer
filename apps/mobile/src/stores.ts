@@ -9,8 +9,8 @@ import { formatCents, formatDate } from "./format";
 export type StoresView = "current" | "previous" | "last3";
 
 export const STORES_VIEWS: { value: StoresView; label: string; period: StoresPeriod; n?: number }[] = [
-  { value: "current", label: "This period", period: "current" },
-  { value: "previous", label: "Last period", period: "previous" },
+  { value: "current", label: "This", period: "current" },
+  { value: "previous", label: "Last", period: "previous" },
   { value: "last3", label: "Last 3", period: "last_n", n: 3 },
 ];
 
