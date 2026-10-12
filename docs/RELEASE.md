@@ -17,7 +17,8 @@ Ordinary pushes still run only the tests (`ci.yml`).
 | **Desktop bundles**: Windows, macOS (Apple silicon and Intel), Linux | nothing | The server plus the web app. Unzip, double-click `start.bat` (Windows) or run `./start.sh`; the browser opens. Data stays in the folder. Not signed, so macOS and Windows warn on first start. |
 | **Web app** (zip) | nothing | The same app, to host yourself. It needs the server on the same address (the desktop bundle and the Docker image do that with `FINANCER_WEB_DIR`). |
 | **Docker image** `ghcr.io/<owner>/financer-server` | nothing | For your own server, see `deploy/`. Version tags and `latest` on tags, `edge` on manual runs. |
-| **Android app** (APK) | `EXPO_TOKEN` | Built in the cloud by EAS Build. |
+| **Android app** (APK), built on the runner | nothing | The `android-apk` job runs `expo prebuild` and Gradle on GitHub's runner (about 16 minutes) and uploads `financer-android.apk`. Signed with the debug key: fine to install yourself, not for the Play Store. It is the app in "Server" mode (no on-phone backend). Included in tag releases and in a manual run with `all` or `android-apk`. |
+| **Android app** (APK), built by EAS | `EXPO_TOKEN` | Built in the cloud by EAS Build. |
 | **iOS app** | `EXPO_TOKEN` (+ Apple account for real devices) | `preview` builds for the iOS **simulator** (macOS only, no Apple account). Installing on an iPhone needs the `device` or `production` profile and a paid Apple Developer account. |
 
 There is no native desktop app: Expo targets phones and the web. The desktop bundle runs the web
@@ -48,6 +49,8 @@ you host (or the desktop bundle on your network). `eas.json` is where that would
   macOS (Apple silicon and Intel) and Windows, and the Linux bundle was also assembled and run
   locally (start script, web app, API, token). The Windows and macOS bundles were built but
   **not started** on those systems.
+- The `android-apk` job ran on GitHub (manual run) and **produced an APK** (about 16 minutes).
+  The APK has **not been installed or run on a device**.
 - The Docker job and the release job (attaching files to a GitHub release) have **not run**; they
   only run for a published tag or a manual `docker` run.
 - The EAS (phone) jobs skip themselves without `EXPO_TOKEN` (that path was exercised); the build
