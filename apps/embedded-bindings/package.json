@@ -19,5 +19,7 @@
   },
   "devDependencies": {
     "@ubjs/react-native": "0.31.0-6"
-  }
+  },
+  "author": "driver005",
+  "homepage": "https://github.com/driver005/financer"
 }
