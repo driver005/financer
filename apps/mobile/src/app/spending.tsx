@@ -86,7 +86,7 @@ export default function Spending() {
             data={items}
             keyExtractor={(t) => String(t.id)}
             refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}
-            ListEmptyComponent={busy ? null : <Body muted>No transactions yet. Import a CSV export from Sparkasse online banking.</Body>}
+            ListEmptyComponent={busy ? undefined : <Body muted>No transactions yet. Import a CSV export from Sparkasse online banking.</Body>}
             ListHeaderComponent={<CategorizationTools onChanged={(note) => void load().then(() => setMessage(note))} />}
             renderItem={({ item }) => (
               <TransactionRow item={item} split={splits.some((s) => s.transaction_id === item.id)} onPress={() => setSelected(item)} />

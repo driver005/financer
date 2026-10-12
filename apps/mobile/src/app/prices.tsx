@@ -71,7 +71,7 @@ export default function Prices() {
             keyExtractor={(g) => g.item}
             refreshControl={<RefreshControl refreshing={busy} onRefresh={reload} />}
             ListEmptyComponent={
-              busy ? null : (
+              busy ? undefined : (
                 <Card>
                   <Body bold>No prices yet</Body>
                   <Text variant="bodyMedium" style={{ color: c.muted, marginTop: 4 }}>
