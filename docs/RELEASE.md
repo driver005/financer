@@ -43,6 +43,33 @@ release gets the desktop bundles, web zip, APK and generated notes as described 
   but the workflow itself has not run on GitHub, so the tag push and the dispatch of the release
   build are unproven until the first merge.
 
+## Two variants in every release
+
+Every release (a version tag, which `version.yml` creates on each merge to `master`) contains both
+ways to run Financer, and its notes say so (`.github/release-body.md`):
+
+| | **Compact** | **Server + client** |
+|---|---|---|
+| Android | `financer-compact-android.apk`: the Rust backend runs inside the app | `financer-client-android.apk`: talks to your server |
+| iOS Simulator | `financer-compact-ios-simulator.zip` | `financer-client-ios-simulator.zip` |
+| Server | none needed | desktop bundles `financer-desktop-*`, Docker image, and `financer-web.zip` |
+
+The `android-apk` and `ios-simulator` jobs are matrices over `variant: [client, compact]`. The
+compact leg first builds the Rust library and bindings with `apps/mobile/scripts/enable-embedded.sh`
+(see `EMBEDDED.md`), which is the same chain the `android-app` / `ios-app` jobs in `native.yml`
+check on every push.
+
+- **Required for a release:** the desktop bundles, the web zip and **both** Android APKs. If the
+  compact build breaks, the release is not created (rather than silently shipping one variant).
+- **Best effort:** the iOS Simulator zips are added when they build; a failure there does not
+  block the release. They run on an Apple-silicon Mac's Simulator only. iPhones need signing,
+  which is the EAS job (it builds the client variant; the compact iPhone build is not set up).
+- **Not yet proven on GitHub:** the matrix and the iOS Simulator job were checked with
+  `actionlint` and are built from steps that already ran green in `native.yml`, but the release
+  workflow itself has not run since this change. Expect one round of fixes on the first tag.
+- By hand: Actions tab, **Release builds**, choose `android-apk` or `ios-simulator` to build just
+  those (both variants each).
+
 ## What you get
 
 | Output | Needs | Notes |
