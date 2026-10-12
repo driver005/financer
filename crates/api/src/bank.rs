@@ -66,7 +66,7 @@ pub async fn bank_status(State(state): State<AppState>) -> Result<Json<BankStatu
 }
 
 impl BankRoutes {
-    fn bank_error(e: BankError) -> ApiError {
+    pub(crate) fn bank_error(e: BankError) -> ApiError {
         match e {
             BankError::NotConfigured => ApiError::Unavailable(e.to_string()),
             BankError::WrongPin
@@ -102,25 +102,18 @@ impl BankRoutes {
             iban: req.iban.trim().replace(' ', ""),
             bic: req.bic.unwrap_or_default().trim().to_string(),
             days: req.days.unwrap_or(DEFAULT_DAYS).clamp(1, MAX_DAYS),
+            fints_url: None,
         };
         if let Some(minutes) = state.pin_guard.lock().await.blocked_minutes() {
-            return Err(ApiError::TooManyRequests(format!(
-                "syncing is paused for about {minutes} more minute(s) after failed logins, to keep your online banking from being locked. Check your PIN and login first"
-            )));
+            return Err(ApiError::TooManyRequests(PinGuard::paused_message(minutes)));
         }
         let (pending, challenge) = match state.bank.start(&params).await {
             Ok(started) => {
-                state.pin_guard.lock().await.failures = 0;
+                state.pin_guard.lock().await.succeeded();
                 started
             }
             Err(e) => {
-                if matches!(e, BankError::WrongPin | BankError::Locked) {
-                    let mut guard = state.pin_guard.lock().await;
-                    guard.failures += 1;
-                    if guard.failures >= PIN_STRIKES || matches!(e, BankError::Locked) {
-                        guard.blocked_until = Some(Instant::now() + state.pin_pause);
-                    }
-                }
+                state.pin_guard.lock().await.failed(&e, state.pin_pause);
                 return Err(Self::bank_error(e));
             }
         };
@@ -167,12 +160,7 @@ impl BankRoutes {
         let entry = slot.take().expect("entry present");
         drop(slot);
 
-        let categorizer = state.store.categorizer().await?;
-        let mut txs = data.transactions;
-        for tx in &mut txs {
-            tx.category = Some(categorizer.categorize(tx));
-        }
-        let imported = state.store.insert_new_transactions(&txs).await?;
+        let (imported, duplicates) = Self::import(&state, data.transactions).await?;
 
         let store = &state.store;
         for (key, value) in [
@@ -201,11 +189,25 @@ impl BankRoutes {
         }
         Ok(Json(SyncDone {
             imported,
-            duplicates: txs.len() - imported,
+            duplicates,
             skipped: data.skipped,
             balance_cents: data.balance,
             balance_date: data.balance_date,
         }))
+    }
+
+    /// Categorize bank transactions like a CSV import and store the ones not seen before.
+    /// Returns (imported, duplicates); syncing the same period twice imports nothing new.
+    pub(crate) async fn import(
+        state: &AppState,
+        mut txs: Vec<financer_core::Transaction>,
+    ) -> Result<(usize, usize), financer_store::StoreError> {
+        let categorizer = state.store.categorizer().await?;
+        for tx in &mut txs {
+            tx.category = Some(categorizer.categorize(tx));
+        }
+        let imported = state.store.insert_new_transactions(&txs).await?;
+        Ok((imported, txs.len() - imported))
     }
 
     pub async fn bank_status(state: AppState) -> Result<Json<BankStatus>, ApiError> {
@@ -245,8 +247,27 @@ pub struct PinGuard {
 }
 
 impl PinGuard {
+    pub(crate) fn paused_message(minutes: u64) -> String {
+        format!("syncing is paused for about {minutes} more minute(s) after failed logins, to keep your online banking from being locked. Check your PIN and login first")
+    }
+
+    /// A login worked.
+    pub(crate) fn succeeded(&mut self) {
+        self.failures = 0;
+    }
+
+    /// A login failed; two wrong PINs in a row, or one lock, start a pause.
+    pub(crate) fn failed(&mut self, error: &BankError, pause: Duration) {
+        if matches!(error, BankError::WrongPin | BankError::Locked) {
+            self.failures += 1;
+            if self.failures >= PIN_STRIKES || matches!(error, BankError::Locked) {
+                self.blocked_until = Some(Instant::now() + pause);
+            }
+        }
+    }
+
     /// Minutes left in a pause, if one is active.
-    fn blocked_minutes(&mut self) -> Option<u64> {
+    pub(crate) fn blocked_minutes(&mut self) -> Option<u64> {
         let until = self.blocked_until?;
         match until.checked_duration_since(Instant::now()) {
             Some(left) => Some(left.as_secs() / 60 + 1),

@@ -447,6 +447,25 @@ async fn ideas_need_a_key_and_use_the_selected_provider() {
 }
 
 #[tokio::test]
+async fn the_configured_default_provider_applies_until_the_app_chooses_one() {
+    let app =
+        Fixture::app_with(|s| s.with_default_llm_provider(Some(financer_llm::Provider::OpenAi)))
+            .await;
+    let (_, settings) = Fixture::send(&app, Method::GET, "/v1/settings", None).await;
+    assert_eq!(settings["llm_provider"], "open_ai");
+    // the app's own choice wins
+    Fixture::send(
+        &app,
+        Method::PUT,
+        "/v1/settings",
+        Some(json!({"llm_provider": "claude"})),
+    )
+    .await;
+    let (_, settings) = Fixture::send(&app, Method::GET, "/v1/settings", None).await;
+    assert_eq!(settings["llm_provider"], "claude");
+}
+
+#[tokio::test]
 async fn provider_failures_are_bad_gateway() {
     let app = Fixture::app_with(|s| {
         s.with_llm_keys(LlmKeys {

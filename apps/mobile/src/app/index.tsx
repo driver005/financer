@@ -7,6 +7,7 @@ import { RefreshControl, ScrollView, Text as RNText, View } from "react-native";
 import { ForecastCard } from "@/components/ForecastCard";
 import { Mascot } from "@/components/Mascot";
 import { SafeToSpendCard } from "@/components/SafeToSpendCard";
+import { StoresLink } from "@/components/StoresLink";
 import { TrophiesCard } from "@/components/TrophiesCard";
 import { WatchdogCard } from "@/components/Watchdog";
 import { EmptyState } from "@/components/EmptyState";
@@ -301,6 +302,8 @@ export default function Today() {
               {lvl.into} / {lvl.size} XP to level {lvl.level + 1}
             </RNText>
           </Card>
+
+          <StoresLink />
 
           {rewards ? <TrophiesCard rewards={rewards} /> : null}
 

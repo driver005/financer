@@ -122,6 +122,9 @@ export default function Spending() {
           <ChunkyButton compact icon="bank-transfer" label="Sync bank" accessibilityLabel="Sync with Sparkasse" onPress={() => router.push("/sync")} />
         </View>
         <View style={{ flex: 1, minWidth: 150 }}>
+          <ChunkyButton compact outline icon="storefront-outline" label="By store" accessibilityLabel="Spending by store" onPress={() => router.push("/stores")} />
+        </View>
+        <View style={{ flex: 1, minWidth: 150 }}>
           <ChunkyButton compact outline icon="file-delimited-outline" label="Import CSV" accessibilityLabel="Import Sparkasse CSV" onPress={() => void importCsv()} disabled={busy} />
         </View>
       </View>

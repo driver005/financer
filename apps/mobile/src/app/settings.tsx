@@ -6,6 +6,7 @@ import { useReducedMotion } from "react-native-reanimated";
 import { useApi } from "@/api/config";
 import { AboutCard } from "@/components/AboutCard";
 import { BackupCard } from "@/components/BackupCard";
+import { BankConnectionsCard } from "@/components/BankConnectionsCard";
 import { LockCard } from "@/components/LockCard";
 import { NotificationsCard } from "@/components/NotificationsCard";
 import { BackendCard } from "@/components/settings/BackendCard";
@@ -94,7 +95,7 @@ export default function SettingsScreen() {
                 <SettingsRow icon="calendar-sync-outline" title="Subscriptions" subtitle="Recurring payments and price increases" onPress={() => router.push("/subscriptions")} />
                 <SettingsRow icon="shield-alert-outline" title="Alerts" subtitle="Payments that look odd" onPress={() => router.push("/alerts")} />
                 <SettingsRow icon="bank-transfer" title="Bank sync" subtitle="Sparkasse over FinTS" onPress={() => router.push("/sync")} />
-                {/* more money cards (bank connections) go here, one line each */}
+                <BankConnectionsCard />
               </SettingsGroup>
             </>,
           )}

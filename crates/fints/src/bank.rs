@@ -25,6 +25,9 @@ pub struct SyncParams {
     pub bic: String,
     /// How many days back to fetch (the bank may limit this, often to 90 days without a TAN).
     pub days: u32,
+    /// The bank's FinTS address, for a bank that is not in the built-in list (then `bic` is
+    /// needed too). `None` looks the bank code up.
+    pub fints_url: Option<String>,
 }
 
 impl fmt::Debug for SyncParams {
@@ -181,6 +184,7 @@ mod tests {
             iban: "DE89370400440532013000".into(),
             bic: String::new(),
             days: 30,
+            fints_url: None,
         };
         let shown = format!("{p:?}");
         for secret in ["mein-login", "12345", "DE89370400440532013000"] {
@@ -208,6 +212,7 @@ mod tests {
             iban: "i".into(),
             bic: String::new(),
             days: 1,
+            fints_url: None,
         };
         let (mut pending, challenge) = bank.start(&params).await.unwrap();
         assert_eq!(challenge.text, "Bitte bestätigen");

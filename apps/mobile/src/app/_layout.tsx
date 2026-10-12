@@ -73,6 +73,7 @@ export default function RootLayout() {
           <Tabs.Screen name="alerts" options={{ href: null, title: "Alerts" }} />
           <Tabs.Screen name="trophies" options={{ href: null, title: "Trophies" }} />
           <Tabs.Screen name="scan" options={{ href: null, title: "Scan a product" }} />
+          <Tabs.Screen name="stores" options={{ href: null, title: "Stores" }} />
           {/* first-run setup: full screen, no tab bar */}
           <Tabs.Screen name="onboarding" options={{ href: null, title: "Setup", tabBarStyle: { display: "none" } }} />
         </Tabs>

@@ -1,0 +1,14 @@
+[package]
+name = "financer-config"
+description = "The server's configuration: financer.toml plus FINANCER_* environment variables"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+toml = { version = "0.9", default-features = false, features = ["std", "serde", "parse"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -295,6 +295,202 @@
         ]
       }
     },
+    "/v1/bank/connections": {
+      "get": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "The bank connections from `financer.toml`, with the state of each. The login is masked and no\nsecret is part of the answer.",
+        "operationId": "list_connections",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BankConnectionDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/connections/{name}/cancel": {
+      "post": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "Stop waiting for an approval.",
+        "operationId": "cancel_connection",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "connection name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankConnectionDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Logging in right now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/connections/{name}/sync": {
+      "post": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "Start a sync for one connection: logs in, then waits (in the background) for your approval in\nthe banking app and imports. Send the PIN only when `pin_from_env` is false.",
+        "operationId": "sync_connection",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "connection name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/SyncNowRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankConnectionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "PIN missing, or rejected by the bank",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Paused after wrong PINs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Could not reach the bank",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No FinTS product id configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/bank/status": {
       "get": {
         "tags": [
@@ -2019,6 +2215,190 @@
         ]
       }
     },
+    "/v1/spending/stores": {
+      "get": {
+        "tags": [
+          "stores"
+        ],
+        "summary": "What is spent at each supermarket chain in a budget period, ranked, with the share of all store\nspending, number of visits, average basket, last visit and the change against the range before.\nGroceries that no chain matched are in `other`.",
+        "operationId": "store_spending",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "description": "`current` (default), `previous` or `last_n`.",
+            "required": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/StoresPeriod"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "n",
+            "in": "path",
+            "description": "With `last_n`: how many budget periods, 1 to 24 (default 3), the running one included.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "date",
+            "in": "path",
+            "description": "The day to treat as today, ISO format. Defaults to today (UTC); the app sends its local date.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "example": "2026-10-11"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoresDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "n out of range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/spending/stores/{chain}/transactions": {
+      "get": {
+        "tags": [
+          "stores"
+        ],
+        "summary": "The purchases behind one chain's total (`other` for unmatched groceries), newest first.",
+        "operationId": "store_transactions",
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "path",
+            "description": "chain id from /v1/spending/stores, or other",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "in": "path",
+            "description": "`current` (default), `previous` or `last_n`.",
+            "required": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/StoresPeriod"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "n",
+            "in": "path",
+            "description": "With `last_n`: how many budget periods, 1 to 24 (default 3), the running one included.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "date",
+            "in": "path",
+            "description": "The day to treat as today, ISO format. Defaults to today (UTC); the app sends its local date.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "example": "2026-10-11"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TransactionDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "n out of range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown chain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/subscriptions": {
       "get": {
         "tags": [
@@ -2702,6 +3082,111 @@
           }
         }
       },
+      "BankConnectionDto": {
+        "type": "object",
+        "description": "A configured connection. The login is masked; the PIN is never part of it.",
+        "required": [
+          "name",
+          "kind",
+          "bank_code",
+          "login_masked",
+          "iban_masked",
+          "sync_every_hours",
+          "pin_from_env",
+          "state",
+          "sync_due"
+        ],
+        "properties": {
+          "approval_expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds after which a sync waiting for approval is given up."
+          },
+          "balance_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "balance_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "bank_code": {
+            "type": "string"
+          },
+          "iban_masked": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "Always `fints` today."
+          },
+          "last_result": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SyncOutcomeDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_sync_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds of the last successful sync."
+          },
+          "login_masked": {
+            "type": "string"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The bank's approval text in `needs_approval`, the reason in `error`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "next_sync_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds of the next scheduled sync; absent for manual-only connections."
+          },
+          "pin_from_env": {
+            "type": "boolean",
+            "description": "True when the server has the PIN (the environment variable named by `pin_env` is set), so\nthe app does not need to ask for it."
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConnectionState"
+          },
+          "sync_due": {
+            "type": "boolean",
+            "description": "A scheduled sync is due but cannot start by itself because the server has no PIN: press\nSync now and type it."
+          },
+          "sync_every_hours": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Hours between automatic syncs; 0 = only when you ask.",
+            "minimum": 0
+          }
+        }
+      },
       "BankStatus": {
         "type": "object",
         "required": [
@@ -3029,6 +3514,16 @@
             "description": "Price of the items this chain stocks."
           }
         }
+      },
+      "ConnectionState": {
+        "type": "string",
+        "description": "Where a connection is in a sync.",
+        "enum": [
+          "idle",
+          "syncing",
+          "needs_approval",
+          "error"
+        ]
       },
       "DisposableDto": {
         "type": "object",
@@ -5161,6 +5656,156 @@
           }
         }
       },
+      "StoreSpendDto": {
+        "type": "object",
+        "description": "One chain over the asked range, compared with the range before it.",
+        "required": [
+          "chain",
+          "name",
+          "total_cents",
+          "visits",
+          "average_basket_cents",
+          "share_permille",
+          "previous_total_cents",
+          "previous_visits",
+          "change_cents"
+        ],
+        "properties": {
+          "average_basket_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total divided by visits, rounded to the cent; 0 without visits."
+          },
+          "chain": {
+            "type": "string",
+            "description": "Stable id for `/v1/spending/stores/{chain}/transactions`; `other` for unmatched groceries."
+          },
+          "change_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`total_cents - previous_total_cents`."
+          },
+          "change_permille": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Change relative to the comparison range in tenths of a percent (-333 = -33.3 %); absent\nwhen nothing was spent there."
+          },
+          "last_visit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "name": {
+            "type": "string"
+          },
+          "previous_total_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Spent in the comparison range (see `compare_start` / `compare_end`)."
+          },
+          "previous_visits": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "share_permille": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Share of everything spent in stores, in tenths of a percent (123 = 12.3 %).",
+            "minimum": 0
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "visits": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of purchases (each booking is one visit).",
+            "minimum": 0
+          }
+        }
+      },
+      "StoresDto": {
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "periods",
+          "compare_start",
+          "compare_end",
+          "compare_is_partial",
+          "total_cents",
+          "previous_total_cents",
+          "chains",
+          "other"
+        ],
+        "properties": {
+          "chains": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreSpendDto"
+            },
+            "description": "Chains with purchases in the range, largest first."
+          },
+          "compare_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "compare_is_partial": {
+            "type": "boolean",
+            "description": "True while the range is still running: the comparison then covers only as many days as\nhave passed, so that half a month is not compared with a whole one."
+          },
+          "compare_start": {
+            "type": "string",
+            "format": "date",
+            "description": "The range the numbers are compared with: the same number of periods right before `start`."
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "description": "Last day of the range, inclusive."
+          },
+          "other": {
+            "$ref": "#/components/schemas/StoreSpendDto",
+            "description": "Grocery bookings that no chain matched (`chain` is `other`); always present."
+          },
+          "periods": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many budget periods the range covers.",
+            "minimum": 0
+          },
+          "previous_total_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "description": "First day of the range, inclusive."
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Everything spent in stores (chains plus unmatched groceries)."
+          }
+        }
+      },
+      "StoresPeriod": {
+        "type": "string",
+        "description": "Which budget period(s) to look at.",
+        "enum": [
+          "current",
+          "previous",
+          "last_n"
+        ]
+      },
       "SubscriptionDto": {
         "type": "object",
         "description": "One recurring outgoing payment. All amounts in the watchdog are positive charge sizes.",
@@ -5356,6 +6001,67 @@
           "skipped": {
             "type": "integer",
             "description": "Transactions left out (pending, or not in EUR).",
+            "minimum": 0
+          }
+        }
+      },
+      "SyncNowRequest": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync\nonly and never stored."
+          }
+        }
+      },
+      "SyncOutcomeDto": {
+        "type": "object",
+        "description": "What a sync should do, to be reported in the connection list.",
+        "required": [
+          "ok",
+          "at"
+        ],
+        "properties": {
+          "at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds."
+          },
+          "duplicates": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "imported": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why it failed (never contains the PIN)."
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "skipped": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
             "minimum": 0
           }
         }

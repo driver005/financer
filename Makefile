@@ -5,8 +5,9 @@
 #   make server     only the Rust server          make web      only the web app
 #   make app        Expo for a phone (Expo Go)    make serve    built web app served by the server
 #
-# Everything local lives in .dev/ (git-ignored): the SQLite file, the dev token, and an optional
-# .dev/env file for your own FINANCER_* settings (API keys, price sources, ...).
+# Everything local lives in .dev/ (ignored by version control): the SQLite file, the dev token, the
+# server's config file .dev/financer.toml (made from financer.example.toml by `make dev`; see
+# docs/CONFIG.md) and an optional .dev/env file for your own FINANCER_* settings (API keys, ...).
 
 SHELL := /bin/sh
 .DEFAULT_GOAL := help
@@ -21,8 +22,10 @@ PG_URL    := postgres://financer:financer@127.0.0.1:5432/financer
 COMPOSE   := docker compose -f deploy/docker-compose.dev.yml
 
 # Environment for the server. .dev/env (if it exists) is loaded first, so values given on the
-# command line or set below win over it.
+# command line or set below win over it. .dev/financer.toml is used when it exists (unless
+# FINANCER_CONFIG already names another file); the variables below win over what it says.
 SERVER_ENV = set -a; [ -f $(DEV_DIR)/env ] && . ./$(DEV_DIR)/env; set +a; \
+	if [ -f $(DEV_DIR)/financer.toml ]; then export FINANCER_CONFIG="$${FINANCER_CONFIG:-$(CURDIR)/$(DEV_DIR)/financer.toml}"; fi; \
 	export FINANCER_API_TOKEN="$$(cat $(DEV_DIR)/token)" FINANCER_DATABASE_URL="$(DB_URL)" \
 	FINANCER_BIND="$(BIND)" RUST_LOG="$(RUST_LOG)" \
 	FINANCER_CORS_ORIGIN="http://localhost:$(WEB_PORT),http://127.0.0.1:$(WEB_PORT)"
@@ -68,6 +71,7 @@ info: $(DEV_DIR)/token ## Show the URLs and the token
 	@echo "  API         http://$(BIND)   (health: http://$(BIND)/health)"
 	@echo "  Web app     http://localhost:$(WEB_PORT)   (make web / make dev)"
 	@echo "  Database    $(DB_URL)"
+	@if [ -f $(DEV_DIR)/financer.toml ]; then echo "  Config      $(DEV_DIR)/financer.toml (the settings above win over it)"; fi
 	@echo "  Token       $$(cat $(DEV_DIR)/token)"
 	@echo "  In the app: Settings > Server, URL http://localhost:$(lastword $(subst :, ,$(BIND))), paste the token."
 	@echo "  A phone needs your computer's address instead of localhost: make dev BIND=0.0.0.0:8080"
@@ -86,7 +90,13 @@ check-port: ## Fail early, with advice, if the server's port is already taken
 stop: ## Stop a leftover Financer server (the cargo-run one from make dev / server / serve)
 	@if pkill -x financer-server; then echo "stopped financer-server"; else echo "no financer-server is running"; fi
 
-dev: check-port $(DEV_DIR)/token $(NPM_STAMP) ## Server (restarts on changes) + web app together; Ctrl-C stops both
+$(DEV_DIR)/financer.toml:
+	@mkdir -p $(DEV_DIR)
+	@cp financer.example.toml $@
+	@chmod 600 $@
+	@echo "created $@ from financer.example.toml (everything in it is commented out)"
+
+dev: check-port $(DEV_DIR)/token $(DEV_DIR)/financer.toml $(NPM_STAMP) ## Server (restarts on changes) + web app together; Ctrl-C stops both
 	@$(MAKE) --no-print-directory info
 	@trap 'kill 0' INT TERM; \
 	  $(MAKE) --no-print-directory server-watch & \
