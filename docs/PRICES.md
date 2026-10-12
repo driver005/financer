@@ -91,3 +91,37 @@ What this means:
   against the live service; whether it yields useful prices depends on the barcodes you choose.
 - Open Prices only helps for products someone has recorded a price for in one of the four chains
   (matched by store brand), so expect sparse data.
+
+## Scanning a barcode in the store
+
+`GET /v1/prices/ean/{ean}` and the **Scan a barcode** button on the Prices screen answer "what
+does this cost at Lidl, Aldi, Kaufland and Rewe?" for a product in your hand.
+
+- **Barcodes**: EAN-8, EAN-13 and UPC-A, checked by length and check digit. A UPC-A code is
+  looked up as the EAN-13 with a leading `0` (the form Open Prices uses). An invalid code is
+  answered with `400` and a reason (digits only, wrong length, wrong check digit); the app checks
+  the same rule before asking.
+- **Where the prices come from**: (1) recent observations from Open Prices for that barcode,
+  read live, only if you configured an `open_prices` source (nothing is fetched otherwise, and
+  only within that source's `max_age_days`); the newest observation per chain counts as that
+  chain's price. (2) The stored prices (`GET /v1/prices`) of the catalog item the barcode belongs
+  to: the item set in the `open_prices` source for that barcode, or, if the barcode is not listed,
+  the item recognised from the product name Open Prices reports.
+- **Unit prices** (EUR/kg or EUR/l) are shown where the pack size is known (from Open Prices, or
+  the catalog's reference pack for stored prices). Chains are ranked on the unit price, else on
+  the catalog reference-pack price, else on the shelf price of the scanned pack, and only on a
+  basis every listed chain has. If there is none, or two chains tie, no single cheapest chain is
+  named and the response says why.
+- **Offline or unknown**: if Open Prices cannot be reached, the stored prices are still returned
+  with a note. A valid barcode with no data answers `200` with an empty `chains` list and a note,
+  never an error.
+- **Limits**: prices marked `item` are the cheapest stored price for the kind of product (for
+  example milk per litre), not necessarily the scanned brand. Open Prices is sparse and
+  crowdsourced, so many barcodes will have no price at one or more chains. Product names and packs
+  are only known from Open Prices observations (there is no separate product lookup).
+- **App**: the camera reads EAN-13, EAN-8 and UPC-A, ignores repeated reads of the same code for a
+  few seconds and invalid reads, and asks for camera permission (with a link to the system
+  settings if it was refused). On the web, or in a build without the camera module, you type the
+  number instead. "Add to usual items" appears when the product maps to a catalog item and uses the
+  same list as the Usual items screen; it only changes the comparison when the habit mode is "My
+  list".

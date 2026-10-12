@@ -8,6 +8,7 @@ mod dto;
 mod export;
 mod grocery;
 mod routes;
+mod scan;
 mod watchdog;
 
 use std::sync::Arc;
@@ -150,6 +151,7 @@ impl AppState {
         grocery::refresh_prices,
         grocery::list_prices,
         grocery::best_prices,
+        scan::ean_lookup,
         grocery::catalog,
         grocery::get_basket,
         grocery::put_basket,
@@ -200,6 +202,9 @@ impl AppState {
         dto::SyncDone,
         dto::BankStatus,
         dto::PriceDto,
+        scan::EanLookupDto,
+        scan::ChainPriceDto,
+        scan::ObservationDto,
         dto::SourceStatusDto,
         dto::RefreshReportDto,
         dto::BasketItemDto,
@@ -290,6 +295,7 @@ impl Api {
             .route("/bank/status", get(bank::bank_status))
             .route("/prices", get(grocery::list_prices))
             .route("/prices/best", get(grocery::best_prices))
+            .route("/prices/ean/{ean}", get(scan::ean_lookup))
             .route("/prices/refresh", post(grocery::refresh_prices))
             .route("/catalog", get(grocery::catalog))
             .route("/basket", get(grocery::get_basket).put(grocery::put_basket))
