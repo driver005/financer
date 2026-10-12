@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 import { Chip, List, Searchbar, Snackbar, Text } from "@/components/kit";
@@ -61,6 +62,8 @@ export default function Prices() {
       ) : (
         <>
           <Button label={refreshing ? "Refreshing…" : "Refresh prices"} icon="refresh" onPress={refresh} disabled={refreshing} />
+          <View style={{ height: 8 }} />
+          <Button label="Scan a barcode" icon="barcode-scan" mode="outlined" onPress={() => router.push("/scan")} />
           <Searchbar placeholder="Search items" accessibilityLabel="Search items" value={query} onChangeText={setQuery} style={{ marginVertical: 12 }} />
           {error ? <Text style={{ color: c.bad, marginBottom: 8 }}>{error}</Text> : null}
           <FlatList

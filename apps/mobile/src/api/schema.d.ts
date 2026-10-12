@@ -445,6 +445,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/prices/ean/{ean}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a scanned barcode costs at Lidl, Aldi, Kaufland and Rewe: the best stored price per
+         *     chain, recent Open Prices observations, unit prices and the cheapest chain. A valid barcode
+         *     nobody has a price for answers `200` with no chains and a note.
+         */
+        get: operations["ean_lookup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/prices/refresh": {
         parameters: {
             query?: never;
@@ -993,6 +1014,42 @@ export interface components {
             /** @description Basket items this chain has no price for. */
             missing: string[];
         };
+        /** @description The best known price of the scanned product at one chain. */
+        ChainPriceDto: {
+            /** @example lidl */
+            chain: string;
+            is_offer: boolean;
+            /**
+             * Format: date
+             * @description Day the price was seen (Open Prices), if known.
+             */
+            observed_on?: string | null;
+            /** @description Pack the price is for, for example `500 g` (scope `item`: the reference pack). */
+            pack?: string | null;
+            /**
+             * Format: int64
+             * @description Shelf price of the scanned pack for scope `product`, price of the reference pack for
+             *     scope `item`.
+             */
+            price_cents: number;
+            product_name?: string | null;
+            /**
+             * @description `product`: a shelf price seen for exactly this barcode. `item`: the cheapest stored price
+             *     for the catalog item (for example milk), per reference pack; not necessarily this brand.
+             */
+            scope: string;
+            /** @description `open-prices` for a live observation, or the name of the stored price source. */
+            source: string;
+            /** @description `kg` or `l`. */
+            unit?: string | null;
+            /**
+             * Format: int64
+             * @description Price of one kg or l in cents, where the pack size is known.
+             */
+            unit_price_cents?: number | null;
+            /** Format: date */
+            valid_until?: string | null;
+        };
         ChainTotalDto: {
             chain: string;
             complete: boolean;
@@ -1020,6 +1077,42 @@ export interface components {
              */
             reason: string;
             second: components["schemas"]["SubscriptionDto"];
+        };
+        EanLookupDto: {
+            /** @description One entry per chain with a known price, cheapest first. */
+            chains: components["schemas"]["ChainPriceDto"][];
+            /**
+             * @description The cheapest chain; absent on a tie, or when the chains cannot be compared.
+             * @example aldi
+             */
+            cheapest?: string | null;
+            /**
+             * @description What the chains were compared on: `unit_price`, `reference_pack` or `pack_price`;
+             *     absent when their prices have nothing in common.
+             */
+            compared_by?: string | null;
+            /** @description The barcode in the form used by Open Prices (UPC-A gets a leading 0). */
+            ean: string;
+            /**
+             * @description Catalog key (see `GET /v1/catalog`), when the product is a known kind of item; usable in
+             *     the usual items (`PUT /v1/basket`).
+             */
+            item?: string | null;
+            item_name?: string | null;
+            /** @description `ean8`, `upc_a` or `ean13`. */
+            kind: string;
+            /** @description True when Open Prices answered for this request. */
+            live_lookup: boolean;
+            /** @description Plain-language remarks: what is missing and why. */
+            notes: string[];
+            /** @description Recent Open Prices observations, newest first. */
+            observations: components["schemas"]["ObservationDto"][];
+            /** @description Pack size as printed, for example `500 g`. */
+            pack?: string | null;
+            product_name?: string | null;
+            reference_pack?: string | null;
+            /** @description Chains sharing the lowest price when there is a tie. */
+            tied_cheapest: string[];
         };
         EnvelopeDto: {
             /** @example groceries */
@@ -1292,6 +1385,24 @@ export interface components {
         MealPlanInput: {
             /** @description At most one meal per day; days not listed are empty. Replaces the whole week. */
             days: components["schemas"]["MealDayInput"][];
+        };
+        /** @description A crowdsourced Open Prices observation. */
+        ObservationDto: {
+            /**
+             * @description Lidl, Aldi, Kaufland or Rewe when the store is one of them.
+             * @example rewe
+             */
+            chain?: string | null;
+            /** Format: date */
+            date: string;
+            /** Format: int64 */
+            price_cents: number;
+            /** @description Store name as recorded, if any. */
+            store?: string | null;
+            /** @description `kg` or `l`, with `unit_price_cents`. */
+            unit?: string | null;
+            /** Format: int64 */
+            unit_price_cents?: number | null;
         };
         PantryDto: {
             /** @description True until the list is saved for the first time. */
@@ -2758,6 +2869,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PickDto"][];
+                };
+            };
+        };
+    };
+    ean_lookup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description EAN-8, EAN-13 or UPC-A, with a valid check digit */
+                ean: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EanLookupDto"];
+                };
+            };
+            /** @description Not a valid barcode (digits, length or check digit) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

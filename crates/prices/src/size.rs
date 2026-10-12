@@ -58,6 +58,22 @@ impl PackSize {
         (milli > 0).then_some(PackSize { unit, milli })
     }
 
+    /// What a whole kg or l costs when this pack costs `price` cents, rounded to the cent.
+    /// `None` for pieces, which have no unit price.
+    pub fn unit_price_cents(&self, price_cents: i64) -> Option<i64> {
+        Self::per_kg_or_l(self.unit, self.milli, price_cents)
+    }
+
+    /// Cents per kg/l for `price_cents` paid for `milli` thousandths of a kg/l.
+    pub fn per_kg_or_l(unit: Unit, milli: u64, price_cents: i64) -> Option<i64> {
+        if unit == Unit::Piece || milli == 0 || price_cents < 0 {
+            return None;
+        }
+        let milli = i128::from(milli);
+        let cents = (i128::from(price_cents) * 1000 * 2 + milli) / (milli * 2);
+        i64::try_from(cents).ok()
+    }
+
     pub fn parse(text: &str) -> Option<PackSize> {
         let t = text.to_lowercase();
 
@@ -131,6 +147,17 @@ mod tests {
         assert_eq!(Sizes::p("0 g"), None);
         // "3,5%" must not be read as a size
         assert_eq!(Sizes::p("Milch 3,5%"), None);
+    }
+
+    #[test]
+    fn unit_prices() {
+        let pack = |t: &str| PackSize::parse(t).unwrap();
+        assert_eq!(pack("500 g").unit_price_cents(129), Some(258));
+        assert_eq!(pack("1,5 l").unit_price_cents(89), Some(59)); // 59.33
+        assert_eq!(pack("750 ml").unit_price_cents(199), Some(265)); // 265.33
+        assert_eq!(pack("6 x 1,5 l").unit_price_cents(450), Some(50));
+        assert_eq!(pack("10er").unit_price_cents(199), None);
+        assert_eq!(pack("1 kg").unit_price_cents(-1), None);
     }
 
     #[test]
