@@ -1,0 +1,23 @@
+{
+  "tickets": [
+    {
+      "id": "FIXTURE-TICKET-0001",
+      "date": "2026-03-02T18:42:07+01:00",
+      "totalAmount": 5.65,
+      "storeCode": "DE0001",
+      "isHtml": true,
+      "articlesCount": 3
+    },
+    {
+      "id": "FIXTURE-TICKET-0002",
+      "date": "2026-03-05T08:15:00+01:00",
+      "totalAmount": 3.58,
+      "storeCode": "DE0001",
+      "isHtml": true,
+      "articlesCount": 2
+    }
+  ],
+  "totalCount": 3,
+  "size": 2,
+  "page": 1
+}

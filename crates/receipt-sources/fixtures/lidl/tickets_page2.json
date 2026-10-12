@@ -1,0 +1,15 @@
+{
+  "tickets": [
+    {
+      "id": "FIXTURE-TICKET-0003",
+      "date": "2026-03-06T12:00:00+01:00",
+      "totalAmount": 0,
+      "storeCode": "DE0002",
+      "isHtml": true,
+      "articlesCount": 0
+    }
+  ],
+  "totalCount": 3,
+  "size": 2,
+  "page": 2
+}
