@@ -30,7 +30,10 @@ SERVER_ENV = set -a; [ -f $(DEV_DIR)/env ] && . ./$(DEV_DIR)/env; set +a; \
 # Written by npm when it installs; newer than package-lock.json means the packages are current.
 NPM_STAMP := $(MOBILE)/node_modules/.package-lock.json
 
-.PHONY: help doctor setup token info dev dev-postgres server server-watch web app android ios \
+API_HOST := $(firstword $(subst :, ,$(BIND)))
+API_PORT := $(lastword $(subst :, ,$(BIND)))
+
+.PHONY: help doctor setup token info check-port stop dev dev-postgres server server-watch web app android ios \
         web-build serve db-up db-down db-reset dev-reset gen-api test lint fmt check clean
 
 help: ## Show this list
@@ -69,7 +72,21 @@ info: $(DEV_DIR)/token ## Show the URLs and the token
 	@echo "  In the app: Settings > Server, URL http://localhost:$(lastword $(subst :, ,$(BIND))), paste the token."
 	@echo "  A phone needs your computer's address instead of localhost: make dev BIND=0.0.0.0:8080"
 
-dev: $(DEV_DIR)/token $(NPM_STAMP) ## Server (restarts on changes) + web app together; Ctrl-C stops both
+check-port: ## Fail early, with advice, if the server's port is already taken
+	@node -e 'const s=require("net").createServer();s.on("error",()=>process.exit(1));s.listen(+process.argv[2],process.argv[1],()=>s.close())' $(API_HOST) $(API_PORT) || { \
+	  echo; \
+	  echo "Port $(API_PORT) on $(API_HOST) is already in use, so the server cannot start."; \
+	  echo "Most likely another 'make dev', 'make server' or 'make serve' is still running (in another terminal?)."; \
+	  (ss -ltnp 2>/dev/null | grep ":$(API_PORT) " || lsof -nP -iTCP:$(API_PORT) -sTCP:LISTEN 2>/dev/null) | sed 's/^/  /'; \
+	  echo "Fix it with one of:"; \
+	  echo "  make stop                          stop a leftover Financer server"; \
+	  echo "  make $(if $(filter-out check-port stop,$(firstword $(MAKECMDGOALS))),$(firstword $(MAKECMDGOALS)),dev) BIND=$(API_HOST):8090      use another port"; \
+	  echo; exit 1; }
+
+stop: ## Stop a leftover Financer server (the cargo-run one from make dev / server / serve)
+	@if pkill -x financer-server; then echo "stopped financer-server"; else echo "no financer-server is running"; fi
+
+dev: check-port $(DEV_DIR)/token $(NPM_STAMP) ## Server (restarts on changes) + web app together; Ctrl-C stops both
 	@$(MAKE) --no-print-directory info
 	@trap 'kill 0' INT TERM; \
 	  $(MAKE) --no-print-directory server-watch & \
@@ -79,10 +96,10 @@ dev: $(DEV_DIR)/token $(NPM_STAMP) ## Server (restarts on changes) + web app tog
 dev-postgres: db-up ## Same as dev, but on a PostgreSQL container (needs Docker)
 	@$(MAKE) --no-print-directory dev DB_URL="$(PG_URL)"
 
-server: $(DEV_DIR)/token ## Run the Rust server once
+server: check-port $(DEV_DIR)/token ## Run the Rust server once
 	@$(SERVER_ENV); exec cargo run -p financer-server
 
-server-watch: $(DEV_DIR)/token ## Run the Rust server and restart it when the Rust code changes
+server-watch: check-port $(DEV_DIR)/token ## Run the Rust server and restart it when the Rust code changes
 	@if command -v cargo-watch >/dev/null 2>&1; then \
 	  $(SERVER_ENV); exec cargo watch -q -w crates -w Cargo.toml -x 'run -p financer-server'; \
 	else \
@@ -105,8 +122,8 @@ ios: $(NPM_STAMP) ## Expo on an iOS Simulator (macOS only)
 web-build: $(NPM_STAMP) ## Build the web app into apps/mobile/dist
 	cd $(MOBILE) && npx expo export --platform web --output-dir dist
 
-serve: web-build $(DEV_DIR)/token ## Server plus the built web app on one address, like a release
-	@$(SERVER_ENV); FINANCER_WEB_DIR="$(CURDIR)/$(MOBILE)/dist" exec cargo run -p financer-server
+serve: check-port web-build $(DEV_DIR)/token ## Server plus the built web app on one address, like a release
+	@$(SERVER_ENV); unset FINANCER_CORS_ORIGIN; FINANCER_WEB_DIR="$(CURDIR)/$(MOBILE)/dist" exec cargo run -p financer-server
 
 db-up: ## Start the dev PostgreSQL container (127.0.0.1:5432)
 	$(COMPOSE) up -d --wait postgres
