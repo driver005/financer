@@ -54,7 +54,7 @@ describe("RemoteTransport", () => {
 });
 
 function fakeBackend(status: number, body: string) {
-  const seen: Array<{ method: string; pathAndQuery: string; contentType: string | undefined; body: string }> = [];
+  const seen: Array<{ method: string; pathAndQuery: string; contentType?: string; body: string }> = [];
   const backend: EmbeddedBackend = {
     async handle(req) {
       seen.push({ ...req, body: new TextDecoder().decode(req.body) });
