@@ -43,3 +43,15 @@ export function easeOutCubic(t: number): number {
 export function countUpValue(from: number, to: number, t: number): number {
   return Math.round(from + (to - from) * easeOutCubic(t));
 }
+
+/**
+ * Font size for the hero amount so the whole euros plus the small cents fit in `available` points
+ * (the inside of the ring). Digits are about 0.62 em wide, separators about 0.32 em, and the
+ * `,00 EUR` tail takes a fixed share. Never below `min`, never above `max`. This does not depend on
+ * the platform's auto-shrink (which the web does not have), so the number is never clipped.
+ */
+export function heroFontSize(whole: string, available = 112, max = 44, min = 24): number {
+  let em = 0;
+  for (const ch of whole) em += /\d/.test(ch) ? 0.62 : 0.32;
+  return Math.max(min, Math.min(max, Math.floor(available / Math.max(em, 0.1) + 1e-6)));
+}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { clamp01, countUpValue, dashOffset, easeOutCubic, periodLeft, ringGeometry } from "../src/ring";
+import { clamp01, countUpValue, dashOffset, easeOutCubic, heroFontSize, periodLeft, ringGeometry } from "../src/ring";
 
 describe("ringGeometry", () => {
   it("keeps the stroke inside the box", () => {
@@ -37,6 +37,25 @@ describe("periodLeft", () => {
   it("copes with a zero-length period and overshoot", () => {
     assert.equal(periodLeft(5, 0), 0);
     assert.equal(periodLeft(40, 30), 1);
+  });
+});
+
+describe("heroFontSize", () => {
+  it("keeps short amounts at full size and shrinks long ones", () => {
+    assert.equal(heroFontSize("30"), 44);
+    assert.equal(heroFontSize("4.061"), 40);
+    assert.ok(heroFontSize("81.234") < heroFontSize("4.061"));
+  });
+  it("stays inside the bounds", () => {
+    assert.equal(heroFontSize("0"), 44);
+    assert.equal(heroFontSize("1.000.000.000"), 24);
+    assert.equal(heroFontSize(""), 44);
+  });
+  it("makes the text fit the room it is given", () => {
+    for (const whole of ["5", "30", "999", "1.234", "12.345", "123.456"]) {
+      const em = [...whole].reduce((a, ch) => a + (/\d/.test(ch) ? 0.62 : 0.32), 0);
+      assert.ok(em * heroFontSize(whole) <= 112 + 1e-9 || heroFontSize(whole) === 24, whole);
+    }
   });
 });
 

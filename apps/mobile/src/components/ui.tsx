@@ -1,12 +1,14 @@
-import { Link } from "expo-router";
-import { Card as HCard } from "heroui-native";
+import { useRouter } from "expo-router";
 import { useEffect, type ReactNode } from "react";
-import { View, type StyleProp, type ViewStyle } from "react-native";
+import { Text as RNText, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { EmptyState } from "@/components/EmptyState";
 import { ActivityIndicator, ChunkyButton, Text } from "@/components/kit";
-import { usePalette } from "@/theme";
+import { useReduceMotion } from "@/components/motion";
+import { SkeletonList } from "@/components/Skeleton";
+import { elevation, motion, radius, space, typography, usePalette } from "@/theme";
 
 /** Colours used by the screens, taken from the active (light or dark) palette. */
 export function useColors() {
@@ -31,19 +33,45 @@ export function Screen({ children }: { children: ReactNode }) {
   );
 }
 
-export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+/**
+ * The standard surface: a rounded card with a hairline border and a barely visible shadow
+ * (`elevation.card`). Pass `flush` to drop the padding, e.g. for a list that runs to the edges.
+ */
+export function Card({ children, style, flush }: { children: ReactNode; style?: StyleProp<ViewStyle>; flush?: boolean }) {
+  const p = usePalette();
   return (
-    <HCard className="mb-3 rounded-3xl border-2 border-border bg-surface shadow-none" style={style}>
-      <HCard.Body>{children}</HCard.Body>
-    </HCard>
+    <View
+      style={[
+        {
+          marginBottom: space.md,
+          borderRadius: radius.xl,
+          borderWidth: 2,
+          borderColor: p.border,
+          backgroundColor: p.surface,
+          padding: flush ? 0 : space.lg,
+        },
+        elevation.card,
+        style,
+      ]}
+    >
+      {children}
+    </View>
   );
 }
 
-export function Title({ children }: { children: ReactNode }) {
+/** Screen title. `subtitle` is a quiet line under it; `right` sits at the end of the row. */
+export function Title({ children, subtitle, right }: { children: ReactNode; subtitle?: string; right?: ReactNode }) {
+  const p = usePalette();
   return (
-    <Text variant="headlineMedium" style={{ marginVertical: 12, fontWeight: "800" }} accessibilityRole="header">
-      {children}
-    </Text>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, marginTop: space.md, marginBottom: space.md }}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text variant="headlineMedium" style={{ fontWeight: "800" }} accessibilityRole="header">
+          {children}
+        </Text>
+        {subtitle ? <RNText style={[typography.caption, { color: p.muted }]}>{subtitle}</RNText> : null}
+      </View>
+      {right}
+    </View>
   );
 }
 
@@ -85,29 +113,37 @@ export function Button({
   );
 }
 
-/** Progress bar that slides to its value. `progress` is 0..1; `color` overrides the green. */
+/**
+ * Progress bar that slides to its value (it jumps there with reduced motion). `progress` is
+ * 0..1; `color` overrides the purple. Give it an `accessibilityLabel` when the bar means
+ * something that the surrounding text does not say.
+ */
 export function Bar({
   progress,
   color,
   marginTop = 6,
   height = 10,
+  accessibilityLabel,
 }: {
   progress: number;
   color?: string;
   marginTop?: number;
   height?: number;
+  accessibilityLabel?: string;
 }) {
   const p = usePalette();
-  const pct = Math.max(0, Math.min(1, progress)) * 100;
-  const width = useSharedValue(0);
+  const reduce = useReduceMotion();
+  const pct = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0)) * 100;
+  const width = useSharedValue(reduce ? pct : 0);
   useEffect(() => {
-    width.value = withTiming(pct, { duration: 600, easing: Easing.out(Easing.cubic) });
-  }, [pct, width]);
+    width.value = reduce ? pct : withTiming(pct, { duration: motion.progress, easing: Easing.out(Easing.cubic) });
+  }, [pct, width, reduce]);
   const fill = useAnimatedStyle(() => ({ width: `${width.value}%` }));
   return (
     <View
-      style={{ height, marginTop, borderRadius: height, overflow: "hidden", backgroundColor: p.border }}
+      style={{ height, marginTop, borderRadius: height, overflow: "hidden", backgroundColor: p.accentSoft }}
       accessibilityRole="progressbar"
+      accessibilityLabel={accessibilityLabel}
       accessibilityValue={{ min: 0, max: 100, now: Math.round(pct) }}
     >
       <Animated.View style={[{ height: "100%", borderRadius: height, backgroundColor: color ?? p.fill }, fill]} />
@@ -115,22 +151,25 @@ export function Bar({
   );
 }
 
-export function Loading() {
+/**
+ * Loading placeholder. The default is a spinner; `variant="skeleton"` shows grey rows shaped like
+ * a list, which is what list screens use so the layout does not jump when data arrives.
+ */
+export function Loading({ variant = "spinner", rows }: { variant?: "spinner" | "skeleton"; rows?: number }) {
+  if (variant === "skeleton") return <SkeletonList rows={rows} />;
   return <ActivityIndicator style={{ marginTop: 40 }} accessibilityLabel="Loading" />;
 }
 
 /** Shown on every tab until the server URL and token are saved. */
 export function NeedsSetup() {
-  const c = useColors();
+  const router = useRouter();
   return (
-    <Card>
-      <Body bold>Connect to your server first</Body>
-      <Text variant="bodyMedium" style={{ color: c.muted, marginTop: 4 }}>
-        Enter the server address and API token in Settings.
-      </Text>
-      <Link href="/settings" style={{ color: c.accent, marginTop: 12, fontSize: 16 }}>
-        Open Settings
-      </Link>
-    </Card>
+    <EmptyState
+      title="Connect to your server first"
+      message="Enter the server address and API token in Settings and your numbers show up here."
+      actionLabel="Open Settings"
+      actionIcon="cog-outline"
+      onAction={() => router.push("/settings")}
+    />
   );
 }
