@@ -11,6 +11,7 @@ export type EnvelopeStatus = components["schemas"]["EnvelopeStatusDto"];
 export type Disposable = components["schemas"]["DisposableDto"];
 export type BudgetPeriod = components["schemas"]["PeriodDto"];
 export type SafeToSpend = components["schemas"]["SafeToSpendDto"];
+export type Forecast = components["schemas"]["ForecastDto"];
 export type Price = components["schemas"]["PriceDto"];
 export type RefreshReport = components["schemas"]["RefreshReportDto"];
 export type Pick = components["schemas"]["PickDto"];
@@ -141,6 +142,11 @@ export class Api {
 
   safeToSpend(date?: string) {
     return this.request<SafeToSpend>(`/v1/budget/safe-to-spend${date ? `?date=${date}` : ""}`);
+  }
+
+  /** Where the current budget period is heading; `date` is the local day. */
+  forecast(date?: string) {
+    return this.request<Forecast>(`/v1/forecast${date ? `?date=${date}` : ""}`);
   }
 
   prices(item?: string) {

@@ -814,6 +814,55 @@
         ]
       }
     },
+    "/v1/forecast": {
+      "get": {
+        "tags": [
+          "forecast"
+        ],
+        "summary": "Project the current budget period to its end from the recurring payments still due, the\naverage spending so far and the income expected.",
+        "operationId": "forecast",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "description": "The day to treat as today, ISO format. Defaults to today (UTC); the app sends its local date.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2026-10-11"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid date",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/import": {
       "post": {
         "tags": [
@@ -2713,6 +2762,151 @@
           }
         }
       },
+      "ForecastDto": {
+        "type": "object",
+        "description": "The end-of-period projection. Amounts are integer cents.",
+        "required": [
+          "payday",
+          "period_start",
+          "period_end",
+          "today",
+          "days_through",
+          "days_after_today",
+          "early",
+          "income_detected",
+          "income_received_cents",
+          "income_upcoming_cents",
+          "spent_so_far_cents",
+          "fixed_costs_due_cents",
+          "grocery_spent_cents",
+          "other_spent_cents",
+          "grocery_daily_cents",
+          "other_daily_cents",
+          "projected_extra_spend_cents",
+          "projected_leftover_cents",
+          "grocery_exhausted",
+          "level",
+          "reason"
+        ],
+        "properties": {
+          "days_after_today": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days after today until the period ends.",
+            "minimum": 0
+          },
+          "days_through": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days of the period up to and including today.",
+            "minimum": 0
+          },
+          "early": {
+            "type": "boolean",
+            "description": "Only the first days of the period are over: the pace is a rough guess."
+          },
+          "fixed_costs_due_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Recurring payments still to come this period."
+          },
+          "grocery_daily_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Average groceries per day so far."
+          },
+          "grocery_exhausted": {
+            "type": "boolean",
+            "description": "The grocery limit is already used up."
+          },
+          "grocery_limit_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The groceries envelope limit, if there is one."
+          },
+          "grocery_run_out": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "The day the grocery budget runs out (before the period ends), if it does at this pace.\nWhen it is already used up this is the day it was crossed."
+          },
+          "grocery_spent_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "income_detected": {
+            "type": "boolean"
+          },
+          "income_received_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "income_upcoming_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "level": {
+            "$ref": "#/components/schemas/WarningLevelDto"
+          },
+          "next_income_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "When the next expected income is due (before today when it is late)."
+          },
+          "other_daily_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Average other discretionary spending per day so far."
+          },
+          "other_spent_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Discretionary spending that is not groceries."
+          },
+          "payday": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "projected_extra_spend_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What the current pace adds until the period ends."
+          },
+          "projected_leftover_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Income minus spending so far, fixed costs due and the projected extra spending;\nnegative when the period is heading for a shortfall."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/WarningReasonDto"
+          },
+          "spent_so_far_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "today": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
       "IdeaDto": {
         "type": "object",
         "required": [
@@ -4204,6 +4398,29 @@
             "description": "The expected date has passed and the charge has not been booked yet."
           }
         }
+      },
+      "WarningLevelDto": {
+        "type": "string",
+        "description": "How worried to be about the end of the period.",
+        "enum": [
+          "ok",
+          "watch",
+          "danger"
+        ]
+      },
+      "WarningReasonDto": {
+        "type": "string",
+        "description": "Why the warning level is what it is.",
+        "enum": [
+          "no_data",
+          "no_income",
+          "projected_shortfall",
+          "income_overdue",
+          "groceries_run_out",
+          "thin_margin",
+          "income_pending",
+          "on_track"
+        ]
       }
     },
     "securitySchemes": {
