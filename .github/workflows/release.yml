@@ -18,7 +18,7 @@ on:
         description: What to build
         type: choice
         default: all
-        options: [all, desktop-and-web, docker, mobile, android-apk]
+        options: [all, desktop-and-web, docker, mobile, android-apk, ios-simulator]
       eas_profile:
         description: EAS build profile for the phone apps (see apps/mobile/eas.json)
         type: choice
@@ -46,6 +46,9 @@ jobs:
           cache: npm
           cache-dependency-path: apps/mobile/package-lock.json
       - run: npm ci
+      - name: Stamp the tag's version
+        if: github.ref_type == 'tag'
+        run: node scripts/set-version.mjs "$GITHUB_REF_NAME"
       - run: npx expo export --platform web --output-dir dist
         env:
           CI: "1"
@@ -76,6 +79,9 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - name: Stamp the tag's version
+        if: github.ref_type == 'tag'
+        run: bash .github/scripts/set-rust-version.sh "$GITHUB_REF_NAME"
       - uses: dtolnay/rust-toolchain@stable
       # Compiled dependencies and workspace libs are restored per platform on later releases.
       - uses: Swatinem/rust-cache@v2
@@ -115,6 +121,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - name: Stamp the tag's version
+        if: github.ref_type == 'tag'
+        run: bash .github/scripts/set-rust-version.sh "$GITHUB_REF_NAME"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -173,6 +182,13 @@ jobs:
           cache-dependency-path: apps/mobile/package-lock.json
       - run: npm ci
         if: steps.gate.outputs.enabled == 'true'
+      - name: Stamp the tag's version
+        if: steps.gate.outputs.enabled == 'true' && github.ref_type == 'tag'
+        run: |
+          node scripts/set-version.mjs "$GITHUB_REF_NAME"
+          # EAS builds what is committed, so keep the stamped files in a local commit (never pushed).
+          git -c user.name="release build" -c user.email="release-build@users.noreply.github.com" \
+            commit -q -m "Version $GITHUB_REF_NAME" -- app.json package.json package-lock.json
       - uses: expo/expo-github-action@v8
         if: steps.gate.outputs.enabled == 'true'
         with:
@@ -198,16 +214,35 @@ jobs:
           path: apps/mobile/${{ env.APP_FILE }}
 
   android-apk:
-    # An installable Android app built on the runner itself (no Expo account needed). It is the
-    # app in "Server" mode; the on-phone Rust backend is not included. Signed with the debug key,
-    # which is fine for installing it yourself but not for the Play Store.
+    # Installable Android apps built on the runner itself (no Expo account needed), always in both
+    # variants:
+    #   client  - the app in "Server" mode; it talks to a server you host (needs the server bundle
+    #             or the Docker image from this release).
+    #   compact - the same app with the Rust backend inside the phone; nothing else to run.
+    # Signed with the debug key (fine for installing it yourself, not for the Play Store) unless the
+    # four ANDROID_* signing secrets are set, then with your own keystore.
     if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'android-apk'
+    name: android-apk (${{ matrix.variant }})
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [client, compact]
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/mobile
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.variant == 'compact'
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        if: matrix.variant == 'compact'
+      - uses: taiki-e/install-action@v2
+        if: matrix.variant == 'compact'
+        with:
+          tool: cargo-ndk
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -218,32 +253,147 @@ jobs:
           distribution: temurin
           java-version: 17
       - run: npm ci
+      - name: Stamp the tag's version
+        if: github.ref_type == 'tag'
+        run: node scripts/set-version.mjs "$GITHUB_REF_NAME"
+      - name: Build the Rust backend into the app (compact variant)
+        if: matrix.variant == 'compact'
+        run: scripts/enable-embedded.sh android
       - name: Generate the native Android project
         run: npx expo prebuild --platform android --no-install
         env:
           CI: "1"
+      # Release signing is used only when all four secrets exist; otherwise the debug key signs
+      # the APK exactly as before. Setup: docs/RELEASE.md.
+      - name: Prepare release signing (only if the keystore secrets are set)
+        id: signing
+        working-directory: .
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set=0
+          for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -n "${!v}" ]; then set=$((set + 1)); fi
+          done
+          if [ "$set" -eq 4 ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "keystore=$RUNNER_TEMP/release.keystore" >> "$GITHUB_OUTPUT"
+          elif [ "$set" -gt 0 ]; then
+            echo "::warning title=APK stays debug-signed::Only $set of the 4 Android signing secrets are set (docs/RELEASE.md)."
+          else
+            echo "::notice title=APK is debug-signed::Add the Android signing secrets to sign with your own key (docs/RELEASE.md)."
+          fi
       - uses: gradle/actions/setup-gradle@v4
       - name: Build the release APK
         working-directory: apps/mobile/android
-        run: ./gradlew assembleRelease --no-daemon
+        env:
+          SIGNING: ${{ steps.signing.outputs.enabled }}
+          FINANCER_KEYSTORE_FILE: ${{ steps.signing.outputs.keystore }}
+          FINANCER_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FINANCER_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FINANCER_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ "$SIGNING" = "true" ]; then
+            ./gradlew assembleRelease --no-daemon -I "$GITHUB_WORKSPACE/.github/scripts/android-signing.init.gradle"
+          else
+            ./gradlew assembleRelease --no-daemon
+          fi
       - name: Collect the APK
         run: |
           mkdir out
-          cp android/app/build/outputs/apk/release/*.apk out/financer-android.apk
+          cp android/app/build/outputs/apk/release/*.apk "out/financer-${{ matrix.variant }}-android.apk"
+          ls -lh out
+      - name: Check who signed the APK
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)
+          "$apksigner" verify --print-certs "out/financer-${{ matrix.variant }}-android.apk" | tee signer.txt
+          # The signing step must not have fallen back to the debug key without anyone noticing.
+          if grep -qi 'Android Debug' signer.txt; then
+            echo "::error::The APK is signed with the debug key although the signing secrets are set."
+            exit 1
+          fi
+          rm signer.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-android-${{ matrix.variant }}-apk
+          path: apps/mobile/out/financer-${{ matrix.variant }}-android.apk
+
+  ios-simulator:
+    # iOS apps for the Simulator, unsigned, in both variants (client / compact, see android-apk).
+    # They run on an Apple-silicon Mac's Simulator only; installing on an iPhone needs signing,
+    # which is what the EAS job above is for. Best effort: a failure here does not block the release.
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'ios-simulator'
+    name: ios-simulator (${{ matrix.variant }})
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [client, compact]
+    runs-on: macos-latest
+    env:
+      IPHONEOS_DEPLOYMENT_TARGET: "15.1"
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.variant == 'compact'
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        if: matrix.variant == 'compact'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - name: Stamp the tag's version
+        if: github.ref_type == 'tag'
+        run: node scripts/set-version.mjs "$GITHUB_REF_NAME"
+      - name: Build the Rust backend into the app (compact variant)
+        if: matrix.variant == 'compact'
+        run: scripts/enable-embedded.sh ios
+      - name: Generate the native iOS project and install the pods
+        run: npx expo prebuild --platform ios
+        env:
+          CI: "1"
+      - name: Build for the Simulator
+        working-directory: apps/mobile/ios
+        run: |
+          xcodebuild -workspace *.xcworkspace -scheme "$(basename *.xcworkspace .xcworkspace)" \
+            -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO ARCHS=arm64 build | tail -40
+          exit ${PIPESTATUS[0]}
+      - name: Zip the app
+        run: |
+          mkdir out
+          app=$(ls -d ios/build/Build/Products/Release-iphonesimulator/*.app | head -n1)
+          ditto -c -k --sequesterRsrc --keepParent "$app" "out/financer-${{ matrix.variant }}-ios-simulator.zip"
           ls -lh out
       - uses: actions/upload-artifact@v4
         with:
-          name: app-android-apk
-          path: apps/mobile/out/financer-android.apk
+          name: app-ios-simulator-${{ matrix.variant }}
+          path: apps/mobile/out/financer-${{ matrix.variant }}-ios-simulator.zip
 
   release:
     # Only for version tags: attach everything that was built to a GitHub release.
-    if: startsWith(github.ref, 'refs/tags/') && !cancelled() && needs.desktop.result == 'success' && needs.web.result == 'success'
-    needs: [web, desktop, docker, mobile, android-apk]
+    # Both variants must be there: the server side (desktop bundles + web) and both Android apps.
+    # The iOS Simulator builds are added when they succeeded.
+    if: startsWith(github.ref, 'refs/tags/') && !cancelled() && needs.desktop.result == 'success' && needs.web.result == 'success' && needs.android-apk.result == 'success'
+    needs: [web, desktop, docker, mobile, android-apk, ios-simulator]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/release-body.md
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -253,4 +403,5 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          body_path: .github/release-body.md
           generate_release_notes: true

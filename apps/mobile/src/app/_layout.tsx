@@ -5,7 +5,11 @@ import { HeroUINativeProvider } from "heroui-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { ApiProvider } from "@/api/config";
+import { AppLockOverlay } from "@/components/AppLockOverlay";
+import { BackupOnOpen } from "@/components/BackupOnOpen";
 import "@/native/background"; // defines the background task at startup
+import { NotificationSync } from "@/components/NotificationSync";
+import { OnboardingGate } from "@/components/OnboardingGate";
 import "@/global.css";
 import { usePalette } from "@/theme";
 
@@ -26,6 +30,8 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <HeroUINativeProvider config={{ toast: { defaultProps: { placement: "bottom" } } }}>
       <ApiProvider>
+        <NotificationSync />
+        <OnboardingGate />
         <Tabs
           screenOptions={{
             headerShown: false,
@@ -42,13 +48,20 @@ export default function RootLayout() {
           <Tabs.Screen name="recipes" options={tab("Recipes", "chef-hat")} />
           <Tabs.Screen name="settings" options={tab("Settings", "cog-outline")} />
           {/* reachable from Settings, not shown in the tab bar */}
-          <Tabs.Screen name="basket" options={{ href: null, title: "Usual items" }} />
+          <Tabs.Screen name="mealplan" options={{ href: null, title: "Meal plan" }} />
+          <Tabs.Screen name="basket"options={{ href: null, title: "Usual items" }} />
           <Tabs.Screen name="receipts" options={{ href: null, title: "Receipts" }} />
           <Tabs.Screen name="sync" options={{ href: null, title: "Sync with Sparkasse" }} />
           <Tabs.Screen name="rules" options={{ href: null, title: "Rules" }} />
           <Tabs.Screen name="subscriptions" options={{ href: null, title: "Subscriptions" }} />
           <Tabs.Screen name="alerts" options={{ href: null, title: "Alerts" }} />
+          <Tabs.Screen name="trophies" options={{ href: null, title: "Trophies" }} />
+          <Tabs.Screen name="scan" options={{ href: null, title: "Scan a product" }} />
+          {/* first-run setup: full screen, no tab bar */}
+          <Tabs.Screen name="onboarding" options={{ href: null, title: "Setup", tabBarStyle: { display: "none" } }} />
         </Tabs>
+        <BackupOnOpen />
+        <AppLockOverlay />
       </ApiProvider>
     </HeroUINativeProvider>
     </GestureHandlerRootView>

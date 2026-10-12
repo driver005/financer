@@ -1,0 +1,37 @@
+// Gradle init script: sign the release build of the generated Android app with your own keystore.
+//
+// The android/ project is created by `expo prebuild` on every build, so its build.gradle is not
+// edited by hand; the release workflow passes this file with `./gradlew -I ...` instead. It reads
+// the keystore from environment variables (never from files in the repository):
+//   FINANCER_KEYSTORE_FILE, FINANCER_KEYSTORE_PASSWORD, FINANCER_KEY_ALIAS, FINANCER_KEY_PASSWORD
+// and replaces the signing config of the `release` build type, which the Expo template points at
+// the debug key. Without all four variables the build is left untouched. Passwords are only
+// handed to Gradle's signing config, never printed.
+// Setup and what was and was not tested: docs/RELEASE.md.
+
+allprojects { project ->
+    project.pluginManager.withPlugin('com.android.application') {
+        def file = System.getenv('FINANCER_KEYSTORE_FILE')
+        def storePassword = System.getenv('FINANCER_KEYSTORE_PASSWORD')
+        def alias = System.getenv('FINANCER_KEY_ALIAS')
+        def keyPassword = System.getenv('FINANCER_KEY_PASSWORD')
+        if (!file || !storePassword || !alias || !keyPassword) {
+            project.logger.warn('android-signing.init.gradle: signing variables missing, keeping the build as configured')
+            return
+        }
+        if (!new File(file).isFile()) {
+            throw new GradleException("android-signing.init.gradle: keystore file not found: ${file}")
+        }
+        // finalizeDsl runs after app/build.gradle has been evaluated and before the Android
+        // Gradle plugin freezes the configuration, so it wins over the template's debug signing.
+        project.extensions.getByName('androidComponents').finalizeDsl { android ->
+            def release = android.signingConfigs.create('financerRelease')
+            release.storeFile = new File(file)
+            release.storePassword = storePassword
+            release.keyAlias = alias
+            release.keyPassword = keyPassword
+            android.buildTypes.getByName('release').signingConfig = release
+            project.logger.lifecycle("android-signing.init.gradle: release build is signed with the keystore from FINANCER_KEYSTORE_FILE")
+        }
+    }
+}

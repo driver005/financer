@@ -8,6 +8,7 @@
     "expo": "~57.0.27",
     "expo-background-task": "~57.0.21",
     "expo-blur": "~57.0.3",
+    "expo-camera": "~57.0.6",
     "expo-constants": "~57.0.21",
     "expo-document-picker": "~57.0.3",
     "expo-file-system": "~57.0.7",
@@ -15,6 +16,8 @@
     "expo-haptics": "~57.0.3",
     "expo-image-picker": "~57.0.20",
     "expo-linking": "~57.0.12",
+    "expo-local-authentication": "~57.0.3",
+    "expo-notifications": "~57.0.22",
     "expo-router": "~57.0.25",
     "expo-secure-store": "~57.0.4",
     "expo-sharing": "~57.0.22",
@@ -48,7 +51,7 @@
     "web": "expo start --web",
     "gen:api": "(cd ../.. && cargo run -q -p financer-server -- --print-openapi) > openapi.json && npx --yes openapi-typescript@7.13.0 openapi.json -o src/api/schema.d.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tests/tsconfig.json && node --test \".test-build/tests/*.test.js\""
+    "test": "tsc -p tests/tsconfig.json && node --test \".test-build/tests/*.test.js\" \"tests/*.test.mjs\""
   },
   "private": true
 }

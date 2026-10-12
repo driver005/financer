@@ -1,13 +1,17 @@
 //! REST API shared by the hosted server and the embedded on-phone backend.
 
 mod auth;
+mod backup;
 mod bank;
 mod budget_period;
 mod categorization;
 mod dto;
 mod export;
+mod forecast;
 mod grocery;
+mod mealplan;
 mod routes;
+mod scan;
 mod watchdog;
 
 use std::sync::Arc;
@@ -142,14 +146,18 @@ impl AppState {
         routes::budget_status,
         budget_period::budget_period,
         budget_period::safe_to_spend,
+        forecast::forecast,
         export::export_data,
         export::import_data,
+        backup::create_backup,
+        backup::restore_backup,
         bank::start_sync,
         bank::confirm_sync,
         bank::bank_status,
         grocery::refresh_prices,
         grocery::list_prices,
         grocery::best_prices,
+        scan::ean_lookup,
         grocery::catalog,
         grocery::get_basket,
         grocery::put_basket,
@@ -177,6 +185,11 @@ impl AppState {
         watchdog::subscriptions,
         watchdog::alerts,
         watchdog::dismiss_alert,
+        mealplan::get_meal_plan,
+        mealplan::put_meal_plan,
+        mealplan::get_shopping_list,
+        mealplan::get_pantry,
+        mealplan::put_pantry,
     ),
     components(schemas(
         dto::TransactionDto,
@@ -189,17 +202,26 @@ impl AppState {
         budget_period::PeriodChoice,
         budget_period::PeriodDto,
         budget_period::SafeToSpendDto,
+        forecast::ForecastDto,
+        forecast::WarningLevelDto,
+        forecast::WarningReasonDto,
         dto::ErrorBody,
         dto::ExportTransaction,
         dto::ExportReceipt,
         dto::ExportSettings,
         dto::ExportDto,
         dto::ImportReportDto,
+        backup::BackupCreateRequest,
+        backup::BackupDto,
+        backup::BackupRestoreRequest,
         dto::SyncRequest,
         dto::SyncStarted,
         dto::SyncDone,
         dto::BankStatus,
         dto::PriceDto,
+        scan::EanLookupDto,
+        scan::ChainPriceDto,
+        scan::ObservationDto,
         dto::SourceStatusDto,
         dto::RefreshReportDto,
         dto::BasketItemDto,
@@ -247,6 +269,22 @@ impl AppState {
         watchdog::AlertDto,
         watchdog::AlertsDto,
         watchdog::AlertDismissedDto,
+        mealplan::MealIngredientInput,
+        mealplan::MealDayInput,
+        mealplan::MealPlanInput,
+        mealplan::MealIngredientDto,
+        mealplan::MealDayDto,
+        mealplan::MealPlanDto,
+        mealplan::PantryItemDto,
+        mealplan::PantryDto,
+        mealplan::PantryUpdate,
+        mealplan::ShoppingItemDto,
+        mealplan::ShoppingStopDto,
+        mealplan::ShoppingPlanDto,
+        mealplan::ChainTotalDto,
+        mealplan::UnmatchedDto,
+        mealplan::MealBudgetDto,
+        mealplan::ShoppingListDto,
     )),
     modifiers(&BearerAuth)
 )]
@@ -283,13 +321,17 @@ impl Api {
             .route("/budget/status", get(routes::budget_status))
             .route("/budget/period", get(budget_period::budget_period))
             .route("/budget/safe-to-spend", get(budget_period::safe_to_spend))
+            .route("/forecast", get(forecast::forecast))
             .route("/export", get(export::export_data))
             .route("/import", post(export::import_data))
+            .route("/backup/create", post(backup::create_backup))
+            .route("/backup/restore", post(backup::restore_backup))
             .route("/bank/sync", post(bank::start_sync))
             .route("/bank/sync/{id}/confirm", post(bank::confirm_sync))
             .route("/bank/status", get(bank::bank_status))
             .route("/prices", get(grocery::list_prices))
             .route("/prices/best", get(grocery::best_prices))
+            .route("/prices/ean/{ean}", get(scan::ean_lookup))
             .route("/prices/refresh", post(grocery::refresh_prices))
             .route("/catalog", get(grocery::catalog))
             .route("/basket", get(grocery::get_basket).put(grocery::put_basket))
@@ -339,6 +381,15 @@ impl Api {
             .route("/subscriptions", get(watchdog::subscriptions))
             .route("/alerts", get(watchdog::alerts))
             .route("/alerts/{id}/dismiss", post(watchdog::dismiss_alert))
+            .route(
+                "/meal-plan",
+                get(mealplan::get_meal_plan).put(mealplan::put_meal_plan),
+            )
+            .route("/meal-plan/shopping-list", get(mealplan::get_shopping_list))
+            .route(
+                "/meal-plan/pantry",
+                get(mealplan::get_pantry).put(mealplan::put_pantry),
+            )
             // An unknown API path is an API error, never a web page (see `Api::with_web_app`).
             .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
             .layer(middleware::from_fn_with_state(

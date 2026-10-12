@@ -1,0 +1,83 @@
+name: Nightly checks
+
+# Once a night (and on demand): the Rust tests again, so a dependency that changed under us or a
+# test that depends on the date shows up, plus security advisory reports for the Rust and npm
+# dependencies. The advisory steps only REPORT: they never fail the run, because an advisory in a
+# dependency we do not control should not turn the whole workflow red. Read the job summary.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: financer
+          POSTGRES_PASSWORD: financer
+          POSTGRES_DB: financer_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U financer"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FINANCER_TEST_POSTGRES_URL: postgres://financer:financer@127.0.0.1:5432/financer_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: workspace
+          cache-on-failure: true
+      - run: cargo test --workspace
+
+  advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: cargo audit (report only)
+        continue-on-error: true
+        run: |
+          status=0
+          cargo audit --color never > cargo-audit.txt 2>&1 || status=$?
+          cat cargo-audit.txt
+          {
+            echo "### cargo audit (exit code $status)"
+            echo '```'
+            tail -n 80 cargo-audit.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: npm audit, production dependencies of the app (report only)
+        continue-on-error: true
+        working-directory: apps/mobile
+        run: |
+          status=0
+          npm audit --omit=dev > npm-audit.txt 2>&1 || status=$?
+          cat npm-audit.txt
+          {
+            echo "### npm audit --omit=dev, apps/mobile (exit code $status)"
+            echo '```'
+            tail -n 80 npm-audit.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

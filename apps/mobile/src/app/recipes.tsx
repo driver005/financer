@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { FlatList, View } from "react-native";
 import { Chip, HelperText, List, Text, TextInput } from "@/components/kit";
@@ -13,6 +14,7 @@ const TAGS = ["vegetarisch", "vegan", "günstig", "schnell", "fleisch", "fisch"]
 export default function Recipes() {
   const { api, loaded } = useApi();
   const c = useColors();
+  const router = useRouter();
   const [tag, setTag] = useState<string | undefined>();
   const [budgetText, setBudgetText] = useState("");
   const budget = budgetText.trim() ? parseEuroInput(budgetText) : null;
@@ -68,6 +70,9 @@ export default function Recipes() {
                 style={{ marginTop: 12 }}
                 error={budgetText.trim() !== "" && budget === null}
               />
+              <View style={{ marginTop: 12 }}>
+                <Button label="Plan my week" icon="calendar-week" mode="outlined" onPress={() => router.push("/mealplan")} />
+              </View>
               <View style={{ marginTop: 12 }}>
                 <Button label={asking ? "Thinking…" : "Surprise me with new ideas"} icon="creation" mode="contained-tonal" onPress={askForIdeas} disabled={asking} />
               </View>

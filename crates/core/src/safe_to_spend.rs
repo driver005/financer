@@ -218,19 +218,29 @@ impl SafeToSpend {
     /// How many times `r` is still to come between `today` (or an overdue date inside the period)
     /// and the period's end. Zero for a payment that looks stopped.
     fn occurrences_to_come(r: &RecurringPayment, period: BudgetPeriod, today: Date) -> u32 {
+        Self::dates_to_come(r, period, today).len() as u32
+    }
+
+    /// The dates `r` is still expected on inside the period, oldest first. Empty for a payment
+    /// that looks stopped (more than half a cadence overdue).
+    pub(crate) fn dates_to_come(
+        r: &RecurringPayment,
+        period: BudgetPeriod,
+        today: Date,
+    ) -> Vec<Date> {
         let grace = Duration::days(r.cadence.nominal_days() / 2);
         if r.next_expected + grace < today {
-            return 0;
+            return Vec::new();
         }
-        let mut count = 0;
+        let mut dates = Vec::new();
         let mut date = r.next_expected;
         while date <= period.end {
             if date >= period.start {
-                count += 1;
+                dates.push(date);
             }
             date = r.cadence.next_after(date);
         }
-        count
+        dates
     }
 }
 

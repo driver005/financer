@@ -11,7 +11,11 @@ export type EnvelopeStatus = components["schemas"]["EnvelopeStatusDto"];
 export type Disposable = components["schemas"]["DisposableDto"];
 export type BudgetPeriod = components["schemas"]["PeriodDto"];
 export type SafeToSpend = components["schemas"]["SafeToSpendDto"];
+export type Forecast = components["schemas"]["ForecastDto"];
 export type Price = components["schemas"]["PriceDto"];
+export type EanLookup = components["schemas"]["EanLookupDto"];
+export type ChainPrice = components["schemas"]["ChainPriceDto"];
+export type Observation = components["schemas"]["ObservationDto"];
 export type RefreshReport = components["schemas"]["RefreshReportDto"];
 export type Pick = components["schemas"]["PickDto"];
 export type CatalogItem = components["schemas"]["CatalogItemDto"];
@@ -21,6 +25,12 @@ export type Receipt = components["schemas"]["ReceiptDto"];
 export type Affordability = components["schemas"]["AffordabilityDto"];
 export type RecipeMatch = components["schemas"]["RecipeMatchDto"];
 export type Idea = components["schemas"]["IdeaDto"];
+export type MealPlan = components["schemas"]["MealPlanDto"];
+export type MealDay = components["schemas"]["MealDayDto"];
+export type MealDayInput = components["schemas"]["MealDayInput"];
+export type MealShoppingList = components["schemas"]["ShoppingListDto"];
+export type ShoppingItem = components["schemas"]["ShoppingItemDto"];
+export type Pantry = components["schemas"]["PantryDto"];
 export type Settings = components["schemas"]["SettingsDto"];
 export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
 export type BankStatus = components["schemas"]["BankStatus"];
@@ -43,6 +53,7 @@ export type UpcomingCharge = components["schemas"]["UpcomingChargeDto"];
 export type PriceHike = components["schemas"]["PriceHikeDto"];
 export type Alert = components["schemas"]["AlertDto"];
 export type AlertList = components["schemas"]["AlertsDto"];
+export type EncryptedBackup = components["schemas"]["BackupDto"];
 export type Chain = "aldi" | "lidl" | "kaufland" | "rewe";
 
 export class ApiError extends Error {
@@ -143,8 +154,18 @@ export class Api {
     return this.request<SafeToSpend>(`/v1/budget/safe-to-spend${date ? `?date=${date}` : ""}`);
   }
 
+  /** Where the current budget period is heading; `date` is the local day. */
+  forecast(date?: string) {
+    return this.request<Forecast>(`/v1/forecast${date ? `?date=${date}` : ""}`);
+  }
+
   prices(item?: string) {
     return this.request<Price[]>(`/v1/prices${item ? `?item=${encodeURIComponent(item)}` : ""}`);
+  }
+
+  /** What a scanned barcode (EAN-8, EAN-13, UPC-A) costs per chain. 400 for an invalid barcode. */
+  eanLookup(ean: string) {
+    return this.request<EanLookup>(`/v1/prices/ean/${encodeURIComponent(ean)}`);
   }
 
   refreshPrices() {
@@ -201,6 +222,32 @@ export class Api {
     return this.json<Idea[]>("/v1/recipes/ideas", "POST", req);
   }
 
+  /** The meals planned for the week that contains `week` (Monday to Sunday). */
+  mealPlan(week: string) {
+    return this.request<MealPlan>(`/v1/meal-plan?week=${encodeURIComponent(week)}`);
+  }
+
+  /** Replaces the plan of the week; days that are not listed become empty. */
+  saveMealPlan(week: string, days: MealDayInput[]) {
+    return this.json<MealPlan>(`/v1/meal-plan?week=${encodeURIComponent(week)}`, "PUT", { days });
+  }
+
+  /** Ingredients of the week's meals, priced per chain and checked against the groceries budget. `date` is the local day. */
+  mealShoppingList(week: string, date?: string) {
+    const q = new URLSearchParams({ week });
+    if (date) q.set("date", date);
+    return this.request<MealShoppingList>(`/v1/meal-plan/shopping-list?${q}`);
+  }
+
+  pantry() {
+    return this.request<Pantry>("/v1/meal-plan/pantry");
+  }
+
+  /** Replaces the list of items assumed to be at home (catalog keys). */
+  savePantry(items: string[]) {
+    return this.json<Pantry>("/v1/meal-plan/pantry", "PUT", { items });
+  }
+
   settings() {
     return this.request<Settings>("/v1/settings");
   }
@@ -230,6 +277,16 @@ export class Api {
 
   importData(data: ExportData) {
     return this.json<ImportSummary>("/v1/import", "POST", data);
+  }
+
+  /** The same data as `exportData`, encrypted with a passphrase (an `age` file, base64). */
+  createBackup(passphrase: string) {
+    return this.json<EncryptedBackup>("/v1/backup/create", "POST", { passphrase });
+  }
+
+  /** Merge an encrypted backup; a wrong passphrase or damaged file is a 400 and changes nothing. */
+  restoreBackup(passphrase: string, dataBase64: string) {
+    return this.json<ImportSummary>("/v1/backup/restore", "POST", { passphrase, data_base64: dataBase64 });
   }
 
   bankStatus() {

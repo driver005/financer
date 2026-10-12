@@ -28,10 +28,35 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Financer uses Face ID to unlock the app when you have turned on the app lock."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "cameraPermission": "Financer uses the camera to photograph receipts so it can learn what you usually buy.",
           "photosPermission": "Financer reads receipt photos you choose so it can learn what you usually buy."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Financer uses the camera to scan product barcodes in the store.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Financer uses Face ID to lock the app, which holds your bank data."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#7c3aed"
         }
       ]
     ],

@@ -78,6 +78,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/backup/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a passphrase-encrypted backup of everything that is yours (see `/v1/export`). */
+        post: operations["create_backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/backup/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decrypt a backup and merge it like `/v1/import`. A wrong passphrase or damaged file is a
+         *     400 and changes nothing.
+         */
+        post: operations["restore_backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/bank/status": {
         parameters: {
             query?: never;
@@ -273,6 +310,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/forecast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Project the current budget period to its end from the recurring payments still due, the
+         *     average spending so far and the income expected.
+         */
+        get: operations["forecast"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/import": {
         parameters: {
             query?: never;
@@ -288,6 +345,66 @@ export interface paths {
          *     list replace the current ones when the export has any; settings are applied if present.
          */
         post: operations["import_data"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/meal-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The meals planned for a week (Monday to Sunday), one per day at most. */
+        get: operations["get_meal_plan"];
+        /**
+         * Replace the plan of a week. Each day holds a bundled recipe by id, or a suggested recipe by
+         *     title with its ingredients, and the servings to cook.
+         */
+        put: operations["put_meal_plan"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/meal-plan/pantry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Items assumed to be at home (salt, oil, flour...); the shopping list leaves them off. */
+        get: operations["get_pantry"];
+        /** Replace the pantry list. */
+        put: operations["put_pantry"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/meal-plan/shopping-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the
+         *     servings and converted to packs), pantry items left off, priced per chain with the best split
+         *     and checked against what is left of the groceries budget.
+         */
+        get: operations["get_shopping_list"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -320,6 +437,27 @@ export interface paths {
         };
         /** For each item of your basket, the cheapest chain right now. */
         get: operations["best_prices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/prices/ean/{ean}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a scanned barcode costs at Lidl, Aldi, Kaufland and Rewe: the best stored price per
+         *     chain, recent Open Prices observations, unit prices and the cheapest chain. A valid barcode
+         *     nobody has a price for answers `200` with no chains and a note.
+         */
+        get: operations["ean_lookup"];
         put?: never;
         post?: never;
         delete?: never;
@@ -787,6 +925,21 @@ export interface components {
             /** @description Transactions whose category changed. Transactions you categorized by hand are skipped. */
             changed: number;
         };
+        BackupCreateRequest: {
+            /** @description At least 8 characters. Not stored anywhere: without it the backup cannot be opened. */
+            passphrase: string;
+        };
+        BackupDto: {
+            /** @description The encrypted backup (an `age` file), base64-encoded. */
+            data_base64: string;
+            receipts: number;
+            transactions: number;
+        };
+        BackupRestoreRequest: {
+            /** @description The encrypted backup, base64-encoded, as returned by the create endpoint. */
+            data_base64: string;
+            passphrase: string;
+        };
         BankStatus: {
             /** Format: int64 */
             balance_cents?: number | null;
@@ -861,6 +1014,53 @@ export interface components {
             /** @description Basket items this chain has no price for. */
             missing: string[];
         };
+        /** @description The best known price of the scanned product at one chain. */
+        ChainPriceDto: {
+            /** @example lidl */
+            chain: string;
+            is_offer: boolean;
+            /**
+             * Format: date
+             * @description Day the price was seen (Open Prices), if known.
+             */
+            observed_on?: string | null;
+            /** @description Pack the price is for, for example `500 g` (scope `item`: the reference pack). */
+            pack?: string | null;
+            /**
+             * Format: int64
+             * @description Shelf price of the scanned pack for scope `product`, price of the reference pack for
+             *     scope `item`.
+             */
+            price_cents: number;
+            product_name?: string | null;
+            /**
+             * @description `product`: a shelf price seen for exactly this barcode. `item`: the cheapest stored price
+             *     for the catalog item (for example milk), per reference pack; not necessarily this brand.
+             */
+            scope: string;
+            /** @description `open-prices` for a live observation, or the name of the stored price source. */
+            source: string;
+            /** @description `kg` or `l`. */
+            unit?: string | null;
+            /**
+             * Format: int64
+             * @description Price of one kg or l in cents, where the pack size is known.
+             */
+            unit_price_cents?: number | null;
+            /** Format: date */
+            valid_until?: string | null;
+        };
+        ChainTotalDto: {
+            chain: string;
+            complete: boolean;
+            /** @description Names of priced items this chain does not stock. */
+            missing: string[];
+            /**
+             * Format: int64
+             * @description Price of the items this chain stocks.
+             */
+            total_cents: number;
+        };
         DisposableDto: {
             /** Format: int64 */
             disposable_cents: number;
@@ -877,6 +1077,42 @@ export interface components {
              */
             reason: string;
             second: components["schemas"]["SubscriptionDto"];
+        };
+        EanLookupDto: {
+            /** @description One entry per chain with a known price, cheapest first. */
+            chains: components["schemas"]["ChainPriceDto"][];
+            /**
+             * @description The cheapest chain; absent on a tie, or when the chains cannot be compared.
+             * @example aldi
+             */
+            cheapest?: string | null;
+            /**
+             * @description What the chains were compared on: `unit_price`, `reference_pack` or `pack_price`;
+             *     absent when their prices have nothing in common.
+             */
+            compared_by?: string | null;
+            /** @description The barcode in the form used by Open Prices (UPC-A gets a leading 0). */
+            ean: string;
+            /**
+             * @description Catalog key (see `GET /v1/catalog`), when the product is a known kind of item; usable in
+             *     the usual items (`PUT /v1/basket`).
+             */
+            item?: string | null;
+            item_name?: string | null;
+            /** @description `ean8`, `upc_a` or `ean13`. */
+            kind: string;
+            /** @description True when Open Prices answered for this request. */
+            live_lookup: boolean;
+            /** @description Plain-language remarks: what is missing and why. */
+            notes: string[];
+            /** @description Recent Open Prices observations, newest first. */
+            observations: components["schemas"]["ObservationDto"][];
+            /** @description Pack size as printed, for example `500 g`. */
+            pack?: string | null;
+            product_name?: string | null;
+            reference_pack?: string | null;
+            /** @description Chains sharing the lowest price when there is a tie. */
+            tied_cheapest: string[];
         };
         EnvelopeDto: {
             /** @example groceries */
@@ -943,6 +1179,89 @@ export interface components {
             counterparty_iban?: string | null;
             purpose: string;
         };
+        /** @description The end-of-period projection. Amounts are integer cents. */
+        ForecastDto: {
+            /**
+             * Format: int32
+             * @description Days after today until the period ends.
+             */
+            days_after_today: number;
+            /**
+             * Format: int32
+             * @description Days of the period up to and including today.
+             */
+            days_through: number;
+            /** @description Only the first days of the period are over: the pace is a rough guess. */
+            early: boolean;
+            /**
+             * Format: int64
+             * @description Recurring payments still to come this period.
+             */
+            fixed_costs_due_cents: number;
+            /**
+             * Format: int64
+             * @description Average groceries per day so far.
+             */
+            grocery_daily_cents: number;
+            /** @description The grocery limit is already used up. */
+            grocery_exhausted: boolean;
+            /**
+             * Format: int64
+             * @description The groceries envelope limit, if there is one.
+             */
+            grocery_limit_cents?: number | null;
+            /**
+             * Format: date
+             * @description The day the grocery budget runs out (before the period ends), if it does at this pace.
+             *     When it is already used up this is the day it was crossed.
+             */
+            grocery_run_out?: string | null;
+            /** Format: int64 */
+            grocery_spent_cents: number;
+            income_detected: boolean;
+            /** Format: int64 */
+            income_received_cents: number;
+            /** Format: int64 */
+            income_upcoming_cents: number;
+            level: components["schemas"]["WarningLevelDto"];
+            /**
+             * Format: date
+             * @description When the next expected income is due (before today when it is late).
+             */
+            next_income_date?: string | null;
+            /**
+             * Format: int64
+             * @description Average other discretionary spending per day so far.
+             */
+            other_daily_cents: number;
+            /**
+             * Format: int64
+             * @description Discretionary spending that is not groceries.
+             */
+            other_spent_cents: number;
+            /** Format: int32 */
+            payday: number;
+            /** Format: date */
+            period_end: string;
+            /** Format: date */
+            period_start: string;
+            /**
+             * Format: int64
+             * @description What the current pace adds until the period ends.
+             */
+            projected_extra_spend_cents: number;
+            /**
+             * Format: int64
+             * @description Income minus spending so far, fixed costs due and the projected extra spending;
+             *     negative when the period is heading for a shortfall.
+             */
+            projected_leftover_cents: number;
+            reason: components["schemas"]["WarningReasonDto"];
+            /** Format: int64 */
+            spent_so_far_cents: number;
+            /** Format: date */
+            today: string;
+        };
         IdeaDto: {
             ingredients: components["schemas"]["IdeaIngredientDto"][];
             /** Format: int32 */
@@ -978,6 +1297,126 @@ export interface components {
             receipts_known: number;
             transactions_added: number;
             transactions_known: number;
+        };
+        MealBudgetDto: {
+            /**
+             * Format: int64
+             * @description What is left of this period's groceries limit; missing when no limit is set.
+             */
+            budget_cents?: number | null;
+            /** @description `groceries_envelope` or `none`. */
+            budget_source: string;
+            /**
+             * Format: int64
+             * @description Cost of the priced items on the best plan.
+             */
+            estimated_cents: number;
+            fits?: boolean | null;
+            /**
+             * Format: int64
+             * @description Budget minus estimate; negative when over.
+             */
+            left_after_cents?: number | null;
+            /**
+             * Format: int32
+             * @description Items that are not in the estimate because they have no price.
+             */
+            unpriced_count: number;
+        };
+        MealDayDto: {
+            /**
+             * @description False when the stored recipe id is no longer in the dataset; such a meal adds nothing to the
+             *     shopping list.
+             */
+            available: boolean;
+            /** Format: date */
+            date: string;
+            ingredients: components["schemas"]["MealIngredientDto"][];
+            recipe_id?: string | null;
+            /**
+             * Format: int32
+             * @description Servings the ingredient amounts are written for.
+             */
+            recipe_servings: number;
+            /** Format: int32 */
+            servings: number;
+            title: string;
+        };
+        MealDayInput: {
+            /**
+             * Format: date
+             * @example 2026-10-13
+             */
+            date: string;
+            /** @description Ingredients of the suggested recipe, as written for `recipe_servings`. */
+            ingredients?: components["schemas"]["MealIngredientInput"][] | null;
+            /** @description A bundled recipe (from `GET /v1/recipes`). Use this or `title` with `ingredients`. */
+            recipe_id?: string | null;
+            /**
+             * Format: int32
+             * @description Servings the suggested recipe's amounts are written for. Defaults to `servings`.
+             */
+            recipe_servings?: number | null;
+            /**
+             * Format: int32
+             * @description Servings to cook (1 to 20).
+             */
+            servings: number;
+            /** @description A suggested recipe that is not in the dataset, e.g. an idea from `POST /v1/recipes/ideas`. */
+            title?: string | null;
+        };
+        MealIngredientDto: {
+            amount: string;
+            name: string;
+        };
+        MealIngredientInput: {
+            /** @description Free text such as `250 g` or `2 EL`. */
+            amount: string;
+            name: string;
+        };
+        MealPlanDto: {
+            /** @description The planned days, oldest first. */
+            days: components["schemas"]["MealDayDto"][];
+            /** Format: date */
+            week_end: string;
+            /** Format: date */
+            week_start: string;
+        };
+        MealPlanInput: {
+            /** @description At most one meal per day; days not listed are empty. Replaces the whole week. */
+            days: components["schemas"]["MealDayInput"][];
+        };
+        /** @description A crowdsourced Open Prices observation. */
+        ObservationDto: {
+            /**
+             * @description Lidl, Aldi, Kaufland or Rewe when the store is one of them.
+             * @example rewe
+             */
+            chain?: string | null;
+            /** Format: date */
+            date: string;
+            /** Format: int64 */
+            price_cents: number;
+            /** @description Store name as recorded, if any. */
+            store?: string | null;
+            /** @description `kg` or `l`, with `unit_price_cents`. */
+            unit?: string | null;
+            /** Format: int64 */
+            unit_price_cents?: number | null;
+        };
+        PantryDto: {
+            /** @description True until the list is saved for the first time. */
+            is_default: boolean;
+            /** @description Items assumed to be at home; they are left off the shopping list. */
+            items: components["schemas"]["PantryItemDto"][];
+        };
+        PantryItemDto: {
+            item: string;
+            name: string;
+        };
+        PantryUpdate: {
+            /** @description Catalog keys (see `GET /v1/catalog`). */
+            items: string[];
         };
         /**
          * @description Which period to look at when no year and month are given.
@@ -1323,6 +1762,75 @@ export interface components {
              */
             payday?: number | null;
         };
+        ShoppingItemDto: {
+            is_offer: boolean;
+            item: string;
+            /**
+             * Format: int64
+             * @description `packs` times the pack price.
+             */
+            line_cents?: number | null;
+            /** @description The meals that use it. */
+            meals: string[];
+            name: string;
+            /** @description What the plan needs, e.g. `750 g`. */
+            needed: string;
+            /** @description Size of one pack, e.g. `500 g`. */
+            pack: string;
+            /**
+             * Format: int64
+             * @description Price of one pack at the chosen chain; missing for items nobody has a price for.
+             */
+            pack_price_cents?: number | null;
+            /**
+             * Format: int32
+             * @description Reference packs to buy.
+             */
+            packs: number;
+        };
+        ShoppingListDto: {
+            budget: components["schemas"]["MealBudgetDto"];
+            /** Format: int32 */
+            meals_planned: number;
+            /** @description Needed by the plan but on the pantry list. */
+            pantry_skipped: components["schemas"]["PantryItemDto"][];
+            /** @description The priced items per chain, cheapest complete chain first. */
+            per_chain: components["schemas"]["ChainTotalDto"][];
+            plan?: null | components["schemas"]["ShoppingPlanDto"];
+            /** @description Planned meals that could not be used (recipe no longer in the dataset). */
+            skipped_meals: string[];
+            /** @description Ingredients that could not be matched to a known item. */
+            unmatched: components["schemas"]["UnmatchedDto"][];
+            /** @description Items nobody has a price for. */
+            unpriced: components["schemas"]["ShoppingItemDto"][];
+            /** Format: date */
+            week_end: string;
+            /** Format: date */
+            week_start: string;
+        };
+        ShoppingPlanDto: {
+            /**
+             * Format: int64
+             * @description What splitting saves compared with the single chain; zero when not splitting.
+             */
+            saving_cents: number;
+            /**
+             * Format: int64
+             * @description The same items at the cheapest chain that has all of them, if there is one.
+             */
+            single_chain_total_cents?: number | null;
+            split: boolean;
+            /** @description One stop when everything is bought at one chain, more when splitting saves enough. */
+            stops: components["schemas"]["ShoppingStopDto"][];
+            /** Format: int64 */
+            total_cents: number;
+        };
+        ShoppingStopDto: {
+            chain: string;
+            items: components["schemas"]["ShoppingItemDto"][];
+            /** Format: int64 */
+            subtotal_cents: number;
+        };
         SkippedRowDto: {
             /** Format: int64 */
             line: number;
@@ -1491,6 +1999,11 @@ export interface components {
             id: number;
             purpose: string;
         };
+        UnmatchedDto: {
+            amounts: string[];
+            meals: string[];
+            name: string;
+        };
         UpcomingChargeDto: {
             /** Format: int64 */
             amount_cents: number;
@@ -1507,6 +2020,16 @@ export interface components {
             /** @description The expected date has passed and the charge has not been booked yet. */
             overdue: boolean;
         };
+        /**
+         * @description How worried to be about the end of the period.
+         * @enum {string}
+         */
+        WarningLevelDto: "ok" | "watch" | "danger";
+        /**
+         * @description Why the warning level is what it is.
+         * @enum {string}
+         */
+        WarningReasonDto: "no_data" | "no_income" | "projected_shortfall" | "income_overdue" | "groceries_run_out" | "thin_margin" | "income_pending" | "on_track";
     };
     responses: never;
     parameters: never;
@@ -1620,6 +2143,70 @@ export interface operations {
             };
             /** @description No such alert */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupCreateRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupDto"];
+                };
+            };
+            /** @description Passphrase too short */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    restore_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupRestoreRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReportDto"];
+                };
+            };
+            /** @description Wrong passphrase, damaged file or not a valid backup */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2017,6 +2604,40 @@ export interface operations {
             };
         };
     };
+    forecast: {
+        parameters: {
+            query?: {
+                /**
+                 * @description The day to treat as today, ISO format. Defaults to today (UTC); the app sends its local date.
+                 * @example 2026-10-11
+                 */
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForecastDto"];
+                };
+            };
+            /** @description Invalid date */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     import_data: {
         parameters: {
             query?: never;
@@ -2039,6 +2660,168 @@ export interface operations {
                 };
             };
             /** @description Not a valid export */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_meal_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Any day of the week; the week runs Monday to Sunday. Defaults to the current week.
+                 * @example 2026-10-12
+                 */
+                week: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MealPlanDto"];
+                };
+            };
+            /** @description Week out of range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_meal_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Any day of the week; the week runs Monday to Sunday. Defaults to the current week.
+                 * @example 2026-10-12
+                 */
+                week: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MealPlanInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MealPlanDto"];
+                };
+            };
+            /** @description Unknown recipe, day outside the week, duplicate day or bad value */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_pantry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PantryDto"];
+                };
+            };
+        };
+    };
+    put_pantry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PantryUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PantryDto"];
+                };
+            };
+            /** @description Unknown item or too many items */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_shopping_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Any day of the week to shop for. Defaults to the current week.
+                 * @example 2026-10-12
+                 */
+                week: string | null;
+                /**
+                 * @description The day to treat as today when looking up the groceries budget left. Defaults to today (UTC).
+                 * @example 2026-10-12
+                 */
+                date: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShoppingListDto"];
+                };
+            };
+            /** @description Week out of range */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2086,6 +2869,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PickDto"][];
+                };
+            };
+        };
+    };
+    ean_lookup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description EAN-8, EAN-13 or UPC-A, with a valid check digit */
+                ean: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EanLookupDto"];
+                };
+            };
+            /** @description Not a valid barcode (digits, length or check digit) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

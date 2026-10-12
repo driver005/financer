@@ -33,13 +33,42 @@ release gets the desktop bundles, web zip, APK and generated notes as described 
 
 - Skip one: put `[skip release]` in the merge commit message.
 - Force a bump: Actions tab, **New version**, **Run workflow**, choose `patch`, `minor` or `major`.
-- The tag is the version. `package.json`, `app.json` and `Cargo.toml` are not edited by the
-  workflow (it makes no commits to `master`), so those numbers do not follow the tags.
+- The tag is the version. The tagging workflow makes no commits to `master`, so the numbers in
+  `package.json`, `app.json` and `Cargo.toml` stay as committed; instead the release build stamps
+  the tag's version into the build it makes (see "Version numbers" below). The app, the web zip,
+  the desktop bundles and the Docker image therefore carry the tag's version.
 - If you protect tags with a ruleset, allow `github-actions[bot]` to create `v*` tags.
 - It only runs once the file is on `master`; it cannot tag from a branch.
 - Not yet run: the bump script is tested on a scratch repo and the file passes `actionlint`,
   but the workflow itself has not run on GitHub, so the tag push and the dispatch of the release
   build are unproven until the first merge.
+
+## Two variants in every release
+
+Every release (a version tag, which `version.yml` creates on each merge to `master`) contains both
+ways to run Financer, and its notes say so (`.github/release-body.md`):
+
+| | **Compact** | **Server + client** |
+|---|---|---|
+| Android | `financer-compact-android.apk`: the Rust backend runs inside the app | `financer-client-android.apk`: talks to your server |
+| iOS Simulator | `financer-compact-ios-simulator.zip` | `financer-client-ios-simulator.zip` |
+| Server | none needed | desktop bundles `financer-desktop-*`, Docker image, and `financer-web.zip` |
+
+The `android-apk` and `ios-simulator` jobs are matrices over `variant: [client, compact]`. The
+compact leg first builds the Rust library and bindings with `apps/mobile/scripts/enable-embedded.sh`
+(see `EMBEDDED.md`), which is the same chain the `android-app` / `ios-app` jobs in `native.yml`
+check on every push.
+
+- **Required for a release:** the desktop bundles, the web zip and **both** Android APKs. If the
+  compact build breaks, the release is not created (rather than silently shipping one variant).
+- **Best effort:** the iOS Simulator zips are added when they build; a failure there does not
+  block the release. They run on an Apple-silicon Mac's Simulator only. iPhones need signing,
+  which is the EAS job (it builds the client variant; the compact iPhone build is not set up).
+- **Not yet proven on GitHub:** the matrix and the iOS Simulator job were checked with
+  `actionlint` and are built from steps that already ran green in `native.yml`, but the release
+  workflow itself has not run since this change. Expect one round of fixes on the first tag.
+- By hand: Actions tab, **Release builds**, choose `android-apk` or `ios-simulator` to build just
+  those (both variants each).
 
 ## What you get
 
@@ -48,12 +77,96 @@ release gets the desktop bundles, web zip, APK and generated notes as described 
 | **Desktop bundles**: Windows, macOS (Apple silicon and Intel), Linux | nothing | The server plus the web app. Unzip, double-click `start.bat` (Windows) or run `./start.sh`; the browser opens. Data stays in the folder. Not signed, so macOS and Windows warn on first start. |
 | **Web app** (zip) | nothing | The same app, to host yourself. It needs the server on the same address (the desktop bundle and the Docker image do that with `FINANCER_WEB_DIR`). |
 | **Docker image** `ghcr.io/<owner>/financer-server` | nothing | For your own server, see `deploy/`. Version tags and `latest` on tags, `edge` on manual runs. |
-| **Android app** (APK), built on the runner | nothing | The `android-apk` job runs `expo prebuild` and Gradle on GitHub's runner (about 16 minutes) and uploads `financer-android.apk`. Signed with the debug key: fine to install yourself, not for the Play Store. It is the app in "Server" mode (no on-phone backend). Included in tag releases and in a manual run with `all` or `android-apk`. |
+| **Android app** (APK), built on the runner | nothing | The `android-apk` job runs `expo prebuild` and Gradle on GitHub's runner (about 16 minutes) and uploads `financer-android.apk`. Signed with the debug key unless you add the signing secrets (see "Signing the Android app"): the debug key is fine to install yourself, not for the Play Store. It is the app in "Server" mode (no on-phone backend). Included in tag releases and in a manual run with `all` or `android-apk`. |
 | **Android app** (APK), built by EAS | `EXPO_TOKEN` | Built in the cloud by EAS Build. |
 | **iOS app** | `EXPO_TOKEN` (+ Apple account for real devices) | `preview` builds for the iOS **simulator** (macOS only, no Apple account). Installing on an iPhone needs the `device` or `production` profile and a paid Apple Developer account. |
 
 There is no native desktop app: Expo targets phones and the web. The desktop bundle runs the web
 app in your browser, served by the local server.
+
+## Version numbers
+
+For a build of a version tag (`github.ref_type == 'tag'`, which includes the build that **New
+version** starts by dispatching on the tag), each job first writes the tag's version into its own
+checkout. Nothing is committed or pushed. A manual run from a branch keeps the versions in the
+repository.
+
+| Job | What is stamped | By |
+|---|---|---|
+| `web`, `android-apk`, `mobile` (EAS) | `expo.version`, `expo.android.versionCode`, `expo.ios.buildNumber` in `app.json`; `version` in `package.json` and `package-lock.json` | `apps/mobile/scripts/set-version.mjs vX.Y.Z` |
+| `desktop`, `docker` | `[workspace.package] version` in `Cargo.toml` and the `financer-*` entries of `Cargo.lock` (so `--locked` still passes) | `.github/scripts/set-rust-version.sh vX.Y.Z` |
+
+- Only plain `vMAJOR.MINOR.PATCH` tags are accepted; anything else fails the build instead of
+  producing a wrongly numbered app.
+- **Build number** (Android `versionCode`, iOS `buildNumber`): derived from the version as
+  `major * 1000000 + minor * 1000 + patch`, so `v1.2.3` is `1002003`. Stores need a number that
+  only goes up, and this goes up with every new version, gives the same number if a tag is built
+  again, and needs no counter stored anywhere. Limits: minor and patch below 1000. To use another
+  number run the script yourself with `--build N`.
+- The EAS (`mobile`) job keeps the stamped files in a **local** commit, because EAS builds what is
+  committed. With the `production` profile `eas.json` uses `appVersionSource: remote` and
+  `autoIncrement`, so EAS then manages the build number itself and ignores the one stamped; the
+  version string still comes from `app.json`.
+- The app shows its version in Settings, under About ("Financer 1.2.3 (build 1002003)"), read
+  with expo-constants. The server's `/health` answer stays `ok` and there is no other place that
+  reports the server version, so Settings shows only the app version.
+- Try the stamping locally (this edits your files; revert with git): `cd apps/mobile && node
+  scripts/set-version.mjs v1.2.3 --dry-run` prints what would change without writing, and from the
+  repository root `.github/scripts/set-rust-version.sh v1.2.3`.
+
+## Signing the Android app
+
+By default the `android-apk` job signs the release APK with the debug key that `expo prebuild`
+generates, which is fine to install on your own phone but not for the Play Store, and an APK signed
+with a different key cannot be installed over one signed with another. If you add **all four**
+secrets below, the job signs with your own keystore instead; if one is missing it says so in a
+warning and keeps the debug key exactly as before.
+
+1. Create a keystore once and **keep it and its passwords safe**. If you lose it you cannot publish
+   updates under the same identity:
+   ```
+   keytool -genkeypair -v -storetype PKCS12 -keystore financer-release.keystore \
+     -alias financer -keyalg RSA -keysize 2048 -validity 10000
+   ```
+   (You are asked for the passwords and your name; with PKCS12 the key password equals the store password.)
+2. Encode it as one line: `base64 -w0 financer-release.keystore` (macOS: `base64 -i financer-release.keystore`).
+3. Add these repository secrets (Settings, Secrets and variables, Actions):
+
+   | Secret | Value |
+   |---|---|
+   | `ANDROID_KEYSTORE_BASE64` | the base64 text from step 2 |
+   | `ANDROID_KEYSTORE_PASSWORD` | the keystore password |
+   | `ANDROID_KEY_ALIAS` | the alias (`financer` above) |
+   | `ANDROID_KEY_PASSWORD` | the key password |
+
+4. Keep the keystore file outside the repository and never commit it.
+
+How it works: the `android/` project is generated on every build, so it is not edited by hand. The
+job decodes the keystore into the runner's temp directory and runs Gradle with the init script
+`.github/scripts/android-signing.init.gradle`. The script reads the keystore from environment
+variables and, once the app's own `build.gradle` has been evaluated, replaces the signing config of
+the `release` build type. Afterwards the job runs `apksigner verify --print-certs` on the APK and
+fails if it is still signed with the debug key although the secrets are set.
+
+**This signing path has not been run.** Only the parts that do not need an Android build were
+checked: the workflow passes `actionlint`, and the init script loads and is inert in a plain Gradle
+build. Whether the Android Gradle plugin of the generated project accepts it (the `finalizeDsl`
+hook), and whether the verification step finds `apksigner` on the runner, is unproven until the
+first run with real secrets; read that job's log the first time.
+
+## Dependency updates and nightly checks
+
+- `.github/dependabot.yml` opens weekly update pull requests for the Rust workspace (cargo), the app
+  (`apps/mobile`) and `apps/embedded-bindings` (npm) and the GitHub Actions used by the workflows.
+  Minor and patch updates of each are grouped into one pull request; open pull requests are limited
+  (5, 5, 3, 3). For the app, major updates of `expo` and any React / React Native update are
+  ignored, because Expo fixes those per SDK release: upgrade the SDK by hand (`npx expo install --fix`).
+- `.github/workflows/nightly.yml` runs every night (03:17 UTC) and on demand: `cargo test
+  --workspace` (with the Postgres service the normal tests use), then `cargo audit` and
+  `npm audit --omit=dev` for `apps/mobile`. The two audits only **report**: their steps never fail
+  the run, and the output is in the run's summary. A failing test run does turn it red.
+  `apps/embedded-bindings` has no lock file, so it is not audited.
+- Neither file has run on GitHub yet; both pass `actionlint` / parse as YAML, nothing more is proven.
 
 ## One-time setup for the phone apps
 
@@ -86,3 +199,8 @@ you host (or the desktop bundle on your network). `eas.json` is where that would
   only run for a published tag or a manual `docker` run.
 - The EAS (phone) jobs skip themselves without `EXPO_TOKEN` (that path was exercised); the build
   itself has never run, since it needs your Expo account.
+- Version stamping: the pure parts and the command line of `set-version.mjs` have unit tests
+  (`npm test` in `apps/mobile`), and `set-rust-version.sh` was run on a copy of the workspace and
+  followed by `cargo metadata --locked`, which accepts the changed `Cargo.lock`. The workflow steps
+  that call them (tag check, local commit for EAS) have **not run on GitHub**.
+- Android release signing, Dependabot and the nightly workflow have **not run** (see above).
