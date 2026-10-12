@@ -5,30 +5,32 @@ import { useApi } from "@/api/config";
 import { ChunkyButton } from "@/components/kit";
 import { Card } from "@/components/ui";
 import { useScreenData } from "@/hooks";
+import { useInk } from "@/components/settings/SettingsKit";
 import { usePalette } from "@/theme";
 import { nextChargeText } from "@/watchdog";
 
 /** Small outlined label (price hike, duplicate, severity ...). */
 export function Badge({ text, tone = "muted" }: { text: string; tone?: "bad" | "warn" | "good" | "muted" }) {
   const p = usePalette();
-  const edge = { bad: p.bad, warn: p.orange, good: p.good, muted: p.border }[tone];
+  const ink = useInk();
+  const edge = { bad: ink.danger, warn: p.orange, good: ink.success, muted: p.border }[tone];
   return (
     <View style={{ borderWidth: 2, borderColor: edge, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 1, alignSelf: "flex-start" }}>
-      <RNText style={{ color: tone === "bad" ? p.bad : p.text, fontSize: 12, fontWeight: "800" }}>{text}</RNText>
+      <RNText style={{ color: tone === "bad" ? ink.danger : p.text, fontSize: 12, fontWeight: "800" }}>{text}</RNText>
     </View>
   );
 }
 
 /** Round red counter, e.g. the number of unread alerts. */
 export function CountBubble({ count, label }: { count: number; label: string }) {
-  const p = usePalette();
+  const ink = useInk();
   if (count <= 0) return null;
   return (
     <View
       accessibilityLabel={label}
-      style={{ minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 6, alignItems: "center", justifyContent: "center", backgroundColor: p.bad }}
+      style={{ minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 6, alignItems: "center", justifyContent: "center", backgroundColor: ink.dangerFace }}
     >
-      <RNText style={{ color: "#ffffff", fontSize: 13, fontWeight: "800" }}>{count > 99 ? "99+" : count}</RNText>
+      <RNText style={{ color: ink.onDanger, fontSize: 13, fontWeight: "800" }}>{count > 99 ? "99+" : count}</RNText>
     </View>
   );
 }

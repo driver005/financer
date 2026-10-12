@@ -1,8 +1,7 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
-import { Card, useColors } from "@/components/ui";
-import { Text } from "@/components/kit";
+import { SettingsRow } from "@/components/settings/SettingsKit";
 
 /**
  * "Version 1.4.2 (build 1004002)". Release builds carry the version of the tag they were built
@@ -17,17 +16,15 @@ function versionLabel(): string {
   return build !== undefined && build !== null ? `${version} (build ${build})` : version;
 }
 
+/** Settings, About: the app version as a read-only row. */
 export function AboutCard() {
-  const c = useColors();
   return (
-    <Card>
-      <Text variant="titleMedium">About</Text>
-      <Text variant="bodyMedium" style={{ marginTop: 4 }} accessibilityLabel={`App version ${versionLabel()}`}>
-        Financer {versionLabel()}
-      </Text>
-      <Text variant="bodySmall" style={{ color: c.muted, marginTop: 2 }}>
-        This is the version of the app, not of the server it talks to.
-      </Text>
-    </Card>
+    <SettingsRow
+      icon="information-outline"
+      title="Financer"
+      value={versionLabel()}
+      subtitle="The version of the app, not of the server it talks to."
+      accessibilityLabel={`App version ${versionLabel()}. This is the version of the app, not of the server it talks to.`}
+    />
   );
 }

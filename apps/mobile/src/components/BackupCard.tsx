@@ -3,8 +3,9 @@ import { Platform, View } from "react-native";
 
 import { useApi } from "@/api/config";
 import { manualBackupName, passphraseProblem, type BackupSchedule, type BackupSettings } from "@/backupPlan";
-import { HelperText, SegmentedButtons, Text, TextInput } from "@/components/kit";
-import { Button, Card, useColors } from "@/components/ui";
+import { TextInput } from "@/components/kit";
+import { ConfirmAction, FieldMessage, PanelDivider, PanelText, Segmented, SettingsPanel } from "@/components/settings/SettingsKit";
+import { Button } from "@/components/ui";
 import {
   canKeepBackupsOnDevice,
   canPickBackupFolder,
@@ -27,10 +28,9 @@ function describeError(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
 }
 
-/** Settings card: encrypted backups, made by hand or automatically. */
+/** Settings, Account & data: encrypted backups, made by hand or automatically. */
 export function BackupCard() {
   const { api } = useApi();
-  const c = useColors();
   const [passphrase, setPassphrase] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
@@ -158,64 +158,56 @@ export function BackupCard() {
       setSettings(next);
     });
 
+  const scheduleLabel = { off: "Automatic backups off", daily: "Automatic: daily", weekly: "Automatic: weekly" }[settings.schedule];
+
   return (
-    <Card>
-      <Text variant="titleMedium">Backup</Text>
-      <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
-        An encrypted file with all your data. Only the passphrase opens it, and nobody can recover it for you. A copy that
-        stays inside the app does not survive losing or resetting the phone, so send the file somewhere else too (cloud
-        storage, another device).
-      </Text>
-      <TextInput
-        mode="outlined"
-        label="Passphrase (at least 8 characters)"
-        accessibilityLabel="Backup passphrase"
-        value={passphrase}
-        onChangeText={setPassphrase}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
-        style={{ marginTop: 8 }}
-      />
-      <TextInput
-        mode="outlined"
-        label="Repeat passphrase (to create)"
-        accessibilityLabel="Repeat backup passphrase"
-        value={confirm}
-        onChangeText={setConfirm}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
-        style={{ marginTop: 8 }}
-      />
-      {passphrase.length > 0 && confirm.length > 0 && createProblem ? <HelperText type="error" visible>{createProblem}</HelperText> : null}
-      <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-        <View style={{ flex: 1 }}>
-          <Button
-            label={busy ? "Working…" : isWeb ? "Create and download" : "Create and share"}
-            icon="shield-lock-outline"
-            onPress={create}
-            disabled={busy || createProblem !== null}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button label="Restore" icon="backup-restore" mode="outlined" onPress={restore} disabled={busy || passphrase === ""} />
-        </View>
+    <SettingsPanel icon="shield-lock-outline" title="Encrypted backup" summary={canKeepBackupsOnDevice ? scheduleLabel : "Create and restore a protected file"}>
+      <PanelText style={{ marginTop: 4 }}>
+        An encrypted file with all your data. Only the passphrase opens it, and nobody can recover it for you. A copy that stays inside the app does not survive losing or resetting the phone, so send the file somewhere else too (cloud storage, another device).
+      </PanelText>
+      <View style={{ gap: 8, marginTop: 12 }}>
+        <TextInput
+          mode="outlined"
+          label="Passphrase (at least 8 characters)"
+          accessibilityLabel="Backup passphrase"
+          value={passphrase}
+          onChangeText={setPassphrase}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <TextInput
+          mode="outlined"
+          label="Repeat passphrase (to create)"
+          accessibilityLabel="Repeat backup passphrase"
+          value={confirm}
+          onChangeText={setConfirm}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          error={passphrase.length > 0 && confirm.length > 0 && createProblem !== null}
+        />
       </View>
-      <Text variant="bodySmall" style={{ color: c.muted, marginTop: 8 }}>
-        Restore adds the data from a backup file to what is here (type its passphrase first). Restoring twice changes nothing.
-      </Text>
+      {passphrase.length > 0 && confirm.length > 0 && createProblem ? <FieldMessage tone="error">{createProblem}</FieldMessage> : null}
+      <View style={{ gap: 8, marginTop: 12 }}>
+        <Button
+          label={busy ? "Working…" : isWeb ? "Create and download" : "Create and share"}
+          icon="shield-lock-outline"
+          onPress={create}
+          disabled={busy || createProblem !== null}
+        />
+        <Button label="Restore from a file" icon="backup-restore" mode="outlined" onPress={restore} disabled={busy || passphrase === ""} />
+      </View>
+      <PanelText>Restore adds the data from a backup file to what is here (type its passphrase first). Restoring twice changes nothing.</PanelText>
 
       {canKeepBackupsOnDevice ? (
         <>
-          <View style={{ height: 1, backgroundColor: c.border, marginVertical: 16 }} />
-          <Text variant="titleSmall">Automatic backups</Text>
-          <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
-            When you open the app and the newest automatic backup is older than the interval, a new one is saved in the app's
-            backup folder (the last 3 are kept). To do that without asking, the phone has to remember the passphrase: it is
-            kept in this phone's secure storage, only if you choose so below.
-          </Text>
-          <SegmentedButtons
+          <PanelDivider />
+          <PanelText style={{ marginTop: 0, fontWeight: "700" }}>Automatic backups</PanelText>
+          <PanelText style={{ marginTop: 4 }}>
+            When you open the app and the newest automatic backup is older than the interval, a new one is saved in the app's backup folder (the last 3 are kept). To do that without asking, the phone has to remember the passphrase: it is kept in this phone's secure storage, only if you choose so below.
+          </PanelText>
+          <Segmented
             style={{ marginTop: 12 }}
             value={settings.schedule}
             onValueChange={(v) => saved && !busy && void setSchedule(v as BackupSchedule)}
@@ -226,17 +218,21 @@ export function BackupCard() {
             ]}
           />
           {!saved ? (
-            <HelperText type="info" visible>
-              Type a passphrase above and save it to turn automatic backups on.
-            </HelperText>
+            <FieldMessage tone="info">Type a passphrase above and save it to turn automatic backups on.</FieldMessage>
           ) : settings.schedule !== "off" ? (
-            <HelperText type="info" visible>
-              {last ? `Latest automatic backup: ${new Date(last).toLocaleString()}.` : "No automatic backup yet."}
-            </HelperText>
+            <FieldMessage tone="info">{last ? `Latest automatic backup: ${new Date(last).toLocaleString()}.` : "No automatic backup yet."}</FieldMessage>
           ) : null}
-          <View style={{ marginTop: 8 }}>
+          <View style={{ marginTop: 12 }}>
             {saved ? (
-              <Button label="Forget the saved passphrase" icon="key-remove" mode="text" onPress={forget} disabled={busy} />
+              <ConfirmAction
+                label="Forget the saved passphrase"
+                icon="key-remove"
+                question="Forget the saved passphrase?"
+                consequence="Automatic backups switch off. Backups you already made still open with the passphrase, so keep it somewhere safe."
+                confirmLabel="Yes, forget it"
+                onConfirm={() => void forget()}
+                disabled={busy}
+              />
             ) : (
               <Button
                 label="Remember passphrase on this phone"
@@ -248,20 +244,18 @@ export function BackupCard() {
             )}
           </View>
           {canPickBackupFolder ? (
-            <View style={{ marginTop: 4 }}>
+            <View style={{ marginTop: 8 }}>
               {settings.folderUri ? (
                 <Button label="Stop writing to my folder" icon="folder-remove-outline" mode="text" onPress={clearFolder} disabled={busy} />
               ) : (
                 <Button label="Also write to a folder I choose" icon="folder-outline" mode="outlined" onPress={pickFolder} disabled={busy} />
               )}
-              <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
-                A folder that a cloud app syncs makes the backup survive losing the phone.
-              </Text>
+              <PanelText>A folder that a cloud app syncs makes the backup survive losing the phone.</PanelText>
             </View>
           ) : null}
         </>
       ) : null}
-      {status ? <HelperText type={status.error ? "error" : "info"} visible>{status.text}</HelperText> : null}
-    </Card>
+      {status ? <FieldMessage tone={status.error ? "error" : "ok"}>{status.text}</FieldMessage> : null}
+    </SettingsPanel>
   );
 }
