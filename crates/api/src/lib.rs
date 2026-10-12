@@ -6,6 +6,7 @@ mod budget_period;
 mod categorization;
 mod dto;
 mod export;
+mod forecast;
 mod grocery;
 mod routes;
 mod watchdog;
@@ -142,6 +143,7 @@ impl AppState {
         routes::budget_status,
         budget_period::budget_period,
         budget_period::safe_to_spend,
+        forecast::forecast,
         export::export_data,
         export::import_data,
         bank::start_sync,
@@ -189,6 +191,9 @@ impl AppState {
         budget_period::PeriodChoice,
         budget_period::PeriodDto,
         budget_period::SafeToSpendDto,
+        forecast::ForecastDto,
+        forecast::WarningLevelDto,
+        forecast::WarningReasonDto,
         dto::ErrorBody,
         dto::ExportTransaction,
         dto::ExportReceipt,
@@ -283,6 +288,7 @@ impl Api {
             .route("/budget/status", get(routes::budget_status))
             .route("/budget/period", get(budget_period::budget_period))
             .route("/budget/safe-to-spend", get(budget_period::safe_to_spend))
+            .route("/forecast", get(forecast::forecast))
             .route("/export", get(export::export_data))
             .route("/import", post(export::import_data))
             .route("/bank/sync", post(bank::start_sync))
