@@ -30,12 +30,15 @@ import {
 
 import { twMerge } from "tailwind-merge";
 
+import { MIN_TOUCH } from "@/a11y";
 import { tap } from "@/native/haptics";
-import { usePalette } from "@/theme";
+import { radius, usePalette } from "@/theme";
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 const VARIANT_CLASS = {
+  display: "text-5xl font-black text-foreground",
+  caption: "text-[13px] text-foreground",
   headlineMedium: "text-3xl font-bold text-foreground",
   headlineSmall: "text-2xl font-bold text-foreground",
   titleLarge: "text-xl font-semibold text-foreground",
@@ -206,7 +209,14 @@ export function IconButton({
 }) {
   const p = usePalette();
   return (
-    <Button isIconOnly size="sm" variant="ghost" onPress={onPress} accessibilityLabel={accessibilityLabel}>
+    <Button
+      isIconOnly
+      size="sm"
+      variant="ghost"
+      onPress={onPress}
+      accessibilityLabel={accessibilityLabel}
+      style={{ minWidth: MIN_TOUCH, minHeight: MIN_TOUCH }}
+    >
       <MaterialCommunityIcons name={icon as IconName} size={22} color={p.muted} />
     </Button>
   );
@@ -244,13 +254,14 @@ export function ChunkyButton({
   const p = usePalette();
   const colours = {
     green: { face: p.accent, edge: p.accentEdge, text: p.onAccent, ink: p.accent },
-    blue: { face: p.blue, edge: p.blueEdge, text: "#ffffff", ink: p.blue },
-    red: { face: p.bad, edge: "#a31d1d", text: "#ffffff", ink: p.bad },
+    blue: { face: p.blue, edge: p.blueEdge, text: p.onBlue, ink: p.blue },
+    red: { face: p.bad, edge: p.badEdge, text: p.onBad, ink: p.bad },
   }[tone];
   const lip = flat ? 0 : 4;
   const textColour = flat || outline ? colours.ink : colours.text;
   return (
     <Pressable
+      hitSlop={compact ? 4 : 0}
       {...rest}
       onPress={
         onPress
@@ -270,7 +281,8 @@ export function ChunkyButton({
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          borderRadius: 16,
+          borderRadius: radius.lg,
+          minHeight: compact ? MIN_TOUCH : 52,
           paddingVertical: compact ? 8 : 14,
           paddingHorizontal: compact ? 14 : 18,
           backgroundColor: flat ? "transparent" : outline ? p.surface : colours.face,
@@ -357,7 +369,7 @@ function ListItem({
     <Pressable
       {...pressable}
       accessibilityRole={pressable.onPress ? "button" : undefined}
-      className="flex-row items-center gap-3 py-2"
+      className="min-h-11 flex-row items-center gap-3 py-2"
     >
       {left ? <View className="w-6 items-center">{left()}</View> : null}
       <View className="flex-1">

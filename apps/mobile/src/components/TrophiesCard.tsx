@@ -2,10 +2,11 @@ import { useRouter } from "expo-router";
 import { Text as RNText, View } from "react-native";
 
 import { ChunkyButton } from "@/components/kit";
+import { StatusPill } from "@/components/rows";
 import { Card } from "@/components/ui";
-import { formatCents } from "@/format";
+import { formatMoney } from "@/format";
 import { MAX_FREEZES, type Badge, type Rewards, type StreakState } from "@/game";
-import { usePalette } from "@/theme";
+import { space, typography, usePalette } from "@/theme";
 
 /** The streak freezes in stock: one snowflake per slot, dimmed when empty. */
 export function FreezeRow({ streak }: { streak: StreakState }) {
@@ -20,7 +21,7 @@ export function FreezeRow({ streak }: { streak: StreakState }) {
           ❄️
         </RNText>
       ))}
-      <RNText style={{ color: p.muted, fontSize: 13, marginLeft: 4 }}>
+      <RNText style={[typography.caption, { color: p.muted, marginLeft: space.xs, flexShrink: 1 }]}>
         {streak.freezes === 0 ? "No freeze in stock" : `${streak.freezes} streak freeze${streak.freezes === 1 ? "" : "s"} in stock`}
       </RNText>
     </View>
@@ -41,7 +42,7 @@ export function BadgeIcon({ badge, size = 44 }: { badge: Badge; size?: number })
         justifyContent: "center",
         borderWidth: 2,
         borderColor: badge.earned ? p.gold : p.border,
-        backgroundColor: badge.earned ? p.surfaceAlt : "transparent",
+        backgroundColor: badge.earned ? p.goldSoft : "transparent",
         opacity: badge.earned ? 1 : 0.4,
       }}
     >
@@ -58,25 +59,25 @@ export function TrophiesCard({ rewards }: { rewards: Rewards }) {
   const { bests } = rewards;
   return (
     <Card>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <RNText style={{ color: p.text, fontSize: 18, fontWeight: "800" }}>Trophies</RNText>
-        <RNText style={{ color: p.muted, fontWeight: "800" }}>
-          {earned} / {rewards.badges.length}
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.md }}>
+        <RNText accessibilityRole="header" style={[typography.heading, { color: p.text }]}>
+          Trophies
         </RNText>
+        <StatusPill tone="gold" icon="trophy-outline" label={`${earned} / ${rewards.badges.length}`} accessibilityLabel={`${earned} of ${rewards.badges.length} badges earned`} />
       </View>
-      <View style={{ marginTop: 8 }}>
+      <View style={{ marginTop: space.md }}>
         <FreezeRow streak={rewards.streak} />
       </View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginTop: space.md }}>
         {rewards.badges.map((b) => (
           <BadgeIcon key={b.id} badge={b} />
         ))}
       </View>
-      <RNText style={{ color: p.muted, fontSize: 13, marginTop: 10 }}>
+      <RNText style={[typography.caption, { color: p.muted, marginTop: space.md }]}>
         Longest streak: {bests.longestStreak} {bests.longestStreak === 1 ? "day" : "days"}
-        {bests.bestWeek ? ` · Best grocery week: ${formatCents(bests.bestWeek.spentCents)}` : ""}
+        {bests.bestWeek ? ` · Best grocery week: ${formatMoney(bests.bestWeek.spentCents)}` : ""}
       </RNText>
-      <View style={{ marginTop: 12 }}>
+      <View style={{ marginTop: space.md }}>
         <ChunkyButton compact outline icon="trophy-outline" label="All trophies" onPress={() => router.push("/trophies")} />
       </View>
     </Card>
