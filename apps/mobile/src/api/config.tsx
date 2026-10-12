@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Api, type ApiConfig } from "./client";
+import { CONFIG_KEY, MODE_KEY } from "./keys";
 import { deleteSecret, getSecret, setSecret } from "./storage";
 import { EmbeddedTransport } from "./transport";
 import { disableBackgroundRefresh, enableBackgroundRefresh } from "../native/background";
@@ -12,8 +13,7 @@ import {
   type EmbeddedSettings,
 } from "../native/embedded";
 
-const KEY = "financer.api-config";
-const MODE_KEY = "financer.backend-mode";
+const KEY = CONFIG_KEY;
 
 export type BackendMode = "remote" | "embedded";
 

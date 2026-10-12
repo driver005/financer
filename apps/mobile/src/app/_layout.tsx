@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { ApiProvider } from "@/api/config";
 import "@/native/background"; // defines the background task at startup
+import { NotificationSync } from "@/components/NotificationSync";
 import "@/global.css";
 import { usePalette } from "@/theme";
 
@@ -26,6 +27,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <HeroUINativeProvider config={{ toast: { defaultProps: { placement: "bottom" } } }}>
       <ApiProvider>
+        <NotificationSync />
         <Tabs
           screenOptions={{
             headerShown: false,
