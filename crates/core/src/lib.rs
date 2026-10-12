@@ -3,6 +3,7 @@ pub mod basket;
 pub mod budget;
 pub mod catalog;
 pub mod category;
+pub mod forecast;
 pub mod money;
 pub mod period;
 pub mod recurring;
@@ -20,6 +21,7 @@ pub use basket::{
 pub use budget::{Budget, Disposable, EnvelopeStatus, YearMonth};
 pub use catalog::{Catalog, GenericItem, Unit, CATALOG};
 pub use category::{Categorizer, Category};
+pub use forecast::{Forecast, ForecastInput, WarningLevel, WarningReason};
 pub use money::Money;
 pub use period::BudgetPeriod;
 pub use recurring::{Cadence, RecurringDetector, RecurringPayment};

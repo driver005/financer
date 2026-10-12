@@ -310,6 +310,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/forecast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Project the current budget period to its end from the recurring payments still due, the
+         *     average spending so far and the income expected.
+         */
+        get: operations["forecast"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/import": {
         parameters: {
             query?: never;
@@ -995,6 +1015,89 @@ export interface components {
             counterparty_iban?: string | null;
             purpose: string;
         };
+        /** @description The end-of-period projection. Amounts are integer cents. */
+        ForecastDto: {
+            /**
+             * Format: int32
+             * @description Days after today until the period ends.
+             */
+            days_after_today: number;
+            /**
+             * Format: int32
+             * @description Days of the period up to and including today.
+             */
+            days_through: number;
+            /** @description Only the first days of the period are over: the pace is a rough guess. */
+            early: boolean;
+            /**
+             * Format: int64
+             * @description Recurring payments still to come this period.
+             */
+            fixed_costs_due_cents: number;
+            /**
+             * Format: int64
+             * @description Average groceries per day so far.
+             */
+            grocery_daily_cents: number;
+            /** @description The grocery limit is already used up. */
+            grocery_exhausted: boolean;
+            /**
+             * Format: int64
+             * @description The groceries envelope limit, if there is one.
+             */
+            grocery_limit_cents?: number | null;
+            /**
+             * Format: date
+             * @description The day the grocery budget runs out (before the period ends), if it does at this pace.
+             *     When it is already used up this is the day it was crossed.
+             */
+            grocery_run_out?: string | null;
+            /** Format: int64 */
+            grocery_spent_cents: number;
+            income_detected: boolean;
+            /** Format: int64 */
+            income_received_cents: number;
+            /** Format: int64 */
+            income_upcoming_cents: number;
+            level: components["schemas"]["WarningLevelDto"];
+            /**
+             * Format: date
+             * @description When the next expected income is due (before today when it is late).
+             */
+            next_income_date?: string | null;
+            /**
+             * Format: int64
+             * @description Average other discretionary spending per day so far.
+             */
+            other_daily_cents: number;
+            /**
+             * Format: int64
+             * @description Discretionary spending that is not groceries.
+             */
+            other_spent_cents: number;
+            /** Format: int32 */
+            payday: number;
+            /** Format: date */
+            period_end: string;
+            /** Format: date */
+            period_start: string;
+            /**
+             * Format: int64
+             * @description What the current pace adds until the period ends.
+             */
+            projected_extra_spend_cents: number;
+            /**
+             * Format: int64
+             * @description Income minus spending so far, fixed costs due and the projected extra spending;
+             *     negative when the period is heading for a shortfall.
+             */
+            projected_leftover_cents: number;
+            reason: components["schemas"]["WarningReasonDto"];
+            /** Format: int64 */
+            spent_so_far_cents: number;
+            /** Format: date */
+            today: string;
+        };
         IdeaDto: {
             ingredients: components["schemas"]["IdeaIngredientDto"][];
             /** Format: int32 */
@@ -1559,6 +1662,16 @@ export interface components {
             /** @description The expected date has passed and the charge has not been booked yet. */
             overdue: boolean;
         };
+        /**
+         * @description How worried to be about the end of the period.
+         * @enum {string}
+         */
+        WarningLevelDto: "ok" | "watch" | "danger";
+        /**
+         * @description Why the warning level is what it is.
+         * @enum {string}
+         */
+        WarningReasonDto: "no_data" | "no_income" | "projected_shortfall" | "income_overdue" | "groceries_run_out" | "thin_margin" | "income_pending" | "on_track";
     };
     responses: never;
     parameters: never;
@@ -2129,6 +2242,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExportDto"];
+                };
+            };
+        };
+    };
+    forecast: {
+        parameters: {
+            query?: {
+                /**
+                 * @description The day to treat as today, ISO format. Defaults to today (UTC); the app sends its local date.
+                 * @example 2026-10-11
+                 */
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForecastDto"];
+                };
+            };
+            /** @description Invalid date */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
