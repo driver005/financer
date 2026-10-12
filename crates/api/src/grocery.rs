@@ -22,7 +22,7 @@ use crate::routes::ApiError;
 use crate::AppState;
 
 const DEFAULT_HABIT_MODE: &str = "manual";
-const MIN_PLAN_SAVING_CENTS: i64 = 50;
+pub(crate) const MIN_PLAN_SAVING_CENTS: i64 = 50;
 
 const SCAN_SYSTEM: &str = "You transcribe photos or PDFs of shop receipts. Output only the text printed on the receipt, \
 one receipt line per output line, in reading order. Keep item names, prices, quantity lines such as \
@@ -65,14 +65,16 @@ impl Grocery {
         OffsetDateTime::now_utc().date()
     }
 
-    fn item_name(key: &str) -> String {
+    pub(crate) fn item_name(key: &str) -> String {
         Catalog::by_key(key)
             .map(|i| i.name_de.to_string())
             .unwrap_or_else(|| key.to_string())
     }
 
     /// Stored quotes that are still valid today (an offer past its end date is not an offer).
-    async fn live_quotes(state: &AppState) -> Result<Vec<financer_store::StoredQuote>, ApiError> {
+    pub(crate) async fn live_quotes(
+        state: &AppState,
+    ) -> Result<Vec<financer_store::StoredQuote>, ApiError> {
         let today = Self::today();
         Ok(state
             .store
@@ -83,7 +85,7 @@ impl Grocery {
             .collect())
     }
 
-    fn plain_quotes(stored: &[financer_store::StoredQuote]) -> Vec<PriceQuote> {
+    pub(crate) fn plain_quotes(stored: &[financer_store::StoredQuote]) -> Vec<PriceQuote> {
         stored.iter().map(|q| q.quote.clone()).collect()
     }
 

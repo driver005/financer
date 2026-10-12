@@ -3,6 +3,7 @@
 
 mod alerts;
 pub mod entity;
+mod mealplan;
 pub mod migration;
 mod rules;
 
@@ -15,6 +16,7 @@ use sea_orm::{
 use sea_orm_migration::MigratorTrait;
 
 pub use alerts::AlertDismissal;
+pub use mealplan::StoredMealDay;
 pub use rules::{SplitOutcome, StoredSplit, UnknownMerchant};
 pub use sea_orm::DatabaseBackend;
 

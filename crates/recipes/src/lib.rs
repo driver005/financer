@@ -1,5 +1,7 @@
+pub mod amount;
 pub mod ideas;
 pub mod matcher;
+pub mod shopping;
 
 use std::sync::OnceLock;
 
@@ -7,6 +9,10 @@ use serde::{Deserialize, Serialize};
 
 pub use ideas::{IdeaError, IdeaGenerator, IdeaRequest, RecipeIdea};
 pub use matcher::{MatchInput, RecipeMatch, RecipeMatcher};
+pub use shopping::{
+    BudgetCheck, MealIngredient, PlannedMeal, PricedList, ShoppingLine, ShoppingList,
+    ShoppingListBuilder, ShoppingPricer, UnmatchedLine,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ingredient {

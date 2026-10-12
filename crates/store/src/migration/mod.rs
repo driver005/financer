@@ -12,6 +12,7 @@ mod m20261012_000200_create_categorization_rules;
 mod m20261012_000201_create_transaction_splits;
 mod m20261012_000202_create_category_overrides;
 mod m20261012_000300_create_alert_dismissals;
+mod m20261012_000400_create_meal_plan_days;
 
 pub struct Migrator;
 
@@ -29,6 +30,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261012_000201_create_transaction_splits::Migration),
             Box::new(m20261012_000202_create_category_overrides::Migration),
             Box::new(m20261012_000300_create_alert_dismissals::Migration),
+            Box::new(m20261012_000400_create_meal_plan_days::Migration),
         ]
     }
 }

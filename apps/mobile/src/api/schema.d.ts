@@ -294,6 +294,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/meal-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The meals planned for a week (Monday to Sunday), one per day at most. */
+        get: operations["get_meal_plan"];
+        /**
+         * Replace the plan of a week. Each day holds a bundled recipe by id, or a suggested recipe by
+         *     title with its ingredients, and the servings to cook.
+         */
+        put: operations["put_meal_plan"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/meal-plan/pantry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Items assumed to be at home (salt, oil, flour...); the shopping list leaves them off. */
+        get: operations["get_pantry"];
+        /** Replace the pantry list. */
+        put: operations["put_pantry"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/meal-plan/shopping-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the
+         *     servings and converted to packs), pantry items left off, priced per chain with the best split
+         *     and checked against what is left of the groceries budget.
+         */
+        get: operations["get_shopping_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/prices": {
         parameters: {
             query?: never;
@@ -861,6 +921,17 @@ export interface components {
             /** @description Basket items this chain has no price for. */
             missing: string[];
         };
+        ChainTotalDto: {
+            chain: string;
+            complete: boolean;
+            /** @description Names of priced items this chain does not stock. */
+            missing: string[];
+            /**
+             * Format: int64
+             * @description Price of the items this chain stocks.
+             */
+            total_cents: number;
+        };
         DisposableDto: {
             /** Format: int64 */
             disposable_cents: number;
@@ -978,6 +1049,108 @@ export interface components {
             receipts_known: number;
             transactions_added: number;
             transactions_known: number;
+        };
+        MealBudgetDto: {
+            /**
+             * Format: int64
+             * @description What is left of this period's groceries limit; missing when no limit is set.
+             */
+            budget_cents?: number | null;
+            /** @description `groceries_envelope` or `none`. */
+            budget_source: string;
+            /**
+             * Format: int64
+             * @description Cost of the priced items on the best plan.
+             */
+            estimated_cents: number;
+            fits?: boolean | null;
+            /**
+             * Format: int64
+             * @description Budget minus estimate; negative when over.
+             */
+            left_after_cents?: number | null;
+            /**
+             * Format: int32
+             * @description Items that are not in the estimate because they have no price.
+             */
+            unpriced_count: number;
+        };
+        MealDayDto: {
+            /**
+             * @description False when the stored recipe id is no longer in the dataset; such a meal adds nothing to the
+             *     shopping list.
+             */
+            available: boolean;
+            /** Format: date */
+            date: string;
+            ingredients: components["schemas"]["MealIngredientDto"][];
+            recipe_id?: string | null;
+            /**
+             * Format: int32
+             * @description Servings the ingredient amounts are written for.
+             */
+            recipe_servings: number;
+            /** Format: int32 */
+            servings: number;
+            title: string;
+        };
+        MealDayInput: {
+            /**
+             * Format: date
+             * @example 2026-10-13
+             */
+            date: string;
+            /** @description Ingredients of the suggested recipe, as written for `recipe_servings`. */
+            ingredients?: components["schemas"]["MealIngredientInput"][] | null;
+            /** @description A bundled recipe (from `GET /v1/recipes`). Use this or `title` with `ingredients`. */
+            recipe_id?: string | null;
+            /**
+             * Format: int32
+             * @description Servings the suggested recipe's amounts are written for. Defaults to `servings`.
+             */
+            recipe_servings?: number | null;
+            /**
+             * Format: int32
+             * @description Servings to cook (1 to 20).
+             */
+            servings: number;
+            /** @description A suggested recipe that is not in the dataset, e.g. an idea from `POST /v1/recipes/ideas`. */
+            title?: string | null;
+        };
+        MealIngredientDto: {
+            amount: string;
+            name: string;
+        };
+        MealIngredientInput: {
+            /** @description Free text such as `250 g` or `2 EL`. */
+            amount: string;
+            name: string;
+        };
+        MealPlanDto: {
+            /** @description The planned days, oldest first. */
+            days: components["schemas"]["MealDayDto"][];
+            /** Format: date */
+            week_end: string;
+            /** Format: date */
+            week_start: string;
+        };
+        MealPlanInput: {
+            /** @description At most one meal per day; days not listed are empty. Replaces the whole week. */
+            days: components["schemas"]["MealDayInput"][];
+        };
+        PantryDto: {
+            /** @description True until the list is saved for the first time. */
+            is_default: boolean;
+            /** @description Items assumed to be at home; they are left off the shopping list. */
+            items: components["schemas"]["PantryItemDto"][];
+        };
+        PantryItemDto: {
+            item: string;
+            name: string;
+        };
+        PantryUpdate: {
+            /** @description Catalog keys (see `GET /v1/catalog`). */
+            items: string[];
         };
         /**
          * @description Which period to look at when no year and month are given.
@@ -1323,6 +1496,75 @@ export interface components {
              */
             payday?: number | null;
         };
+        ShoppingItemDto: {
+            is_offer: boolean;
+            item: string;
+            /**
+             * Format: int64
+             * @description `packs` times the pack price.
+             */
+            line_cents?: number | null;
+            /** @description The meals that use it. */
+            meals: string[];
+            name: string;
+            /** @description What the plan needs, e.g. `750 g`. */
+            needed: string;
+            /** @description Size of one pack, e.g. `500 g`. */
+            pack: string;
+            /**
+             * Format: int64
+             * @description Price of one pack at the chosen chain; missing for items nobody has a price for.
+             */
+            pack_price_cents?: number | null;
+            /**
+             * Format: int32
+             * @description Reference packs to buy.
+             */
+            packs: number;
+        };
+        ShoppingListDto: {
+            budget: components["schemas"]["MealBudgetDto"];
+            /** Format: int32 */
+            meals_planned: number;
+            /** @description Needed by the plan but on the pantry list. */
+            pantry_skipped: components["schemas"]["PantryItemDto"][];
+            /** @description The priced items per chain, cheapest complete chain first. */
+            per_chain: components["schemas"]["ChainTotalDto"][];
+            plan?: null | components["schemas"]["ShoppingPlanDto"];
+            /** @description Planned meals that could not be used (recipe no longer in the dataset). */
+            skipped_meals: string[];
+            /** @description Ingredients that could not be matched to a known item. */
+            unmatched: components["schemas"]["UnmatchedDto"][];
+            /** @description Items nobody has a price for. */
+            unpriced: components["schemas"]["ShoppingItemDto"][];
+            /** Format: date */
+            week_end: string;
+            /** Format: date */
+            week_start: string;
+        };
+        ShoppingPlanDto: {
+            /**
+             * Format: int64
+             * @description What splitting saves compared with the single chain; zero when not splitting.
+             */
+            saving_cents: number;
+            /**
+             * Format: int64
+             * @description The same items at the cheapest chain that has all of them, if there is one.
+             */
+            single_chain_total_cents?: number | null;
+            split: boolean;
+            /** @description One stop when everything is bought at one chain, more when splitting saves enough. */
+            stops: components["schemas"]["ShoppingStopDto"][];
+            /** Format: int64 */
+            total_cents: number;
+        };
+        ShoppingStopDto: {
+            chain: string;
+            items: components["schemas"]["ShoppingItemDto"][];
+            /** Format: int64 */
+            subtotal_cents: number;
+        };
         SkippedRowDto: {
             /** Format: int64 */
             line: number;
@@ -1490,6 +1732,11 @@ export interface components {
             /** Format: int64 */
             id: number;
             purpose: string;
+        };
+        UnmatchedDto: {
+            amounts: string[];
+            meals: string[];
+            name: string;
         };
         UpcomingChargeDto: {
             /** Format: int64 */
@@ -2039,6 +2286,168 @@ export interface operations {
                 };
             };
             /** @description Not a valid export */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_meal_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Any day of the week; the week runs Monday to Sunday. Defaults to the current week.
+                 * @example 2026-10-12
+                 */
+                week: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MealPlanDto"];
+                };
+            };
+            /** @description Week out of range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_meal_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Any day of the week; the week runs Monday to Sunday. Defaults to the current week.
+                 * @example 2026-10-12
+                 */
+                week: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MealPlanInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MealPlanDto"];
+                };
+            };
+            /** @description Unknown recipe, day outside the week, duplicate day or bad value */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_pantry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PantryDto"];
+                };
+            };
+        };
+    };
+    put_pantry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PantryUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PantryDto"];
+                };
+            };
+            /** @description Unknown item or too many items */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_shopping_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Any day of the week to shop for. Defaults to the current week.
+                 * @example 2026-10-12
+                 */
+                week: string | null;
+                /**
+                 * @description The day to treat as today when looking up the groceries budget left. Defaults to today (UTC).
+                 * @example 2026-10-12
+                 */
+                date: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShoppingListDto"];
+                };
+            };
+            /** @description Week out of range */
             400: {
                 headers: {
                     [name: string]: unknown;
