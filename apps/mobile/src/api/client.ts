@@ -37,7 +37,12 @@ export type BankStatus = components["schemas"]["BankStatus"];
 export type SyncStarted = components["schemas"]["SyncStarted"];
 export type SyncDone = components["schemas"]["SyncDone"];
 export type SyncRequest = components["schemas"]["SyncRequest"];
-export type ScanResult = components["schemas"]["ScanDto"];
+export type BankConnection = components["schemas"]["BankConnectionDto"];
+export type ConnectionState = components["schemas"]["ConnectionState"];
+export type StoreSpend = components["schemas"]["StoreSpendDto"];
+export type StoreSpending = components["schemas"]["StoresDto"];
+export type StoresPeriod = components["schemas"]["StoresPeriod"];
+export type ScanResult =components["schemas"]["ScanDto"];
 export type ExportData = components["schemas"]["ExportDto"];
 export type ImportSummary = components["schemas"]["ImportReportDto"];
 export type Rule = components["schemas"]["RuleDto"];
@@ -300,6 +305,44 @@ export class Api {
   /** Throws `ApiError` with status 409 while the approval in the banking app is still missing. */
   confirmSync(id: string) {
     return this.request<SyncDone>(`/v1/bank/sync/${encodeURIComponent(id)}/confirm`, { method: "POST" });
+  }
+
+  /** The bank connections of the server's financer.toml, without secrets. Empty when none is configured. */
+  bankConnections() {
+    return this.request<BankConnection[]>("/v1/bank/connections");
+  }
+
+  /**
+   * Log in for one connection; the server then waits for the approval in the banking app and imports by
+   * itself. Send `pin` only when the connection has no `pin_from_env`.
+   */
+  syncConnection(name: string, pin?: string) {
+    const path = `/v1/bank/connections/${encodeURIComponent(name)}/sync`;
+    return pin ? this.json<BankConnection>(path, "POST", { pin }) : this.request<BankConnection>(path, { method: "POST" });
+  }
+
+  /** Stop waiting for an approval. */
+  cancelConnection(name: string) {
+    return this.request<BankConnection>(`/v1/bank/connections/${encodeURIComponent(name)}/cancel`, { method: "POST" });
+  }
+
+  /** Spending per supermarket chain for the current/previous budget period or the last `n` periods. `date` is the local day. */
+  storeSpending(period: StoresPeriod = "current", opts: { n?: number; date?: string } = {}) {
+    return this.request<StoreSpending>(`/v1/spending/stores?${Api.storeQuery(period, opts)}`);
+  }
+
+  /** The bookings behind one chain's total (`other` = groceries no chain matched), newest first. */
+  storeTransactions(chain: string, period: StoresPeriod = "current", opts: { n?: number; date?: string } = {}) {
+    return this.request<Transaction[]>(
+      `/v1/spending/stores/${encodeURIComponent(chain)}/transactions?${Api.storeQuery(period, opts)}`,
+    );
+  }
+
+  private static storeQuery(period: StoresPeriod, opts: { n?: number; date?: string }) {
+    const q = new URLSearchParams({ period });
+    if (period === "last_n" && opts.n) q.set("n", String(opts.n));
+    if (opts.date) q.set("date", opts.date);
+    return q;
   }
 
   // ---- categorization: rules, corrections, splits, AI suggestions ----

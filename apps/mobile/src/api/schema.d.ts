@@ -115,6 +115,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/bank/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The bank connections from `financer.toml`, with the state of each. The login is masked and no
+         *     secret is part of the answer.
+         */
+        get: operations["list_connections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/bank/connections/{name}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop waiting for an approval. */
+        post: operations["cancel_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/bank/connections/{name}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a sync for one connection: logs in, then waits (in the background) for your approval in
+         *     the banking app and imports. Send the PIN only when `pin_from_env` is false.
+         */
+        post: operations["sync_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/bank/status": {
         parameters: {
             query?: never;
@@ -688,6 +745,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/spending/stores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What is spent at each supermarket chain in a budget period, ranked, with the share of all store
+         *     spending, number of visits, average basket, last visit and the change against the range before.
+         *     Groceries that no chain matched are in `other`.
+         */
+        get: operations["store_spending"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/spending/stores/{chain}/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The purchases behind one chain's total (`other` for unmatched groceries), newest first. */
+        get: operations["store_transactions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/subscriptions": {
         parameters: {
             query?: never;
@@ -940,6 +1035,53 @@ export interface components {
             data_base64: string;
             passphrase: string;
         };
+        /** @description A configured connection. The login is masked; the PIN is never part of it. */
+        BankConnectionDto: {
+            /**
+             * Format: int64
+             * @description Unix seconds after which a sync waiting for approval is given up.
+             */
+            approval_expires_at?: number | null;
+            /** Format: int64 */
+            balance_cents?: number | null;
+            /** Format: date */
+            balance_date?: string | null;
+            bank_code: string;
+            iban_masked: string;
+            /** @description Always `fints` today. */
+            kind: string;
+            last_result?: components["schemas"]["SyncOutcomeDto"] | null;
+            /**
+             * Format: int64
+             * @description Unix seconds of the last successful sync.
+             */
+            last_sync_at?: number | null;
+            login_masked: string;
+            /** @description The bank's approval text in `needs_approval`, the reason in `error`. */
+            message?: string | null;
+            name: string;
+            /**
+             * Format: int64
+             * @description Unix seconds of the next scheduled sync; absent for manual-only connections.
+             */
+            next_sync_at?: number | null;
+            /**
+             * @description True when the server has the PIN (the environment variable named by `pin_env` is set), so
+             *     the app does not need to ask for it.
+             */
+            pin_from_env: boolean;
+            state: components["schemas"]["ConnectionState"];
+            /**
+             * @description A scheduled sync is due but cannot start by itself because the server has no PIN: press
+             *     Sync now and type it.
+             */
+            sync_due: boolean;
+            /**
+             * Format: int32
+             * @description Hours between automatic syncs; 0 = only when you ask.
+             */
+            sync_every_hours: number;
+        };
         BankStatus: {
             /** Format: int64 */
             balance_cents?: number | null;
@@ -1061,6 +1203,11 @@ export interface components {
              */
             total_cents: number;
         };
+        /**
+         * @description Where a connection is in a sync.
+         * @enum {string}
+         */
+        ConnectionState: "idle" | "syncing" | "needs_approval" | "error";
         DisposableDto: {
             /** Format: int64 */
             disposable_cents: number;
@@ -1882,6 +2029,94 @@ export interface components {
             /** Format: int64 */
             price_cents: number;
         };
+        /** @description One chain over the asked range, compared with the range before it. */
+        StoreSpendDto: {
+            /**
+             * Format: int64
+             * @description Total divided by visits, rounded to the cent; 0 without visits.
+             */
+            average_basket_cents: number;
+            /** @description Stable id for `/v1/spending/stores/{chain}/transactions`; `other` for unmatched groceries. */
+            chain: string;
+            /**
+             * Format: int64
+             * @description `total_cents - previous_total_cents`.
+             */
+            change_cents: number;
+            /**
+             * Format: int64
+             * @description Change relative to the comparison range in tenths of a percent (-333 = -33.3 %); absent
+             *     when nothing was spent there.
+             */
+            change_permille?: number | null;
+            /** Format: date */
+            last_visit?: string | null;
+            name: string;
+            /**
+             * Format: int64
+             * @description Spent in the comparison range (see `compare_start` / `compare_end`).
+             */
+            previous_total_cents: number;
+            /** Format: int32 */
+            previous_visits: number;
+            /**
+             * Format: int32
+             * @description Share of everything spent in stores, in tenths of a percent (123 = 12.3 %).
+             */
+            share_permille: number;
+            /** Format: int64 */
+            total_cents: number;
+            /**
+             * Format: int32
+             * @description Number of purchases (each booking is one visit).
+             */
+            visits: number;
+        };
+        StoresDto: {
+            /** @description Chains with purchases in the range, largest first. */
+            chains: components["schemas"]["StoreSpendDto"][];
+            /** Format: date */
+            compare_end: string;
+            /**
+             * @description True while the range is still running: the comparison then covers only as many days as
+             *     have passed, so that half a month is not compared with a whole one.
+             */
+            compare_is_partial: boolean;
+            /**
+             * Format: date
+             * @description The range the numbers are compared with: the same number of periods right before `start`.
+             */
+            compare_start: string;
+            /**
+             * Format: date
+             * @description Last day of the range, inclusive.
+             */
+            end: string;
+            /** @description Grocery bookings that no chain matched (`chain` is `other`); always present. */
+            other: components["schemas"]["StoreSpendDto"];
+            /**
+             * Format: int32
+             * @description How many budget periods the range covers.
+             */
+            periods: number;
+            /** Format: int64 */
+            previous_total_cents: number;
+            /**
+             * Format: date
+             * @description First day of the range, inclusive.
+             */
+            start: string;
+            /**
+             * Format: int64
+             * @description Everything spent in stores (chains plus unmatched groceries).
+             */
+            total_cents: number;
+        };
+        /**
+         * @description Which budget period(s) to look at.
+         * @enum {string}
+         */
+        StoresPeriod: "current" | "previous" | "last_n";
         /** @description One recurring outgoing payment. All amounts in the watchdog are positive charge sizes. */
         SubscriptionDto: {
             /**
@@ -1955,6 +2190,30 @@ export interface components {
             imported: number;
             /** @description Transactions left out (pending, or not in EUR). */
             skipped: number;
+        };
+        SyncNowRequest: {
+            /**
+             * @description The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync
+             *     only and never stored.
+             */
+            pin?: string | null;
+        };
+        /** @description What a sync should do, to be reported in the connection list. */
+        SyncOutcomeDto: {
+            /**
+             * Format: int64
+             * @description Unix seconds.
+             */
+            at: number;
+            /** Format: int32 */
+            duplicates?: number | null;
+            /** Format: int32 */
+            imported?: number | null;
+            /** @description Why it failed (never contains the PIN). */
+            message?: string | null;
+            ok: boolean;
+            /** Format: int32 */
+            skipped?: number | null;
         };
         SyncRequest: {
             /** @description Leave empty to use the bank's own BIC. */
@@ -2207,6 +2466,145 @@ export interface operations {
             };
             /** @description Wrong passphrase, damaged file or not a valid backup */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_connections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankConnectionDto"][];
+                };
+            };
+        };
+    };
+    cancel_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description connection name */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankConnectionDto"];
+                };
+            };
+            /** @description No such connection */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Logging in right now */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    sync_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description connection name */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SyncNowRequest"] | null;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankConnectionDto"];
+                };
+            };
+            /** @description PIN missing, or rejected by the bank */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such connection */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Already running */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Paused after wrong PINs */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Could not reach the bank */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No FinTS product id configured */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3367,6 +3765,93 @@ export interface operations {
             };
             /** @description Invalid value */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    store_spending: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `current` (default), `previous` or `last_n`. */
+                period: components["schemas"]["StoresPeriod"] | null;
+                /** @description With `last_n`: how many budget periods, 1 to 24 (default 3), the running one included. */
+                n: number | null;
+                /**
+                 * @description The day to treat as today, ISO format. Defaults to today (UTC); the app sends its local date.
+                 * @example 2026-10-11
+                 */
+                date: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoresDto"];
+                };
+            };
+            /** @description n out of range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    store_transactions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description chain id from /v1/spending/stores, or other */
+                chain: string;
+                /** @description `current` (default), `previous` or `last_n`. */
+                period: components["schemas"]["StoresPeriod"] | null;
+                /** @description With `last_n`: how many budget periods, 1 to 24 (default 3), the running one included. */
+                n: number | null;
+                /**
+                 * @description The day to treat as today, ISO format. Defaults to today (UTC); the app sends its local date.
+                 * @example 2026-10-11
+                 */
+                date: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionDto"][];
+                };
+            };
+            /** @description n out of range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown chain */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -9,6 +9,7 @@ import { PaydayPicker } from "@/components/PaydayPicker";
 import { AboutCard } from "@/components/AboutCard";
 import { NotificationsCard } from "@/components/NotificationsCard";
 import { BackupCard } from "@/components/BackupCard";
+import { BankConnectionsCard } from "@/components/BankConnectionsCard";
 import { LockCard } from "@/components/LockCard";
 import { Body, Button, Card, Screen, Title, useColors } from "@/components/ui";
 import { pickTextFile, shareTextFile } from "@/native/files";
@@ -277,6 +278,8 @@ export default function SettingsScreen() {
             </Card>
 
             <BackupCard />
+
+            <BankConnectionsCard />
 
             <Card>
               <Body>

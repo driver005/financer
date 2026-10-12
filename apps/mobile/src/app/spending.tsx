@@ -70,6 +70,10 @@ export default function Spending() {
           </Link>
           <View style={{ height: 8 }} />
           <Button label="Import Sparkasse CSV" icon="file-delimited-outline" mode="outlined" onPress={importCsv} disabled={busy} />
+          <View style={{ height: 8 }} />
+          <Link href="/stores" asChild>
+            <Button label="Spending by store" icon="storefront-outline" mode="outlined" onPress={() => {}} />
+          </Link>
           {message ? <Text style={{ color: c.muted, marginVertical: 8 }}>{message}</Text> : null}
           <RecategorizeSheet
             tx={selected}

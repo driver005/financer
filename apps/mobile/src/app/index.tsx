@@ -7,6 +7,7 @@ import { ScrollView, Text as RNText, View } from "react-native";
 import { ForecastCard } from "@/components/ForecastCard";
 import { Mascot } from "@/components/Mascot";
 import { SafeToSpendCard } from "@/components/SafeToSpendCard";
+import { StoresLink } from "@/components/StoresLink";
 import { TrophiesCard } from "@/components/TrophiesCard";
 import { WatchdogCard } from "@/components/Watchdog";
 import { ChunkyButton } from "@/components/kit";
@@ -261,6 +262,8 @@ export default function Today() {
           </Card>
 
           <WatchdogCard />
+
+          <StoresLink />
 
           {rewards ? <TrophiesCard rewards={rewards} /> : null}
 
