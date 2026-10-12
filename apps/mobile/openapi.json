@@ -95,6 +95,98 @@
         ]
       }
     },
+    "/v1/backup/create": {
+      "post": {
+        "tags": [
+          "backup"
+        ],
+        "summary": "Create a passphrase-encrypted backup of everything that is yours (see `/v1/export`).",
+        "operationId": "create_backup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Passphrase too short",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/backup/restore": {
+      "post": {
+        "tags": [
+          "backup"
+        ],
+        "summary": "Decrypt a backup and merge it like `/v1/import`. A wrong passphrase or damaged file is a\n400 and changes nothing.",
+        "operationId": "restore_backup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Wrong passphrase, damaged file or not a valid backup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/bank/status": {
       "get": {
         "tags": [
@@ -1234,6 +1326,56 @@
               "$ref": "#/components/schemas/StapleDto"
             },
             "description": "Cheapest items that fit the budget (at most 20)."
+          }
+        }
+      },
+      "BackupCreateRequest": {
+        "type": "object",
+        "required": [
+          "passphrase"
+        ],
+        "properties": {
+          "passphrase": {
+            "type": "string",
+            "description": "At least 8 characters. Not stored anywhere: without it the backup cannot be opened."
+          }
+        }
+      },
+      "BackupDto": {
+        "type": "object",
+        "required": [
+          "data_base64",
+          "transactions",
+          "receipts"
+        ],
+        "properties": {
+          "data_base64": {
+            "type": "string",
+            "description": "The encrypted backup (an `age` file), base64-encoded."
+          },
+          "receipts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "transactions": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "BackupRestoreRequest": {
+        "type": "object",
+        "required": [
+          "passphrase",
+          "data_base64"
+        ],
+        "properties": {
+          "data_base64": {
+            "type": "string",
+            "description": "The encrypted backup, base64-encoded, as returned by the create endpoint."
+          },
+          "passphrase": {
+            "type": "string"
           }
         }
       },
