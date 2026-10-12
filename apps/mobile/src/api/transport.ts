@@ -53,9 +53,9 @@ export interface EmbeddedBackend {
   handle(request: {
     method: string;
     pathAndQuery: string;
-    contentType: string | undefined;
+    contentType?: string;
     body: ArrayBuffer;
-  }): Promise<{ status: number; contentType: string | undefined; body: ArrayBuffer }>;
+  }): Promise<{ status: number; contentType?: string; body: ArrayBuffer }>;
 }
 
 const encoder = new TextEncoder();
