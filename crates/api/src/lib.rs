@@ -12,6 +12,7 @@ mod grocery;
 mod mealplan;
 mod routes;
 mod scan;
+mod stores;
 mod watchdog;
 
 use std::sync::Arc;
@@ -21,6 +22,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
+use financer_core::{StoreAlias, StoreMatcher};
 use financer_fints::{BankClient, UnconfiguredBank};
 use financer_llm::{LlmError, LlmProvider, LlmSettings, ProviderFactory};
 use financer_prices::{Http, HttpResponse, PriceError, SourceConfig};
@@ -71,6 +73,7 @@ pub struct AppState {
     pub(crate) price_sources: Arc<Vec<SourceConfig>>,
     pub(crate) llm_keys: LlmKeys,
     pub(crate) default_llm_provider: Option<financer_llm::Provider>,
+    pub(crate) store_matcher: Arc<StoreMatcher>,
     pub(crate) llm: LlmFactory,
 }
 
@@ -88,6 +91,7 @@ impl AppState {
             price_sources: Arc::new(Vec::new()),
             llm_keys: LlmKeys::default(),
             default_llm_provider: None,
+            store_matcher: Arc::new(StoreMatcher::builtin()),
             llm: Arc::new(ProviderFactory::create),
         }
     }
@@ -133,6 +137,13 @@ impl AppState {
         self
     }
 
+    /// Your own spellings for supermarket chains (`[[stores]]` in the server configuration), added
+    /// to the built-in table used for the spending-per-store report.
+    pub fn with_store_aliases(mut self, aliases: &[StoreAlias]) -> Self {
+        self.store_matcher = Arc::new(StoreMatcher::with_aliases(aliases));
+        self
+    }
+
     /// Replace how LLM providers are built (tests use a mock).
     pub fn with_llm_factory(mut self, factory: LlmFactory) -> Self {
         self.llm = factory;
@@ -162,6 +173,8 @@ impl AppState {
         bank::start_sync,
         bank::confirm_sync,
         bank::bank_status,
+        stores::store_spending,
+        stores::store_transactions,
         grocery::refresh_prices,
         grocery::list_prices,
         grocery::best_prices,
@@ -226,6 +239,9 @@ impl AppState {
         dto::SyncStarted,
         dto::SyncDone,
         dto::BankStatus,
+        stores::StoresPeriod,
+        stores::StoreSpendDto,
+        stores::StoresDto,
         dto::PriceDto,
         scan::EanLookupDto,
         scan::ChainPriceDto,
@@ -337,6 +353,11 @@ impl Api {
             .route("/bank/sync", post(bank::start_sync))
             .route("/bank/sync/{id}/confirm", post(bank::confirm_sync))
             .route("/bank/status", get(bank::bank_status))
+            .route("/spending/stores", get(stores::store_spending))
+            .route(
+                "/spending/stores/{chain}/transactions",
+                get(stores::store_transactions),
+            )
             .route("/prices", get(grocery::list_prices))
             .route("/prices/best", get(grocery::best_prices))
             .route("/prices/ean/{ean}", get(scan::ean_lookup))
