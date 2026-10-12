@@ -1001,6 +1001,254 @@
         ]
       }
     },
+    "/v1/meal-plan": {
+      "get": {
+        "tags": [
+          "mealplan"
+        ],
+        "summary": "The meals planned for a week (Monday to Sunday), one per day at most.",
+        "operationId": "get_meal_plan",
+        "parameters": [
+          {
+            "name": "week",
+            "in": "path",
+            "description": "Any day of the week; the week runs Monday to Sunday. Defaults to the current week.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "example": "2026-10-12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MealPlanDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Week out of range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "mealplan"
+        ],
+        "summary": "Replace the plan of a week. Each day holds a bundled recipe by id, or a suggested recipe by\ntitle with its ingredients, and the servings to cook.",
+        "operationId": "put_meal_plan",
+        "parameters": [
+          {
+            "name": "week",
+            "in": "path",
+            "description": "Any day of the week; the week runs Monday to Sunday. Defaults to the current week.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "example": "2026-10-12"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MealPlanInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MealPlanDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown recipe, day outside the week, duplicate day or bad value",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/meal-plan/pantry": {
+      "get": {
+        "tags": [
+          "mealplan"
+        ],
+        "summary": "Items assumed to be at home (salt, oil, flour...); the shopping list leaves them off.",
+        "operationId": "get_pantry",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PantryDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "mealplan"
+        ],
+        "summary": "Replace the pantry list.",
+        "operationId": "put_pantry",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PantryUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PantryDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown item or too many items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/meal-plan/shopping-list": {
+      "get": {
+        "tags": [
+          "mealplan"
+        ],
+        "summary": "The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the\nservings and converted to packs), pantry items left off, priced per chain with the best split\nand checked against what is left of the groceries budget.",
+        "operationId": "get_shopping_list",
+        "parameters": [
+          {
+            "name": "week",
+            "in": "path",
+            "description": "Any day of the week to shop for. Defaults to the current week.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "example": "2026-10-12"
+          },
+          {
+            "name": "date",
+            "in": "path",
+            "description": "The day to treat as today when looking up the groceries budget left. Defaults to today (UTC).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "example": "2026-10-12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShoppingListDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Week out of range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/prices": {
       "get": {
         "tags": [
@@ -2679,6 +2927,35 @@
           }
         }
       },
+      "ChainTotalDto": {
+        "type": "object",
+        "required": [
+          "chain",
+          "total_cents",
+          "missing",
+          "complete"
+        ],
+        "properties": {
+          "chain": {
+            "type": "string"
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Names of priced items this chain does not stock."
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Price of the items this chain stocks."
+          }
+        }
+      },
       "DisposableDto": {
         "type": "object",
         "required": [
@@ -3191,6 +3468,274 @@
           "transactions_known": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "MealBudgetDto": {
+        "type": "object",
+        "required": [
+          "budget_source",
+          "estimated_cents",
+          "unpriced_count"
+        ],
+        "properties": {
+          "budget_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "What is left of this period's groceries limit; missing when no limit is set."
+          },
+          "budget_source": {
+            "type": "string",
+            "description": "`groceries_envelope` or `none`."
+          },
+          "estimated_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Cost of the priced items on the best plan."
+          },
+          "fits": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "left_after_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Budget minus estimate; negative when over."
+          },
+          "unpriced_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Items that are not in the estimate because they have no price.",
+            "minimum": 0
+          }
+        }
+      },
+      "MealDayDto": {
+        "type": "object",
+        "required": [
+          "date",
+          "title",
+          "servings",
+          "recipe_servings",
+          "ingredients",
+          "available"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "False when the stored recipe id is no longer in the dataset; such a meal adds nothing to the\nshopping list."
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "ingredients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MealIngredientDto"
+            }
+          },
+          "recipe_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recipe_servings": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Servings the ingredient amounts are written for.",
+            "minimum": 0
+          },
+          "servings": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "MealDayInput": {
+        "type": "object",
+        "required": [
+          "date",
+          "servings"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-10-13"
+          },
+          "ingredients": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/MealIngredientInput"
+            },
+            "description": "Ingredients of the suggested recipe, as written for `recipe_servings`."
+          },
+          "recipe_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A bundled recipe (from `GET /v1/recipes`). Use this or `title` with `ingredients`."
+          },
+          "recipe_servings": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Servings the suggested recipe's amounts are written for. Defaults to `servings`.",
+            "minimum": 0
+          },
+          "servings": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Servings to cook (1 to 20).",
+            "minimum": 0
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A suggested recipe that is not in the dataset, e.g. an idea from `POST /v1/recipes/ideas`."
+          }
+        }
+      },
+      "MealIngredientDto": {
+        "type": "object",
+        "required": [
+          "name",
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "MealIngredientInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "string",
+            "description": "Free text such as `250 g` or `2 EL`."
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "MealPlanDto": {
+        "type": "object",
+        "required": [
+          "week_start",
+          "week_end",
+          "days"
+        ],
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MealDayDto"
+            },
+            "description": "The planned days, oldest first."
+          },
+          "week_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "week_start": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "MealPlanInput": {
+        "type": "object",
+        "required": [
+          "days"
+        ],
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MealDayInput"
+            },
+            "description": "At most one meal per day; days not listed are empty. Replaces the whole week."
+          }
+        }
+      },
+      "PantryDto": {
+        "type": "object",
+        "required": [
+          "items",
+          "is_default"
+        ],
+        "properties": {
+          "is_default": {
+            "type": "boolean",
+            "description": "True until the list is saved for the first time."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PantryItemDto"
+            },
+            "description": "Items assumed to be at home; they are left off the shopping list."
+          }
+        }
+      },
+      "PantryItemDto": {
+        "type": "object",
+        "required": [
+          "item",
+          "name"
+        ],
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PantryUpdate": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Catalog keys (see `GET /v1/catalog`)."
           }
         }
       },
@@ -4039,6 +4584,205 @@
           }
         }
       },
+      "ShoppingItemDto": {
+        "type": "object",
+        "required": [
+          "item",
+          "name",
+          "needed",
+          "packs",
+          "pack",
+          "meals",
+          "is_offer"
+        ],
+        "properties": {
+          "is_offer": {
+            "type": "boolean"
+          },
+          "item": {
+            "type": "string"
+          },
+          "line_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`packs` times the pack price."
+          },
+          "meals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The meals that use it."
+          },
+          "name": {
+            "type": "string"
+          },
+          "needed": {
+            "type": "string",
+            "description": "What the plan needs, e.g. `750 g`."
+          },
+          "pack": {
+            "type": "string",
+            "description": "Size of one pack, e.g. `500 g`."
+          },
+          "pack_price_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Price of one pack at the chosen chain; missing for items nobody has a price for."
+          },
+          "packs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Reference packs to buy.",
+            "minimum": 0
+          }
+        }
+      },
+      "ShoppingListDto": {
+        "type": "object",
+        "required": [
+          "week_start",
+          "week_end",
+          "meals_planned",
+          "skipped_meals",
+          "per_chain",
+          "unpriced",
+          "unmatched",
+          "pantry_skipped",
+          "budget"
+        ],
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/MealBudgetDto"
+          },
+          "meals_planned": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "pantry_skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PantryItemDto"
+            },
+            "description": "Needed by the plan but on the pantry list."
+          },
+          "per_chain": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChainTotalDto"
+            },
+            "description": "The priced items per chain, cheapest complete chain first."
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ShoppingPlanDto",
+                "description": "The cheapest way to buy the priced items; missing when no item has a price."
+              }
+            ]
+          },
+          "skipped_meals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Planned meals that could not be used (recipe no longer in the dataset)."
+          },
+          "unmatched": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnmatchedDto"
+            },
+            "description": "Ingredients that could not be matched to a known item."
+          },
+          "unpriced": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShoppingItemDto"
+            },
+            "description": "Items nobody has a price for."
+          },
+          "week_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "week_start": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "ShoppingPlanDto": {
+        "type": "object",
+        "required": [
+          "stops",
+          "total_cents",
+          "split",
+          "saving_cents"
+        ],
+        "properties": {
+          "saving_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What splitting saves compared with the single chain; zero when not splitting."
+          },
+          "single_chain_total_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The same items at the cheapest chain that has all of them, if there is one."
+          },
+          "split": {
+            "type": "boolean"
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShoppingStopDto"
+            },
+            "description": "One stop when everything is bought at one chain, more when splitting saves enough."
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ShoppingStopDto": {
+        "type": "object",
+        "required": [
+          "chain",
+          "subtotal_cents",
+          "items"
+        ],
+        "properties": {
+          "chain": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShoppingItemDto"
+            }
+          },
+          "subtotal_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "SkippedRowDto": {
         "type": "object",
         "required": [
@@ -4499,6 +5243,31 @@
             "format": "int64"
           },
           "purpose": {
+            "type": "string"
+          }
+        }
+      },
+      "UnmatchedDto": {
+        "type": "object",
+        "required": [
+          "name",
+          "amounts",
+          "meals"
+        ],
+        "properties": {
+          "amounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "meals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "name": {
             "type": "string"
           }
         }

@@ -46,7 +46,8 @@ export default function RootLayout() {
           <Tabs.Screen name="recipes" options={tab("Recipes", "chef-hat")} />
           <Tabs.Screen name="settings" options={tab("Settings", "cog-outline")} />
           {/* reachable from Settings, not shown in the tab bar */}
-          <Tabs.Screen name="basket" options={{ href: null, title: "Usual items" }} />
+          <Tabs.Screen name="mealplan" options={{ href: null, title: "Meal plan" }} />
+          <Tabs.Screen name="basket"options={{ href: null, title: "Usual items" }} />
           <Tabs.Screen name="receipts" options={{ href: null, title: "Receipts" }} />
           <Tabs.Screen name="sync" options={{ href: null, title: "Sync with Sparkasse" }} />
           <Tabs.Screen name="rules" options={{ href: null, title: "Rules" }} />

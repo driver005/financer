@@ -22,6 +22,12 @@ export type Receipt = components["schemas"]["ReceiptDto"];
 export type Affordability = components["schemas"]["AffordabilityDto"];
 export type RecipeMatch = components["schemas"]["RecipeMatchDto"];
 export type Idea = components["schemas"]["IdeaDto"];
+export type MealPlan = components["schemas"]["MealPlanDto"];
+export type MealDay = components["schemas"]["MealDayDto"];
+export type MealDayInput = components["schemas"]["MealDayInput"];
+export type MealShoppingList = components["schemas"]["ShoppingListDto"];
+export type ShoppingItem = components["schemas"]["ShoppingItemDto"];
+export type Pantry = components["schemas"]["PantryDto"];
 export type Settings = components["schemas"]["SettingsDto"];
 export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
 export type BankStatus = components["schemas"]["BankStatus"];
@@ -206,6 +212,32 @@ export class Api {
 
   ideas(req: { count?: number; diet?: string; budget_cents?: number }) {
     return this.json<Idea[]>("/v1/recipes/ideas", "POST", req);
+  }
+
+  /** The meals planned for the week that contains `week` (Monday to Sunday). */
+  mealPlan(week: string) {
+    return this.request<MealPlan>(`/v1/meal-plan?week=${encodeURIComponent(week)}`);
+  }
+
+  /** Replaces the plan of the week; days that are not listed become empty. */
+  saveMealPlan(week: string, days: MealDayInput[]) {
+    return this.json<MealPlan>(`/v1/meal-plan?week=${encodeURIComponent(week)}`, "PUT", { days });
+  }
+
+  /** Ingredients of the week's meals, priced per chain and checked against the groceries budget. `date` is the local day. */
+  mealShoppingList(week: string, date?: string) {
+    const q = new URLSearchParams({ week });
+    if (date) q.set("date", date);
+    return this.request<MealShoppingList>(`/v1/meal-plan/shopping-list?${q}`);
+  }
+
+  pantry() {
+    return this.request<Pantry>("/v1/meal-plan/pantry");
+  }
+
+  /** Replaces the list of items assumed to be at home (catalog keys). */
+  savePantry(items: string[]) {
+    return this.json<Pantry>("/v1/meal-plan/pantry", "PUT", { items });
   }
 
   settings() {

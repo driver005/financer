@@ -9,6 +9,7 @@ mod dto;
 mod export;
 mod forecast;
 mod grocery;
+mod mealplan;
 mod routes;
 mod watchdog;
 
@@ -182,6 +183,11 @@ impl AppState {
         watchdog::subscriptions,
         watchdog::alerts,
         watchdog::dismiss_alert,
+        mealplan::get_meal_plan,
+        mealplan::put_meal_plan,
+        mealplan::get_shopping_list,
+        mealplan::get_pantry,
+        mealplan::put_pantry,
     ),
     components(schemas(
         dto::TransactionDto,
@@ -258,6 +264,22 @@ impl AppState {
         watchdog::AlertDto,
         watchdog::AlertsDto,
         watchdog::AlertDismissedDto,
+        mealplan::MealIngredientInput,
+        mealplan::MealDayInput,
+        mealplan::MealPlanInput,
+        mealplan::MealIngredientDto,
+        mealplan::MealDayDto,
+        mealplan::MealPlanDto,
+        mealplan::PantryItemDto,
+        mealplan::PantryDto,
+        mealplan::PantryUpdate,
+        mealplan::ShoppingItemDto,
+        mealplan::ShoppingStopDto,
+        mealplan::ShoppingPlanDto,
+        mealplan::ChainTotalDto,
+        mealplan::UnmatchedDto,
+        mealplan::MealBudgetDto,
+        mealplan::ShoppingListDto,
     )),
     modifiers(&BearerAuth)
 )]
@@ -353,6 +375,15 @@ impl Api {
             .route("/subscriptions", get(watchdog::subscriptions))
             .route("/alerts", get(watchdog::alerts))
             .route("/alerts/{id}/dismiss", post(watchdog::dismiss_alert))
+            .route(
+                "/meal-plan",
+                get(mealplan::get_meal_plan).put(mealplan::put_meal_plan),
+            )
+            .route("/meal-plan/shopping-list", get(mealplan::get_shopping_list))
+            .route(
+                "/meal-plan/pantry",
+                get(mealplan::get_pantry).put(mealplan::put_pantry),
+            )
             // An unknown API path is an API error, never a web page (see `Api::with_web_app`).
             .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
             .layer(middleware::from_fn_with_state(
