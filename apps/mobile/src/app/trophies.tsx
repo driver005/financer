@@ -160,7 +160,8 @@ export default function Trophies() {
             {r.bests.bestWeek ? (
               <ListRow
                 leading={<IconEmoji emoji="🛒" />}
-                title={`Best grocery week`}
+                title="Best grocery week"
+                subtitleLines={4}
                 subtitle={`${formatDate(r.bests.bestWeek.start)} to ${formatDate(r.bests.bestWeek.end)}. This week so far: ${formatMoney(r.bests.thisWeekCents)}${
                   r.bests.thisWeekCents < r.bests.bestWeek.spentCents ? " (on track to beat it)" : ""
                 }`}
@@ -171,6 +172,7 @@ export default function Trophies() {
               <ListRow
                 leading={<IconEmoji emoji="🛒" />}
                 title="No best grocery week yet"
+                subtitleLines={4}
                 subtitle="It shows up after the first full week (Monday to Sunday) of bookings."
                 accessibilityLabel="No best grocery week yet"
               />
@@ -185,6 +187,7 @@ export default function Trophies() {
                 leading={<BadgeIcon badge={b} size={44} />}
                 title={b.title}
                 subtitle={b.rule}
+                subtitleLines={8}
                 value={b.earned ? <StatusPill tone="good" icon="check" label={b.earnedOn ? formatDate(b.earnedOn) : "Earned"} accessibilityLabel={b.earnedOn ? `Earned ${formatDate(b.earnedOn)}` : "Earned"} /> : undefined}
                 accessibilityLabel={`${b.title}: ${b.earned ? "earned" : "not yet"}. ${b.rule}`}
               />
