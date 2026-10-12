@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { ActivityIndicator, HelperText, Switch, Text, TextInput } from "@/components/kit";
+import { ActivityIndicator, Text, TextInput } from "@/components/kit";
+import { FieldMessage, SettingsGroup, SettingsToggleRow } from "@/components/settings/SettingsKit";
+import { blzProblem, ibanProblem } from "@/settingsPlan";
 
 import { ApiError } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -112,19 +114,26 @@ export default function Sync() {
           ) : null}
 
           <Card>
-            <TextInput mode="outlined" label="Bank code (BLZ)" accessibilityLabel="Bank code (BLZ)" value={blz} onChangeText={setBlz} keyboardType="number-pad" />
-            <TextInput mode="outlined" label="Online banking login" accessibilityLabel="Online banking login" value={userId} onChangeText={setUserId} autoCapitalize="none" autoCorrect={false} style={{ marginTop: 8 }} />
-            <TextInput mode="outlined" label="IBAN" accessibilityLabel="IBAN" value={iban} onChangeText={setIban} autoCapitalize="characters" autoCorrect={false} style={{ marginTop: 8 }} />
-            <TextInput mode="outlined" label="PIN" accessibilityLabel="PIN" value={pin} onChangeText={setPin} secureTextEntry autoCapitalize="none" autoCorrect={false} style={{ marginTop: 8 }} />
-            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
-              <Switch value={rememberPin} onValueChange={setRememberPin} accessibilityLabel="Remember the PIN on this device" />
-              <Text variant="bodyMedium" style={{ marginLeft: 12, flex: 1 }}>Remember the PIN on this device</Text>
+            <Text variant="titleMedium" accessibilityRole="header">Your Sparkasse account</Text>
+            <View style={{ gap: 8, marginTop: 8 }}>
+              <TextInput mode="outlined" label="Bank code (BLZ)" accessibilityLabel="Bank code (BLZ)" value={blz} onChangeText={setBlz} keyboardType="number-pad" error={!!blzProblem(blz)} />
+              {blzProblem(blz) ? <FieldMessage tone="error">{blzProblem(blz) as string}</FieldMessage> : null}
+              <TextInput mode="outlined" label="Online banking login" accessibilityLabel="Online banking login" value={userId} onChangeText={setUserId} autoCapitalize="none" autoCorrect={false} />
+              <TextInput mode="outlined" label="IBAN" accessibilityLabel="IBAN" value={iban} onChangeText={setIban} autoCapitalize="characters" autoCorrect={false} error={!!ibanProblem(iban)} />
+              {ibanProblem(iban) ? <FieldMessage tone="error">{ibanProblem(iban) as string}</FieldMessage> : null}
+              <TextInput mode="outlined" label="PIN" accessibilityLabel="PIN" value={pin} onChangeText={setPin} secureTextEntry autoCapitalize="none" autoCorrect={false} />
             </View>
-            <HelperText type="info" visible>
-              The PIN goes to your server only for the sync and is never stored there. Only pushTAN (approval in the
-              Sparkasse app) is supported.
-            </HelperText>
-            <Button label={waiting ? "Waiting for approval…" : "Sync now"} icon="bank-transfer" onPress={start} disabled={waiting || !ready} />
+            <View style={{ marginTop: 12 }}>
+              <SettingsGroup>
+                <SettingsToggleRow icon="lock-outline" title="Remember the PIN on this device" subtitle="Kept in this device's secure storage, never on the server." value={rememberPin} onValueChange={setRememberPin} />
+              </SettingsGroup>
+            </View>
+            <FieldMessage tone="info">
+              The PIN goes to your server only for the sync and is never stored there. Only pushTAN (approval in the Sparkasse app) is supported.
+            </FieldMessage>
+            <View style={{ marginTop: 16 }}>
+              <Button label={waiting ? "Waiting for approval…" : "Sync now"} icon="bank-transfer" onPress={start} disabled={waiting || !ready} />
+            </View>
           </Card>
 
           {waiting ? (
@@ -141,8 +150,8 @@ export default function Sync() {
               <Button mode="text" label="Cancel" onPress={() => { cancelled.current = true; setPhase({ kind: "idle" }); }} />
             </Card>
           ) : null}
-          {phase.kind === "done" ? <HelperText type="info" visible>{phase.text}</HelperText> : null}
-          {phase.kind === "error" ? <HelperText type="error" visible>{phase.text}</HelperText> : null}
+          {phase.kind === "done" ? <FieldMessage tone="ok">{phase.text}</FieldMessage> : null}
+          {phase.kind === "error" ? <FieldMessage tone="error">{phase.text}</FieldMessage> : null}
         </ScrollView>
       )}
     </Screen>

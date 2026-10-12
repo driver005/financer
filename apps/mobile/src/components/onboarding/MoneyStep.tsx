@@ -3,7 +3,8 @@ import { useState } from "react";
 import { View } from "react-native";
 
 import { useApi } from "@/api/config";
-import { ChunkyButton, HelperText, Text } from "@/components/kit";
+import { ChunkyButton, Text } from "@/components/kit";
+import { FieldMessage } from "@/components/settings/SettingsKit";
 import { Note, StepFrame } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
 import { Card, useColors } from "@/components/ui";
@@ -129,7 +130,7 @@ export function MoneyStep({ ctx }: { ctx: StepCtx }) {
             disabled={busy || offline}
           />
         </View>
-        {(draft.csvImported ?? 0) > 0 ? <HelperText type="info" visible>{draft.csvImported} bookings imported so far.</HelperText> : null}
+        {(draft.csvImported ?? 0) > 0 ? <FieldMessage tone="info">{draft.csvImported} bookings imported so far.</FieldMessage> : null}
       </Card>
 
       <Card>
@@ -159,11 +160,11 @@ export function MoneyStep({ ctx }: { ctx: StepCtx }) {
       </Card>
 
       {offline ? (
-        <HelperText type="info" visible>
+        <FieldMessage tone="info">
           Importing and the demo need a connected backend. Go back one step to connect, or skip this for now.
-        </HelperText>
+        </FieldMessage>
       ) : null}
-      {message ? <HelperText type={message.error ? "error" : "info"} visible>{message.text}</HelperText> : null}
+      {message ? <FieldMessage tone={message.error ? "error" : "ok"}>{message.text}</FieldMessage> : null}
     </StepFrame>
   );
 }

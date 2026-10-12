@@ -4,9 +4,10 @@ import { useFocusEffect } from "expo-router";
 
 import type { Alert } from "@/api/client";
 import { useApi } from "@/api/config";
-import { ChunkyButton, Switch } from "@/components/kit";
+import { ChunkyButton } from "@/components/kit";
+import { EmptyState, FieldMessage, SettingsGroup, SettingsToggleRow } from "@/components/settings/SettingsKit";
 import { Badge, CountBubble } from "@/components/Watchdog";
-import { Body, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
+import { Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
 import { alertKindLabel, alertText, sortAlerts, SEVERITY_LABEL } from "@/watchdog";
 
@@ -80,19 +81,24 @@ export default function Alerts() {
           refreshControl={<RefreshControl refreshing={busy} onRefresh={() => load(showDismissed)} />}
           contentContainerStyle={{ paddingBottom: 24 }}
           ListHeaderComponent={
-            <View>
-              <Text style={{ color: c.muted, marginBottom: 8 }}>
+            <View style={{ marginBottom: 12 }}>
+              <Text style={{ color: c.muted, fontSize: 14, marginBottom: 12 }}>
                 Payments from the last 60 days that look odd: charged twice, far above the usual, a big first-time merchant, or large for the category. These are hints, not proof.
               </Text>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                <Text style={{ color: c.text, fontWeight: "700" }}>Show dismissed</Text>
-                <Switch value={showDismissed} onValueChange={setShowDismissed} accessibilityLabel="Show dismissed alerts" />
-              </View>
-              {message ? <Text style={{ color: c.bad, marginBottom: 8 }}>{message}</Text> : null}
+              <SettingsGroup>
+                <SettingsToggleRow icon="eye-off-outline" title="Show dismissed" value={showDismissed} onValueChange={setShowDismissed} />
+              </SettingsGroup>
+              {message ? <FieldMessage tone="error">{message}</FieldMessage> : null}
             </View>
           }
           ListEmptyComponent={
-            alerts === null ? <Loading /> : <Body muted>{showDismissed ? "No alerts at all." : "Nothing to worry about right now."}</Body>
+            alerts === null ? (
+              <Loading />
+            ) : showDismissed ? (
+              <EmptyState mood="happy" title="No alerts at all" body="Nothing has looked odd in the last 60 days, dismissed or not." />
+            ) : (
+              <EmptyState mood="cheer" title="All quiet" body="No payment looks odd right now. New hints show up here after a sync or an import." />
+            )
           }
           renderItem={({ item }) => (
             <Card style={{ opacity: item.dismissed ? 0.6 : 1 }}>
@@ -111,7 +117,7 @@ export default function Alerts() {
               <Text style={{ color: c.text, marginTop: 8 }}>{alertText(item)}</Text>
               {item.dismissed ? null : (
                 <View style={{ marginTop: 12, alignSelf: "flex-start" }}>
-                  <ChunkyButton compact outline label="Dismiss" icon="check" onPress={() => dismiss(item)} />
+                  <ChunkyButton compact style={{ minHeight: 44 }} outline label="Dismiss" icon="check" onPress={() => dismiss(item)} />
                 </View>
               )}
             </Card>
