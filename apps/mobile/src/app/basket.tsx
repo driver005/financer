@@ -1,11 +1,15 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import { FlatList, View } from "react-native";
-import { HelperText, IconButton, List, Searchbar, Text } from "@/components/kit";
+import { FlatList, Text as RNText, View } from "react-native";
 
 import type { BasketItem, CatalogItem } from "@/api/client";
 import { useApi } from "@/api/config";
-import { Body, Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
+import { Avatar, EmptyState, Group, Panel, SectionLabel, SkeletonCards, Stepper, Subtitle, Tap, space } from "@/components/grocery/primitives";
+import { ChunkyButton, HelperText, Searchbar, Text } from "@/components/kit";
+import { Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { initials, mealTint } from "@/groceryView";
 import { useScreenData } from "@/hooks";
+import { usePalette } from "@/theme";
 
 const SOURCE_NOTE: Record<string, string> = {
   manual: "Your own list.",
@@ -15,7 +19,7 @@ const SOURCE_NOTE: Record<string, string> = {
 
 export default function BasketScreen() {
   const { api, loaded } = useApi();
-  const c = useColors();
+  const p = usePalette();
   const { data, error, reload } = useScreenData(async (a) => ({ basket: await a.basket(), catalog: await a.catalog() }));
   const [items, setItems] = useState<BasketItem[]>([]);
   const [query, setQuery] = useState("");
@@ -61,59 +65,96 @@ export default function BasketScreen() {
 
   if (!loaded) return <Screen><Loading /></Screen>;
 
+  const loading = !data && !error;
+
   return (
     <Screen>
       <Title>Usual items</Title>
+      {api ? <Subtitle>What you buy again and again. Prices are compared for these.</Subtitle> : null}
       {!api ? (
         <NeedsSetup />
       ) : (
-        <FlatList
-          data={items}
-          keyExtractor={(i) => i.item}
-          keyboardShouldPersistTaps="handled"
-          ListHeaderComponent={
-            <View>
-              <Text variant="bodyMedium" style={{ color: c.muted, marginBottom: 8 }}>
-                {data ? SOURCE_NOTE[data.basket.source] : ""} Quantities are packs of the size shown.
-              </Text>
-              <Searchbar placeholder="Add an item" accessibilityLabel="Search items to add" value={query} onChangeText={setQuery} />
-              {matches.map((m) => (
-                <List.Item
-                  key={m.key}
-                  title={m.name}
-                  description={m.reference_pack}
-                  left={() => <List.Icon icon="plus-circle-outline" />}
-                  onPress={() => {
-                    setItems((l) => [...l, { item: m.key, quantity: 1 }]);
-                    setQuery("");
-                  }}
-                  accessibilityLabel={`Add ${m.name}`}
-                />
-              ))}
-              {error ? <HelperText type="error" visible>{error}</HelperText> : null}
-            </View>
-          }
-          ListEmptyComponent={<Body muted>Nothing yet. Search above to add items.</Body>}
-          renderItem={({ item }) => (
-            <Card>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ flex: 1 }}>
-                  <Body bold>{nameOf(item.item)}</Body>
-                  <Text variant="bodySmall" style={{ color: c.muted }}>{packOf(item.item)}</Text>
-                </View>
-                <IconButton icon="minus" onPress={() => setQty(item.item, -1)} accessibilityLabel={`Fewer ${nameOf(item.item)}`} />
-                <Text variant="titleMedium" style={{ minWidth: 24, textAlign: "center" }}>{item.quantity}</Text>
-                <IconButton icon="plus" onPress={() => setQty(item.item, 1)} accessibilityLabel={`More ${nameOf(item.item)}`} />
+        <View style={{ flex: 1 }}>
+          <FlatList
+            data={items}
+            keyExtractor={(i) => i.item}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: space.lg }}
+            ListHeaderComponent={
+              <View>
+                {data ? (
+                  <View style={{ flexDirection: "row", gap: space.sm, marginBottom: space.md }}>
+                    <MaterialCommunityIcons name="information-outline" size={18} color={p.muted} style={{ marginTop: 2 }} />
+                    <Text variant="bodyMedium" style={{ color: p.muted, flex: 1 }}>
+                      {SOURCE_NOTE[data.basket.source]} Quantities are packs of the size shown.
+                    </Text>
+                  </View>
+                ) : null}
+                <Searchbar placeholder="Add an item" accessibilityLabel="Search items to add" value={query} onChangeText={setQuery} />
+                {matches.length > 0 ? (
+                  <View style={{ marginTop: space.md }}>
+                    <Group>
+                      {matches.map((m) => (
+                        <Tap
+                          key={m.key}
+                          accessibilityLabel={`Add ${m.name}`}
+                          onPress={() => {
+                            setItems((l) => [...l, { item: m.key, quantity: 1 }]);
+                            setQuery("");
+                          }}
+                          style={{ flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.sm, minHeight: 56 }}
+                        >
+                          <MaterialCommunityIcons name="plus-circle" size={26} color={p.accent} />
+                          <View style={{ flex: 1 }}>
+                            <RNText style={{ color: p.text, fontSize: 16, fontWeight: "600" }}>{m.name}</RNText>
+                            <RNText style={{ color: p.muted, fontSize: 13 }}>{m.reference_pack}</RNText>
+                          </View>
+                        </Tap>
+                      ))}
+                    </Group>
+                  </View>
+                ) : null}
+                {error ? <HelperText type="error" visible>{error}</HelperText> : null}
+                {loading ? <SkeletonCards count={3} label="Loading your usual items" /> : null}
+                {items.length > 0 ? <SectionLabel>{`${items.length} item${items.length === 1 ? "" : "s"}`}</SectionLabel> : <View style={{ height: space.md }} />}
               </View>
-            </Card>
-          )}
-          ListFooterComponent={
-            <View style={{ marginVertical: 12 }}>
-              <Button label={saving ? "Saving…" : "Save my list"} icon="content-save-outline" onPress={save} disabled={saving} />
-              {message ? <HelperText type={message === "Saved" ? "info" : "error"} visible>{message}</HelperText> : null}
-            </View>
-          }
-        />
+            }
+            ListEmptyComponent={
+              loading ? null : (
+                <EmptyState
+                  title="Nothing on your list yet"
+                  body="Search above for what you buy most. Financer compares these items across Aldi, Lidl, Kaufland and Rewe."
+                />
+              )
+            }
+            renderItem={({ item }) => (
+              <Panel padding={space.md} style={{ marginBottom: space.sm }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+                  <Avatar tint={mealTint(item.item)} label={initials(nameOf(item.item))} size={44} square />
+                  <View style={{ flex: 1 }}>
+                    <RNText style={{ color: p.text, fontSize: 16, fontWeight: "700" }} numberOfLines={2}>
+                      {nameOf(item.item)}
+                    </RNText>
+                    <RNText style={{ color: p.muted, fontSize: 13 }}>{packOf(item.item)}</RNText>
+                  </View>
+                  <Stepper
+                    value={item.quantity}
+                    minusIcon={item.quantity === 1 ? "delete-outline" : "minus"}
+                    onMinus={() => setQty(item.item, -1)}
+                    onPlus={() => setQty(item.item, 1)}
+                    minusLabel={item.quantity === 1 ? `Remove ${nameOf(item.item)}` : `Fewer ${nameOf(item.item)}`}
+                    plusLabel={`More ${nameOf(item.item)}`}
+                  />
+                </View>
+              </Panel>
+            )}
+          />
+          <View style={{ paddingTop: space.sm, paddingBottom: space.sm }}>
+            <ChunkyButton label={saving ? "Saving…" : "Save my list"} icon="content-save-outline" onPress={save} disabled={saving} />
+            {message ? <HelperText type={message === "Saved" ? "info" : "error"} visible>{message}</HelperText> : null}
+          </View>
+        </View>
       )}
     </Screen>
   );
