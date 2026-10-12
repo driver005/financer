@@ -3,12 +3,43 @@
 One GitHub workflow, `.github/workflows/release.yml`, builds everything you can install.
 
 **Start it**
+- Merge to `master`: the **New version** workflow (`version.yml`) tags the merge with the next
+  version and starts this build for the tag, so every merge becomes a release. See below.
 - Push a version tag: `git tag v1.0.0 && git push --tags`. Everything is built and attached to a
   GitHub release.
 - Or open the repository's **Actions** tab, pick **Release builds** and **Run workflow**. Choose
   what to build (`all`, `desktop-and-web`, `docker` or `mobile`; only `docker` and `all` publish an image) and the phone build profile.
 
-Ordinary pushes still run only the tests (`ci.yml`).
+Ordinary pushes to other branches still run only the tests (`ci.yml`).
+
+## Automatic versions on merge
+
+`.github/workflows/version.yml` runs on every push to `master`, which is what a merged pull
+request is. It takes the latest `vX.Y.Z` tag as the current version and raises it by looking at the
+commits since then (`.github/scripts/next-version.sh`):
+
+| Commits since the last tag contain | Bump |
+|---|---|
+| a breaking change (`feat!: ...` or a `BREAKING CHANGE` line) | major |
+| `feat: ...` or `feat(scope): ...` | minor |
+| anything else | patch |
+
+A pull request's merge commit carries the PR title, so a PR titled `feat: budget screen` makes a
+minor version. The first release (no tag yet) is the version in `Cargo.toml` (`v0.1.0`) as it is.
+
+The workflow then pushes an annotated tag and starts **Release builds** on it (a tag pushed with
+the workflow's own token does not start other workflows, so it is started explicitly). The
+release gets the desktop bundles, web zip, APK and generated notes as described above.
+
+- Skip one: put `[skip release]` in the merge commit message.
+- Force a bump: Actions tab, **New version**, **Run workflow**, choose `patch`, `minor` or `major`.
+- The tag is the version. `package.json`, `app.json` and `Cargo.toml` are not edited by the
+  workflow (it makes no commits to `master`), so those numbers do not follow the tags.
+- If you protect tags with a ruleset, allow `github-actions[bot]` to create `v*` tags.
+- It only runs once the file is on `master`; it cannot tag from a branch.
+- Not yet run: the bump script is tested on a scratch repo and the file passes `actionlint`,
+  but the workflow itself has not run on GitHub, so the tag push and the dispatch of the release
+  build are unproven until the first merge.
 
 ## What you get
 
