@@ -12,13 +12,14 @@ reach it, and your data stays in the app's private storage (SQLite).
 | UniFFI interface (`Backend.start`, `handle`, `refreshPrices`) | Kotlin and Swift bindings generate from the built library (checked in CI) |
 | App transport (`EmbeddedTransport`), settings, mode switch, backup export/import | tested in Node and in the browser build (the mode reports "not available in this build") |
 | Cross-compiling `crates/embedded` | **Android and iOS both pass** on GitHub runners (`.github/workflows/native.yml`): Android with a real NDK (arm64 phones and the x86_64 emulator), iOS with Xcode (iPhone and simulator). iOS first failed at link time (the C code in the TLS libraries was built for a newer iOS than Rust links for); pinning `IPHONEOS_DEPLOYMENT_TARGET=15.0` fixed it. Only the Rust library is built, not the app |
-| The UniFFI React Native module (`uniffi-bindgen-react-native` 0.31.0-6, flavour `jsi2`) and an Android app that includes it | **builds in CI**: the `android-app` job in `native.yml` runs Rust -> bindings -> typecheck of the app against the generated TypeScript -> `expo prebuild` -> Gradle `assembleRelease` and uploads the APK. The typecheck caught one real mismatch (`contentType` is optional in the generated types), now fixed. iOS app build with the module: **not tried** |
-| Running that app on a device or emulator | **not done**: nothing has ever started the library, so whether `Backend.start` works at run time is unknown |
+| The UniFFI React Native module (`uniffi-bindgen-react-native` 0.31.0-6, flavour `jsi2`) and an Android app that includes it | **builds in CI**: the `android-app` job in `native.yml` runs Rust -> bindings -> typecheck of the app against the generated TypeScript -> `expo prebuild` -> Gradle `assembleRelease` and uploads the APK. The typecheck caught one real mismatch (`contentType` is optional in the generated types), now fixed. iOS app build with the module (`ios-app` job): fixed two setup problems so far (pod metadata, simulator architectures); **no green build yet**, see the CI result |
+| Running that app | **runs on an Android emulator in CI** (`android-emulator` job, API 33 x86_64): the app starts the Rust backend, imports one CSV transaction through it and reads it back categorised (`FINANCER_SMOKE OK health=200:ok import=200 category=groceries`, from `apps/mobile/scripts/smoke-entry.js`). The first attempt crashed with `libfinancer_embedded.so not found` because `npm install --install-links` honoured `.gitignore` and dropped the generated native module; a `.npmignore` fixed it. **Not a physical phone**: the arm64 build, the screens in embedded mode, the SQLite file surviving an app restart, background refresh and real network calls (prices, FinTS, LLM) have not been exercised |
 | Background price refresh (`expo-background-task`, registered when the on-phone backend starts; also refreshes on app open) | written, typechecks and bundles; **never run on a device** |
 
 So the Rust half and the app half are in place and tested, the library cross-compiles for Android
-and iOS, and an Android APK that contains it builds on a GitHub runner. What is left is running it
-on a device or emulator (which you will have to do and debug), and the iOS app build.
+and iOS, and an Android APK that contains it builds on a GitHub runner and answers requests on an
+emulator. What is left is a physical phone (which you will have to try and debug) and running the
+iOS app.
 
 ## Limits you cannot code around
 
