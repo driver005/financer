@@ -51,7 +51,7 @@
     "web": "expo start --web",
     "gen:api": "(cd ../.. && cargo run -q -p financer-server -- --print-openapi) > openapi.json && npx --yes openapi-typescript@7.13.0 openapi.json -o src/api/schema.d.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tests/tsconfig.json && node --test \".test-build/tests/*.test.js\""
+    "test": "tsc -p tests/tsconfig.json && node --test \".test-build/tests/*.test.js\" \"tests/*.test.mjs\""
   },
   "private": true
 }
