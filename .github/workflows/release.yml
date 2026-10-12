@@ -287,7 +287,7 @@ jobs:
           else
             echo "::notice title=APK is debug-signed::Add the Android signing secrets to sign with your own key (docs/RELEASE.md)."
           fi
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Build the release APK
         working-directory: apps/mobile/android
         env:
