@@ -870,7 +870,7 @@ export interface components {
             /** @description `request` or `groceries_envelope`. */
             budget_source: string;
             per_chain: components["schemas"]["ChainAffordabilityDto"][];
-            plan?: null | components["schemas"]["PlanDto"];
+            plan?: components["schemas"]["PlanDto"] | null;
             /** @description Cheapest items that fit the budget (at most 20). */
             staples: components["schemas"]["StapleDto"][];
         };
@@ -996,7 +996,7 @@ export interface components {
         CategoryChanged: {
             /** @description Other transactions that changed category because of that rule. */
             others_changed: number;
-            rule?: null | components["schemas"]["RuleDto"];
+            rule?: components["schemas"]["RuleDto"] | null;
             transaction: components["schemas"]["TransactionDto"];
         };
         ChainAffordabilityDto: {
@@ -1796,7 +1796,7 @@ export interface components {
             pantry_skipped: components["schemas"]["PantryItemDto"][];
             /** @description The priced items per chain, cheapest complete chain first. */
             per_chain: components["schemas"]["ChainTotalDto"][];
-            plan?: null | components["schemas"]["ShoppingPlanDto"];
+            plan?: components["schemas"]["ShoppingPlanDto"] | null;
             /** @description Planned meals that could not be used (recipe no longer in the dataset). */
             skipped_meals: string[];
             /** @description Ingredients that could not be matched to a known item. */
@@ -2470,7 +2470,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description `current` (default) or `previous`. */
-                period: null | components["schemas"]["PeriodChoice"];
+                period: components["schemas"]["PeriodChoice"] | null;
                 /**
                  * @description The day to treat as today, ISO format (`2026-10-11`). Defaults to today (UTC); the app
                  *     sends its local date so that a late evening is not already "tomorrow".
@@ -2539,7 +2539,7 @@ export interface operations {
                 /** @description 1 to 12; only together with `year`. */
                 month: number | null;
                 /** @description Instead of `year` and `month`: `current` (default) or `previous` budget period. */
-                period: null | components["schemas"]["PeriodChoice"];
+                period: components["schemas"]["PeriodChoice"] | null;
                 /** @description The day to treat as today for `period` (ISO format); defaults to today (UTC). */
                 date: string | null;
             };
