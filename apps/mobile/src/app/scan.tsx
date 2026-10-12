@@ -1,14 +1,19 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, Text as RNText, View } from "react-native";
 
 import type { EanLookup } from "@/api/client";
 import { useApi } from "@/api/config";
 import { BarcodeScanner, cameraAvailable } from "@/components/BarcodeScanner";
-import { Chip, HelperText, List, Text, TextInput } from "@/components/kit";
-import { Body, Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
+import { ChainPriceRow } from "@/components/grocery/ChainPriceRow";
+import { Group, Panel, SectionLabel, SkeletonCards, Subtitle, space, useTones } from "@/components/grocery/primitives";
+import { ScanFrame } from "@/components/grocery/ScanFrame";
+import { ChunkyButton, HelperText, Text, TextInput } from "@/components/kit";
+import { Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { tap } from "@/native/haptics";
 import { ScanGate, chainRows, checkEan, headline, observationLine, planAddToUsual, productTitle } from "@/scan";
+import { usePalette } from "@/theme";
 
 export default function Scan() {
   const { api, loaded } = useApi();
@@ -89,66 +94,85 @@ export default function Scan() {
 
   if (!loaded) return <Screen><Loading /></Screen>;
 
+  const hasCamera = cameraAvailable();
+  const showResult = result && !busy;
+
   return (
     <Screen>
       <Title>Scan a product</Title>
+      {api ? <Subtitle>See which chain sells it cheapest.</Subtitle> : null}
       {!api ? (
         <NeedsSetup />
       ) : (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
-          <Card>
-            {cameraAvailable() ? (
-              cameraOn ? (
-                <View style={{ gap: 12 }}>
-                  <BarcodeScanner onCode={onCameraCode} />
-                  <Button label="Stop camera" icon="camera-off" mode="outlined" onPress={() => setCameraOn(false)} />
+        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space.xl }}>
+          {hasCamera && cameraOn ? (
+            <View style={{ gap: space.md, marginBottom: space.lg }}>
+              <BarcodeScanner onCode={onCameraCode} />
+              <ChunkyButton label="Stop camera" icon="camera-off" outline onPress={() => setCameraOn(false)} />
+            </View>
+          ) : (
+            <View style={{ marginBottom: space.lg }}>
+              {!showResult ? (
+                <View style={{ marginBottom: space.lg }}>
+                  <ScanFrame hint={hasCamera ? "Hold the barcode inside the frame" : "No camera here: type the number below"}>
+                    <MaterialCommunityIcons name="barcode-scan" size={72} color={c.accent} accessibilityElementsHidden />
+                  </ScanFrame>
                 </View>
-              ) : (
-                <Button
+              ) : null}
+              {hasCamera ? (
+                <ChunkyButton
                   label="Scan with camera"
                   icon="barcode-scan"
+                  disabled={busy}
                   onPress={() => {
                     gate.reset();
                     setCameraOn(true);
                   }}
-                  disabled={busy}
                 />
-              )
-            ) : (
-              <Text variant="bodyMedium" style={{ color: c.muted }}>
-                The camera is not available here. Type the number under the barcode instead.
-              </Text>
-            )}
-            <View style={{ marginTop: 16 }}>
-              <TextInput
-                label="Or type the barcode number"
-                value={manual}
-                onChangeText={(t) => {
-                  setManual(t);
-                  setInputError(null);
-                }}
-                keyboardType="number-pad"
-                maxLength={20}
-                returnKeyType="search"
-                onSubmitEditing={submitManual}
-                error={!!inputError}
-                placeholder="e.g. 4006381333931"
-              />
-              {inputError ? <HelperText type="error" visible>{inputError}</HelperText> : null}
-              <View style={{ marginTop: 8 }}>
-                <Button label={busy ? "Looking up…" : "Look up price"} icon="magnify" mode="contained-tonal" onPress={submitManual} disabled={busy || manual.trim() === ""} />
-              </View>
+              ) : null}
             </View>
-          </Card>
+          )}
 
-          {busy ? <Loading /> : null}
+          <Panel>
+            <TextInput
+              label="Or type the barcode number"
+              value={manual}
+              onChangeText={(t) => {
+                setManual(t);
+                setInputError(null);
+              }}
+              keyboardType="number-pad"
+              maxLength={20}
+              returnKeyType="search"
+              onSubmitEditing={submitManual}
+              error={!!inputError}
+              placeholder="e.g. 4006381333931"
+            />
+            {inputError ? <HelperText type="error" visible>{inputError}</HelperText> : null}
+            <View style={{ marginTop: space.md }}>
+              <ChunkyButton
+                label={busy ? "Looking up…" : "Look up price"}
+                icon="magnify"
+                tone="blue"
+                onPress={submitManual}
+                disabled={busy || manual.trim() === ""}
+              />
+            </View>
+          </Panel>
+
+          {busy ? <SkeletonCards count={1} label="Looking up the price" /> : null}
           {error ? (
-            <Card>
-              <Body bold>That did not work</Body>
-              <Text variant="bodyMedium" style={{ color: c.bad, marginTop: 4 }}>{error}</Text>
-            </Card>
+            <Panel tone="bad">
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={24} color={c.bad} />
+                <View style={{ flex: 1 }}>
+                  <Text variant="titleSmall">That did not work</Text>
+                  <Text variant="bodyMedium" style={{ marginTop: 2 }}>{error}</Text>
+                </View>
+              </View>
+            </Panel>
           ) : null}
-          {result && !busy ? <ResultCard r={result} onAdd={addToUsual} usualMessage={usualMessage} /> : null}
+          {showResult ? <ResultCard r={result} onAdd={addToUsual} usualMessage={usualMessage} /> : null}
         </ScrollView>
       )}
     </Screen>
@@ -156,58 +180,85 @@ export default function Scan() {
 }
 
 function ResultCard({ r, onAdd, usualMessage }: { r: EanLookup; onAdd: (item: string) => void; usualMessage: string | null }) {
-  const c = useColors();
+  const p = usePalette();
+  const tones = useTones();
   const rows = chainRows(r);
   const head = headline(r);
   const good = head.kind === "cheapest" || head.kind === "only";
+  const tone = good ? tones.good : tones.accent;
   return (
-    <Card>
-      <Text variant="titleMedium">{productTitle(r)}</Text>
-      <Text variant="bodySmall" style={{ color: c.muted }}>{r.ean}</Text>
+    <View>
+      <SectionLabel>Result</SectionLabel>
+      <Panel>
+        <Text variant="titleLarge" style={{ fontWeight: "800" }}>{productTitle(r)}</Text>
+        <Text variant="bodySmall" style={{ color: p.muted, marginTop: 2, fontVariant: ["tabular-nums"] }}>EAN {r.ean}</Text>
 
-      <View
-        style={{
-          marginTop: 12,
-          padding: 12,
-          borderRadius: 16,
-          borderWidth: 2,
-          borderColor: good ? c.good : c.border,
-        }}
-        accessibilityRole="summary"
-      >
-        <Body bold>{head.text}</Body>
-      </View>
+        <View
+          accessibilityRole="summary"
+          style={{
+            marginTop: space.md,
+            padding: space.md,
+            borderRadius: 16,
+            backgroundColor: tone.bg,
+            borderWidth: 2,
+            borderColor: tone.border,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: space.md,
+          }}
+        >
+          <MaterialCommunityIcons name={good ? "trophy-outline" : "information-outline"} size={28} color={tone.fg} />
+          <RNText style={{ flex: 1, color: tone.fg, fontSize: 16, fontWeight: "800" }}>{head.text}</RNText>
+        </View>
 
-      {rows.map((row) => (
-        <List.Item
-          key={row.key}
-          title={`${row.name} · ${row.main}`}
-          description={row.detail}
-          left={() => <List.Icon icon={row.isCheapest ? "star" : "store-outline"} color={row.isCheapest ? c.good : undefined} />}
-          right={() => (row.isOffer ? <Chip compact>Offer</Chip> : null)}
-          accessibilityLabel={`${row.name} ${row.main}${row.isCheapest ? ", cheapest" : ""}${row.isTied ? ", tied for cheapest" : ""}`}
-        />
-      ))}
+        {rows.length > 0 ? (
+          <View style={{ gap: space.sm, marginTop: space.md }}>
+            {rows.map((row) => (
+              <ChainPriceRow
+                key={row.key}
+                chain={row.chain}
+                detail={row.detail}
+                priceText={row.main}
+                isCheapest={row.isCheapest || row.isTied}
+                isOffer={row.isOffer}
+                accessibilityLabel={`${row.name} ${row.main}${row.isCheapest ? ", cheapest" : ""}${row.isTied ? ", tied for cheapest" : ""}`}
+              />
+            ))}
+          </View>
+        ) : null}
+
+        {r.notes.map((n, i) => (
+          <View key={i} style={{ flexDirection: "row", gap: space.sm, marginTop: space.md }}>
+            <MaterialCommunityIcons name="information-outline" size={16} color={p.muted} style={{ marginTop: 2 }} />
+            <Text variant="bodySmall" style={{ color: p.muted, flex: 1 }}>{n}</Text>
+          </View>
+        ))}
+
+        {r.item ? (
+          <View style={{ marginTop: space.lg }}>
+            <ChunkyButton
+              label={`Add ${r.item_name ?? "item"} to usual items`}
+              icon="plus-circle-outline"
+              outline
+              onPress={() => onAdd(r.item as string)}
+            />
+            {usualMessage ? <HelperText type="info" visible>{usualMessage}</HelperText> : null}
+          </View>
+        ) : null}
+      </Panel>
 
       {r.observations.length > 0 ? (
-        <View style={{ marginTop: 12 }}>
-          <Text variant="titleSmall">Recent prices seen by others (Open Prices)</Text>
-          {r.observations.slice(0, 5).map((o, i) => (
-            <Text key={i} variant="bodySmall" style={{ color: c.muted, marginTop: 2 }}>{observationLine(o)}</Text>
-          ))}
-        </View>
+        <>
+          <SectionLabel>Seen by others (Open Prices)</SectionLabel>
+          <Group>
+            {r.observations.slice(0, 5).map((o, i) => (
+              <View key={i} style={{ paddingVertical: space.md, paddingHorizontal: space.lg }}>
+                <Text variant="bodyMedium" style={{ fontVariant: ["tabular-nums"] }}>{observationLine(o)}</Text>
+              </View>
+            ))}
+          </Group>
+        </>
       ) : null}
-
-      {r.notes.map((n, i) => (
-        <Text key={i} variant="bodySmall" style={{ color: c.muted, marginTop: 8 }}>{n}</Text>
-      ))}
-
-      {r.item ? (
-        <View style={{ marginTop: 12 }}>
-          <Button label={`Add ${r.item_name ?? "item"} to usual items`} icon="plus-circle-outline" mode="outlined" onPress={() => onAdd(r.item as string)} />
-          {usualMessage ? <HelperText type="info" visible>{usualMessage}</HelperText> : null}
-        </View>
-      ) : null}
-    </Card>
+    </View>
   );
 }
