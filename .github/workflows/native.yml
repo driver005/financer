@@ -110,3 +110,40 @@ jobs:
           name: app-android-embedded-apk
           path: apps/mobile/out/financer-android-embedded.apk
           retention-days: 7
+
+  # Same chain for iOS: Rust -> bindings -> Expo prebuild -> CocoaPods -> xcodebuild for the
+  # simulator (unsigned). Proves the app compiles and links with the library; does not run it.
+  ios-app:
+    runs-on: macos-latest
+    env:
+      IPHONEOS_DEPLOYMENT_TARGET: "15.1"
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - name: Build the Rust library and generate the bindings
+        run: scripts/enable-embedded.sh ios
+      - name: Typecheck against the generated bindings
+        run: npx tsc --noEmit
+      - name: Generate the native iOS project and install the pods
+        run: npx expo prebuild --platform ios
+        env:
+          CI: "1"
+      - name: Build for the simulator
+        working-directory: apps/mobile/ios
+        run: |
+          xcodebuild -workspace *.xcworkspace -scheme "$(basename *.xcworkspace .xcworkspace)" \
+            -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -40
+          exit ${PIPESTATUS[0]}
