@@ -5,6 +5,8 @@ import { HelperText, List, SegmentedButtons, Text, TextInput } from "@/component
 
 import { Api, type ExportData } from "@/api/client";
 import { useApi } from "@/api/config";
+import { BackupCard } from "@/components/BackupCard";
+import { LockCard } from "@/components/LockCard";
 import { Body, Button, Card, Screen, Title, useColors } from "@/components/ui";
 import { pickTextFile, shareTextFile } from "@/native/files";
 import { useScreenData } from "@/hooks";
@@ -260,6 +262,8 @@ export default function SettingsScreen() {
               </View>
             </Card>
 
+            <BackupCard />
+
             <Card>
               <Body>
                 {settings.price_sources} price source{settings.price_sources === 1 ? "" : "s"} configured on the server.
@@ -267,6 +271,7 @@ export default function SettingsScreen() {
             </Card>
           </>
         ) : null}
+        <LockCard />
         {status || error ? <HelperText type="info" visible>{status ?? error}</HelperText> : null}
       </ScrollView>
     </Screen>

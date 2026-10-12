@@ -28,6 +28,12 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Financer uses Face ID to unlock the app when you have turned on the app lock."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "cameraPermission": "Financer uses the camera to photograph receipts so it can learn what you usually buy.",
