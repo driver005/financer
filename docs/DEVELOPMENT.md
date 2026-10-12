@@ -34,6 +34,9 @@ Everything local is in `.dev/` (git-ignored):
 
 - `.dev/financer.db`: the SQLite database.
 - `.dev/token`: the dev API token, created on first use. Delete it to get a new one.
+- `.dev/financer.toml`: the server's config file (see `docs/CONFIG.md`). `make dev` creates it from
+  `financer.example.toml` if it is missing (everything in it is commented out) and the server then
+  reads it. Environment variables, including the ones the Makefile sets, win over it.
 - `.dev/env`: optional. Plain `NAME=value` lines (or `export NAME=value`), loaded before the server
   starts. Put `FINANCER_ANTHROPIC_API_KEY`, `FINANCER_PRICE_SOURCES`, `FINANCER_FINTS_PRODUCT_ID`
   and the like here.

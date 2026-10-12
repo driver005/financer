@@ -45,7 +45,11 @@ export FINANCER_API_TOKEN=$(openssl rand -hex 32)   # at least 32 characters
 cargo run -p financer-server                        # listens on 127.0.0.1:8080
 ```
 
-Settings (environment variables; the full list is at the top of `crates/server/src/main.rs`):
+Settings come from environment variables and, optionally, a `financer.toml` file (copy
+[`financer.example.toml`](financer.example.toml); the environment wins over the file, and
+without a file the variables alone work as before). Full reference: [docs/CONFIG.md](docs/CONFIG.md).
+`financer-server --check-config` validates it and `--print-config` shows what is in effect, with
+secrets hidden. The on-phone backend does not read the file. The environment variables:
 
 | Variable | Purpose |
 |---|---|
@@ -57,6 +61,8 @@ Settings (environment variables; the full list is at the top of `crates/server/s
 | `FINANCER_CORS_ORIGIN` | development only: origins (comma-separated) whose browsers may call the API, used by `make dev` |
 | `FINANCER_FINTS_PRODUCT_ID` | enables live Sparkasse sync |
 | `FINANCER_ANTHROPIC_API_KEY`, `FINANCER_OPENAI_API_KEY` | enable recipe ideas and receipt photo scan |
+| `FINANCER_LLM_PROVIDER` | `claude` or `openai`: the provider used until the app picks one |
+| `FINANCER_CONFIG` | path of the config file (also `--config <path>`; default `./financer.toml`) |
 
 App:
 
@@ -93,11 +99,12 @@ crates/receipts   receipt text parser and usual-item learning
 crates/recipes    bundled recipes, ranking, AI ideas
 crates/llm        Claude and OpenAI behind one trait (genai)
 crates/api        Axum router, auth, OpenAPI
+crates/config     financer.toml and environment configuration of the server
 crates/server     hosted binary
 crates/embedded   the same backend as a library for the phone (UniFFI)
 apps/mobile       Expo app (routes in src/app)
 deploy/           Dockerfile, compose, Caddyfile
-docs/             CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
+docs/             CONFIG.md, CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
 ```
 
 ## Security notes

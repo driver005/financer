@@ -1,0 +1,112 @@
+# Financer server configuration.
+#
+# Copy this file to `financer.toml` (next to the server, or anywhere and point `--config` /
+# FINANCER_CONFIG at it). Everything is optional and every line below is commented out, so the
+# file as it stands changes nothing: remove the leading `#` of a setting to use it.
+#
+# Order of precedence for each setting: environment variable, then this file, then the default.
+# The environment variable that belongs to a setting is named in its comment.
+#
+# Secrets: do not write them here if you can avoid it. Any text value may refer to the
+# environment as ${NAME}, or ${NAME:-fallback} to use "fallback" when NAME is not set. It is an
+# error to refer to a variable that is not set (and has no fallback). Write $$ for a literal $.
+# If you do put a secret in this file, keep the file private (chmod 600); the server warns when
+# other users can read it.
+#
+# Unknown keys are an error (to catch typos), except under [receipts].
+#
+# Check your file without starting the server:
+#   financer-server --check-config      validate, exit 0 or 1
+#   financer-server --print-config      show the effective values (secrets hidden) and where each
+#                                       one came from
+#
+# This file is for the hosted server. The on-phone (embedded) backend does not read it.
+
+[server]
+# Address and port to listen on. Env: FINANCER_BIND. Default: this computer only.
+# Use 0.0.0.0:8080 behind a reverse proxy or in Docker (never expose it without HTTPS).
+#bind = "127.0.0.1:8080"
+
+# Folder of the built web app (expo export --platform web) to serve at /. Env: FINANCER_WEB_DIR.
+# A relative path is relative to this file. Default: not served.
+#web_dir = "./web"
+
+# Development only: browsers on these origins may call the API (the hot-reloading web app).
+# Env: FINANCER_CORS_ORIGIN (comma-separated). Default: none. Leave unset in production.
+#cors_origins = ["http://localhost:8081"]
+
+# Hours between automatic price refreshes, 0 = off. Env: FINANCER_REFRESH_HOURS.
+#refresh_hours = 24
+
+[auth]
+# The token the app sends. At least 32 characters; `openssl rand -hex 32` makes a good one.
+# Env: FINANCER_API_TOKEN. Use ONE of these two.
+#api_token = "${FINANCER_API_TOKEN}"
+# Or read it from a file (a relative path is relative to this file), for example a Docker secret.
+#api_token_file = "/run/secrets/financer_token"
+
+[database]
+# sqlite://path?mode=rwc  or  postgres://user:password@host/db. Env: FINANCER_DATABASE_URL.
+#url = "sqlite://financer.db?mode=rwc"
+
+[prices]
+# JSON file listing the price sources (see docs/PRICES.md and deploy/config/sources.example.json).
+# A relative path is relative to this file. Env: FINANCER_PRICE_SOURCES. Default: no sources.
+#sources_file = "sources.json"
+
+[llm]
+# API keys for recipe ideas, receipt photos and AI category suggestions. Only the keys you set
+# enable a provider. Env: FINANCER_ANTHROPIC_API_KEY, FINANCER_OPENAI_API_KEY.
+#anthropic_api_key = "${ANTHROPIC_API_KEY}"
+#openai_api_key = "${OPENAI_API_KEY}"
+# Which provider to use until you pick one in the app: "claude" or "openai".
+# Env: FINANCER_LLM_PROVIDER. Default: claude.
+#provider = "claude"
+
+[bank]
+# Your FinTS product id from the Deutsche Kreditwirtschaft (see docs/FINTS.md). Without it live
+# bank sync stays off. Env: FINANCER_FINTS_PRODUCT_ID.
+#fints_product_id = "${FINTS_PRODUCT_ID}"
+
+# One block per account to sync automatically. The connection is described here; the PIN is
+# never written in this file: name an environment variable (pin_env) or type the PIN in the app.
+# A pushTAN approval is always needed from you: a scheduled sync logs in by itself and then
+# waits in the app ("needs approval") until you approve it in your banking app.
+#[[bank.accounts]]
+# Shown in the app. Must be unique.
+#name = "Girokonto"
+# Only "fints" exists.
+#kind = "fints"
+# The 8-digit bank code (BLZ).
+#bank_code = "37050198"
+# Your online banking login name.
+#login = "your-login-name"
+# The account to read. Needed by FinTS to pick the account.
+#iban = "DE89 3704 0044 0532 0130 00"
+# Only for a bank that is not in the built-in list of FinTS addresses; then the BIC is required.
+#fints_url = "https://banking.example/fints"
+#bic = "COBADEFFXXX"
+# Environment variable that holds the PIN. Without it, a sync needs the PIN typed in the app.
+#pin_env = "SPARKASSE_PIN"
+# Hours between automatic syncs; 0 (default) = only when you press "Sync now" in the app.
+#sync_every_hours = 12
+# How many days the first import reaches back (1 to 365, default 90; banks often allow ~90).
+#since_days = 90
+
+# Bank texts that belong to a supermarket chain, for "what I spend at each supermarket".
+# The built-in list already knows Lidl, Aldi, Kaufland, Rewe, Edeka, Netto, Penny, dm, Rossmann,
+# Norma, Globus, Tegut and others. Add your own spellings here, or a local store as a new chain.
+# `chain` is a built-in chain (rewe, lidl, aldi, kaufland, edeka, netto, penny, dm, rossmann,
+# norma, globus, tegut, real, ...) or any name of your own. `match` is one text or a list; it is
+# compared without upper/lower case and punctuation, as whole words, in the booking's
+# counterparty and purpose.
+#[[stores]]
+#chain = "edeka"
+#match = ["Mueller Frischemarkt", "Frischecenter Mueller"]
+#
+#[[stores]]
+#chain = "Bio Company"
+#match = "BIO COMPANY"
+
+# Reserved for the receipts feature. Anything written here is accepted and ignored for now.
+[receipts]

@@ -70,6 +70,7 @@ pub struct AppState {
     pub(crate) http: Arc<dyn Http>,
     pub(crate) price_sources: Arc<Vec<SourceConfig>>,
     pub(crate) llm_keys: LlmKeys,
+    pub(crate) default_llm_provider: Option<financer_llm::Provider>,
     pub(crate) llm: LlmFactory,
 }
 
@@ -86,6 +87,7 @@ impl AppState {
             http: Arc::new(NoNetwork),
             price_sources: Arc::new(Vec::new()),
             llm_keys: LlmKeys::default(),
+            default_llm_provider: None,
             llm: Arc::new(ProviderFactory::create),
         }
     }
@@ -122,6 +124,12 @@ impl AppState {
 
     pub fn with_llm_keys(mut self, keys: LlmKeys) -> Self {
         self.llm_keys = keys;
+        self
+    }
+
+    /// The provider used until the app chooses one (the server's `[llm] provider` setting).
+    pub fn with_default_llm_provider(mut self, provider: Option<financer_llm::Provider>) -> Self {
+        self.default_llm_provider = provider;
         self
     }
 

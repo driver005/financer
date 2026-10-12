@@ -5,6 +5,12 @@
 #   FINANCER_API_TOKEN=<at least 32 random characters, e.g. `openssl rand -hex 32`>
 #   DOMAIN=financer.example.com
 # Optional: FINANCER_FINTS_PRODUCT_ID, FINANCER_ANTHROPIC_API_KEY, FINANCER_OPENAI_API_KEY, FINANCER_PRICE_SOURCES
+#
+# Optional settings can also live in deploy/financer.toml (see docs/CONFIG.md). Create the file
+# before the first start, even if it only holds comments:
+#   cp ../financer.example.toml financer.toml
+# Environment variables win over the file. Reference secrets from the file as ${NAME} and pass
+# the variable to the container below (or put it in deploy/.env), rather than writing them in it.
 # For PostgreSQL also: POSTGRES_PASSWORD=<random>  and  FINANCER_DATABASE_URL=postgres://financer:<same password>@postgres/financer
 services:
   server:
@@ -23,11 +29,14 @@ services:
       FINANCER_OPENAI_API_KEY: ${FINANCER_OPENAI_API_KEY:-}
       # e.g. /config/sources.json, with the file in deploy/config/ (see docs/PRICES.md)
       FINANCER_PRICE_SOURCES: ${FINANCER_PRICE_SOURCES:-}
-      FINANCER_REFRESH_HOURS: ${FINANCER_REFRESH_HOURS:-24}
+      # empty = not set here: financer.toml, then the default of 24
+      FINANCER_REFRESH_HOURS: ${FINANCER_REFRESH_HOURS:-}
+      FINANCER_CONFIG: /config/financer.toml
       RUST_LOG: info
     volumes:
       - financer-data:/data
       - ./config:/config:ro
+      - ./financer.toml:/config/financer.toml:ro
     expose:
       - "8080"
 
