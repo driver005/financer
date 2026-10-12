@@ -31,4 +31,9 @@ export { Backend } from "financer-embedded-bindings";
 export type BackendHandle = import("financer-embedded-bindings").BackendLike;
 export type { StartConfig } from "financer-embedded-bindings";
 TS
+# 4. CI smoke test: run the backend at app start and log the result (see scripts/smoke-entry.js).
+if [ "${FINANCER_SMOKE:-}" = "1" ]; then
+  cp scripts/smoke-entry.js smoke-entry.js
+  npm pkg set main=smoke-entry.js
+fi
 echo "Embedded backend enabled for $platform. Next: npx expo prebuild --platform $platform"

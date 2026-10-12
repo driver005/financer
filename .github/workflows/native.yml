@@ -91,6 +91,9 @@ jobs:
       - run: npm ci
       - name: Build the Rust library and generate the bindings
         run: scripts/enable-embedded.sh android
+        env:
+          # CI-only entry that starts the backend at app launch (read by the android-emulator job)
+          FINANCER_SMOKE: "1"
       - name: Typecheck against the generated bindings
         run: npx tsc --noEmit
       - name: Generate the native Android project
@@ -147,3 +150,27 @@ jobs:
             -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO build | tail -40
           exit ${PIPESTATUS[0]}
+
+  # The first real run of the on-phone backend: install the APK from android-app on an x86_64
+  # emulator, start it, and wait for the smoke line that apps/mobile/scripts/smoke-entry.js logs
+  # after starting the Rust backend, importing a transaction through it and reading it back.
+  android-emulator:
+    needs: android-app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-android-embedded-apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash .github/scripts/emulator-smoke.sh financer-android-embedded.apk
