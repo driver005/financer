@@ -25,6 +25,11 @@ pub struct OpenPrice {
     pub date: Date,
     /// Name of the store the price was seen in, if recorded.
     pub store: Option<String>,
+    /// The product as Open Prices describes it (the response embeds it), so no second lookup on
+    /// Open Food Facts is needed. That service's robots.txt disallows `/api` for crawlers.
+    pub product_name: Option<String>,
+    /// Pack size, e.g. `400 g`.
+    pub pack: Option<String>,
 }
 
 /// Request URLs and response parsers for Open Food Facts and Open Prices.
@@ -118,16 +123,32 @@ impl OpenFoodFacts {
                 )
                 .ok()?;
                 let loc = it.get("location");
+                // The chain is usually in the OSM brand ("REWE"); the name may be a branch name.
                 let store = loc
                     .and_then(|l| {
-                        Self::str_field(l, "osm_name").or_else(|| Self::str_field(l, "name"))
+                        Self::str_field(l, "osm_brand")
+                            .or_else(|| Self::str_field(l, "osm_name"))
+                            .or_else(|| Self::str_field(l, "name"))
                     })
                     .or_else(|| Self::str_field(it, "location_name"));
+                let product = it.get("product");
+                let product_code = Self::str_field(it, "product_code")
+                    .or_else(|| product.and_then(|p| Self::str_field(p, "code")))?;
+                // `product_quantity` + unit is clean ("400" + "g"); `quantity` is free text.
+                let pack = product
+                    .and_then(|p| {
+                        let unit = Self::str_field(p, "product_quantity_unit")?;
+                        let amount = p.get("product_quantity").and_then(Value::as_f64)?;
+                        Some(format!("{} {unit}", amount))
+                    })
+                    .or_else(|| product.and_then(|p| Self::str_field(p, "quantity")));
                 Some(OpenPrice {
-                    product_code: Self::str_field(it, "product_code")?,
+                    product_code,
                     price,
                     date,
                     store,
+                    product_name: product.and_then(|p| Self::str_field(p, "product_name")),
+                    pack,
                 })
             })
             .collect()
@@ -138,6 +159,24 @@ impl OpenFoodFacts {
 mod tests {
     use super::*;
     use time::macros::date;
+
+    #[test]
+    fn open_prices_response_carries_product_store_and_pack() {
+        // Shape taken from a live response of prices.openfoodfacts.org (trimmed).
+        let json = r#"{"items":[{"id":341942,"product_code":"3017620422003","price":3.5,
+            "currency":"EUR","date":"2026-10-06",
+            "product":{"code":"3017620422003","product_name":"Nutella",
+                       "product_quantity":400,"product_quantity_unit":"g","quantity":"400 g e"},
+            "location":{"osm_brand":"Carrefour Express","osm_name":"Carrefour Express Nancy Leopold"}},
+            {"product_code":"1","price":1.0,"currency":"EUR","date":"2026-10-06",
+             "product":{"product_name":"Milch","product_quantity":0.5,"product_quantity_unit":"l"}}]}"#;
+        let p = OpenFoodFacts::parse_open_prices(json);
+        assert_eq!(p.len(), 2);
+        assert_eq!(p[0].product_name.as_deref(), Some("Nutella"));
+        assert_eq!(p[0].pack.as_deref(), Some("400 g"));
+        assert_eq!(p[0].store.as_deref(), Some("Carrefour Express"));
+        assert_eq!(p[1].pack.as_deref(), Some("0.5 l"));
+    }
 
     #[test]
     fn parses_product_lookup() {

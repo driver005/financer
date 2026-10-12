@@ -6,7 +6,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use financer_core::{
-    BasketItem, BasketPlanner, Catalog, Category, Money, PriceQuote, YearMonth, CATALOG,
+    BasketItem, BasketPlanner, BudgetPeriod, Catalog, Category, Money, PriceQuote, CATALOG,
 };
 use financer_llm::{LlmSettings, Provider};
 use financer_prices::Sources;
@@ -16,6 +16,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use time::{Date, OffsetDateTime};
 
+use crate::budget_period::BudgetPeriods;
 use crate::dto::*;
 use crate::routes::ApiError;
 use crate::AppState;
@@ -462,15 +463,12 @@ impl Grocery {
                         "set a groceries limit in the budget or pass budget_cents".into(),
                     ));
                 }
-                let txs: Vec<_> = state
-                    .store
-                    .list_transactions()
-                    .await?
-                    .into_iter()
-                    .map(|s| s.transaction)
-                    .collect();
+                // split transactions count by their parts
+                let txs = state.store.list_effective_transactions().await?;
+                let period =
+                    BudgetPeriod::containing(Self::today(), BudgetPeriods::payday(&state).await?);
                 (
-                    envelopes.remaining(Category::Groceries, &txs, YearMonth::of(Self::today())),
+                    envelopes.remaining(Category::Groceries, &txs, period),
                     "groceries_envelope",
                 )
             }
@@ -613,7 +611,9 @@ impl Grocery {
     }
 
     /// The configured provider, or `503` with what to set when its key is missing.
-    async fn build_llm(state: &AppState) -> Result<Box<dyn financer_llm::LlmProvider>, ApiError> {
+    pub(crate) async fn build_llm(
+        state: &AppState,
+    ) -> Result<Box<dyn financer_llm::LlmProvider>, ApiError> {
         let (provider, model) = Self::llm_settings(state).await?;
         let Some(api_key) = Self::key_for(state, provider) else {
             let var = if provider == Provider::Claude {
@@ -706,6 +706,7 @@ impl Grocery {
             claude_key_configured: Self::key_for(&state, Provider::Claude).is_some(),
             openai_key_configured: Self::key_for(&state, Provider::OpenAi).is_some(),
             price_sources: state.price_sources.len(),
+            payday: BudgetPeriods::payday(&state).await?,
         }))
     }
 
@@ -735,6 +736,7 @@ impl Grocery {
                 "llm_model is not a valid model name".into(),
             ));
         }
+        BudgetPeriods::validate_payday(u.payday)?;
         if let Some(m) = u.habit_mode {
             state.store.set_setting("habit_mode", &m).await?;
         }
@@ -743,6 +745,9 @@ impl Grocery {
         }
         if let Some(m) = u.llm_model {
             state.store.set_setting("llm_model", m.trim()).await?;
+        }
+        if let Some(d) = u.payday {
+            BudgetPeriods::set_payday(&state, d).await?;
         }
         Self::get_settings(State(state)).await
     }

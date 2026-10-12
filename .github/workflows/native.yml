@@ -1,0 +1,176 @@
+name: Native libraries
+
+# Cross-compiles the Rust backend that runs inside the phone (crates/embedded) for Android and
+# iOS. It checks that the crate and all its dependencies build with a real Android NDK and Xcode,
+# which a normal Linux build cannot show. It does not run the app on a device.
+
+on:
+  push:
+    paths:
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "apps/embedded-bindings/**"
+      - "apps/mobile/scripts/enable-embedded.sh"
+      - ".github/workflows/native.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+      - name: Show the NDK
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          ls "$ANDROID_NDK_HOME" | head -5
+      - name: Build for arm64 phones and the x86_64 emulator
+        run: cargo ndk -t arm64-v8a -t x86_64 --platform 24 -o jniLibs build --release -p financer-embedded --locked
+      - run: find jniLibs -name '*.so' -exec ls -lh {} +
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-jniLibs
+          path: jniLibs
+          retention-days: 7
+
+  ios:
+    runs-on: macos-latest
+    env:
+      # Rust links for iOS 10 by default, while the C code in the TLS libraries is built for the
+      # SDK's iOS: the symbol ___chkstk_darwin is then missing at link time. Pin one version.
+      IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+      - name: Build for iPhones and the simulator
+        run: |
+          for t in aarch64-apple-ios aarch64-apple-ios-sim; do
+            cargo build --release -p financer-embedded --locked --target "$t"
+          done
+      - run: ls -lh target/aarch64-apple-ios/release/libfinancer_embedded.* target/aarch64-apple-ios-sim/release/libfinancer_embedded.*
+
+  # The whole chain for the Android app with the backend inside: Rust -> bindings (ubrn jsi2) ->
+  # Expo prebuild -> Gradle. It proves the app compiles and links with the library; it does not
+  # run it on a device.
+  android-app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Build the Rust library and generate the bindings
+        run: scripts/enable-embedded.sh android
+        env:
+          # CI-only entry that starts the backend at app launch (read by the android-emulator job)
+          FINANCER_SMOKE: "1"
+      - name: Typecheck against the generated bindings
+        run: npx tsc --noEmit
+      - name: Generate the native Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: "1"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+      - run: |
+          mkdir out
+          cp android/app/build/outputs/apk/release/*.apk out/financer-android-embedded.apk
+          ls -lh out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-android-embedded-apk
+          path: apps/mobile/out/financer-android-embedded.apk
+          retention-days: 7
+
+  # Same chain for iOS: Rust -> bindings -> Expo prebuild -> CocoaPods -> xcodebuild for the
+  # simulator (unsigned). Proves the app compiles and links with the library; does not run it.
+  ios-app:
+    runs-on: macos-latest
+    env:
+      IPHONEOS_DEPLOYMENT_TARGET: "15.1"
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - name: Build the Rust library and generate the bindings
+        run: scripts/enable-embedded.sh ios
+      - name: Typecheck against the generated bindings
+        run: npx tsc --noEmit
+      - name: Generate the native iOS project and install the pods
+        run: npx expo prebuild --platform ios
+        env:
+          CI: "1"
+      - name: Build for the simulator
+        working-directory: apps/mobile/ios
+        run: |
+          xcodebuild -workspace *.xcworkspace -scheme "$(basename *.xcworkspace .xcworkspace)" \
+            -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 build | tail -40
+          exit ${PIPESTATUS[0]}
+
+  # The first real run of the on-phone backend: install the APK from android-app on an x86_64
+  # emulator, start it, and wait for the smoke line that apps/mobile/scripts/smoke-entry.js logs
+  # after starting the Rust backend, importing a transaction through it and reading it back.
+  android-emulator:
+    needs: android-app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-android-embedded-apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash .github/scripts/emulator-smoke.sh financer-android-embedded.apk

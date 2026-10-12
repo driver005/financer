@@ -1,0 +1,56 @@
+[
+  {
+    "type": "json_ld",
+    "chain": "rewe",
+    "is_offer": true,
+    "urls": [
+      "https://www.rewe.de/angebote/",
+      "https://www.rewe.de/angebote/nationale-angebote/"
+    ]
+  },
+  {
+    "type": "json_ld",
+    "chain": "lidl",
+    "is_offer": true,
+    "urls": [
+      "https://www.lidl.de/c/billiger-montag/a10006065",
+      "https://www.lidl.de/c/lebensmittel/s10068374"
+    ]
+  },
+  {
+    "type": "json_ld",
+    "chain": "aldi",
+    "is_offer": true,
+    "urls": [
+      "https://www.aldi-nord.de/angebote.html",
+      "https://www.aldi-sued.de/de/angebote/"
+    ]
+  },
+  {
+    "type": "json_ld",
+    "chain": "kaufland",
+    "is_offer": true,
+    "urls": [
+      "https://filiale.kaufland.de/angebote.html",
+      "https://www.kaufland.de/angebote/"
+    ]
+  },
+  {
+    "type": "open_prices",
+    "max_age_days": 365,
+    "items": [
+      {
+        "item": "milch",
+        "barcode": "3017620422003"
+      },
+      {
+        "item": "schokolade",
+        "barcode": "7622210449283"
+      },
+      {
+        "item": "cola",
+        "barcode": "5449000000996"
+      }
+    ]
+  }
+]

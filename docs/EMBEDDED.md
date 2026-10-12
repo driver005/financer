@@ -11,11 +11,15 @@ reach it, and your data stays in the app's private storage (SQLite).
 | `crates/embedded` (start, in-process request handling, persistence, malformed input) | built and tested on the host (6 tests) |
 | UniFFI interface (`Backend.start`, `handle`, `refreshPrices`) | Kotlin and Swift bindings generate from the built library (checked in CI) |
 | App transport (`EmbeddedTransport`), settings, mode switch, backup export/import | tested in Node and in the browser build (the mode reports "not available in this build") |
-| Cross-compiling to Android/iOS, the native module, running on a device | **not done**: needs the Android NDK or Xcode. The development environment could not download the NDK (its host is blocked there) and has no macOS |
+| Cross-compiling `crates/embedded` | **Android and iOS both pass** on GitHub runners (`.github/workflows/native.yml`): Android with a real NDK (arm64 phones and the x86_64 emulator), iOS with Xcode (iPhone and simulator). iOS first failed at link time (the C code in the TLS libraries was built for a newer iOS than Rust links for); pinning `IPHONEOS_DEPLOYMENT_TARGET=15.0` fixed it. Only the Rust library is built, not the app |
+| The UniFFI React Native module (`uniffi-bindgen-react-native` 0.31.0-6, flavour `jsi2`) and an Android app that includes it | **builds in CI**: the `android-app` job in `native.yml` runs Rust -> bindings -> typecheck of the app against the generated TypeScript -> `expo prebuild` -> Gradle `assembleRelease` and uploads the APK. The typecheck caught one real mismatch (`contentType` is optional in the generated types), now fixed. The iOS app with the module also **builds in CI** (`ios-app` job: Rust -> bindings -> `expo prebuild` -> CocoaPods -> `xcodebuild` for arm64 simulators, unsigned). It needed two fixes: `author`/`homepage` in the bindings package for the pod spec, and `ARCHS=arm64` because the library has no x86_64 simulator slice. **Never run**: there is no iOS equivalent of the emulator check |
+| Running that app | **runs on an Android emulator in CI** (`android-emulator` job, API 33 x86_64): the app starts the Rust backend, imports one CSV transaction through it and reads it back categorised (`FINANCER_SMOKE OK health=200:ok import=200 category=groceries`, from `apps/mobile/scripts/smoke-entry.js`). The first attempt crashed with `libfinancer_embedded.so not found` because `npm install --install-links` honoured `.gitignore` and dropped the generated native module; a `.npmignore` fixed it. **Not a physical phone**: the arm64 build, the screens in embedded mode, the SQLite file surviving an app restart, background refresh and real network calls (prices, FinTS, LLM) have not been exercised |
 | Background price refresh (`expo-background-task`, registered when the on-phone backend starts; also refreshes on app open) | written, typechecks and bundles; **never run on a device** |
 
-So the Rust half and the app half are in place and tested; the native build in the middle is
-the part you will have to run and debug on your machine.
+So the Rust half and the app half are in place and tested, the library cross-compiles for Android
+and iOS, and an Android APK that contains it builds on a GitHub runner and answers requests on an
+emulator; the iOS app builds for the simulator. What is left is a physical Android phone, and running
+anything on iOS (which you will have to try and debug).
 
 ## Limits you cannot code around
 
@@ -31,20 +35,30 @@ the part you will have to run and debug on your machine.
 
 ## Building it
 
-1. Install the Rust targets and the platform toolchains: Android NDK (`cargo-ndk` or the
-   `uniffi-bindgen-react-native` Android build) and/or Xcode.
-2. Use `uniffi-bindgen-react-native` **0.31.x**: it pins UniFFI to exactly `0.31`, which is why
-   `crates/embedded` depends on `uniffi = "=0.31"`.
-3. Point it at `crates/embedded`; it generates the TypeScript, the C++ glue and a React Native
-   module. Put the generated module in `apps/mobile/modules/financer-embedded/`, replacing the
-   placeholder `index.ts` there. The placeholder's shape is what the app expects:
-   `Backend.start(config)` returning an object with `handle(request)` and `refreshPrices()`.
-4. If the generated names differ (UniFFI maps Rust names to the target language's style), adapt
-   `apps/mobile/src/native/embedded.ts`; it is the only file that knows them.
-5. Make a custom development build (`expo prebuild` / EAS). Expo Go cannot load native code.
+The committed app has no native code, so it runs in Expo Go and on the web. The backend is an
+opt-in build step:
 
-If `uniffi-bindgen-react-native` does not work out, the fallback is the official UniFFI
-Kotlin and Swift bindings wrapped in an Expo Module; the Rust crate does not change.
+```sh
+cd apps/mobile
+scripts/enable-embedded.sh android     # needs cargo-ndk and the Android NDK; "ios" needs Xcode
+npx expo prebuild --platform android
+cd android && ./gradlew assembleRelease
+```
+
+The script builds `crates/embedded` for the phone, generates the bindings in
+`apps/embedded-bindings` (config: `ubrn.config.yaml`; everything generated is gitignored),
+installs them together with `@ubjs/react-native` and `@ubjs/core` as **direct** app dependencies
+(autolinking reads only the app's own `package.json`) and rewrites
+`apps/mobile/modules/financer-embedded/index.ts` to re-export the generated `Backend`. It changes
+your working copy, so use a throwaway checkout or `git checkout` the changes afterwards. The
+generated names match what `apps/mobile/src/native/embedded.ts` expects.
+
+`uniffi-bindgen-react-native` must stay on **0.31.x**: it pins UniFFI to exactly `0.31`, which
+is why `crates/embedded` depends on `uniffi = "=0.31"`. Expo Go cannot load native code, so use a
+development build or the APK.
+
+If this does not work out on a device, the fallback is the official UniFFI Kotlin and Swift
+bindings wrapped in an Expo Module; the Rust crate does not change.
 
 ## Check the bindings generate
 

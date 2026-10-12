@@ -18,7 +18,7 @@ on:
         description: What to build
         type: choice
         default: all
-        options: [all, desktop-and-web, docker, mobile]
+        options: [all, desktop-and-web, docker, mobile, android-apk]
       eas_profile:
         description: EAS build profile for the phone apps (see apps/mobile/eas.json)
         type: choice
@@ -197,10 +197,49 @@ jobs:
           name: app-${{ matrix.platform }}
           path: apps/mobile/${{ env.APP_FILE }}
 
+  android-apk:
+    # An installable Android app built on the runner itself (no Expo account needed). It is the
+    # app in "Server" mode; the on-phone Rust backend is not included. Signed with the debug key,
+    # which is fine for installing it yourself but not for the Play Store.
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'android-apk'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Generate the native Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: "1"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the release APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Collect the APK
+        run: |
+          mkdir out
+          cp android/app/build/outputs/apk/release/*.apk out/financer-android.apk
+          ls -lh out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-android-apk
+          path: apps/mobile/out/financer-android.apk
+
   release:
     # Only for version tags: attach everything that was built to a GitHub release.
     if: startsWith(github.ref, 'refs/tags/') && !cancelled() && needs.desktop.result == 'success' && needs.web.result == 'success'
-    needs: [web, desktop, docker, mobile]
+    needs: [web, desktop, docker, mobile, android-apk]
     runs-on: ubuntu-latest
     permissions:
       contents: write

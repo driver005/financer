@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { HelperText, Text, TextInput } from "@/components/kit";
+import { HelperText, SegmentedButtons, Text, TextInput } from "@/components/kit";
 
-import type { Disposable, EnvelopeStatus } from "@/api/client";
+import type { BudgetPeriod, Disposable, EnvelopeStatus } from "@/api/client";
 import { useApi } from "@/api/config";
 import { Afford } from "@/components/Afford";
 import { Bar, Body, Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { formatCents, parseEuroInput } from "@/format";
 import { useScreenData } from "@/hooks";
+import { localIsoDate, periodLabel } from "@/period";
 
 // Categories that can have a monthly limit (income and savings are not spending).
 const CATEGORIES = [
@@ -15,26 +16,42 @@ const CATEGORIES = [
   "subscriptions", "health", "leisure", "shopping", "cash", "other",
 ] as const;
 
-type BudgetData = { disposable: Disposable; limits: Record<string, string>; status: EnvelopeStatus[] };
+type Which = "current" | "previous";
+type BudgetData = {
+  disposable: Disposable;
+  limits: Record<string, string>;
+  status: Record<Which, EnvelopeStatus[]>;
+  period: Record<Which, BudgetPeriod>;
+};
 
 export default function Budget() {
   const { api, loaded } = useApi();
   const c = useColors();
   const { data, error, busy, reload } = useScreenData<BudgetData>(async (a) => {
-    const now = new Date();
-    const [disposable, envelopes, status] = await Promise.all([
+    const today = localIsoDate();
+    const [disposable, envelopes, current, previous, statusNow, statusBefore] = await Promise.all([
       a.disposable(),
       a.envelopes(),
-      a.budgetStatus(now.getFullYear(), now.getMonth() + 1),
+      a.budgetPeriod("current", today),
+      a.budgetPeriod("previous", today),
+      a.budgetStatusFor("current", today),
+      a.budgetStatusFor("previous", today),
     ]);
     const limits = Object.fromEntries(
       envelopes.map((e) => [e.category, (e.limit_cents / 100).toFixed(2).replace(".", ",")]),
     );
-    return { disposable, limits, status };
+    return {
+      disposable,
+      limits,
+      status: { current: statusNow, previous: statusBefore },
+      period: { current, previous },
+    };
   });
   const [limits, setLimits] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [which, setWhich] = useState<Which>("current");
+  const shown = data?.period[which];
 
   useEffect(() => {
     if (data) setLimits(data.limits);
@@ -88,9 +105,31 @@ export default function Budget() {
           ) : null}
 
           <Card>
-            <Text variant="titleMedium">Monthly limits</Text>
+            <Text variant="titleMedium">Limits per budget period</Text>
+            {shown ? (
+              <>
+                <SegmentedButtons
+                  style={{ marginTop: 12 }}
+                  value={which}
+                  onValueChange={setWhich}
+                  buttons={[
+                    { value: "current", label: "This period" },
+                    { value: "previous", label: "Last period" },
+                  ]}
+                />
+                <Text variant="bodyMedium" style={{ marginTop: 8, fontWeight: "700" }} accessibilityLabel={`Budget period ${periodLabel(shown)}`}>
+                  {periodLabel(shown)}
+                  {which === "current" ? ` · ${shown.days_left} ${shown.days_left === 1 ? "day" : "days"} left` : ""}
+                </Text>
+                {shown.payday > 1 ? (
+                  <Text variant="bodySmall" style={{ color: c.muted }}>
+                    Your budget month starts on day {shown.payday} (change it in Settings).
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
             {CATEGORIES.map((cat) => {
-              const s = data?.status.find((x) => x.category === cat);
+              const s = data?.status[which].find((x) => x.category === cat);
               const over = s ? s.remaining_cents < 0 : false;
               const progress = s && s.limit_cents > 0 ? Math.min(1, s.spent_cents / s.limit_cents) : 0;
               return (

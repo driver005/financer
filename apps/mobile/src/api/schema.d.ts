@@ -40,6 +40,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Possible problems in recent payments: duplicate charges, amounts far above the usual, big
+         *     first-time merchants and charges that are large for their category. Dismissed alerts are left
+         *     out unless `include_dismissed=true`.
+         */
+        get: operations["alerts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alerts/{id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss an alert so it no longer counts as unread. Dismissing twice is fine. */
+        post: operations["dismiss_alert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/bank/status": {
         parameters: {
             query?: never;
@@ -144,6 +182,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/budget/period": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The budget period you are in (or the previous one), from your payday setting. */
+        get: operations["budget_period"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/budget/safe-to-spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What you can spend per day for the rest of the period, with the breakdown: expected income,
+         *     recurring costs still to come, planned envelope money not yet spent, and spending so far.
+         */
+        get: operations["safe_to_spend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/budget/status": {
         parameters: {
             query?: never;
@@ -151,7 +226,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Spent and remaining per envelope for one month. */
+        /**
+         * Spent and remaining per envelope for one budget period (a calendar month unless a payday is
+         *     set in the settings).
+         */
         get: operations["budget_status"];
         put?: never;
         post?: never;
@@ -384,6 +462,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your categorization rules in priority order (first match wins, before the built-in rules). */
+        get: operations["list_rules"];
+        put?: never;
+        /** Add a rule at the end of the priority order. */
+        post: operations["create_rule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rules/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the rules again over existing transactions. Transactions you categorized by hand keep
+         *     their category. Returns how many changed.
+         */
+        post: operations["apply_rules"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rules/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set the priority order of all rules. */
+        post: operations["reorder_rules"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a rule's fields; its place in the order stays. */
+        put: operations["update_rule"];
+        post?: never;
+        delete: operations["delete_rule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/settings": {
         parameters: {
             query?: never;
@@ -393,6 +543,26 @@ export interface paths {
         };
         get: operations["get_settings"];
         put: operations["put_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recurring payments seen as a watchdog: what is due in the next days, price hikes, possible
+         *     duplicates, and subscriptions that seem to have stopped.
+         */
+        get: operations["subscriptions"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -411,6 +581,48 @@ export interface paths {
         get: operations["list_transactions"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/categorize-unknown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask your Claude or OpenAI model to suggest categories for merchants still left as
+         *     uncategorized or other. Only distinct merchant names (letters only) and the allowed
+         *     categories are sent; never amounts, dates, IBANs or purposes. Nothing is changed until you
+         *     accept suggestions.
+         */
+        post: operations["categorize_unknown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/categorize-unknown/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept suggestions: one rule per merchant, then the rules are applied to existing
+         *     transactions.
+         */
+        post: operations["accept_suggestions"];
         delete?: never;
         options?: never;
         head?: never;
@@ -437,10 +649,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/transactions/splits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** All split transactions with their parts. */
+        get: operations["list_splits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/{id}/category": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Recategorize one transaction. With `remember`, the merchant gets a rule so its other and
+         *     future transactions follow.
+         */
+        put: operations["set_category"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/{id}/split": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Split a transaction into parts with their own category. The parts must add up to the
+         *     transaction amount exactly. Budget and spending totals then use the parts.
+         */
+        put: operations["put_split"];
+        post?: never;
+        /** Remove the split; the transaction counts as a whole again. */
+        delete: operations["delete_split"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AcceptReport: {
+            /** @description Rules created or updated (one per accepted merchant). */
+            rules_saved: number;
+            /** @description Transactions that changed category as a result. */
+            transactions_changed: number;
+        };
+        AcceptSuggestions: {
+            suggestions: components["schemas"]["AcceptedSuggestion"][];
+        };
+        AcceptedSuggestion: {
+            /** @example dining */
+            category: string;
+            merchant: string;
+        };
         AffordabilityDto: {
             basket_source: string;
             /** Format: int64 */
@@ -451,6 +735,57 @@ export interface components {
             plan?: null | components["schemas"]["PlanDto"];
             /** @description Cheapest items that fit the budget (at most 20). */
             staples: components["schemas"]["StapleDto"][];
+        };
+        AlertDismissedDto: {
+            dismissed: boolean;
+            id: string;
+        };
+        AlertDto: {
+            /**
+             * Format: int64
+             * @description What was charged (positive).
+             */
+            amount_cents: number;
+            /** Format: date */
+            booking_date: string;
+            counterparty: string;
+            dismissed: boolean;
+            /** @description How many earlier charges the comparison is based on. */
+            history_count: number;
+            /** @description Stable id; pass it to `POST /v1/alerts/{id}/dismiss`. */
+            id: string;
+            /**
+             * @description `duplicate_charge`, `unusual_amount`, `new_merchant` or `large_for_category`. The app labels
+             *     these in the user's language; `reason` is the English explanation with the numbers.
+             * @example duplicate_charge
+             */
+            kind: string;
+            reason: string;
+            /**
+             * Format: int64
+             * @description What it is compared with (earlier charge, median, threshold), positive.
+             */
+            reference_cents?: number | null;
+            /**
+             * @description `low`, `medium` or `high`.
+             * @example high
+             */
+            severity: string;
+            /**
+             * Format: int64
+             * @description Id of the transaction in `GET /v1/transactions`.
+             */
+            transaction_id: number;
+        };
+        AlertsDto: {
+            /** @description Newest first. */
+            alerts: components["schemas"]["AlertDto"][];
+            /** @description Alerts that are not dismissed (also when `include_dismissed` is set). */
+            unread_count: number;
+        };
+        ApplyReport: {
+            /** @description Transactions whose category changed. Transactions you categorized by hand are skipped. */
+            changed: number;
         };
         BankStatus: {
             /** Format: int64 */
@@ -496,6 +831,21 @@ export interface components {
             name: string;
             reference_pack: string;
         };
+        CategoryChange: {
+            /** @example groceries */
+            category: string;
+            /**
+             * @description Also create (or update) a rule for this merchant and apply it to its other
+             *     transactions.
+             */
+            remember?: boolean;
+        };
+        CategoryChanged: {
+            /** @description Other transactions that changed category because of that rule. */
+            others_changed: number;
+            rule?: null | components["schemas"]["RuleDto"];
+            transaction: components["schemas"]["TransactionDto"];
+        };
         ChainAffordabilityDto: {
             /** Format: int64 */
             basket_cents: number;
@@ -518,6 +868,15 @@ export interface components {
             monthly_fixed_costs_cents: number;
             /** Format: int64 */
             monthly_income_cents: number;
+        };
+        DuplicateSubscriptionDto: {
+            first: components["schemas"]["SubscriptionDto"];
+            /**
+             * @description `same_merchant` or `similar_merchant`.
+             * @example similar_merchant
+             */
+            reason: string;
+            second: components["schemas"]["SubscriptionDto"];
         };
         EnvelopeDto: {
             /** @example groceries */
@@ -620,6 +979,41 @@ export interface components {
             transactions_added: number;
             transactions_known: number;
         };
+        /**
+         * @description Which period to look at when no year and month are given.
+         * @enum {string}
+         */
+        PeriodChoice: "current" | "previous";
+        /** @description A budget period: from payday to the day before the next payday. */
+        PeriodDto: {
+            /**
+             * Format: int32
+             * @description Length of the period in days.
+             */
+            days: number;
+            /**
+             * Format: int32
+             * @description Days left including the reference day (0 for a finished period).
+             */
+            days_left: number;
+            /**
+             * Format: date
+             * @description Last day, inclusive.
+             * @example 2026-10-24
+             */
+            end: string;
+            /**
+             * Format: int32
+             * @description Day of month the period starts on (1 = calendar month).
+             */
+            payday: number;
+            /**
+             * Format: date
+             * @description First day, inclusive.
+             * @example 2026-09-25
+             */
+            start: string;
+        };
         PickDto: {
             chain: string;
             is_offer: boolean;
@@ -669,6 +1063,27 @@ export interface components {
             source: string;
             /** Format: date */
             valid_until?: string | null;
+        };
+        PriceHikeDto: {
+            /** @example monthly */
+            cadence: string;
+            counterparty: string;
+            /** Format: int64 */
+            delta_cents: number;
+            /** Format: int64 */
+            new_amount_cents: number;
+            /** Format: int64 */
+            old_amount_cents: number;
+            /**
+             * Format: int64
+             * @description Increase in basis points of the old amount: 2002 is +20.02%.
+             */
+            percent_bp: number;
+            /**
+             * Format: date
+             * @description First booking at the new price.
+             */
+            since: string;
         };
         ReceiptDto: {
             /** @example rewe */
@@ -755,6 +1170,127 @@ export interface components {
             stored: number;
             unmatched: number;
         };
+        /**
+         * @description A user categorization rule. Rules run in list order; the first match wins and beats the
+         *     built-in rules.
+         */
+        RuleDto: {
+            /** @example dining */
+            category: string;
+            /** Format: int64 */
+            id: number;
+            /**
+             * @description `contains`, `equals` or `starts_with`.
+             * @example contains
+             */
+            kind: string;
+            /**
+             * Format: int64
+             * @description Largest amount that matches, compared without sign.
+             * @example 2000
+             */
+            max_cents?: number | null;
+            /**
+             * Format: int64
+             * @description Smallest amount that matches, compared without sign.
+             * @example 500
+             */
+            min_cents?: number | null;
+            /**
+             * @description Compared with the counterparty name after normalization (case, digits and punctuation
+             *     are ignored).
+             */
+            pattern: string;
+            /**
+             * @description Only expenses (`expense`) or only income (`income`); absent for both.
+             * @example expense
+             */
+            sign?: string | null;
+        };
+        /** @description Fields of a rule when creating or replacing one. */
+        RuleInput: {
+            /** @example dining */
+            category: string;
+            /** @example contains */
+            kind: string;
+            /** Format: int64 */
+            max_cents?: number | null;
+            /** Format: int64 */
+            min_cents?: number | null;
+            pattern: string;
+            /** @example expense */
+            sign?: string | null;
+        };
+        RuleOrder: {
+            /** @description Every rule id exactly once, highest priority first. */
+            ids: number[];
+        };
+        /** @description The daily number and everything behind it. Amounts are integer cents. */
+        SafeToSpendDto: {
+            /**
+             * Format: int64
+             * @description `income - spent_so_far - fixed_costs_due - envelope_headroom`; negative when overspent.
+             */
+            available_cents: number;
+            /**
+             * Format: int64
+             * @description What you can spend per day for the rest of the period; never negative.
+             */
+            daily_cents: number;
+            /**
+             * Format: int32
+             * @description Days left in the period, counting today.
+             */
+            days_left: number;
+            /** Format: int32 */
+            days_total: number;
+            /**
+             * Format: int64
+             * @description Spending so far without the fixed costs already paid.
+             */
+            discretionary_spent_cents: number;
+            /**
+             * Format: int64
+             * @description Planned envelope money that is not spent yet (never negative).
+             */
+            envelope_headroom_cents: number;
+            /**
+             * Format: int64
+             * @description Recurring payments still to come this period.
+             */
+            fixed_costs_due_cents: number;
+            /**
+             * Format: int64
+             * @description Recurring income booked so far plus what is still expected this period.
+             */
+            income_cents: number;
+            /** @description Whether any recurring income was found in the bookings. */
+            income_detected: boolean;
+            /** Format: int64 */
+            income_received_cents: number;
+            /** Format: int64 */
+            income_upcoming_cents: number;
+            /**
+             * @description `on_track`, `over_pace` or `unknown` (no income detected).
+             * @example on_track
+             */
+            pace: string;
+            /**
+             * Format: int64
+             * @description The straight-line share of discretionary spending that may be used up by today.
+             */
+            pace_target_cents: number;
+            /** Format: int32 */
+            payday: number;
+            /** Format: date */
+            period_end: string;
+            /** Format: date */
+            period_start: string;
+            /** Format: int64 */
+            spent_so_far_cents: number;
+            /** Format: date */
+            today: string;
+        };
         ScanDto: {
             receipt: components["schemas"]["ReceiptDto"];
             /** @description What the model read off the photo, so mistakes can be spotted. */
@@ -769,6 +1305,11 @@ export interface components {
             /** @description `claude` or `open_ai`. */
             llm_provider: string;
             openai_key_configured: boolean;
+            /**
+             * Format: int32
+             * @description Day of the month the budget period starts on (1 to 28; 1 = calendar month).
+             */
+            payday: number;
             /** @description Number of configured price sources. */
             price_sources: number;
         };
@@ -776,6 +1317,11 @@ export interface components {
             habit_mode?: string | null;
             llm_model?: string | null;
             llm_provider?: string | null;
+            /**
+             * Format: int64
+             * @description Day of the month the budget period starts on, 1 to 28.
+             */
+            payday?: number | null;
         };
         SkippedRowDto: {
             /** Format: int64 */
@@ -788,6 +1334,37 @@ export interface components {
             offers_found: number;
             ok: boolean;
         };
+        SplitDto: {
+            parts: components["schemas"]["SplitPartDto"][];
+            /** Format: int64 */
+            transaction_id: number;
+        };
+        SplitInput: {
+            /** @description At least two parts that add up to the transaction amount exactly. */
+            parts: components["schemas"]["SplitPartDto"][];
+        };
+        SplitPartDto: {
+            /**
+             * Format: int64
+             * @description Same sign as the transaction (negative for an expense).
+             * @example -1500
+             */
+            amount_cents: number;
+            /** @example shopping */
+            category: string;
+            note?: string | null;
+        };
+        /** @description A subscription whose last charge is older than two periods: cancelled, paused or moved. */
+        StaleSubscriptionDto: {
+            /** Format: int64 */
+            days_since_last: number;
+            /**
+             * Format: int32
+             * @description How many expected charges did not arrive (at least 2).
+             */
+            periods_missed: number;
+            subscription: components["schemas"]["SubscriptionDto"];
+        };
         StapleDto: {
             chain: string;
             item: string;
@@ -796,6 +1373,70 @@ export interface components {
             name: string;
             /** Format: int64 */
             price_cents: number;
+        };
+        /** @description One recurring outgoing payment. All amounts in the watchdog are positive charge sizes. */
+        SubscriptionDto: {
+            /**
+             * Format: int64
+             * @example 1299
+             */
+            amount_cents: number;
+            /** @example monthly */
+            cadence: string;
+            /**
+             * Format: int32
+             * @description 10 to 99.
+             */
+            confidence: number;
+            counterparty: string;
+            /** Format: date */
+            first_date: string;
+            /** Format: date */
+            last_date: string;
+            /**
+             * Format: int64
+             * @description What it costs per month on average (weekly x 52/12, quarterly / 3, yearly / 12).
+             * @example 1299
+             */
+            monthly_cents: number;
+            /** Format: date */
+            next_expected: string;
+            occurrences: number;
+        };
+        SubscriptionsDto: {
+            /** @description Subscriptions that are still running. */
+            active: components["schemas"]["SubscriptionDto"][];
+            /** Format: date */
+            as_of: string;
+            /**
+             * Format: int64
+             * @description How many days ahead `upcoming` looks.
+             */
+            days: number;
+            duplicates: components["schemas"]["DuplicateSubscriptionDto"][];
+            /**
+             * Format: int64
+             * @description Sum of `monthly_cents` of the active subscriptions.
+             */
+            monthly_total_cents: number;
+            price_hikes: components["schemas"]["PriceHikeDto"][];
+            /** @description Possibly cancelled or unused, reported apart from the active ones. */
+            stale: components["schemas"]["StaleSubscriptionDto"][];
+            /** @description Expected charges from today to `days` ahead, in date order (an overdue one comes first). */
+            upcoming: components["schemas"]["UpcomingChargeDto"][];
+        };
+        SuggestionDto: {
+            /** @example dining */
+            category: string;
+            /** @description The merchant name as sent (lowercase letters only). */
+            merchant: string;
+            /** @description How many of your transactions carry this merchant. */
+            transactions: number;
+        };
+        SuggestionsDto: {
+            /** @description How many distinct merchant names were sent to the model. */
+            merchants_sent: number;
+            suggestions: components["schemas"]["SuggestionDto"][];
         };
         SyncDone: {
             /** Format: int64 */
@@ -850,6 +1491,22 @@ export interface components {
             id: number;
             purpose: string;
         };
+        UpcomingChargeDto: {
+            /** Format: int64 */
+            amount_cents: number;
+            /** @example monthly */
+            cadence: string;
+            /**
+             * Format: int32
+             * @description 10 to 99; lower for charges further out and for overdue ones.
+             */
+            confidence: number;
+            counterparty: string;
+            /** Format: date */
+            date: string;
+            /** @description The expected date has passed and the charge has not been booked yet. */
+            overdue: boolean;
+        };
     };
     responses: never;
     parameters: never;
@@ -903,6 +1560,66 @@ export interface operations {
             };
             /** @description No budget given and no groceries limit set */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    alerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Also list dismissed alerts (default false). */
+                include_dismissed: boolean | null;
+                /** @description Only payments booked within this many days (default 60, 1 to 3650). */
+                lookback_days: number | null;
+                /**
+                 * @description Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.
+                 * @example 2026-03-02
+                 */
+                as_of: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertsDto"];
+                };
+            };
+        };
+    };
+    dismiss_alert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description alert id from GET /v1/alerts */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertDismissedDto"];
+                };
+            };
+            /** @description No such alert */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1160,14 +1877,84 @@ export interface operations {
             };
         };
     };
+    budget_period: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `current` (default) or `previous`. */
+                period: null | components["schemas"]["PeriodChoice"];
+                /**
+                 * @description The day to treat as today, ISO format (`2026-10-11`). Defaults to today (UTC); the app
+                 *     sends its local date so that a late evening is not already "tomorrow".
+                 * @example 2026-10-11
+                 */
+                date: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeriodDto"];
+                };
+            };
+        };
+    };
+    safe_to_spend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The day to treat as today, ISO format. Defaults to today (UTC).
+                 * @example 2026-10-11
+                 */
+                date: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafeToSpendDto"];
+                };
+            };
+            /** @description Invalid date */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     budget_status: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                year: number;
-                /** @description 1 to 12 */
-                month: number;
+                /**
+                 * @description With `month`: the budget period that starts in this month (the calendar month when the
+                 *     payday is 1).
+                 */
+                year: number | null;
+                /** @description 1 to 12; only together with `year`. */
+                month: number | null;
+                /** @description Instead of `year` and `month`: `current` (default) or `previous` budget period. */
+                period: null | components["schemas"]["PeriodChoice"];
+                /** @description The day to treat as today for `period` (ISO format); defaults to today (UTC). */
+                date: string | null;
             };
             cookie?: never;
         };
@@ -1548,6 +2335,182 @@ export interface operations {
             };
         };
     };
+    list_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDto"][];
+                };
+            };
+        };
+    };
+    create_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDto"];
+                };
+            };
+            /** @description Empty pattern or bad amount range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    apply_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplyReport"];
+                };
+            };
+        };
+    };
+    reorder_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleOrder"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDto"][];
+                };
+            };
+            /** @description The ids are not every rule exactly once */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Rule id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDto"];
+                };
+            };
+            /** @description Empty pattern or bad amount range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such rule */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Rule id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such rule */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     get_settings: {
         parameters: {
             query?: never;
@@ -1599,6 +2562,33 @@ export interface operations {
             };
         };
     };
+    subscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description How many days ahead the calendar looks (default 30, 1 to 366). */
+                days: number | null;
+                /**
+                 * @description Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.
+                 * @example 2026-03-02
+                 */
+                as_of: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionsDto"];
+                };
+            };
+        };
+    };
     list_transactions: {
         parameters: {
             query?: never;
@@ -1614,6 +2604,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransactionDto"][];
+                };
+            };
+        };
+    };
+    categorize_unknown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestionsDto"];
+                };
+            };
+            /** @description The provider failed or returned nothing usable */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No API key configured for the selected provider */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    accept_suggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptSuggestions"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptReport"];
+                };
+            };
+            /** @description A merchant without letters or a category suggestions cannot use */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -1642,6 +2701,143 @@ export interface operations {
             };
             /** @description Not a Sparkasse CSV export */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_splits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SplitDto"][];
+                };
+            };
+        };
+    };
+    set_category: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Transaction id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryChange"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryChanged"];
+                };
+            };
+            /** @description Nothing to remember: the transaction has no merchant name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such transaction */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_split: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Transaction id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SplitInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SplitDto"];
+                };
+            };
+            /** @description Fewer than two parts, wrong signs or the parts do not add up */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such transaction */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_split: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Transaction id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Split removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such transaction, or it is not split */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

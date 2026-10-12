@@ -16,7 +16,7 @@ pub enum Cadence {
 }
 
 impl Cadence {
-    fn nominal_days(self) -> i64 {
+    pub(crate) fn nominal_days(self) -> i64 {
         match self {
             Cadence::Weekly => 7,
             Cadence::Monthly => 30,
@@ -27,12 +27,23 @@ impl Cadence {
 
     /// The next booking after `last`: calendar-aware for monthly and longer rhythms
     /// (the 1st stays the 1st), a plain 7 days for weekly.
-    fn next_after(self, last: Date) -> Date {
+    pub(crate) fn next_after(self, last: Date) -> Date {
         match self {
             Cadence::Weekly => last + Duration::days(7),
             Cadence::Monthly => Self::add_months(last, 1),
             Cadence::Quarterly => Self::add_months(last, 3),
             Cadence::Yearly => Self::add_months(last, 12),
+        }
+    }
+
+    /// The `n`-th booking after `last` (`n = 1` is `next_after`), counted from `last` so the day of the
+    /// month does not drift after a short month (31 Jan, 28 Feb, 31 Mar rather than 28 Mar).
+    pub(crate) fn occurrence_after(self, last: Date, n: i32) -> Date {
+        match self {
+            Cadence::Weekly => last + Duration::days(7 * i64::from(n)),
+            Cadence::Monthly => Self::add_months(last, n),
+            Cadence::Quarterly => Self::add_months(last, 3 * n),
+            Cadence::Yearly => Self::add_months(last, 12 * n),
         }
     }
 
@@ -46,7 +57,7 @@ impl Cadence {
         Date::from_calendar_date(year, month, day).expect("clamped day is valid")
     }
 
-    fn classify(median_gap_days: i64) -> Option<Cadence> {
+    pub(crate) fn classify(median_gap_days: i64) -> Option<Cadence> {
         [
             Cadence::Weekly,
             Cadence::Monthly,

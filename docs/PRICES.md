@@ -61,3 +61,33 @@ Requests identify themselves, obey `robots.txt` (an unreachable or 5xx robots.tx
 not fetch"), wait 3 seconds between requests to one host, and cap responses at 3 MB. Using
 them may still conflict with a site's terms; this is for personal use only. Nothing is
 fetched unless you configure a source, and refreshes run once a day (`FINANCER_REFRESH_HOURS`).
+
+## What a live probe showed (11 Oct 2026)
+
+`--probe-prices` was run once from a GitHub Actions runner (a datacenter address, so results can
+differ from your home connection). It is polite: robots.txt is obeyed and requests are spaced.
+The workflow is `.github/workflows/probe.yml`; the pages tried are in `.github/probe/sources.json`.
+
+| Source | Result |
+|---|---|
+| Rewe `/angebote/` | HTTP 403 (refused to the runner) |
+| Kaufland `www.kaufland.de/angebote/` | HTTP 403 (refused to the runner) |
+| Lidl `billiger-montag` page | fetched (200), two structured-data blocks, **none is a product**, so `json_ld` found 0 offers |
+| Aldi Nord `angebote.html` | fetched (200, 620 KB), **no structured data at all**, so `json_ld` found 0 offers |
+| Open Prices | worked in principle (see below) |
+
+What this means:
+
+- `json_ld` does not work for Lidl or Aldi on those pages. Use `llm_page` (your model reads the
+  page; costs API calls) for them, or pick other pages. Which pages work for you is still to be
+  checked from your own connection, especially Rewe and Kaufland (403 may be only the runner).
+- **Open Prices**: the old code first looked each barcode up on `world.openfoodfacts.org/api`,
+  whose robots.txt says `Disallow: /api` for everyone, so the polite client refused it (correctly).
+  The Open Prices response already contains the product name, pack size and store brand, so the
+  source now uses only `prices.openfoodfacts.org` and no second lookup. A repeat probe confirmed
+  it: the source is `ok`, no robots.txt refusal, and it fetched and parsed a live offer for the
+  test barcodes. That offer was then (correctly) rejected as a `size_mismatch`, because the probe
+  deliberately mapped a Nutella barcode to the catalog item `milch`. So the whole path works
+  against the live service; whether it yields useful prices depends on the barcodes you choose.
+- Open Prices only helps for products someone has recorded a price for in one of the four chains
+  (matched by store brand), so expect sparse data.

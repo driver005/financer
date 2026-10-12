@@ -2,17 +2,20 @@
 
 mod auth;
 mod bank;
+mod budget_period;
+mod categorization;
 mod dto;
 mod export;
 mod grocery;
 mod routes;
+mod watchdog;
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use axum::extract::DefaultBodyLimit;
 use axum::middleware;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 use financer_fints::{BankClient, UnconfiguredBank};
 use financer_llm::{LlmError, LlmProvider, LlmSettings, ProviderFactory};
@@ -137,6 +140,8 @@ impl AppState {
         routes::get_envelopes,
         routes::put_envelopes,
         routes::budget_status,
+        budget_period::budget_period,
+        budget_period::safe_to_spend,
         export::export_data,
         export::import_data,
         bank::start_sync,
@@ -157,6 +162,21 @@ impl AppState {
         grocery::recipe_ideas,
         grocery::get_settings,
         grocery::put_settings,
+        categorization::list_rules,
+        categorization::create_rule,
+        categorization::update_rule,
+        categorization::delete_rule,
+        categorization::reorder_rules,
+        categorization::apply_rules,
+        categorization::set_category,
+        categorization::list_splits,
+        categorization::put_split,
+        categorization::delete_split,
+        categorization::categorize_unknown,
+        categorization::accept_suggestions,
+        watchdog::subscriptions,
+        watchdog::alerts,
+        watchdog::dismiss_alert,
     ),
     components(schemas(
         dto::TransactionDto,
@@ -166,6 +186,9 @@ impl AppState {
         dto::EnvelopeDto,
         dto::EnvelopeStatusDto,
         dto::DisposableDto,
+        budget_period::PeriodChoice,
+        budget_period::PeriodDto,
+        budget_period::SafeToSpendDto,
         dto::ErrorBody,
         dto::ExportTransaction,
         dto::ExportReceipt,
@@ -201,6 +224,29 @@ impl AppState {
         dto::IdeaIngredientDto,
         dto::SettingsDto,
         dto::SettingsUpdate,
+        categorization::RuleDto,
+        categorization::RuleInput,
+        categorization::RuleOrder,
+        categorization::ApplyReport,
+        categorization::CategoryChange,
+        categorization::CategoryChanged,
+        categorization::SplitPartDto,
+        categorization::SplitInput,
+        categorization::SplitDto,
+        categorization::SuggestionDto,
+        categorization::SuggestionsDto,
+        categorization::AcceptedSuggestion,
+        categorization::AcceptSuggestions,
+        categorization::AcceptReport,
+        watchdog::SubscriptionDto,
+        watchdog::UpcomingChargeDto,
+        watchdog::PriceHikeDto,
+        watchdog::DuplicateSubscriptionDto,
+        watchdog::StaleSubscriptionDto,
+        watchdog::SubscriptionsDto,
+        watchdog::AlertDto,
+        watchdog::AlertsDto,
+        watchdog::AlertDismissedDto,
     )),
     modifiers(&BearerAuth)
 )]
@@ -235,6 +281,8 @@ impl Api {
                 get(routes::get_envelopes).put(routes::put_envelopes),
             )
             .route("/budget/status", get(routes::budget_status))
+            .route("/budget/period", get(budget_period::budget_period))
+            .route("/budget/safe-to-spend", get(budget_period::safe_to_spend))
             .route("/export", get(export::export_data))
             .route("/import", post(export::import_data))
             .route("/bank/sync", post(bank::start_sync))
@@ -261,6 +309,36 @@ impl Api {
                 "/settings",
                 get(grocery::get_settings).put(grocery::put_settings),
             )
+            .route(
+                "/rules",
+                get(categorization::list_rules).post(categorization::create_rule),
+            )
+            .route("/rules/reorder", post(categorization::reorder_rules))
+            .route("/rules/apply", post(categorization::apply_rules))
+            .route(
+                "/rules/{id}",
+                put(categorization::update_rule).delete(categorization::delete_rule),
+            )
+            .route("/transactions/splits", get(categorization::list_splits))
+            .route(
+                "/transactions/categorize-unknown",
+                post(categorization::categorize_unknown),
+            )
+            .route(
+                "/transactions/categorize-unknown/accept",
+                post(categorization::accept_suggestions),
+            )
+            .route(
+                "/transactions/{id}/category",
+                put(categorization::set_category),
+            )
+            .route(
+                "/transactions/{id}/split",
+                put(categorization::put_split).delete(categorization::delete_split),
+            )
+            .route("/subscriptions", get(watchdog::subscriptions))
+            .route("/alerts", get(watchdog::alerts))
+            .route("/alerts/{id}/dismiss", post(watchdog::dismiss_alert))
             // An unknown API path is an API error, never a web page (see `Api::with_web_app`).
             .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
             .layer(middleware::from_fn_with_state(

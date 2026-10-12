@@ -16,9 +16,9 @@ export type BackendHandle = {
   handle(request: {
     method: string;
     pathAndQuery: string;
-    contentType: string | undefined;
+    contentType?: string;
     body: ArrayBuffer;
-  }): Promise<{ status: number; contentType: string | undefined; body: ArrayBuffer }>;
+  }): Promise<{ status: number; contentType?: string; body: ArrayBuffer }>;
   refreshPrices(): Promise<string>;
 };
 
