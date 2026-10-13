@@ -28,8 +28,14 @@ impl std::fmt::Debug for HttpRequest {
         f.debug_struct("HttpRequest")
             .field("method", &self.method)
             .field("url", &self.url)
-            .field("headers", &self.headers.iter().map(|(k, _)| k).collect::<Vec<_>>())
-            .field("form", &self.form.iter().map(|(k, _)| k).collect::<Vec<_>>())
+            .field(
+                "headers",
+                &self.headers.iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            )
+            .field(
+                "form",
+                &self.form.iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            )
             .finish()
     }
 }
@@ -102,7 +108,9 @@ impl LidlHttp for ReqwestLidlHttp {
             .await
             .map_err(|e| LidlError::Network(e.without_url().to_string()))?;
         if bytes.len() > MAX_BODY_BYTES {
-            return Err(LidlError::BadResponse("the answer is unexpectedly large".into()));
+            return Err(LidlError::BadResponse(
+                "the answer is unexpectedly large".into(),
+            ));
         }
         Ok(HttpResponse {
             status,

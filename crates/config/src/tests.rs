@@ -341,7 +341,10 @@ fn print_config_hides_the_mail_login_and_never_has_a_password() {
     );
     let out = Renderer::render(&loaded);
     assert!(out.contains("j***@example.org"), "{out}");
-    assert!(!out.contains("jane.doe") && !out.contains("hunter2"), "{out}");
+    assert!(
+        !out.contains("jane.doe") && !out.contains("hunter2"),
+        "{out}"
+    );
     assert!(out.contains("password_env = \"FINANCER_IMAP_PASSWORD\""));
 }
 

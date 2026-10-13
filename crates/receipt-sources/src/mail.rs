@@ -51,7 +51,11 @@ pub trait Mailbox: Send {
     async fn select(&mut self, folder: &str, read_only: bool) -> Result<MailboxInfo, MailError>;
     /// UIDs, ascending. With `after_uid`, only those greater than it; without, only messages
     /// received within `max_age_days`.
-    async fn search(&mut self, after_uid: Option<u32>, max_age_days: u32) -> Result<Vec<u32>, MailError>;
+    async fn search(
+        &mut self,
+        after_uid: Option<u32>,
+        max_age_days: u32,
+    ) -> Result<Vec<u32>, MailError>;
     /// Headers only: messages that are not receipt mails are never downloaded.
     async fn headers(&mut self, uids: &[u32]) -> Result<Vec<MessageHeader>, MailError>;
     /// The whole message, without marking it read.

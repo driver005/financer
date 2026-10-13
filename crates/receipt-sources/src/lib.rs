@@ -25,13 +25,10 @@ pub mod testing;
 pub mod text;
 
 pub use config::{
-    EmailConfig, FolderConfig, LidlPlusConfig, OnDone, ReceiptSourcesConfig, SenderRule,
-    SourceKind,
+    EmailConfig, FolderConfig, LidlPlusConfig, OnDone, ReceiptSourcesConfig, SenderRule, SourceKind,
 };
-pub use reader::{ReadError, ReadReceipt, ReceiptReader, Trust};
 pub use ingest::{Ingest, Stored};
 pub use matching::{Linker, Matcher};
+pub use reader::{ReadError, ReadReceipt, ReceiptReader, Trust};
 pub use secret::SecretBox;
-pub use syncer::{
-    ReceiptSyncer, SourceHealth, SourceStatus, SyncDeps, SyncNowError, SyncReport,
-};
+pub use syncer::{ReceiptSyncer, SourceHealth, SourceStatus, SyncDeps, SyncNowError, SyncReport};

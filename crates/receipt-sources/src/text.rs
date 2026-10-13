@@ -40,16 +40,19 @@ pub fn html_to_text(html: &str) -> String {
             if !closing && matches!(name.as_str(), "script" | "style" | "head") {
                 let close = format!("</{name}");
                 i = match lower[i..].find(&close) {
-                    Some(e) => lower[i + e..].find('>').map_or(bytes.len(), |g| i + e + g + 1),
+                    Some(e) => lower[i + e..]
+                        .find('>')
+                        .map_or(bytes.len(), |g| i + e + g + 1),
                     None => bytes.len(),
                 };
                 continue;
             }
             match (name.as_str(), closing) {
                 ("br", _) | ("hr", _) => out.push('\n'),
-                ("p" | "div" | "tr" | "li" | "table" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6", true) => {
-                    out.push('\n')
-                }
+                (
+                    "p" | "div" | "tr" | "li" | "table" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6",
+                    true,
+                ) => out.push('\n'),
                 ("p" | "div" | "tr" | "li", false) => out.push('\n'),
                 ("td" | "th", true) => out.push_str("  "),
                 _ => {}
@@ -92,9 +95,9 @@ fn decode_entities(s: &str) -> String {
                 "szlig" => Some('ß'),
                 "middot" => Some('·'),
                 "ndash" => Some('–'),
-                n if n.starts_with("#x") || n.starts_with("#X") => {
-                    u32::from_str_radix(&n[2..], 16).ok().and_then(char::from_u32)
-                }
+                n if n.starts_with("#x") || n.starts_with("#X") => u32::from_str_radix(&n[2..], 16)
+                    .ok()
+                    .and_then(char::from_u32),
                 n if n.starts_with('#') => n[1..].parse().ok().and_then(char::from_u32),
                 _ => None,
             };
@@ -183,7 +186,10 @@ mod tests {
 
     #[test]
     fn numeric_entities_and_stray_ampersands() {
-        assert_eq!(html_to_text("a &#228; &#xFC; b&c &bogus; &"), "a ä ü b&c &bogus; &");
+        assert_eq!(
+            html_to_text("a &#228; &#xFC; b&c &bogus; &"),
+            "a ä ü b&c &bogus; &"
+        );
     }
 
     #[test]

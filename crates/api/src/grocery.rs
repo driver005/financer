@@ -314,6 +314,8 @@ impl Grocery {
             date: r.date,
             total_cents: r.total,
             reconciles: r.reconciles,
+            source: "manual".to_string(),
+            transaction_id: None,
             items: r
                 .items
                 .into_iter()
@@ -419,6 +421,13 @@ impl Grocery {
     pub async fn list_receipts(
         State(state): State<AppState>,
     ) -> Result<Json<Vec<ReceiptDto>>, ApiError> {
+        let metas: std::collections::HashMap<i64, financer_store::ReceiptMeta> = state
+            .store
+            .receipt_metas()
+            .await?
+            .into_iter()
+            .map(|m| (m.id, m))
+            .collect();
         Ok(Json(
             state
                 .store
@@ -426,9 +435,14 @@ impl Grocery {
                 .await?
                 .into_iter()
                 .filter_map(|r| {
-                    serde_json::from_str::<ParsedReceipt>(&r.json)
+                    let mut dto = serde_json::from_str::<ParsedReceipt>(&r.json)
                         .ok()
-                        .map(|p| Self::receipt_dto(Some(r.id), false, p))
+                        .map(|p| Self::receipt_dto(Some(r.id), false, p))?;
+                    if let Some(m) = metas.get(&r.id) {
+                        dto.source = m.source.clone();
+                        dto.transaction_id = m.transaction_id;
+                    }
+                    Some(dto)
                 })
                 .collect(),
         ))

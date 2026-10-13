@@ -90,7 +90,12 @@ mod tests {
         assert_eq!(store.receipt_metas().await.unwrap().len(), 1);
         let m = &store.receipt_metas().await.unwrap()[0];
         assert_eq!(
-            (m.source.as_str(), m.retailer.as_deref(), m.time.as_deref(), m.total_cents),
+            (
+                m.source.as_str(),
+                m.retailer.as_deref(),
+                m.time.as_deref(),
+                m.total_cents
+            ),
             ("email", Some("rewe"), Some("18:42"), Some(784))
         );
     }
@@ -106,7 +111,9 @@ mod tests {
         let copy = read(&REWE_EBON.replace("BANANEN", "BANANE"));
         assert_ne!(copy.fingerprint, read(REWE_EBON).fingerprint);
         assert_eq!(
-            Ingest::store(&store, SourceKind::Folder, &copy).await.unwrap(),
+            Ingest::store(&store, SourceKind::Folder, &copy)
+                .await
+                .unwrap(),
             Stored::Duplicate
         );
     }

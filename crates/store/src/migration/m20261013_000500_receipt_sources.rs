@@ -46,7 +46,10 @@ impl MigrationTrait for Migration {
                 .not_null()
                 .default("manual")
                 .to_owned(),
-            ColumnDef::new(Receipts::Retailer).string().null().to_owned(),
+            ColumnDef::new(Receipts::Retailer)
+                .string()
+                .null()
+                .to_owned(),
             ColumnDef::new(Receipts::TotalCents)
                 .big_integer()
                 .null()
@@ -113,11 +116,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(ReceiptSeen::Source).string().not_null())
                     .col(ColumnDef::new(ReceiptSeen::ItemKey).string().not_null())
                     .col(ColumnDef::new(ReceiptSeen::Outcome).string().not_null())
-                    .col(
-                        ColumnDef::new(ReceiptSeen::SeenAt)
-                            .big_integer()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(ReceiptSeen::SeenAt).big_integer().not_null())
                     .to_owned(),
             )
             .await?;

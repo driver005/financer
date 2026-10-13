@@ -226,7 +226,11 @@ mod tests {
         assert!(Matcher::link(&[r], &p).is_empty());
         let mut unknown = p[0].clone();
         unknown.brand = None;
-        assert!(Matcher::link(&[receipt(1, "rewe", date!(2026 - 03 - 02), 784)], &[unknown]).is_empty());
+        assert!(Matcher::link(
+            &[receipt(1, "rewe", date!(2026 - 03 - 02), 784)],
+            &[unknown]
+        )
+        .is_empty());
     }
 
     #[test]
@@ -240,14 +244,30 @@ mod tests {
             category: None,
         };
         assert_eq!(
-            PaymentFacts::from_transaction(1, &t("REWE SAGT DANKE", "Kartenzahlung"), &StoreMatcher::builtin()).brand.as_deref(),
+            PaymentFacts::from_transaction(
+                1,
+                &t("REWE SAGT DANKE", "Kartenzahlung"),
+                &StoreMatcher::builtin()
+            )
+            .brand
+            .as_deref(),
             Some("rewe")
         );
         assert_eq!(
-            PaymentFacts::from_transaction(1, &t("PayPal", "EDEKA Müller 1234"), &StoreMatcher::builtin()).brand.as_deref(),
+            PaymentFacts::from_transaction(
+                1,
+                &t("PayPal", "EDEKA Müller 1234"),
+                &StoreMatcher::builtin()
+            )
+            .brand
+            .as_deref(),
             Some("edeka")
         );
-        assert_eq!(PaymentFacts::from_transaction(1, &t("Vermieter", "Miete"), &StoreMatcher::builtin()).brand, None);
+        assert_eq!(
+            PaymentFacts::from_transaction(1, &t("Vermieter", "Miete"), &StoreMatcher::builtin())
+                .brand,
+            None
+        );
     }
 
     #[tokio::test]
@@ -276,7 +296,10 @@ mod tests {
         let r = ReceiptReader::read(REWE_EBON, None, None, Trust::Document).unwrap();
         Ingest::store(&store, SourceKind::Email, &r).await.unwrap();
 
-        assert_eq!(Linker::run(&store, &StoreMatcher::builtin()).await.unwrap(), 1);
+        assert_eq!(
+            Linker::run(&store, &StoreMatcher::builtin()).await.unwrap(),
+            1
+        );
         let metas = store.receipt_metas().await.unwrap();
         let txs = store.list_transactions().await.unwrap();
         let rewe_tx = txs
@@ -285,7 +308,10 @@ mod tests {
             .unwrap();
         assert_eq!(metas[0].transaction_id, Some(rewe_tx.id));
         // nothing new to link, and the link is stable
-        assert_eq!(Linker::run(&store, &StoreMatcher::builtin()).await.unwrap(), 0);
+        assert_eq!(
+            Linker::run(&store, &StoreMatcher::builtin()).await.unwrap(),
+            0
+        );
 
         // a second identical purchase on the same day cannot take the same payment
         let again = ReceiptReader::read(
@@ -295,8 +321,13 @@ mod tests {
             Trust::Document,
         )
         .unwrap();
-        Ingest::store(&store, SourceKind::Email, &again).await.unwrap();
-        assert_eq!(Linker::run(&store, &StoreMatcher::builtin()).await.unwrap(), 0);
+        Ingest::store(&store, SourceKind::Email, &again)
+            .await
+            .unwrap();
+        assert_eq!(
+            Linker::run(&store, &StoreMatcher::builtin()).await.unwrap(),
+            0
+        );
         assert_eq!(
             store
                 .receipt_metas()

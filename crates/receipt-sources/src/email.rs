@@ -99,7 +99,15 @@ impl EmailSync {
         }
 
         let rules = cfg.effective_senders();
-        let result = Self::process(store, cfg, &rules, mailbox.as_mut(), &mut cursor, &mut summary).await;
+        let result = Self::process(
+            store,
+            cfg,
+            &rules,
+            mailbox.as_mut(),
+            &mut cursor,
+            &mut summary,
+        )
+        .await;
         mailbox.close().await;
         EmailRun {
             cursor,
@@ -213,7 +221,9 @@ impl EmailSync {
             summary.note(format!(
                 "no receipt in \"{}\" ({})",
                 subject.chars().take(60).collect::<String>(),
-                tally.first_problem.unwrap_or_else(|| "nothing to read".into())
+                tally
+                    .first_problem
+                    .unwrap_or_else(|| "nothing to read".into())
             ));
         }
         Ok(tally.found > 0)
@@ -242,10 +252,13 @@ mod tests {
     }
 
     fn ebon_mail() -> Vec<u8> {
-        MailBuilder::new("REWE eBon <ebon@mailing.rewe.de>", "Dein REWE eBon vom 02.03.2026")
-            .text("Anbei dein eBon als PDF.")
-            .attach("ebon_20260302.pdf", "application/pdf", rewe_ebon_pdf())
-            .build()
+        MailBuilder::new(
+            "REWE eBon <ebon@mailing.rewe.de>",
+            "Dein REWE eBon vom 02.03.2026",
+        )
+        .text("Anbei dein eBon als PDF.")
+        .attach("ebon_20260302.pdf", "application/pdf", rewe_ebon_pdf())
+        .build()
     }
 
     fn newsletter() -> Vec<u8> {
@@ -263,11 +276,21 @@ mod tests {
     fn lidl_body_mail() -> Vec<u8> {
         MailBuilder::new("Lidl Plus <noreply@lidl.de>", "Dein Kassenbon")
             .date("Tue, 03 Mar 2026 10:00:00 +0100")
-            .text(LIDL_PLUS.replace("Rabatt Coupon -0,30\n", "").replace("4,47", "4,77").as_str())
+            .text(
+                LIDL_PLUS
+                    .replace("Rabatt Coupon -0,30\n", "")
+                    .replace("4,47", "4,77")
+                    .as_str(),
+            )
             .build()
     }
 
-    async fn run(store: &Store, mb: &FakeMailbox, cursor: EmailCursor, cfg: &EmailConfig) -> EmailRun {
+    async fn run(
+        store: &Store,
+        mb: &FakeMailbox,
+        cursor: EmailCursor,
+        cfg: &EmailConfig,
+    ) -> EmailRun {
         EmailSync::run(store, cfg, "pw", mb, cursor).await
     }
 
@@ -282,11 +305,26 @@ mod tests {
 
         let r = run(&store, &mb, EmailCursor::default(), &cfg()).await;
         assert_eq!(r.error, None);
-        assert_eq!((r.summary.imported, r.summary.duplicates), (2, 0), "{:?}", r.summary);
+        assert_eq!(
+            (r.summary.imported, r.summary.duplicates),
+            (2, 0),
+            "{:?}",
+            r.summary
+        );
         // the newsletter parsed to a made-up total that does not add up: skipped, with a note
         assert_eq!(r.summary.skipped, 1);
-        assert!(r.summary.notes[0].contains("Angebote der Woche"), "{:?}", r.summary.notes);
-        assert_eq!(r.cursor, EmailCursor { uid_validity: 7, last_uid: lidl });
+        assert!(
+            r.summary.notes[0].contains("Angebote der Woche"),
+            "{:?}",
+            r.summary.notes
+        );
+        assert_eq!(
+            r.cursor,
+            EmailCursor {
+                uid_validity: 7,
+                last_uid: lidl
+            }
+        );
         // the stranger's mail was never downloaded
         let fetched = mb.fetched();
         assert!(fetched.contains(&ebon) && fetched.contains(&news) && fetched.contains(&lidl));
@@ -294,16 +332,31 @@ mod tests {
         // read-only unless mark_seen is on, and the login came from the arguments
         assert_eq!(mb.selected_read_only(), Some(true));
         assert!(mb.marked_seen().is_empty());
-        assert_eq!(mb.last_login(), Some(("me@example.org".into(), "pw".into())));
+        assert_eq!(
+            mb.last_login(),
+            Some(("me@example.org".into(), "pw".into()))
+        );
 
         let metas = store.receipt_metas().await.unwrap();
         assert_eq!(metas.len(), 2);
         assert!(metas.iter().all(|m| m.source == "email"));
-        let rewe = metas.iter().find(|m| m.retailer.as_deref() == Some("rewe")).unwrap();
-        assert_eq!((rewe.total_cents, rewe.time.as_deref()), (Some(784), Some("18:42")));
-        let lidl_r = metas.iter().find(|m| m.retailer.as_deref() == Some("lidl")).unwrap();
+        let rewe = metas
+            .iter()
+            .find(|m| m.retailer.as_deref() == Some("rewe"))
+            .unwrap();
+        assert_eq!(
+            (rewe.total_cents, rewe.time.as_deref()),
+            (Some(784), Some("18:42"))
+        );
+        let lidl_r = metas
+            .iter()
+            .find(|m| m.retailer.as_deref() == Some("lidl"))
+            .unwrap();
         // the date came from the receipt itself, not from the mail header
-        assert_eq!(lidl_r.date.map(|d| d.to_string()).as_deref(), Some("2026-03-02"));
+        assert_eq!(
+            lidl_r.date.map(|d| d.to_string()).as_deref(),
+            Some("2026-03-02")
+        );
     }
 
     #[tokio::test]
@@ -372,7 +425,10 @@ mod tests {
         let mb = FakeMailbox::new(1);
         mb.deliver(ebon_mail(), 1);
         mb.fail_next_connect("connection refused");
-        let cursor = EmailCursor { uid_validity: 1, last_uid: 0 };
+        let cursor = EmailCursor {
+            uid_validity: 1,
+            last_uid: 0,
+        };
         let r = run(&store, &mb, cursor, &cfg()).await;
         assert_eq!(r.cursor, cursor);
         let e = r.error.unwrap();
@@ -391,7 +447,11 @@ mod tests {
         c.mark_seen = true;
         run(&store, &mb, EmailCursor::default(), &c).await;
         assert_eq!(mb.selected_read_only(), Some(false));
-        assert_eq!(mb.marked_seen(), vec![a], "only the mail that held a receipt");
+        assert_eq!(
+            mb.marked_seen(),
+            vec![a],
+            "only the mail that held a receipt"
+        );
     }
 
     #[tokio::test]
@@ -400,7 +460,9 @@ mod tests {
         let mb = FakeMailbox::new(1);
         // a forwarded eBon from the user's own address, with the receipt inline as text
         mb.deliver(
-            MailBuilder::new("me@example.org", "Fwd: eBon").text(REWE_EBON).build(),
+            MailBuilder::new("me@example.org", "Fwd: eBon")
+                .text(REWE_EBON)
+                .build(),
             1,
         );
         mb.deliver(ebon_mail(), 1);
@@ -414,6 +476,10 @@ mod tests {
         assert_eq!(r.summary.imported, 1);
         assert_eq!(mb.fetched(), vec![1], "rewe.de is not allowed any more");
         let m = &store.receipt_metas().await.unwrap()[0];
-        assert_eq!(m.retailer.as_deref(), Some("rewe"), "found in the receipt text");
+        assert_eq!(
+            m.retailer.as_deref(),
+            Some("rewe"),
+            "found in the receipt text"
+        );
     }
 }

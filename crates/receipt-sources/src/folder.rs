@@ -30,12 +30,7 @@ enum FileKind {
 
 impl FolderSync {
     fn kind_of(path: &Path) -> Option<FileKind> {
-        match path
-            .extension()?
-            .to_str()?
-            .to_lowercase()
-            .as_str()
-        {
+        match path.extension()?.to_str()?.to_lowercase().as_str() {
             "pdf" => Some(FileKind::Doc(DocKind::Pdf)),
             "html" | "htm" => Some(FileKind::Doc(DocKind::Html)),
             "txt" | "text" => Some(FileKind::Doc(DocKind::Text)),
@@ -75,9 +70,12 @@ impl FolderSync {
 
     pub async fn run(store: &Store, cfg: &FolderConfig) -> Result<RunSummary, SyncError> {
         let mut summary = RunSummary::default();
-        let meta = tokio::fs::metadata(&cfg.path)
-            .await
-            .map_err(|e| SyncError::other(format!("cannot open the folder {}: {e}", cfg.path.display())))?;
+        let meta = tokio::fs::metadata(&cfg.path).await.map_err(|e| {
+            SyncError::other(format!(
+                "cannot open the folder {}: {e}",
+                cfg.path.display()
+            ))
+        })?;
         if !meta.is_dir() {
             return Err(SyncError::other(format!(
                 "{} is not a folder",
@@ -94,7 +92,10 @@ impl FolderSync {
                 .and_then(|n| n.to_str())
                 .unwrap_or("file")
                 .to_string();
-            let size = tokio::fs::metadata(&path).await.map(|m| m.len()).unwrap_or(0);
+            let size = tokio::fs::metadata(&path)
+                .await
+                .map(|m| m.len())
+                .unwrap_or(0);
             if size > MAX_FILE_BYTES {
                 summary.skipped += 1;
                 summary.note(format!("{name}: larger than 25 MB"));
@@ -112,7 +113,8 @@ impl FolderSync {
             let outcome = match store.seen_outcome(SourceKind::Folder.key(), &hash).await? {
                 Some(previous) => previous,
                 None => {
-                    let outcome = Self::import_file(store, &path, data, &name, &mut summary).await?;
+                    let outcome =
+                        Self::import_file(store, &path, data, &name, &mut summary).await?;
                     store
                         .mark_seen(SourceKind::Folder.key(), &hash, &outcome)
                         .await?;
@@ -153,16 +155,33 @@ impl FolderSync {
                     for a in &mail.attachments {
                         out.push((
                             a.name.clone(),
-                            Documents::import(store, SourceKind::Folder, a.kind, a.data.clone(), None, mail.date)
-                                .await?,
+                            Documents::import(
+                                store,
+                                SourceKind::Folder,
+                                a.kind,
+                                a.data.clone(),
+                                None,
+                                mail.date,
+                            )
+                            .await?,
                         ));
                     }
-                    if out.iter().all(|(_, r)| matches!(r, DocResult::Unreadable(_))) {
+                    if out
+                        .iter()
+                        .all(|(_, r)| matches!(r, DocResult::Unreadable(_)))
+                    {
                         if let Some(body) = &mail.body {
                             out.push((
                                 "mail text".into(),
-                                Documents::import_text(store, SourceKind::Folder, body, None, mail.date, Trust::Body)
-                                    .await?,
+                                Documents::import_text(
+                                    store,
+                                    SourceKind::Folder,
+                                    body,
+                                    None,
+                                    mail.date,
+                                    Trust::Body,
+                                )
+                                .await?,
                             ));
                         }
                     }
@@ -187,7 +206,12 @@ impl FolderSync {
         summary.imported += imported;
         summary.duplicates += duplicate;
         if imported + duplicate > 0 {
-            return Ok(if imported > 0 { "imported" } else { "duplicate" }.into());
+            return Ok(if imported > 0 {
+                "imported"
+            } else {
+                "duplicate"
+            }
+            .into());
         }
         summary.skipped += 1;
         let why = problem.unwrap_or_else(|| "no receipt found".into());
@@ -202,8 +226,14 @@ impl FolderSync {
         let name = path.file_name().unwrap_or_default();
         let mut target = dir.join(name);
         if tokio::fs::try_exists(&target).await? {
-            let stem = Path::new(name).file_stem().and_then(|s| s.to_str()).unwrap_or("receipt");
-            let ext = Path::new(name).extension().and_then(|s| s.to_str()).unwrap_or("");
+            let stem = Path::new(name)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("receipt");
+            let ext = Path::new(name)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
             target = dir.join(format!("{stem}-{}.{ext}", &hash[..8]));
         }
         tokio::fs::rename(path, target).await
@@ -257,7 +287,8 @@ mod tests {
         write_old(
             &dir,
             "bon.html",
-            "<p>Edeka Müller</p><p>Brot 2,49 A</p><p>Summe 2,49</p><p>05.03.2026 09:10</p>".as_bytes(),
+            "<p>Edeka Müller</p><p>Brot 2,49 A</p><p>Summe 2,49</p><p>05.03.2026 09:10</p>"
+                .as_bytes(),
         );
         write_old(
             &dir,
@@ -266,7 +297,12 @@ mod tests {
                 .attach(
                     "x.pdf",
                     "application/pdf",
-                    crate::testing::make_pdf(&["REWE", "MILCH 1,09 B", "SUMME\t1,09", "Datum: 06.03.2026"]),
+                    crate::testing::make_pdf(&[
+                        "REWE",
+                        "MILCH 1,09 B",
+                        "SUMME\t1,09",
+                        "Datum: 06.03.2026",
+                    ]),
                 )
                 .build(),
         );
@@ -274,13 +310,22 @@ mod tests {
         write_old(&dir, ".hidden.pdf", &rewe_ebon_pdf());
 
         let store = Store::connect("sqlite::memory:").await.unwrap();
-        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Keep)).await.unwrap();
+        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Keep))
+            .await
+            .unwrap();
         assert_eq!((s.imported, s.duplicates, s.skipped), (4, 0, 0), "{s:?}");
-        assert!(store.receipt_metas().await.unwrap().iter().all(|m| m.source == "folder"));
+        assert!(store
+            .receipt_metas()
+            .await
+            .unwrap()
+            .iter()
+            .all(|m| m.source == "folder"));
         assert!(dir.join("rewe.pdf").exists(), "keep leaves files alone");
 
         // second run: everything is remembered by content, nothing is read again
-        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Keep)).await.unwrap();
+        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Keep))
+            .await
+            .unwrap();
         assert_eq!((s.imported, s.duplicates, s.skipped), (0, 0, 0));
         assert_eq!(store.receipt_metas().await.unwrap().len(), 4);
         std::fs::remove_dir_all(dir).ok();
@@ -292,7 +337,9 @@ mod tests {
         write_old(&dir, "rewe.pdf", &rewe_ebon_pdf());
         write_old(&dir, "again.pdf", &rewe_ebon_pdf());
         let store = Store::connect("sqlite::memory:").await.unwrap();
-        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Move)).await.unwrap();
+        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Move))
+            .await
+            .unwrap();
         // two files with the same content: read once, both filed away
         assert_eq!((s.imported, s.duplicates), (1, 0));
         assert!(!dir.join("rewe.pdf").exists() && !dir.join("again.pdf").exists());
@@ -300,7 +347,9 @@ mod tests {
 
         // the same file dropped again is moved without being imported again
         write_old(&dir, "rewe.pdf", &rewe_ebon_pdf());
-        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Move)).await.unwrap();
+        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Move))
+            .await
+            .unwrap();
         assert_eq!(s.imported, 0);
         assert_eq!(std::fs::read_dir(dir.join("done")).unwrap().count(), 3);
         assert_eq!(store.receipt_metas().await.unwrap().len(), 1);
@@ -311,14 +360,30 @@ mod tests {
     async fn unreadable_files_are_reported_once_and_do_not_stop_the_rest() {
         let dir = temp_dir("bad");
         write_old(&dir, "broken.pdf", b"%PDF-1.4 truncated");
-        write_old(&dir, "letter.txt", "Sehr geehrte Damen und Herren,\nvielen Dank.".as_bytes());
+        write_old(
+            &dir,
+            "letter.txt",
+            "Sehr geehrte Damen und Herren,\nvielen Dank.".as_bytes(),
+        );
         write_old(&dir, "ok.txt", LIDL_PLUS.as_bytes());
         let store = Store::connect("sqlite::memory:").await.unwrap();
-        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Keep)).await.unwrap();
+        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Keep))
+            .await
+            .unwrap();
         assert_eq!((s.imported, s.skipped), (1, 2));
-        assert!(s.notes.iter().any(|n| n.starts_with("broken.pdf")), "{:?}", s.notes);
-        let again = FolderSync::run(&store, &cfg(&dir, OnDone::Keep)).await.unwrap();
-        assert_eq!((again.imported, again.skipped), (0, 0), "not retried or re-reported");
+        assert!(
+            s.notes.iter().any(|n| n.starts_with("broken.pdf")),
+            "{:?}",
+            s.notes
+        );
+        let again = FolderSync::run(&store, &cfg(&dir, OnDone::Keep))
+            .await
+            .unwrap();
+        assert_eq!(
+            (again.imported, again.skipped),
+            (0, 0),
+            "not retried or re-reported"
+        );
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -327,7 +392,9 @@ mod tests {
         let dir = temp_dir("fresh");
         std::fs::write(dir.join("new.txt"), REWE_EBON).unwrap(); // modified just now
         let store = Store::connect("sqlite::memory:").await.unwrap();
-        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Keep)).await.unwrap();
+        let s = FolderSync::run(&store, &cfg(&dir, OnDone::Keep))
+            .await
+            .unwrap();
         assert_eq!(s.imported, 0);
         std::fs::remove_dir_all(dir).ok();
     }
@@ -336,7 +403,12 @@ mod tests {
     async fn a_missing_folder_is_an_error_with_the_path() {
         let store = Store::connect("sqlite::memory:").await.unwrap();
         let missing = std::env::temp_dir().join("financer-folder-does-not-exist-xyz");
-        let e = FolderSync::run(&store, &cfg(&missing, OnDone::Keep)).await.unwrap_err();
-        assert!(e.to_string().contains("financer-folder-does-not-exist-xyz"), "{e}");
+        let e = FolderSync::run(&store, &cfg(&missing, OnDone::Keep))
+            .await
+            .unwrap_err();
+        assert!(
+            e.to_string().contains("financer-folder-does-not-exist-xyz"),
+            "{e}"
+        );
     }
 }

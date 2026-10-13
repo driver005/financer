@@ -19,7 +19,8 @@ fn random_string(len: usize) -> Result<String, LidlError> {
     let mut out = String::with_capacity(len);
     let mut buf = [0u8; 64];
     while out.len() < len {
-        getrandom::fill(&mut buf).map_err(|_| LidlError::Internal("no randomness available".into()))?;
+        getrandom::fill(&mut buf)
+            .map_err(|_| LidlError::Internal("no randomness available".into()))?;
         for b in buf {
             if (b as usize) < limit && out.len() < len {
                 out.push(UNRESERVED[b as usize % UNRESERVED.len()] as char);
@@ -112,7 +113,9 @@ pub fn parse_callback(
 ) -> Result<String, LidlError> {
     let callback = callback.trim();
     if callback.is_empty() || callback.len() > 4096 {
-        return Err(LidlError::BadCallback("the address is empty or far too long".into()));
+        return Err(LidlError::BadCallback(
+            "the address is empty or far too long".into(),
+        ));
     }
     let query_text = if callback.contains("://") {
         let url = Url::parse(callback)
@@ -160,7 +163,9 @@ pub fn parse_callback(
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~'))
     {
-        return Err(LidlError::BadCallback("the code in the address looks damaged".into()));
+        return Err(LidlError::BadCallback(
+            "the code in the address looks damaged".into(),
+        ));
     }
     Ok(code.to_string())
 }
@@ -214,8 +219,14 @@ mod tests {
         assert_eq!(q["code_challenge_method"], "S256");
         assert_eq!(q["code_challenge"], p.challenge());
         assert_eq!(q["state"], p.state);
-        assert_eq!((q["Country"].as_str(), q["language"].as_str()), ("DE", "de-DE"));
-        assert!(!built.as_str().contains(&p.verifier), "the verifier never leaves the server");
+        assert_eq!(
+            (q["Country"].as_str(), q["language"].as_str()),
+            ("DE", "de-DE")
+        );
+        assert!(
+            !built.as_str().contains(&p.verifier),
+            "the verifier never leaves the server"
+        );
     }
 
     #[test]
@@ -226,23 +237,39 @@ mod tests {
             "ABC123DEF"
         );
         // no state echoed: accepted (the code is bound to our verifier anyway)
-        assert_eq!(ok("com.lidlplus.app://callback?code=ABC123").unwrap(), "ABC123");
+        assert_eq!(
+            ok("com.lidlplus.app://callback?code=ABC123").unwrap(),
+            "ABC123"
+        );
         // only the query pasted
         assert_eq!(ok("?code=ABC123&state=st4te").unwrap(), "ABC123");
         assert_eq!(ok("code=ABC123").unwrap(), "ABC123");
-        assert_eq!(ok("  com.lidlplus.app://callback?code=ABC123\n").unwrap(), "ABC123");
+        assert_eq!(
+            ok("  com.lidlplus.app://callback?code=ABC123\n").unwrap(),
+            "ABC123"
+        );
     }
 
     #[test]
     fn bad_callbacks_are_refused_in_plain_words() {
-        let err = |s: &str| parse_callback(s, "st4te", REDIRECT_URI).unwrap_err().to_string();
+        let err = |s: &str| {
+            parse_callback(s, "st4te", REDIRECT_URI)
+                .unwrap_err()
+                .to_string()
+        };
         assert!(err("com.lidlplus.app://callback?code=A&state=other").contains("different sign-in"));
         assert!(err("https://evil.example/callback?code=A").contains("should start with"));
         assert!(err("com.lidlplus.app://callback").contains("no code"));
         assert!(err("com.lidlplus.app://callback?code=a%20b").contains("damaged"));
         assert!(err("").contains("empty"));
-        assert!(err("com.lidlplus.app://callback?error=access_denied&error_description=User%20cancelled")
-            .contains("access_denied User cancelled"));
-        assert!(err(&format!("com.lidlplus.app://callback?code={}", "A".repeat(600))).contains("damaged"));
+        assert!(err(
+            "com.lidlplus.app://callback?error=access_denied&error_description=User%20cancelled"
+        )
+        .contains("access_denied User cancelled"));
+        assert!(err(&format!(
+            "com.lidlplus.app://callback?code={}",
+            "A".repeat(600)
+        ))
+        .contains("damaged"));
     }
 }

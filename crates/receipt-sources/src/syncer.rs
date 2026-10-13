@@ -12,15 +12,14 @@ use crate::config::{ReceiptSourcesConfig, SourceKind};
 use crate::email::{EmailCursor, EmailSync};
 use crate::error::SyncError;
 use crate::folder::FolderSync;
-use crate::lidl::{
-    Connection, Endpoints, LidlClient, LidlHttp, LidlPlus, ReqwestLidlHttp,
-};
+use crate::lidl::{Connection, Endpoints, LidlClient, LidlHttp, LidlPlus, ReqwestLidlHttp};
 use crate::mail::{ImapConnector, MailboxConnector};
 use crate::matching::Linker;
 use crate::secret::SecretBox;
 use crate::summary::RunSummary;
 
-const USER_AGENT: &str = "financer-personal/0.1 (personal use; +https://github.com/driver005/financer)";
+const USER_AGENT: &str =
+    "financer-personal/0.1 (personal use; +https://github.com/driver005/financer)";
 /// Pause between requests to Lidl's ticket API.
 const LIDL_REQUEST_GAP: Duration = Duration::from_secs(1);
 /// How often the scheduler looks at the clock.
@@ -225,7 +224,11 @@ impl ReceiptSyncer {
                 self.cfg.lidl_plus.language.to_lowercase(),
                 self.cfg.lidl_plus.country.to_uppercase()
             )),
-            SourceKind::Folder => self.cfg.folder.as_ref().map(|f| f.path.display().to_string()),
+            SourceKind::Folder => self
+                .cfg
+                .folder
+                .as_ref()
+                .map(|f| f.path.display().to_string()),
         }
     }
 
@@ -288,9 +291,16 @@ impl ReceiptSyncer {
                 _ => SourceHealth::Ok,
             }
         };
-        let runnable = enabled && !matches!(health, SourceHealth::NotConnected | SourceHealth::NeedsSignin);
+        let runnable = enabled
+            && !matches!(
+                health,
+                SourceHealth::NotConnected | SourceHealth::NeedsSignin
+            );
         let next_run = match (runnable, self.interval(kind)) {
-            (true, Some(iv)) => Some(rec.last_run.map_or_else(now_unix, |t| t + iv.as_secs() as i64)),
+            (true, Some(iv)) => Some(
+                rec.last_run
+                    .map_or_else(now_unix, |t| t + iv.as_secs() as i64),
+            ),
             _ => None,
         };
         Ok(SourceStatus {
@@ -376,7 +386,9 @@ impl ReceiptSyncer {
                         &serde_json::to_string(&run.cursor).unwrap_or_else(|_| "{}".into()),
                     )
                     .await?;
-                Ok((run.summary, run.error))
+                // whatever the server said, the password does not leave this function
+                let error = run.error.map(|e| e.replace(&password, "***"));
+                Ok((run.summary, error))
             }
             SourceKind::Folder => {
                 let cfg = self
@@ -481,7 +493,9 @@ mod tests {
     use super::*;
     use crate::config::{EmailConfig, FolderConfig, LidlPlusConfig, OnDone};
     use crate::lidl::Method;
-    use crate::testing::{lidl_fixtures as fx, rewe_ebon_pdf, FakeLidlHttp, FakeMailbox, MailBuilder};
+    use crate::testing::{
+        lidl_fixtures as fx, rewe_ebon_pdf, FakeLidlHttp, FakeMailbox, MailBuilder,
+    };
 
     const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
@@ -497,7 +511,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!(
             "financer-syncer-{}-{}",
             std::process::id(),
-            crate::text::sha256_hex(format!("{:?}", std::time::Instant::now()).as_bytes())[..8].to_string()
+            crate::text::sha256_hex(format!("{:?}", std::time::Instant::now()).as_bytes())[..8]
+                .to_string()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let store = Store::connect("sqlite::memory:").await.unwrap();
@@ -531,7 +546,11 @@ mod tests {
         let deps = SyncDeps {
             connector: Arc::new(mailbox.clone()),
             lidl_http: http.clone(),
-            env: Arc::new(move |k| (k == "TEST_IMAP_PASSWORD").then(|| password.map(String::from)).flatten()),
+            env: Arc::new(move |k| {
+                (k == "TEST_IMAP_PASSWORD")
+                    .then(|| password.map(String::from))
+                    .flatten()
+            }),
             lidl_gap: Duration::ZERO,
         };
         let syncer = ReceiptSyncer::new(store.clone(), cfg, deps, SECRET, &[]).unwrap();
@@ -560,12 +579,24 @@ mod tests {
         let s = r.syncer.statuses().await.unwrap();
         assert_eq!(s.len(), 3);
         assert_eq!(by_kind(&s, SourceKind::Email).health, SourceHealth::Waiting);
-        assert_eq!(by_kind(&s, SourceKind::Folder).health, SourceHealth::Waiting);
-        assert_eq!(by_kind(&s, SourceKind::LidlPlus).health, SourceHealth::NotConnected);
-        assert_eq!(by_kind(&s, SourceKind::Email).detail.as_deref(), Some("imap.example.org:993 INBOX"));
+        assert_eq!(
+            by_kind(&s, SourceKind::Folder).health,
+            SourceHealth::Waiting
+        );
+        assert_eq!(
+            by_kind(&s, SourceKind::LidlPlus).health,
+            SourceHealth::NotConnected
+        );
+        assert_eq!(
+            by_kind(&s, SourceKind::Email).detail.as_deref(),
+            Some("imap.example.org:993 INBOX")
+        );
         // nothing that looks like a credential is part of a status
         let text = format!("{s:?}");
-        assert!(!text.contains("me@example.org") && !text.contains("pw\""), "{text}");
+        assert!(
+            !text.contains("me@example.org") && !text.contains("pw\""),
+            "{text}"
+        );
         std::fs::remove_dir_all(r.dir).ok();
     }
 
@@ -590,13 +621,26 @@ mod tests {
         assert_eq!(report.imported, 1);
         assert_eq!(report.linked, 1);
         let email = by_kind(&report.sources, SourceKind::Email);
-        assert_eq!((email.health, email.last_imported, email.imported_total), (SourceHealth::Ok, 1, 1));
-        assert!(email.last_run.is_some() && email.last_success.is_some() && email.next_run.is_some());
-        assert_eq!(by_kind(&report.sources, SourceKind::Folder).health, SourceHealth::Ok);
+        assert_eq!(
+            (email.health, email.last_imported, email.imported_total),
+            (SourceHealth::Ok, 1, 1)
+        );
+        assert!(
+            email.last_run.is_some() && email.last_success.is_some() && email.next_run.is_some()
+        );
+        assert_eq!(
+            by_kind(&report.sources, SourceKind::Folder).health,
+            SourceHealth::Ok
+        );
         // Lidl is on but not signed in: skipped, not an error
-        assert_eq!(by_kind(&report.sources, SourceKind::LidlPlus).health, SourceHealth::NotConnected);
+        assert_eq!(
+            by_kind(&report.sources, SourceKind::LidlPlus).health,
+            SourceHealth::NotConnected
+        );
         assert_eq!(r.http.requests().len(), 0);
-        assert!(r.store.receipt_metas().await.unwrap()[0].transaction_id.is_some());
+        assert!(r.store.receipt_metas().await.unwrap()[0]
+            .transaction_id
+            .is_some());
 
         // a second run finds nothing new
         let again = r.syncer.sync_now(None).await.unwrap();
@@ -610,7 +654,10 @@ mod tests {
         r.mailbox.deliver(ebon_mail(), 2);
         let report = r.syncer.sync_now(Some(SourceKind::Folder)).await.unwrap();
         assert_eq!(report.imported, 0);
-        assert_eq!(by_kind(&report.sources, SourceKind::Email).health, SourceHealth::Waiting);
+        assert_eq!(
+            by_kind(&report.sources, SourceKind::Email).health,
+            SourceHealth::Waiting
+        );
         assert_eq!(r.mailbox.connects(), 0);
         std::fs::remove_dir_all(r.dir).ok();
     }
@@ -621,7 +668,11 @@ mod tests {
         let report = r.syncer.sync_now(Some(SourceKind::Email)).await.unwrap();
         let email = by_kind(&report.sources, SourceKind::Email);
         assert_eq!(email.health, SourceHealth::Error);
-        assert!(email.last_error.as_deref().unwrap().contains("TEST_IMAP_PASSWORD"));
+        assert!(email
+            .last_error
+            .as_deref()
+            .unwrap()
+            .contains("TEST_IMAP_PASSWORD"));
         std::fs::remove_dir_all(r.dir).ok();
 
         let r = rig(Some("s3cret-pw")).await;
@@ -634,7 +685,10 @@ mod tests {
         r.mailbox.deliver(ebon_mail(), 1);
         let report = r.syncer.sync_now(Some(SourceKind::Email)).await.unwrap();
         let email = by_kind(&report.sources, SourceKind::Email);
-        assert_eq!((email.health, email.last_error.clone()), (SourceHealth::Ok, None));
+        assert_eq!(
+            (email.health, email.last_error.clone()),
+            (SourceHealth::Ok, None)
+        );
         std::fs::remove_dir_all(r.dir).ok();
     }
 
@@ -666,27 +720,62 @@ mod tests {
     async fn lidl_runs_once_signed_in_and_the_schedule_honours_poll_hours() {
         let r = rig(Some("pw")).await;
         let lidl = r.syncer.lidl().unwrap();
-        r.http.respond(Method::Post, "/connect/token", 200, fx::TOKEN);
+        r.http
+            .respond(Method::Post, "/connect/token", 200, fx::TOKEN);
         let start = lidl.start().await.unwrap();
-        lidl.finish(&start.state, "com.lidlplus.app://callback?code=C").await.unwrap();
-        r.http.respond(Method::Get, "pageNumber=1", 200, fx::TICKETS_PAGE_1);
-        r.http.respond(Method::Get, "pageNumber=2", 200, fx::TICKETS_PAGE_2);
-        r.http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0001", 200, fx::TICKET_1);
-        r.http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0002", 200, fx::TICKET_2);
-        r.http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0003", 200, fx::TICKET_3);
+        lidl.finish(&start.state, "com.lidlplus.app://callback?code=C")
+            .await
+            .unwrap();
+        r.http
+            .respond(Method::Get, "pageNumber=1", 200, fx::TICKETS_PAGE_1);
+        r.http
+            .respond(Method::Get, "pageNumber=2", 200, fx::TICKETS_PAGE_2);
+        r.http.respond(
+            Method::Get,
+            "/tickets/FIXTURE-TICKET-0001",
+            200,
+            fx::TICKET_1,
+        );
+        r.http.respond(
+            Method::Get,
+            "/tickets/FIXTURE-TICKET-0002",
+            200,
+            fx::TICKET_2,
+        );
+        r.http.respond(
+            Method::Get,
+            "/tickets/FIXTURE-TICKET-0003",
+            200,
+            fx::TICKET_3,
+        );
 
         let now = now_unix();
-        assert!(r.syncer.due(now).await.unwrap().contains(&SourceKind::LidlPlus), "never ran: due");
+        assert!(
+            r.syncer
+                .due(now)
+                .await
+                .unwrap()
+                .contains(&SourceKind::LidlPlus),
+            "never ran: due"
+        );
         let report = r.syncer.sync_now(Some(SourceKind::LidlPlus)).await.unwrap();
         let l = by_kind(&report.sources, SourceKind::LidlPlus);
-        assert_eq!((l.health, l.last_imported, l.imported_total), (SourceHealth::Ok, 2, 2));
+        assert_eq!(
+            (l.health, l.last_imported, l.imported_total),
+            (SourceHealth::Ok, 2, 2)
+        );
 
         let due = |at: i64| {
             let s = r.syncer.clone();
             async move { s.due(at).await.unwrap() }
         };
-        assert!(!due(now + 5 * 3600).await.contains(&SourceKind::LidlPlus), "poll_hours is 6");
-        assert!(due(now + 6 * 3600 + 5).await.contains(&SourceKind::LidlPlus));
+        assert!(
+            !due(now + 5 * 3600).await.contains(&SourceKind::LidlPlus),
+            "poll_hours is 6"
+        );
+        assert!(due(now + 6 * 3600 + 5)
+            .await
+            .contains(&SourceKind::LidlPlus));
         // email polls every 30 minutes, the folder every minute
         assert!(!due(now + 20 * 60).await.contains(&SourceKind::LidlPlus));
         std::fs::remove_dir_all(r.dir).ok();
@@ -715,7 +804,9 @@ mod tests {
         assert!(off.due(now_unix()).await.unwrap().is_empty());
         assert!(off.lidl().is_none());
         let s = off.statuses().await.unwrap();
-        assert!(s.iter().all(|x| x.health == SourceHealth::Disabled && !x.enabled));
+        assert!(s
+            .iter()
+            .all(|x| x.health == SourceHealth::Disabled && !x.enabled));
         let report = off.sync_now(None).await.unwrap();
         assert_eq!(report.imported, 0);
         std::fs::remove_dir_all(r.dir).ok();
@@ -725,13 +816,19 @@ mod tests {
     async fn a_second_sync_while_one_runs_is_refused() {
         let r = rig(Some("pw")).await;
         let _held = r.syncer.run_lock.lock().await;
-        assert!(matches!(r.syncer.sync_now(None).await, Err(SyncNowError::Busy)));
+        assert!(matches!(
+            r.syncer.sync_now(None).await,
+            Err(SyncNowError::Busy)
+        ));
         std::fs::remove_dir_all(r.dir).ok();
     }
 
     #[test]
     fn bad_setups_are_refused_at_construction() {
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         rt.block_on(async {
             let store = Store::connect("sqlite::memory:").await.unwrap();
             let deps = SyncDeps {
@@ -747,7 +844,9 @@ mod tests {
                 },
                 ..Default::default()
             };
-            let e = ReceiptSyncer::new(store.clone(), lidl_on, deps.clone(), "short", &[]).err().unwrap();
+            let e = ReceiptSyncer::new(store.clone(), lidl_on, deps.clone(), "short", &[])
+                .err()
+                .unwrap();
             assert!(e.contains("too short"), "{e}");
             let bad = ReceiptSourcesConfig {
                 folder: Some(FolderConfig {

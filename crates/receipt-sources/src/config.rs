@@ -309,7 +309,9 @@ impl ReceiptSourcesConfig {
 
     /// Build from the process environment alone (see [`Self::apply_env`]).
     pub fn from_env() -> Result<Self, String> {
-        Self::default().apply_env(|k| std::env::var(k).ok()).map(|(c, _)| c)
+        Self::default()
+            .apply_env(|k| std::env::var(k).ok())
+            .map(|(c, _)| c)
     }
 
     /// [`Self::apply_env`] on an empty configuration.
@@ -334,7 +336,9 @@ impl ReceiptSourcesConfig {
     ) -> Result<(Self, Vec<String>), String> {
         let mut used: Vec<String> = Vec::new();
         let mut var = |k: &str| {
-            let v = get(k).map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+            let v = get(k)
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty());
             if v.is_some() {
                 used.push(k.to_string());
             }
@@ -354,7 +358,10 @@ impl ReceiptSourcesConfig {
         // mailbox
         let host = var("FINANCER_RECEIPTS_IMAP_HOST");
         let username = var("FINANCER_RECEIPTS_IMAP_USERNAME");
-        let port = num("FINANCER_RECEIPTS_IMAP_PORT", var("FINANCER_RECEIPTS_IMAP_PORT"))?;
+        let port = num(
+            "FINANCER_RECEIPTS_IMAP_PORT",
+            var("FINANCER_RECEIPTS_IMAP_PORT"),
+        )?;
         let password_env = var("FINANCER_RECEIPTS_IMAP_PASSWORD_ENV");
         let folder = var("FINANCER_RECEIPTS_IMAP_FOLDER");
         let poll = num(
@@ -372,9 +379,9 @@ impl ReceiptSourcesConfig {
             Some(spec) => {
                 let mut rules = Vec::new();
                 for part in spec.split(';').filter(|p| !p.trim().is_empty()) {
-                    let (retailer, from) = part.split_once('=').ok_or(
-                        "FINANCER_RECEIPTS_IMAP_SENDERS: use retailer=domain,domain;...",
-                    )?;
+                    let (retailer, from) = part
+                        .split_once('=')
+                        .ok_or("FINANCER_RECEIPTS_IMAP_SENDERS: use retailer=domain,domain;...")?;
                     rules.push(SenderRule {
                         retailer: retailer.trim().to_lowercase(),
                         from: from
@@ -516,21 +523,32 @@ mod tests {
 
     #[test]
     fn toml_table_with_defaults_and_unknown_keys_rejected() {
-        let c: ReceiptSourcesConfig = toml::from_str(
-            "[email]\nhost = \"imap.example.org\"\nusername = \"me@example.org\"\n",
-        )
-        .unwrap();
+        let c: ReceiptSourcesConfig =
+            toml::from_str("[email]\nhost = \"imap.example.org\"\nusername = \"me@example.org\"\n")
+                .unwrap();
         let e = c.email.unwrap();
         assert_eq!(
-            (e.port, e.folder.as_str(), e.poll_minutes, e.mark_seen, e.max_age_days),
+            (
+                e.port,
+                e.folder.as_str(),
+                e.poll_minutes,
+                e.mark_seen,
+                e.max_age_days
+            ),
             (993, "INBOX", 30, false, 90)
         );
         assert_eq!(e.password_env, DEFAULT_PASSWORD_ENV);
         assert_eq!(e.effective_senders(), SenderRule::defaults());
 
-        assert!(toml::from_str::<ReceiptSourcesConfig>("[email]\nhost = \"x\"\nusername = \"u\"\npassword = \"nope\"\n").is_err());
+        assert!(toml::from_str::<ReceiptSourcesConfig>(
+            "[email]\nhost = \"x\"\nusername = \"u\"\npassword = \"nope\"\n"
+        )
+        .is_err());
         assert!(toml::from_str::<ReceiptSourcesConfig>("bogus = 1\n").is_err());
-        assert!(toml::from_str::<ReceiptSourcesConfig>("[lidl_plus]\nenabled = true\nnope = 1\n").is_err());
+        assert!(
+            toml::from_str::<ReceiptSourcesConfig>("[lidl_plus]\nenabled = true\nnope = 1\n")
+                .is_err()
+        );
         // host and username have no defaults
         assert!(toml::from_str::<ReceiptSourcesConfig>("[email]\nhost = \"x\"\n").is_err());
     }
@@ -559,7 +577,10 @@ mod tests {
         assert_eq!(c.lidl_plus.country, "AT");
         assert!(c.lidl_plus.enabled);
         let f = c.folder.as_ref().unwrap();
-        assert_eq!((f.path.to_str(), f.on_done), (Some("/data/receipts"), OnDone::Move));
+        assert_eq!(
+            (f.path.to_str(), f.on_done),
+            (Some("/data/receipts"), OnDone::Move)
+        );
         assert!(c.any_enabled());
     }
 
@@ -579,8 +600,15 @@ mod tests {
             ]))
             .unwrap();
         let e = c.email.unwrap();
-        assert_eq!((e.host.as_str(), e.username.as_str()), ("imap.env.example", "me@file.example"));
-        assert_eq!((e.poll_minutes, e.mark_seen, e.port), (10, true, 993), "blank means not set");
+        assert_eq!(
+            (e.host.as_str(), e.username.as_str()),
+            ("imap.env.example", "me@file.example")
+        );
+        assert_eq!(
+            (e.poll_minutes, e.mark_seen, e.port),
+            (10, true, 993),
+            "blank means not set"
+        );
         assert!(!c.lidl_plus.enabled, "0 switches it off");
         let f = c.folder.unwrap();
         assert_eq!((f.path.to_str(), f.poll_seconds), (Some("/from/file"), 30));
@@ -618,7 +646,10 @@ mod tests {
         assert!(r.matches_sender("Rewe <noreply@REWE.de>"));
         assert!(r.matches_sender("ebon@shop.example.com"));
         assert!(!r.matches_sender("other@shop.example.com"));
-        assert!(!r.matches_sender("x@notrewe.de"), "a longer domain is not a match");
+        assert!(
+            !r.matches_sender("x@notrewe.de"),
+            "a longer domain is not a match"
+        );
         assert!(!r.matches_sender("x@rewe.de.evil.example"));
         assert!(!r.matches_sender("no-address"));
         assert!(r.matches_subject("Ihr REWE eBon vom 02.03."));

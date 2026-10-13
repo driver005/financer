@@ -140,7 +140,11 @@ impl Renderer {
                 let _ = writeln!(out, "enabled = {}", e.enabled);
                 let _ = writeln!(out, "host = {}", Self::q(&e.host));
                 let _ = writeln!(out, "port = {}", e.port);
-                let _ = writeln!(out, "username = {}", Self::q(&Self::mask_login(&e.username)));
+                let _ = writeln!(
+                    out,
+                    "username = {}",
+                    Self::q(&Self::mask_login(&e.username))
+                );
                 let _ = writeln!(
                     out,
                     "password_env = {}   # the password itself is only read from that variable",
@@ -178,7 +182,11 @@ impl Renderer {
         ];
         for (name, v) in overridden {
             if let Some(v) = v {
-                let _ = writeln!(out, "{name} = {}   # overrides the built-in value", Self::q(v));
+                let _ = writeln!(
+                    out,
+                    "{name} = {}   # overrides the built-in value",
+                    Self::q(v)
+                );
             }
         }
         let _ = writeln!(
@@ -194,7 +202,11 @@ impl Renderer {
                 let _ = writeln!(out, "enabled = {}", f.enabled);
                 let _ = writeln!(out, "path = {}", Self::q(&f.path.to_string_lossy()));
                 let _ = writeln!(out, "poll_seconds = {}", f.poll_seconds);
-                let _ = writeln!(out, "on_done = {:?}", format!("{:?}", f.on_done).to_lowercase());
+                let _ = writeln!(
+                    out,
+                    "on_done = {:?}",
+                    format!("{:?}", f.on_done).to_lowercase()
+                );
             }
         }
     }

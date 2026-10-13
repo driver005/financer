@@ -57,7 +57,9 @@ fn money_of(v: &Value) -> Option<Money> {
 }
 
 fn str_of<'a>(v: &'a Value, key: &str) -> Option<&'a str> {
-    v.get(key).and_then(Value::as_str).filter(|s| !s.trim().is_empty())
+    v.get(key)
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
 }
 
 impl TicketSummary {
@@ -90,7 +92,10 @@ impl Ticket {
         let (date, time) = str_of(v, "date")
             .map(Self::parse_stamp)
             .unwrap_or((None, None));
-        let store = v.get("store").and_then(|s| str_of(s, "name")).map(str::to_string);
+        let store = v
+            .get("store")
+            .and_then(|s| str_of(s, "name"))
+            .map(str::to_string);
         let total = v
             .get("totalAmount")
             .or_else(|| v.get("totalAmountNumber"))
@@ -226,7 +231,11 @@ mod tests {
         // the coupon is taken off the first line; milk is 2 x 1,09; the banana line is by weight
         assert_eq!(
             lines,
-            vec![("Vegane Frikadellen", 1, 198), ("Vollmilch 3,5%", 2, 218), ("Bio Bananen", 1, 149)]
+            vec![
+                ("Vegane Frikadellen", 1, 198),
+                ("Vollmilch 3,5%", 2, 218),
+                ("Bio Bananen", 1, 149)
+            ]
         );
         assert_eq!(r.parsed.total, Some(Money::from_cents(565)));
         assert!(r.parsed.reconciles);
@@ -258,7 +267,11 @@ mod tests {
         let r = t.to_receipt().unwrap();
         assert_eq!(r.parsed.items.len(), 2);
         assert_eq!(r.parsed.total, Some(Money::from_cents(358)));
-        assert_eq!(r.time.as_deref(), Some("08:15"), "the printed time is local");
+        assert_eq!(
+            r.time.as_deref(),
+            Some("08:15"),
+            "the printed time is local"
+        );
         assert_eq!(r.retailer.as_deref(), Some("lidl"));
     }
 
@@ -267,13 +280,19 @@ mod tests {
         assert_eq!(ticket(fx::TICKET_3).to_receipt(), Err(ReadError::NoItems));
         assert!(Ticket::from_json(&serde_json::json!({"date": "x"})).is_err());
         let t = ticket(r#"{"id":"a","itemsLine":[{"name":"x"},{"originalAmount":"1,00"},"junk"]}"#);
-        assert!(t.items.is_empty(), "lines without a name and a price are dropped");
+        assert!(
+            t.items.is_empty(),
+            "lines without a name and a price are dropped"
+        );
     }
 
     #[test]
     fn amounts_in_several_notations() {
         use serde_json::json;
-        assert_eq!(money_of(&json!("1.234,50")), Some(Money::from_cents(123_450)));
+        assert_eq!(
+            money_of(&json!("1.234,50")),
+            Some(Money::from_cents(123_450))
+        );
         assert_eq!(money_of(&json!(2.19)), Some(Money::from_cents(219)));
         assert_eq!(money_of(&json!(5)), Some(Money::from_cents(500)));
         assert_eq!(money_of(&json!("abc")), None);

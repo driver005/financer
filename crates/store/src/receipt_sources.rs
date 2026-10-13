@@ -227,7 +227,10 @@ impl Store {
         })
         .on_conflict(
             OnConflict::column(source_state::Column::Source)
-                .update_columns([source_state::Column::Secret, source_state::Column::UpdatedAt])
+                .update_columns([
+                    source_state::Column::Secret,
+                    source_state::Column::UpdatedAt,
+                ])
                 .to_owned(),
         )
         .exec_without_returning(&self.db)

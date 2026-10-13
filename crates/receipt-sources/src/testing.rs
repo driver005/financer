@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 
-use crate::mail::{Mailbox, MailboxConnector, MailboxInfo, MailError, MessageHeader};
+use crate::mail::{MailError, Mailbox, MailboxConnector, MailboxInfo, MessageHeader};
 
 /// A small text PDF: one line of text per entry, Helvetica, one page. A line may contain a tab
 /// to put the rest of it in a right-hand column, the way receipts print prices.
@@ -70,7 +70,9 @@ pub fn make_pdf(lines: &[&str]) -> Vec<u8> {
         pdf.extend_from_slice(format!("{} 0 obj\n{}\nendobj\n", i + 1, body).as_bytes());
     }
     let xref = pdf.len();
-    pdf.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes());
+    pdf.extend_from_slice(
+        format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
+    );
     for o in offsets {
         pdf.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
     }
@@ -402,7 +404,13 @@ struct FakeRoute {
 }
 
 impl FakeLidlHttp {
-    pub fn respond(&self, method: crate::lidl::Method, url_contains: &str, status: u16, body: &str) {
+    pub fn respond(
+        &self,
+        method: crate::lidl::Method,
+        url_contains: &str,
+        status: u16,
+        body: &str,
+    ) {
         self.routes.lock().unwrap().push(FakeRoute {
             method,
             url_contains: url_contains.into(),

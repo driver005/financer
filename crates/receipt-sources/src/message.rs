@@ -58,12 +58,7 @@ impl MailReader {
 
     fn date_of(msg: &mail_parser::Message<'_>) -> Option<Date> {
         let d = msg.date()?;
-        Date::from_calendar_date(
-            i32::from(d.year),
-            Month::try_from(d.month).ok()?,
-            d.day,
-        )
-        .ok()
+        Date::from_calendar_date(i32::from(d.year), Month::try_from(d.month).ok()?, d.day).ok()
     }
 
     /// Everything that may hold a receipt.
@@ -141,7 +136,11 @@ mod tests {
     fn finds_pdf_attachment_and_ignores_images_and_signature_files() {
         let raw = MailBuilder::new("REWE eBon <ebon@mailing.rewe.de>", "Ihr REWE eBon")
             .text("Anbei Ihr eBon.")
-            .attach("ebon.pdf", "application/pdf", make_pdf(&["REWE", "MILCH 1,09 B"]))
+            .attach(
+                "ebon.pdf",
+                "application/pdf",
+                make_pdf(&["REWE", "MILCH 1,09 B"]),
+            )
             .attach("logo.png", "image/png", vec![0x89, b'P', b'N', b'G'])
             .attach("smime.p7s", "application/pkcs7-signature", vec![1, 2, 3])
             .build();

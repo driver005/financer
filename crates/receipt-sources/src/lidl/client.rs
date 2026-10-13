@@ -105,11 +105,19 @@ impl LidlClient {
     fn basic_auth(&self) -> String {
         format!(
             "Basic {}",
-            STANDARD.encode(format!("{}:{}", self.endpoints.client_id, consts::CLIENT_SECRET))
+            STANDARD.encode(format!(
+                "{}:{}",
+                self.endpoints.client_id,
+                consts::CLIENT_SECRET
+            ))
         )
     }
 
-    async fn token_request(&self, form: Vec<(String, String)>, refresh: bool) -> Result<Tokens, LidlError> {
+    async fn token_request(
+        &self,
+        form: Vec<(String, String)>,
+        refresh: bool,
+    ) -> Result<Tokens, LidlError> {
         let res = self
             .http
             .send(HttpRequest {
@@ -187,7 +195,10 @@ impl LidlClient {
         vec![
             ("Authorization".into(), format!("Bearer {access_token}")),
             ("App-Version".into(), consts::APP_VERSION_HEADER.into()),
-            ("Operating-System".into(), consts::OPERATING_SYSTEM_HEADER.into()),
+            (
+                "Operating-System".into(),
+                consts::OPERATING_SYSTEM_HEADER.into(),
+            ),
             ("App".into(), consts::APP_HEADER.into()),
             ("Accept-Language".into(), self.endpoints.language.clone()),
             ("Accept".into(), "application/json".into()),
@@ -213,7 +224,10 @@ impl LidlClient {
     }
 
     fn tickets_base(&self) -> String {
-        format!("{}/{}/tickets", self.endpoints.tickets_url, self.endpoints.country)
+        format!(
+            "{}/{}/tickets",
+            self.endpoints.tickets_url, self.endpoints.country
+        )
     }
 
     /// Ids of all tickets, newest first as the server orders them.
@@ -225,7 +239,10 @@ impl LidlClient {
             }
             let v = self
                 .api_get(
-                    format!("{}?pageNumber={page}&onlyFavorite=False", self.tickets_base()),
+                    format!(
+                        "{}?pageNumber={page}&onlyFavorite=False",
+                        self.tickets_base()
+                    ),
                     access_token,
                 )
                 .await?;
@@ -247,7 +264,9 @@ impl LidlClient {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
         {
-            return Err(LidlError::BadResponse("a ticket id with odd characters".into()));
+            return Err(LidlError::BadResponse(
+                "a ticket id with odd characters".into(),
+            ));
         }
         tokio::time::sleep(self.gap).await;
         let v = self
@@ -274,14 +293,24 @@ mod tests {
     async fn code_exchange_sends_pkce_verifier_and_basic_client_auth() {
         let http = Arc::new(FakeLidlHttp::default());
         http.respond(Method::Post, "/connect/token", 200, fx::TOKEN);
-        let t = client(&http).exchange_code("CODE123", "the-verifier").await.unwrap();
+        let t = client(&http)
+            .exchange_code("CODE123", "the-verifier")
+            .await
+            .unwrap();
         assert_eq!(t.access_token, "fixture-access-token-1");
         assert_eq!(t.refresh_token.as_deref(), Some("fixture-refresh-token-1"));
         assert_eq!(t.expires_in, 3600);
         let req = &http.requests()[0];
         assert_eq!(req.url, "https://accounts.lidl.com/connect/token");
-        let auth = req.headers.iter().find(|(k, _)| k == "Authorization").unwrap();
-        assert_eq!(auth.1, format!("Basic {}", STANDARD.encode("LidlPlusNativeClient:secret")));
+        let auth = req
+            .headers
+            .iter()
+            .find(|(k, _)| k == "Authorization")
+            .unwrap();
+        assert_eq!(
+            auth.1,
+            format!("Basic {}", STANDARD.encode("LidlPlusNativeClient:secret"))
+        );
         let form: std::collections::HashMap<_, _> = req.form.iter().cloned().collect();
         assert_eq!(form["grant_type"], "authorization_code");
         assert_eq!(form["code"], "CODE123");
@@ -299,8 +328,12 @@ mod tests {
         let c = client(&http);
         let t = c.refresh("old").await.unwrap();
         assert_eq!(t.refresh_token.as_deref(), Some("fixture-refresh-token-2"));
-        let form: std::collections::HashMap<_, _> = http.requests()[0].form.iter().cloned().collect();
-        assert_eq!((form["grant_type"].as_str(), form["refresh_token"].as_str()), ("refresh_token", "old"));
+        let form: std::collections::HashMap<_, _> =
+            http.requests()[0].form.iter().cloned().collect();
+        assert_eq!(
+            (form["grant_type"].as_str(), form["refresh_token"].as_str()),
+            ("refresh_token", "old")
+        );
         assert_eq!(c.refresh("old").await.unwrap_err(), LidlError::NeedsSignIn);
     }
 
@@ -311,7 +344,10 @@ mod tests {
         let e = client(&http).exchange_code("x", "y").await.unwrap_err();
         assert!(matches!(e, LidlError::SignInRefused(_)), "{e:?}");
         http.respond(Method::Post, "/connect/token", 503, "oops");
-        assert_eq!(client(&http).exchange_code("x", "y").await.unwrap_err(), LidlError::Status(503));
+        assert_eq!(
+            client(&http).exchange_code("x", "y").await.unwrap_err(),
+            LidlError::Status(503)
+        );
     }
 
     #[tokio::test]
@@ -326,7 +362,14 @@ mod tests {
             .into_iter()
             .map(|t| t.id)
             .collect();
-        assert_eq!(ids, vec!["FIXTURE-TICKET-0001", "FIXTURE-TICKET-0002", "FIXTURE-TICKET-0003"]);
+        assert_eq!(
+            ids,
+            vec![
+                "FIXTURE-TICKET-0001",
+                "FIXTURE-TICKET-0002",
+                "FIXTURE-TICKET-0003"
+            ]
+        );
         let reqs = http.requests();
         assert_eq!(reqs.len(), 2);
         assert_eq!(
@@ -344,16 +387,30 @@ mod tests {
     #[tokio::test]
     async fn single_ticket_and_error_statuses() {
         let http = Arc::new(FakeLidlHttp::default());
-        http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0001", 200, fx::TICKET_1);
+        http.respond(
+            Method::Get,
+            "/tickets/FIXTURE-TICKET-0001",
+            200,
+            fx::TICKET_1,
+        );
         http.respond(Method::Get, "/tickets/DENIED", 401, "");
         http.respond(Method::Get, "/tickets/BROKEN", 200, "<html>");
         let c = client(&http);
         let t = c.ticket("A", "FIXTURE-TICKET-0001").await.unwrap();
         assert_eq!(t.items.len(), 3);
-        assert_eq!(c.ticket("A", "DENIED").await.unwrap_err(), LidlError::NeedsSignIn);
-        assert!(matches!(c.ticket("A", "BROKEN").await.unwrap_err(), LidlError::BadResponse(_)));
+        assert_eq!(
+            c.ticket("A", "DENIED").await.unwrap_err(),
+            LidlError::NeedsSignIn
+        );
+        assert!(matches!(
+            c.ticket("A", "BROKEN").await.unwrap_err(),
+            LidlError::BadResponse(_)
+        ));
         // ids come from the server; odd ones never reach a URL
-        assert!(matches!(c.ticket("A", "../x?y").await.unwrap_err(), LidlError::BadResponse(_)));
+        assert!(matches!(
+            c.ticket("A", "../x?y").await.unwrap_err(),
+            LidlError::BadResponse(_)
+        ));
         assert_eq!(http.requests().len(), 3);
     }
 
@@ -372,6 +429,9 @@ mod tests {
         assert_eq!(e.tickets_url, "https://tickets.example.test/v3");
         assert_eq!(e.callback_scheme(), "my.app");
         assert_eq!(e.token_url, "https://accounts.lidl.com/connect/token");
-        assert_eq!(Endpoints::from_config(&LidlPlusConfig::default()).callback_scheme(), "com.lidlplus.app");
+        assert_eq!(
+            Endpoints::from_config(&LidlPlusConfig::default()).callback_scheme(),
+            "com.lidlplus.app"
+        );
     }
 }

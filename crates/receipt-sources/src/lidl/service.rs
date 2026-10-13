@@ -117,7 +117,11 @@ impl LidlPlus {
                 .ok_or(LidlError::UnknownSignIn)?;
             pending.remove(pos).0
         };
-        let code = parse_callback(callback_url, &pkce.state, &self.client.endpoints.redirect_uri)?;
+        let code = parse_callback(
+            callback_url,
+            &pkce.state,
+            &self.client.endpoints.redirect_uri,
+        )?;
         let tokens = self.client.exchange_code(&code, &pkce.verifier).await?;
         let refresh = tokens.refresh_token.clone().ok_or_else(|| {
             LidlError::BadResponse("Lidl sent no refresh token, so sign-in cannot be kept".into())
@@ -343,23 +347,44 @@ mod tests {
     }
 
     async fn sign_in(r: &Rig) {
-        r.http.respond(Method::Post, "/connect/token", 200, fx::TOKEN);
+        r.http
+            .respond(Method::Post, "/connect/token", 200, fx::TOKEN);
         let start = r.lidl.start().await.unwrap();
         r.lidl
             .finish(
                 &start.state,
-                &format!("com.lidlplus.app://callback?code=FIXTURECODE&state={}", start.state),
+                &format!(
+                    "com.lidlplus.app://callback?code=FIXTURECODE&state={}",
+                    start.state
+                ),
             )
             .await
             .unwrap();
     }
 
     fn serve_tickets(r: &Rig) {
-        r.http.respond(Method::Get, "pageNumber=1", 200, fx::TICKETS_PAGE_1);
-        r.http.respond(Method::Get, "pageNumber=2", 200, fx::TICKETS_PAGE_2);
-        r.http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0001", 200, fx::TICKET_1);
-        r.http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0002", 200, fx::TICKET_2);
-        r.http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0003", 200, fx::TICKET_3);
+        r.http
+            .respond(Method::Get, "pageNumber=1", 200, fx::TICKETS_PAGE_1);
+        r.http
+            .respond(Method::Get, "pageNumber=2", 200, fx::TICKETS_PAGE_2);
+        r.http.respond(
+            Method::Get,
+            "/tickets/FIXTURE-TICKET-0001",
+            200,
+            fx::TICKET_1,
+        );
+        r.http.respond(
+            Method::Get,
+            "/tickets/FIXTURE-TICKET-0002",
+            200,
+            fx::TICKET_2,
+        );
+        r.http.respond(
+            Method::Get,
+            "/tickets/FIXTURE-TICKET-0003",
+            200,
+            fx::TICKET_3,
+        );
     }
 
     #[tokio::test]
@@ -367,11 +392,14 @@ mod tests {
         let r = rig().await;
         assert_eq!(r.lidl.connection().await.unwrap(), Connection::Never);
         let start = r.lidl.start().await.unwrap();
-        assert!(start.authorization_url.starts_with("https://accounts.lidl.com/connect/authorize?"));
+        assert!(start
+            .authorization_url
+            .starts_with("https://accounts.lidl.com/connect/authorize?"));
         assert_eq!(start.callback_scheme, "com.lidlplus.app");
         assert_eq!(r.http.requests().len(), 0, "starting sends nothing to Lidl");
 
-        r.http.respond(Method::Post, "/connect/token", 200, fx::TOKEN);
+        r.http
+            .respond(Method::Post, "/connect/token", 200, fx::TOKEN);
         r.lidl
             .finish(&start.state, "com.lidlplus.app://callback?code=FIXTURECODE")
             .await
@@ -380,10 +408,13 @@ mod tests {
         assert!(r.lidl.connected_at().await.unwrap().is_some());
 
         // the code was traded together with the verifier whose challenge went into the address
-        let form: std::collections::HashMap<_, _> = r.http.requests()[0].form.iter().cloned().collect();
+        let form: std::collections::HashMap<_, _> =
+            r.http.requests()[0].form.iter().cloned().collect();
         assert_eq!(form["code"], "FIXTURECODE");
         let challenge = Pkce::challenge_of(&form["code_verifier"]);
-        assert!(start.authorization_url.contains(&format!("code_challenge={challenge}")));
+        assert!(start
+            .authorization_url
+            .contains(&format!("code_challenge={challenge}")));
 
         // at rest: sealed, and neither token appears anywhere in the row
         let row = r.store.source_state("lidl_plus").await.unwrap().unwrap();
@@ -399,34 +430,51 @@ mod tests {
     async fn finish_refuses_unknown_reused_foreign_and_broken_sign_ins() {
         let r = rig().await;
         assert_eq!(
-            r.lidl.finish("nope", "com.lidlplus.app://callback?code=A").await.unwrap_err(),
+            r.lidl
+                .finish("nope", "com.lidlplus.app://callback?code=A")
+                .await
+                .unwrap_err(),
             LidlError::UnknownSignIn
         );
         let start = r.lidl.start().await.unwrap();
         // an address from another sign-in
         let e = r
             .lidl
-            .finish(&start.state, "com.lidlplus.app://callback?code=A&state=other")
+            .finish(
+                &start.state,
+                "com.lidlplus.app://callback?code=A&state=other",
+            )
             .await
             .unwrap_err();
         assert!(matches!(e, LidlError::BadCallback(_)), "{e:?}");
         // a start is single-use, even after a failed finish
         assert_eq!(
-            r.lidl.finish(&start.state, "com.lidlplus.app://callback?code=A").await.unwrap_err(),
+            r.lidl
+                .finish(&start.state, "com.lidlplus.app://callback?code=A")
+                .await
+                .unwrap_err(),
             LidlError::UnknownSignIn
         );
         // Lidl's page reported an error
         let start = r.lidl.start().await.unwrap();
         let e = r
             .lidl
-            .finish(&start.state, "com.lidlplus.app://callback?error=access_denied")
+            .finish(
+                &start.state,
+                "com.lidlplus.app://callback?error=access_denied",
+            )
             .await
             .unwrap_err();
         assert!(matches!(e, LidlError::SignInRefused(_)));
         // the token endpoint refuses the code
         let start = r.lidl.start().await.unwrap();
-        r.http.respond(Method::Post, "/connect/token", 400, fx::TOKEN_INVALID_GRANT);
-        assert!(r.lidl.finish(&start.state, "com.lidlplus.app://callback?code=A").await.is_err());
+        r.http
+            .respond(Method::Post, "/connect/token", 400, fx::TOKEN_INVALID_GRANT);
+        assert!(r
+            .lidl
+            .finish(&start.state, "com.lidlplus.app://callback?code=A")
+            .await
+            .is_err());
         assert_eq!(r.lidl.connection().await.unwrap(), Connection::Never);
         // no refresh token in the answer: refused, nothing stored
         let start = r.lidl.start().await.unwrap();
@@ -436,7 +484,11 @@ mod tests {
             200,
             r#"{"access_token":"a","expires_in":10}"#,
         );
-        let e = r.lidl.finish(&start.state, "com.lidlplus.app://callback?code=A").await.unwrap_err();
+        let e = r
+            .lidl
+            .finish(&start.state, "com.lidlplus.app://callback?code=A")
+            .await
+            .unwrap_err();
         assert!(matches!(e, LidlError::BadResponse(_)));
         assert_eq!(r.lidl.connection().await.unwrap(), Connection::Never);
     }
@@ -449,7 +501,10 @@ mod tests {
             r.lidl.start().await.unwrap();
         }
         assert_eq!(
-            r.lidl.finish(&first.state, "com.lidlplus.app://callback?code=A").await.unwrap_err(),
+            r.lidl
+                .finish(&first.state, "com.lidlplus.app://callback?code=A")
+                .await
+                .unwrap_err(),
             LidlError::UnknownSignIn,
             "the oldest was dropped"
         );
@@ -463,11 +518,19 @@ mod tests {
         let s = r.lidl.sync().await.unwrap();
         assert_eq!((s.imported, s.duplicates, s.skipped), (2, 0, 1), "{s:?}");
         let calls = r.http.requests();
-        assert_eq!(calls.iter().filter(|c| c.url.contains("/connect/token")).count(), 1);
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|c| c.url.contains("/connect/token"))
+                .count(),
+            1
+        );
 
         let metas = r.store.receipt_metas().await.unwrap();
         assert_eq!(metas.len(), 2);
-        assert!(metas.iter().all(|m| m.source == "lidl_plus" && m.retailer.as_deref() == Some("lidl")));
+        assert!(metas
+            .iter()
+            .all(|m| m.source == "lidl_plus" && m.retailer.as_deref() == Some("lidl")));
         let t1 = metas.iter().find(|m| m.total_cents == Some(565)).unwrap();
         assert_eq!(t1.time.as_deref(), Some("18:42"));
 
@@ -476,7 +539,10 @@ mod tests {
         let s = r.lidl.sync().await.unwrap();
         assert_eq!((s.imported, s.skipped), (0, 0));
         let new_calls: Vec<_> = r.http.requests().into_iter().skip(before).collect();
-        assert!(new_calls.iter().all(|c| c.url.contains("pageNumber")), "{new_calls:?}");
+        assert!(
+            new_calls.iter().all(|c| c.url.contains("pageNumber")),
+            "{new_calls:?}"
+        );
     }
 
     #[tokio::test]
@@ -489,16 +555,42 @@ mod tests {
             r#"{"access_token":"short","refresh_token":"fixture-refresh-token-1","expires_in":1}"#,
         );
         let start = r.lidl.start().await.unwrap();
-        r.lidl.finish(&start.state, "com.lidlplus.app://callback?code=A").await.unwrap();
+        r.lidl
+            .finish(&start.state, "com.lidlplus.app://callback?code=A")
+            .await
+            .unwrap();
         serve_tickets(&r);
-        r.http.respond(Method::Post, "/connect/token", 200, fx::TOKEN_REFRESHED);
+        r.http
+            .respond(Method::Post, "/connect/token", 200, fx::TOKEN_REFRESHED);
         let s = r.lidl.sync().await.unwrap(); // access token lifetime is below the safety margin
         assert_eq!(s.imported, 2);
-        let refresh = r.http.requests().into_iter().find(|c| c.form.iter().any(|(k, v)| k == "grant_type" && v == "refresh_token")).unwrap();
-        assert!(refresh.form.iter().any(|(k, v)| k == "refresh_token" && v == "fixture-refresh-token-1"));
-        let sealed = r.store.source_state("lidl_plus").await.unwrap().unwrap().secret.unwrap();
+        let refresh = r
+            .http
+            .requests()
+            .into_iter()
+            .find(|c| {
+                c.form
+                    .iter()
+                    .any(|(k, v)| k == "grant_type" && v == "refresh_token")
+            })
+            .unwrap();
+        assert!(refresh
+            .form
+            .iter()
+            .any(|(k, v)| k == "refresh_token" && v == "fixture-refresh-token-1"));
+        let sealed = r
+            .store
+            .source_state("lidl_plus")
+            .await
+            .unwrap()
+            .unwrap()
+            .secret
+            .unwrap();
         let key = SecretBox::new("0123456789abcdef0123456789abcdef").unwrap();
-        assert_eq!(key.open(PURPOSE, &sealed).unwrap().as_str(), "fixture-refresh-token-2");
+        assert_eq!(
+            key.open(PURPOSE, &sealed).unwrap().as_str(),
+            "fixture-refresh-token-2"
+        );
     }
 
     #[tokio::test]
@@ -511,8 +603,12 @@ mod tests {
             r#"{"access_token":"short","refresh_token":"fixture-refresh-token-1","expires_in":1}"#,
         );
         let start = r.lidl.start().await.unwrap();
-        r.lidl.finish(&start.state, "com.lidlplus.app://callback?code=A").await.unwrap();
-        r.http.respond(Method::Post, "/connect/token", 400, fx::TOKEN_INVALID_GRANT);
+        r.lidl
+            .finish(&start.state, "com.lidlplus.app://callback?code=A")
+            .await
+            .unwrap();
+        r.http
+            .respond(Method::Post, "/connect/token", 400, fx::TOKEN_INVALID_GRANT);
         let e = r.lidl.sync().await.unwrap_err().to_string();
         assert!(e.contains("sign in again"), "{e}");
         assert_eq!(r.lidl.connection().await.unwrap(), Connection::NeedsSignin);
@@ -532,7 +628,11 @@ mod tests {
         let other = LidlPlus::new(
             r.store.clone(),
             SecretBox::new("a-completely-different-secret!!").unwrap(),
-            LidlClient::new(r.http.clone(), Endpoints::from_config(&LidlPlusConfig::default()), Duration::ZERO),
+            LidlClient::new(
+                r.http.clone(),
+                Endpoints::from_config(&LidlPlusConfig::default()),
+                Duration::ZERO,
+            ),
         );
         assert_eq!(other.connection().await.unwrap(), Connection::NeedsSignin);
         assert!(other.sync().await.is_err());
@@ -547,7 +647,12 @@ mod tests {
         r.lidl.disconnect().await.unwrap();
         assert_eq!(r.lidl.connection().await.unwrap(), Connection::Never);
         assert!(r.store.source_state("lidl_plus").await.unwrap().is_none());
-        assert!(r.store.seen_outcome("lidl_plus", "FIXTURE-TICKET-0001").await.unwrap().is_none());
+        assert!(r
+            .store
+            .seen_outcome("lidl_plus", "FIXTURE-TICKET-0001")
+            .await
+            .unwrap()
+            .is_none());
         assert!(r.lidl.sync().await.is_err());
         // imported receipts stay
         assert_eq!(r.store.receipt_metas().await.unwrap().len(), 2);
@@ -557,16 +662,34 @@ mod tests {
     async fn server_trouble_midway_keeps_progress_and_reports() {
         let r = rig().await;
         sign_in(&r).await;
-        r.http.respond(Method::Get, "pageNumber=1", 200, fx::TICKETS_PAGE_1);
-        r.http.respond(Method::Get, "pageNumber=2", 200, fx::TICKETS_PAGE_2);
-        r.http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0001", 200, fx::TICKET_1);
-        r.http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0002", 500, "");
+        r.http
+            .respond(Method::Get, "pageNumber=1", 200, fx::TICKETS_PAGE_1);
+        r.http
+            .respond(Method::Get, "pageNumber=2", 200, fx::TICKETS_PAGE_2);
+        r.http.respond(
+            Method::Get,
+            "/tickets/FIXTURE-TICKET-0001",
+            200,
+            fx::TICKET_1,
+        );
+        r.http
+            .respond(Method::Get, "/tickets/FIXTURE-TICKET-0002", 500, "");
         let e = r.lidl.sync().await.unwrap_err().to_string();
         assert!(e.contains("500"), "{e}");
-        assert_eq!(r.store.receipt_metas().await.unwrap().len(), 1, "the first ticket was kept");
+        assert_eq!(
+            r.store.receipt_metas().await.unwrap().len(),
+            1,
+            "the first ticket was kept"
+        );
         // next run continues with the rest
-        r.http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0002", 200, fx::TICKET_2);
-        r.http.respond(Method::Get, "/tickets/FIXTURE-TICKET-0003", 404, "");
+        r.http.respond(
+            Method::Get,
+            "/tickets/FIXTURE-TICKET-0002",
+            200,
+            fx::TICKET_2,
+        );
+        r.http
+            .respond(Method::Get, "/tickets/FIXTURE-TICKET-0003", 404, "");
         let s = r.lidl.sync().await.unwrap();
         assert_eq!(s.imported, 1);
     }

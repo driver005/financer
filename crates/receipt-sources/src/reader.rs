@@ -53,7 +53,10 @@ impl ReceiptReader {
                     .split_whitespace()
                     .filter(|t| !t.eq_ignore_ascii_case("eur") && *t != "€")
                     .collect();
-                if tokens.is_empty() || tokens.iter().all(|t| t.chars().all(|c| "-=_*.".contains(c)))
+                if tokens.is_empty()
+                    || tokens
+                        .iter()
+                        .all(|t| t.chars().all(|c| "-=_*.".contains(c)))
                 {
                     return None;
                 }
@@ -91,13 +94,14 @@ impl ReceiptReader {
                 if i > 0 && at(i - 1).is_ascii_digit() {
                     return None;
                 }
-                let (h_len, rest) = if at(i).is_ascii_digit() && at(i + 1).is_ascii_digit() && at(i + 2) == b':' {
-                    (2, i + 3)
-                } else if at(i).is_ascii_digit() && at(i + 1) == b':' {
-                    (1, i + 2)
-                } else {
-                    return None;
-                };
+                let (h_len, rest) =
+                    if at(i).is_ascii_digit() && at(i + 1).is_ascii_digit() && at(i + 2) == b':' {
+                        (2, i + 3)
+                    } else if at(i).is_ascii_digit() && at(i + 1) == b':' {
+                        (1, i + 2)
+                    } else {
+                        return None;
+                    };
                 if !at(rest).is_ascii_digit() || !at(rest + 1).is_ascii_digit() {
                     return None;
                 }
@@ -133,7 +137,10 @@ impl ReceiptReader {
             .as_deref()
             .and_then(brand_of)
             .or_else(|| named.and_then(brand_of))
-            .or_else(|| hint.filter(|h| *h != "auto").map(crate::brand::normalize_brand));
+            .or_else(|| {
+                hint.filter(|h| *h != "auto")
+                    .map(crate::brand::normalize_brand)
+            });
         if parsed.chain.is_none() {
             parsed.chain = retailer.as_deref().and_then(Chain::from_name);
         }
@@ -168,7 +175,11 @@ impl ReceiptReader {
 
     /// Identity of a purchase. Names are normalised, so a different line wrap or letter case in
     /// another copy of the same receipt still gives the same fingerprint.
-    pub fn fingerprint(parsed: &ParsedReceipt, retailer: Option<&str>, time: Option<&str>) -> String {
+    pub fn fingerprint(
+        parsed: &ParsedReceipt,
+        retailer: Option<&str>,
+        time: Option<&str>,
+    ) -> String {
         let items: Vec<String> = parsed
             .items
             .iter()
@@ -282,8 +293,13 @@ mod tests {
         let t = "REWE\nMILCH 1,09 B\nSUMME 1,09";
         let r = ReceiptReader::read(t, None, Some(date!(2026 - 05 - 06)), Trust::Document).unwrap();
         assert_eq!(r.parsed.date, Some(date!(2026 - 05 - 06)));
-        let r = ReceiptReader::read(REWE_EBON, None, Some(date!(2026 - 05 - 06)), Trust::Document)
-            .unwrap();
+        let r = ReceiptReader::read(
+            REWE_EBON,
+            None,
+            Some(date!(2026 - 05 - 06)),
+            Trust::Document,
+        )
+        .unwrap();
         assert_eq!(r.parsed.date, Some(date!(2026 - 03 - 02)));
     }
 
@@ -319,8 +335,14 @@ mod tests {
 
     #[test]
     fn times_are_taken_from_date_or_uhr_lines_only() {
-        assert_eq!(ReceiptReader::time_of("02.03.26 8:05 Bon-Nr. 1234").as_deref(), Some("08:05"));
-        assert_eq!(ReceiptReader::time_of("Uhrzeit: 18:42:07 Uhr").as_deref(), Some("18:42"));
+        assert_eq!(
+            ReceiptReader::time_of("02.03.26 8:05 Bon-Nr. 1234").as_deref(),
+            Some("08:05")
+        );
+        assert_eq!(
+            ReceiptReader::time_of("Uhrzeit: 18:42:07 Uhr").as_deref(),
+            Some("18:42")
+        );
         assert_eq!(ReceiptReader::time_of("Bon-Nr. 12:34"), None);
         assert_eq!(ReceiptReader::time_of("02.03.2026 25:99"), None);
         assert_eq!(ReceiptReader::time_of("Datum 02.03.2026"), None);

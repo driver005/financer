@@ -97,7 +97,8 @@ impl SecretBox {
         };
         let dec = |s: &str| URL_SAFE_NO_PAD.decode(s).map_err(|_| SecretError::Cannot);
         let (salt, nonce, ct) = (dec(salt)?, dec(nonce)?, dec(ct)?);
-        let nonce = <[u8; NONCE_LEN]>::try_from(nonce.as_slice()).map_err(|_| SecretError::Cannot)?;
+        let nonce =
+            <[u8; NONCE_LEN]>::try_from(nonce.as_slice()).map_err(|_| SecretError::Cannot)?;
         if salt.len() != SALT_LEN {
             return Err(SecretError::Cannot);
         }
@@ -139,12 +140,17 @@ mod tests {
         let b = SecretBox::new(KEY).unwrap();
         let sealed = b.seal("lidl", "t").unwrap();
         let other = SecretBox::new("another-server-secret-value-xyz").unwrap();
-        assert_eq!(other.open("lidl", &sealed).unwrap_err(), SecretError::Cannot);
+        assert_eq!(
+            other.open("lidl", &sealed).unwrap_err(),
+            SecretError::Cannot
+        );
         assert_eq!(b.open("email", &sealed).unwrap_err(), SecretError::Cannot);
         let mut bytes = sealed.clone().into_bytes();
         let last = bytes.len() - 2;
         bytes[last] = if bytes[last] == b'A' { b'B' } else { b'A' };
-        assert!(b.open("lidl", std::str::from_utf8(&bytes).unwrap()).is_err());
+        assert!(b
+            .open("lidl", std::str::from_utf8(&bytes).unwrap())
+            .is_err());
         for junk in ["", "v1", "v2.a.b.c", "v1.a.b", "v1.a.b.c.d", "plain-token"] {
             assert!(b.open("lidl", junk).is_err(), "{junk}");
         }
@@ -152,7 +158,10 @@ mod tests {
 
     #[test]
     fn short_secrets_are_refused_and_debug_hides_the_key() {
-        assert_eq!(SecretBox::new("short").unwrap_err(), SecretError::WeakSecret);
+        assert_eq!(
+            SecretBox::new("short").unwrap_err(),
+            SecretError::WeakSecret
+        );
         let b = SecretBox::new(KEY).unwrap();
         assert!(!format!("{b:?}").contains("0123"));
     }
