@@ -185,12 +185,7 @@ impl ReceiptSourceRoutes {
             .receipt_syncer
             .as_deref()
             .and_then(|s| s.lidl().map(|l| (s, l)))
-            .ok_or_else(|| {
-                ApiError::Conflict(
-                    "Lidl Plus is not switched on; set receipts.lidl_plus.enabled in the server configuration"
-                        .into(),
-                )
-            })
+            .ok_or_else(|| ApiError::Conflict("Lidl Plus is not switched on".into()))
     }
 
     pub async fn sources(

@@ -13,8 +13,10 @@ use axum::Router;
 use financer_api::{Api, AppState, LlmKeys, PriceSourceConfig, TokenHash};
 use financer_fints::FintsBank;
 use financer_prices::{PoliteHttp, ReqwestHttp};
+use financer_receipt_sources::{LidlPlusConfig, ReceiptSourcesConfig, ReceiptSyncer};
 use financer_store::Store;
 use http_body_util::BodyExt;
+use time::OffsetDateTime;
 use tower::ServiceExt;
 
 uniffi::setup_scaffolding!();
@@ -35,6 +37,18 @@ pub struct StartConfig {
     pub fints_product_id: Option<String>,
     /// The price sources file contents (JSON array, see docs/PRICES.md).
     pub price_sources_json: Option<String>,
+    /// Switch on receipt import from Lidl Plus (you sign in on Lidl's own page from the app).
+    /// Needs `device_secret`.
+    pub lidl_plus: bool,
+    /// Two-letter country (`DE`) and language (`de`) of the Lidl Plus account; default DE / de.
+    pub lidl_country: Option<String>,
+    pub lidl_language: Option<String>,
+    /// Hours between Lidl Plus syncs when the app asks (default 12).
+    pub lidl_poll_hours: Option<u32>,
+    /// A secret the app keeps in the phone's secure storage and passes on every start (make one
+    /// with `generate_device_secret`). It encrypts the Lidl Plus sign-in in the database, so the
+    /// database alone, e.g. in a phone backup, does not give it away. It must not change.
+    pub device_secret: Option<String>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -67,6 +81,8 @@ pub enum EmbeddedError {
 pub struct Backend {
     router: Router,
     state: AppState,
+    /// The receipt import, when a source is switched on.
+    receipts: Option<Arc<ReceiptSyncer>>,
     /// Random per start; the backend adds it to every in-process request, so the unchanged
     /// router (which requires a token) can be reused.
     token: String,
@@ -104,6 +120,7 @@ impl Backend {
                 message: e.to_string(),
             })?;
 
+        let receipt_store = store.clone();
         let http = ReqwestHttp::new(USER_AGENT).map_err(|e| EmbeddedError::Failed {
             message: e.to_string(),
         })?;
@@ -122,6 +139,38 @@ impl Backend {
             state = state.with_bank(Arc::new(FintsBank::new(&id)));
         }
 
+        let mut cfg = ReceiptSourcesConfig::default();
+        if config.lidl_plus {
+            cfg.lidl_plus = LidlPlusConfig {
+                enabled: true,
+                country: config
+                    .lidl_country
+                    .filter(|c| !c.trim().is_empty())
+                    .unwrap_or_else(|| "DE".into()),
+                language: config
+                    .lidl_language
+                    .filter(|c| !c.trim().is_empty())
+                    .unwrap_or_else(|| "de".into()),
+                poll_hours: config.lidl_poll_hours.map_or(12, u64::from),
+                ..LidlPlusConfig::default()
+            };
+        }
+        let receipts = match config.device_secret.as_deref().map(str::trim) {
+            Some(secret) if !secret.is_empty() => {
+                ReceiptSyncer::for_device(receipt_store, cfg, secret, &[])
+                    .map_err(|message| EmbeddedError::Config { message })?
+            }
+            _ if cfg.any_enabled() => {
+                return Err(EmbeddedError::Config {
+                    message: "receipt import needs a device secret from the app".into(),
+                })
+            }
+            _ => None,
+        };
+        if let Some(syncer) = &receipts {
+            state = state.with_receipt_syncer(syncer.clone());
+        }
+
         let token = format!(
             "{}{}",
             uuid::Uuid::new_v4().simple(),
@@ -131,6 +180,7 @@ impl Backend {
         Ok(Arc::new(Backend {
             router,
             state,
+            receipts,
             token,
         }))
     }
@@ -183,6 +233,33 @@ impl Backend {
         }
     }
 
+    /// Import new receipts from the switched-on sources whose turn it is (call on app open and
+    /// from the OS background task slot, right after `refresh`). Cheap when nothing is due, and
+    /// it does nothing until you have signed in to Lidl Plus. Returns a one-line summary.
+    pub async fn sync_receipts(&self) -> Result<String, EmbeddedError> {
+        let Some(syncer) = &self.receipts else {
+            return Ok("receipt import is off".into());
+        };
+        let due = syncer
+            .due(OffsetDateTime::now_utc().unix_timestamp())
+            .await
+            .map_err(|e| EmbeddedError::Failed {
+                message: e.to_string(),
+            })?;
+        if due.is_empty() {
+            return Ok("no receipts due".into());
+        }
+        match syncer.sync_now(None).await {
+            Ok(report) => Ok(format!(
+                "{} new receipts, {} linked to a payment",
+                report.imported, report.linked
+            )),
+            Err(e) => Err(EmbeddedError::Failed {
+                message: e.to_string(),
+            }),
+        }
+    }
+
     /// Refresh prices now (call on app open and from the OS background task slot). Returns a
     /// one-line summary.
     pub async fn refresh(&self) -> Result<String, EmbeddedError> {
@@ -206,6 +283,21 @@ impl Backend {
     pub async fn refresh_prices(&self) -> Result<String, EmbeddedError> {
         self.refresh().await
     }
+
+    pub async fn sync_receipts_now(&self) -> Result<String, EmbeddedError> {
+        self.sync_receipts().await
+    }
+}
+
+/// A new random secret for `StartConfig::device_secret` (64 hex characters). The app makes one
+/// once, keeps it in secure storage and passes the same one on every start.
+#[uniffi::export]
+pub fn generate_device_secret() -> String {
+    format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    )
 }
 
 #[cfg(test)]
@@ -230,6 +322,19 @@ mod tests {
                 openai_api_key: None,
                 fints_product_id: None,
                 price_sources_json: None,
+                lidl_plus: false,
+                lidl_country: None,
+                lidl_language: None,
+                lidl_poll_hours: None,
+                device_secret: None,
+            }
+        }
+
+        fn with_lidl(name: &str) -> StartConfig {
+            StartConfig {
+                lidl_plus: true,
+                device_secret: Some(generate_device_secret()),
+                ..Self::config(name)
             }
         }
 
@@ -375,5 +480,96 @@ mod tests {
             .unwrap();
         let err = b.refresh().await.unwrap_err();
         assert!(err.to_string().contains("no price sources"));
+    }
+
+    #[tokio::test]
+    async fn receipt_import_is_off_by_default() {
+        let b = Backend::start_with(Fixtures::config("receipts-off"))
+            .await
+            .unwrap();
+        assert_eq!(b.sync_receipts().await.unwrap(), "receipt import is off");
+        let status = b
+            .handle_request(Fixtures::get("/v1/receipts/lidl/status"))
+            .await;
+        assert_eq!(status.status, 200);
+        assert_eq!(Fixtures::json(&status)["state"], "disabled");
+        // the answer says what to do, without pointing at a server config the phone does not have
+        let start = b
+            .handle_request(HttpRequest {
+                method: "POST".into(),
+                path_and_query: "/v1/receipts/lidl/start".into(),
+                content_type: None,
+                body: vec![],
+            })
+            .await;
+        assert_eq!(start.status, 409);
+        let message = Fixtures::json(&start)["error"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(message, "Lidl Plus is not switched on");
+    }
+
+    #[tokio::test]
+    async fn lidl_plus_can_be_switched_on_on_the_phone() {
+        let b = Backend::start_with(Fixtures::with_lidl("receipts-lidl"))
+            .await
+            .unwrap();
+        let status = b
+            .handle_request(Fixtures::get("/v1/receipts/lidl/status"))
+            .await;
+        let status = Fixtures::json(&status);
+        assert_eq!(status["enabled"], true);
+        assert_eq!(status["state"], "never"); // on, but nobody has signed in yet
+
+        // the sign-in page address comes from the backend; nothing is contacted here
+        let start = b
+            .handle_request(HttpRequest {
+                method: "POST".into(),
+                path_and_query: "/v1/receipts/lidl/start".into(),
+                content_type: None,
+                body: vec![],
+            })
+            .await;
+        assert_eq!(start.status, 200);
+        let start = Fixtures::json(&start);
+        assert!(start["authorization_url"]
+            .as_str()
+            .unwrap()
+            .starts_with("https://accounts.lidl.com/"));
+        assert!(start["state"].as_str().is_some_and(|s| !s.is_empty()));
+
+        // nothing to sync until someone has signed in, and this must not reach the network
+        assert_eq!(b.sync_receipts().await.unwrap(), "no receipts due");
+    }
+
+    #[tokio::test]
+    async fn receipt_import_needs_a_device_secret() {
+        let cfg = StartConfig {
+            lidl_plus: true,
+            device_secret: None,
+            ..Fixtures::config("receipts-nosecret")
+        };
+        let err = Backend::start_with(cfg).await.err().unwrap();
+        assert!(matches!(err, EmbeddedError::Config { .. }));
+        assert!(err.to_string().contains("device secret"));
+
+        let short = StartConfig {
+            lidl_plus: true,
+            device_secret: Some("short".into()),
+            ..Fixtures::config("receipts-shortsecret")
+        };
+        assert!(matches!(
+            Backend::start_with(short).await.err().unwrap(),
+            EmbeddedError::Config { .. }
+        ));
+    }
+
+    #[test]
+    fn device_secrets_are_long_and_different() {
+        let (a, b) = (generate_device_secret(), generate_device_secret());
+        assert_eq!(a.len(), 64);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, b);
     }
 }

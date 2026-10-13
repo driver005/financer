@@ -186,6 +186,21 @@ impl ReceiptSyncer {
         Self::new(store, cfg, SyncDeps::live()?, &secret, store_aliases).map(Some)
     }
 
+    /// The on-phone backend's setup: real HTTPS, and no environment variable for the key. `secret`
+    /// is kept by the app in the phone's secure storage and must stay the same between starts,
+    /// or a stored Lidl sign-in can no longer be opened. `Ok(None)` when no source is enabled.
+    pub fn for_device(
+        store: Store,
+        cfg: ReceiptSourcesConfig,
+        secret: &str,
+        store_aliases: &[StoreAlias],
+    ) -> Result<Option<Arc<Self>>, String> {
+        if !cfg.any_enabled() {
+            return Ok(None);
+        }
+        Self::new(store, cfg, SyncDeps::live()?, secret, store_aliases).map(Some)
+    }
+
     pub fn config(&self) -> &ReceiptSourcesConfig {
         &self.cfg
     }

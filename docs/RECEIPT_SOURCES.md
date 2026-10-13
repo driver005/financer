@@ -144,6 +144,13 @@ open-source client. The authorization path `/connect/authorize` is **assumed** (
 client reads it from the provider's discovery document; it is the standard path of the identity
 server Lidl uses).
 
+### Lidl Plus on the phone (embedded mode)
+
+The on-phone backend has no `financer.toml`. There Lidl Plus is switched on in the app (Receipt
+sources > Lidl Plus), the token is encrypted with a secret kept in the phone's secure storage, and
+syncing happens when the app opens and in the OS background slot. Email and the watched folder are
+server-only. Details and limits: [EMBEDDED.md](EMBEDDED.md#receipts-from-lidl-plus-on-the-phone).
+
 ## Source 3: watched folder
 
 `[receipts.folder]` names a directory on the server. Every `poll_seconds`, new `.pdf`, `.txt`,

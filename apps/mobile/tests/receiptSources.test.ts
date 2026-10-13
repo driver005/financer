@@ -9,12 +9,15 @@ import {
   attentionCount,
   callbackHasResult,
   canSyncNow,
+  disconnectedText,
   extractCallbackUrl,
   healthPill,
   importedText,
   isSourceKey,
   lastSyncText,
+  lidlPromises,
   lidlStateText,
+  noSourceText,
   nextRunText,
   setupSteps,
   signInMode,
@@ -203,5 +206,38 @@ describe("API client", () => {
     assert.equal(calls[1].body, undefined);
     assert.deepEqual(JSON.parse(calls[2].body ?? "{}"), { source: "folder" });
     assert.deepEqual(JSON.parse(calls[4].body ?? "{}"), { state: "st", callback_url: "com.lidlplus.app://callback?code=A" });
+  });
+});
+
+describe("on the phone's own backend", () => {
+  it("never points a phone user at a server or financer.toml", () => {
+    for (const k of SOURCE_ORDER) {
+      const text = setupSteps(k, true).join(" ");
+      assert.ok(setupSteps(k, true).length >= 1);
+      assert.ok(!/financer\.toml|restart the server|environment variable/i.test(text), `${k}: ${text}`);
+    }
+    assert.ok(!/financer\.toml|restart the server/i.test(noSourceText(true)));
+    assert.ok(!/server/i.test(disconnectedText(true)));
+    assert.ok(!/your server/i.test(lidlPromises(true).join(" ")));
+  });
+
+  it("tells the truth about what works there", () => {
+    assert.match(setupSteps("lidl_plus", true).join(" "), /Switch it on below/);
+    assert.match(setupSteps("email", true).join(" "), /Not available on this phone/);
+    assert.match(setupSteps("folder", true).join(" "), /Not available on this phone/);
+    assert.match(noSourceText(true), /Lidl Plus/);
+  });
+
+  it("keeps the server wording when there is a server", () => {
+    assert.match(setupSteps("lidl_plus", false).join(" "), /financer\.toml/);
+    assert.match(lidlPromises(false)[1], /on your server/);
+    assert.match(disconnectedText(false), /your server/);
+    assert.match(noSourceText(false), /financer\.toml/);
+    assert.deepEqual(lidlPromises(false), [...LIDL_PROMISES]);
+  });
+
+  it("keeps the same four statements, the unofficial warning included", () => {
+    assert.equal(lidlPromises(true).length, 4);
+    assert.ok(lidlPromises(true).some((t) => t.startsWith("This is unofficial")));
   });
 });

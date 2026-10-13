@@ -22,6 +22,7 @@ required-features = ["bindgen-cli"]
 financer-api = { path = "../api" }
 financer-fints = { path = "../fints" }
 financer-prices = { path = "../prices" }
+financer-receipt-sources = { path = "../receipt-sources" }
 financer-store = { path = "../store" }
 axum = { version = "0.8", default-features = false }
 http-body-util = "0.1"

@@ -1664,6 +1664,7 @@ dependencies = [
  "financer-api",
  "financer-fints",
  "financer-prices",
+ "financer-receipt-sources",
  "financer-store",
  "http-body-util",
  "serde_json",

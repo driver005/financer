@@ -27,7 +27,7 @@ npm install --no-audit --no-fund --install-links "$bindings" @ubjs/react-native@
 # 3. Point the app's wrapper at the real module.
 cat > modules/financer-embedded/index.ts <<'TS'
 // Written by scripts/enable-embedded.sh: the generated binding of crates/embedded.
-export { Backend } from "financer-embedded-bindings";
+export { Backend, generateDeviceSecret } from "financer-embedded-bindings";
 export type BackendHandle = import("financer-embedded-bindings").BackendLike;
 export type { StartConfig } from "financer-embedded-bindings";
 TS

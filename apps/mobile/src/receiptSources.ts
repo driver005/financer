@@ -138,8 +138,30 @@ export function syncResultText(imported: number, linked: number): string {
   return `${found}; ${linked === 1 ? "1 matched" : `${linked} matched`} to a bank payment.`;
 }
 
-/** Setup steps, as the server's configuration asks for them. */
-export function setupSteps(s: string): string[] {
+/**
+ * Setup steps. With `onPhone` (the on-phone backend, which has no financer.toml and no server)
+ * only Lidl Plus can be switched on, from the app; the other two need a server.
+ */
+export function setupSteps(s: string, onPhone = false): string[] {
+  if (onPhone) {
+    switch (s) {
+      case "lidl_plus":
+        return [
+          "Switch it on below. The setting stays on this phone.",
+          "Then tap Connect. You sign in on Lidl's own page; Financer never sees your password.",
+        ];
+      case "email":
+        return [
+          "Not available on this phone: reading a mailbox needs a server that can stay connected. Connect your own server (Settings > Backend) to use it, or forward receipts to the Receipts screen by hand.",
+        ];
+      case "folder":
+        return [
+          "Not available on this phone: the app cannot watch a folder. Use Receipts > PDF to import a file you saved, or connect your own server.",
+        ];
+      default:
+        return [];
+    }
+  }
   switch (s) {
     case "email":
       return [
@@ -163,12 +185,28 @@ export function setupSteps(s: string): string[] {
 }
 
 /** The short, plain statements shown on the Lidl Plus card. */
-export const LIDL_PROMISES: readonly string[] = [
-  "You sign in on Lidl's own page. Financer never sees your password.",
-  "Only a refresh token is stored, on your server, encrypted.",
-  "This is unofficial. Lidl has no public interface for this, so it can stop working at any time.",
-  "You can disconnect whenever you like. That deletes the token; receipts already imported stay.",
-];
+export function lidlPromises(onPhone = false): string[] {
+  return [
+    "You sign in on Lidl's own page. Financer never sees your password.",
+    `Only a refresh token is stored, ${onPhone ? "on this phone" : "on your server"}, encrypted.`,
+    "This is unofficial. Lidl has no public interface for this, so it can stop working at any time.",
+    "You can disconnect whenever you like. That deletes the token; receipts already imported stay.",
+  ];
+}
+
+export const LIDL_PROMISES: readonly string[] = lidlPromises(false);
+
+/** Where "Disconnect" says the saved sign-in is deleted from. */
+export function disconnectedText(onPhone: boolean): string {
+  return `Disconnected. The saved sign-in was deleted from ${onPhone ? "this phone" : "your server"}.`;
+}
+
+/** The empty state when no receipt source is on. */
+export function noSourceText(onPhone: boolean): string {
+  return onPhone
+    ? "On this phone the receipts can come from Lidl Plus. Switch it on in the Lidl Plus card below. Mailbox and folder import need your own server."
+    : "Receipts can arrive from your mailbox, from Lidl Plus or from a folder. Sources are switched on in the server's financer.toml; the cards below say how.";
+}
 
 /** Where the sign-in can be completed: inside the app (a browser sheet that hands the address back) or by pasting it. */
 export type SignInMode = "auth-session" | "paste";

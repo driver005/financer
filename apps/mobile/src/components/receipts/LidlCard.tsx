@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Platform, Text as RNText, View } from "react-native";
 
 import type { Api, LidlStart, LidlStatus, ReceiptSource } from "@/api/client";
+import { useApi } from "@/api/config";
 import { Card } from "@/components/ui";
 import { ChunkyButton, TextInput } from "@/components/kit";
 import { IconBadge, ListGroup, ListRow, StatusPill } from "@/components/rows";
@@ -10,12 +11,13 @@ import { ConfirmAction, FieldMessage, PanelText, SettingsPanel } from "@/compone
 import { openInBrowser, openSignInPage } from "@/native/authSession";
 import { celebrate } from "@/native/haptics";
 import {
-  LIDL_PROMISES,
   callbackHasResult,
+  disconnectedText,
   extractCallbackUrl,
   healthPill,
   importedText,
   lastSyncText,
+  lidlPromises,
   lidlStateText,
   setupSteps,
   signInMode,
@@ -42,6 +44,9 @@ export function LidlCard({
   onChanged: () => Promise<void> | void;
 }) {
   const p = usePalette();
+  const { mode: backendMode, embedded, saveEmbedded } = useApi();
+  // On the phone's own backend there is no server and no financer.toml: Lidl Plus is a switch here.
+  const onPhone = backendMode === "embedded";
   const now = Math.floor(Date.now() / 1000);
   const mode = signInMode(Platform.OS);
   const pill = healthPill(source);
@@ -121,12 +126,26 @@ export function LidlCard({
     }
   }
 
+  async function switchPhone(on: boolean) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await saveEmbedded({ ...embedded, lidlPlus: on }); // restarts the on-phone backend
+      setMessage({ tone: "info", text: on ? "Lidl Plus is switched on." : "Lidl Plus is switched off. A saved sign-in stays until you disconnect." });
+      await onChanged();
+    } catch (e) {
+      setMessage({ tone: "error", text: e instanceof Error ? e.message : "Could not change the setting" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function disconnect() {
     setBusy(true);
     setMessage(null);
     try {
       await api.lidlDisconnect();
-      setMessage({ tone: "info", text: "Disconnected. The saved sign-in was deleted from your server." });
+      setMessage({ tone: "info", text: disconnectedText(onPhone) });
       await onChanged();
     } catch (e) {
       setMessage({ tone: "error", text: e instanceof Error ? e.message : "Could not disconnect" });
@@ -152,16 +171,19 @@ export function LidlCard({
 
       {switchedOff ? (
         <View style={{ marginTop: space.sm, gap: space.sm }}>
-          {setupSteps("lidl_plus").map((s, i) => (
+          {setupSteps("lidl_plus", onPhone).map((s, i) => (
             <RNText key={i} style={[typography.label, { color: p.muted }]}>
               {`${i + 1}. ${s}`}
             </RNText>
           ))}
+          {onPhone ? (
+            <ChunkyButton label={busy ? "Switching on…" : "Switch on Lidl Plus"} icon="power" tone="blue" onPress={() => void switchPhone(true)} disabled={busy} />
+          ) : null}
         </View>
       ) : (
         <>
           <View style={{ marginTop: space.md, gap: space.sm }}>
-            {LIDL_PROMISES.map((t) => (
+            {lidlPromises(onPhone).map((t) => (
               <View key={t} style={{ flexDirection: "row", gap: space.sm }}>
                 <MaterialCommunityIcons
                   name={t.startsWith("This is unofficial") ? "alert-outline" : "check-circle-outline"}
@@ -215,7 +237,7 @@ export function LidlCard({
                     label="Disconnect"
                     icon="link-off"
                     question="Disconnect Lidl Plus?"
-                    consequence="The saved sign-in is deleted from your server. Receipts you already imported stay. You can connect again any time."
+                    consequence={`The saved sign-in is deleted from ${onPhone ? "this phone" : "your server"}. Receipts you already imported stay. You can connect again any time.`}
                     confirmLabel="Disconnect"
                     onConfirm={() => void disconnect()}
                     disabled={busy}
@@ -234,6 +256,20 @@ export function LidlCard({
           )}
 
           {message ? <FieldMessage tone={message.tone}>{message.text}</FieldMessage> : null}
+
+          {onPhone ? (
+            <View style={{ marginTop: space.md }}>
+              <ConfirmAction
+                label="Switch off Lidl Plus"
+                icon="power"
+                question="Switch off Lidl Plus?"
+                consequence="Receipts stop being imported. A saved sign-in stays on this phone until you disconnect it."
+                confirmLabel="Switch off"
+                onConfirm={() => void switchPhone(false)}
+                disabled={busy}
+              />
+            </View>
+          ) : null}
 
           <ListGroup style={{ marginTop: space.md, marginBottom: 0 }} inset={0}>
             <SettingsPanel icon="help-circle-outline" title="How this works">

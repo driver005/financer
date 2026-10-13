@@ -18,6 +18,7 @@ import {
   importedText,
   lastSyncText,
   nextRunText,
+  noSourceText,
   setupSteps,
   sourceBlurb,
   sourceIcon,
@@ -40,7 +41,8 @@ async function loadAll(api: Api): Promise<Loaded> {
  * button and help for setting it up.
  */
 export default function ReceiptSources() {
-  const { api, loaded } = useApi();
+  const { api, loaded, mode: backendMode } = useApi();
+  const onPhone = backendMode === "embedded";
   const p = usePalette();
   const { data, error, busy, reload } = useScreenData(loadAll);
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -93,7 +95,7 @@ export default function ReceiptSources() {
               {allOff ? (
                 <EmptyState
                   title="No source is switched on"
-                  message="Receipts can arrive from your mailbox, from Lidl Plus or from a folder. Sources are switched on in the server's financer.toml; the cards below say how."
+                  message={noSourceText(onPhone)}
                   mood="happy"
                 />
               ) : null}
@@ -124,7 +126,7 @@ export default function ReceiptSources() {
                     <LidlCard api={api} source={s} status={data.lidl} onChanged={reload} />
                   </View>
                 ) : (
-                  <SourceCard key={s.source} s={s} now={now} syncing={syncing === s.source} disabled={syncing !== null} onSync={() => void sync(s.source)} />
+                  <SourceCard key={s.source} s={s} now={now} onPhone={onPhone} syncing={syncing === s.source} disabled={syncing !== null} onSync={() => void sync(s.source)} />
                 ),
               )}
 
@@ -140,7 +142,7 @@ export default function ReceiptSources() {
 }
 
 /** Mailbox and folder: status, numbers, last problem, Sync now and setup help. */
-function SourceCard({ s, now, syncing, disabled, onSync }: { s: ReceiptSource; now: number; syncing: boolean; disabled: boolean; onSync: () => void }) {
+function SourceCard({ s, now, onPhone, syncing, disabled, onSync }: { s: ReceiptSource; now: number; onPhone: boolean; syncing: boolean; disabled: boolean; onSync: () => void }) {
   const pill = healthPill(s);
   const next = nextRunText(s.next_run, now);
   return (
@@ -169,7 +171,7 @@ function SourceCard({ s, now, syncing, disabled, onSync }: { s: ReceiptSource; n
         </View>
       ) : null}
       <SettingsPanel icon="help-circle-outline" title={s.enabled ? "Setup help" : "How to switch it on"}>
-        {setupSteps(s.source).map((step, i) => (
+        {setupSteps(s.source, onPhone).map((step, i) => (
           <PanelText key={i}>{`${i + 1}. ${step}`}</PanelText>
         ))}
       </SettingsPanel>

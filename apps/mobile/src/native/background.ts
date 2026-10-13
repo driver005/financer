@@ -17,13 +17,17 @@ export const REFRESH_TASK = "financer-refresh-prices";
  * the saved server, or null when the app is not set up. The task runs headlessly, without the
  * app's React tree, so it rebuilds this from secure storage.
  */
-async function headlessApi(): Promise<{ api: Api; refreshPrices?: () => Promise<unknown> } | null> {
+async function headlessApi(): Promise<{ api: Api; refreshPrices?: () => Promise<unknown>; syncReceipts?: () => Promise<unknown> } | null> {
   if ((await getSecret(MODE_KEY)) === "embedded") {
     if (!embeddedAvailable) return null;
     const raw = await getSecret(EMBEDDED_KEY);
     const settings: EmbeddedSettings = { ...EMPTY_EMBEDDED_SETTINGS, ...(raw ? (JSON.parse(raw) as Partial<EmbeddedSettings>) : {}) };
     const backend = await startEmbedded(settings);
-    return { api: new Api(new EmbeddedTransport(backend)), refreshPrices: () => backend.refreshPrices() };
+    return {
+      api: new Api(new EmbeddedTransport(backend)),
+      refreshPrices: () => backend.refreshPrices(),
+      syncReceipts: () => backend.syncReceiptsNow(),
+    };
   }
   const raw = await getSecret(CONFIG_KEY);
   return raw ? { api: new Api(JSON.parse(raw) as ApiConfig) } : null;
@@ -39,6 +43,11 @@ if (Platform.OS !== "web" && !TaskManager.isTaskDefined(REFRESH_TASK)) {
       if (!ctx) return BackgroundTask.BackgroundTaskResult.Success; // nothing configured yet
       try {
         await ctx.refreshPrices?.(); // on-phone backend only: a server refreshes its own prices
+      } catch {
+        failed = true;
+      }
+      try {
+        await ctx.syncReceipts?.(); // on-phone backend only, and only when Lidl Plus is switched on
       } catch {
         failed = true;
       }
