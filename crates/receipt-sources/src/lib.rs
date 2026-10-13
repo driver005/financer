@@ -20,6 +20,7 @@ pub mod message;
 pub mod reader;
 pub mod secret;
 pub mod summary;
+pub mod syncer;
 pub mod testing;
 pub mod text;
 
@@ -28,3 +29,9 @@ pub use config::{
     SourceKind,
 };
 pub use reader::{ReadError, ReadReceipt, ReceiptReader, Trust};
+pub use ingest::{Ingest, Stored};
+pub use matching::{Linker, Matcher};
+pub use secret::SecretBox;
+pub use syncer::{
+    ReceiptSyncer, SourceHealth, SourceStatus, SyncDeps, SyncNowError, SyncReport,
+};
