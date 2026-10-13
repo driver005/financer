@@ -20,7 +20,8 @@ step "Where should your data live?", or Settings) choose your own server, URL
 | `make server` / `make server-watch` | only the server, once / restarting on changes |
 | `make web` | only the web app (start the server yourself) |
 | `make app`, `make android`, `make ios` | Expo for a phone (Expo Go), an Android emulator, an iOS Simulator |
-| `make serve` | builds the web app and serves it from the server on one address (`:8080`), like a release |
+| `make serve` | builds the web app and serves it from the server on one address (`:8080`), like a release (CORS is not enabled here, it is not needed) |
+| `make stop` | stops a leftover Financer server (the one `make dev`, `server` or `serve` started) |
 | `make dev-reset` | deletes the dev database, keeps the token |
 | `make gen-api` | regenerates `openapi.json` and `src/api/schema.d.ts` after API changes |
 | `make test`, `make lint`, `make check` | tests, format/clippy/typecheck, both (what CI runs) |
@@ -34,9 +35,19 @@ Everything local is in `.dev/` (git-ignored):
 
 - `.dev/financer.db`: the SQLite database.
 - `.dev/token`: the dev API token, created on first use. Delete it to get a new one.
+- `.dev/financer.toml`: the server's config file (see `docs/CONFIG.md`). `make dev` creates it from
+  `financer.example.toml` if it is missing (everything in it is commented out) and the server then
+  reads it. Environment variables, including the ones the Makefile sets, win over it.
 - `.dev/env`: optional. Plain `NAME=value` lines (or `export NAME=value`), loaded before the server
   starts. Put `FINANCER_ANTHROPIC_API_KEY`, `FINANCER_PRICE_SOURCES`, `FINANCER_FINTS_PRODUCT_ID`
   and the like here.
+
+## Troubleshooting
+
+- **"Port 8080 on 127.0.0.1 is already in use".** `make dev`, `server`, `server-watch` and `serve`
+  check the port first and say what is listening. Usually an earlier run is still going in another
+  terminal: stop it there, or run `make stop`. To run a second copy, pick another port:
+  `make serve BIND=127.0.0.1:8090`. If something else owns 8080, use `BIND` the same way.
 
 ## Notes
 

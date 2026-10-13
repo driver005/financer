@@ -43,6 +43,65 @@ clear message.
   differ per bank: TAN medium selection, how far back the bank lets you read without extra
   approval (often 90 days), and the BIC. Errors from the bank are shown in the app.
 
+## Connections in `financer.toml` (scheduled sync)
+
+Instead of typing bank code, login and IBAN into the app every time, describe the connection once
+in the server's `financer.toml` (all keys: [CONFIG.md](CONFIG.md)):
+
+```toml
+[bank]
+fints_product_id = "${FINTS_PRODUCT_ID}"
+
+[[bank.accounts]]
+name = "Girokonto"
+bank_code = "37050198"
+login = "your-login-name"
+iban = "DE89 3704 0044 0532 0130 00"
+pin_env = "SPARKASSE_PIN"     # optional; without it you type the PIN in the app
+sync_every_hours = 12         # 0 = only when you press "Sync now"
+since_days = 90               # how far back the first import reaches
+```
+
+What this does and does not do:
+
+- **The PIN is never in the file and never stored.** It comes from the environment variable named
+  by `pin_env` (read when a sync starts), or you type it in the app (Settings > Bank connections
+  > Sync now); then it is used for that sync only.
+- **You still approve every login.** pushTAN needs you, so a scheduled sync cannot finish alone:
+  it **starts by itself** (when the server has the PIN through `pin_env`), logs in, and then waits
+  in the state `needs_approval`. The app shows the bank's text. When you approve in your banking
+  app the server notices within a few seconds (it asks the bank every 5 seconds) and imports; the
+  app does not have to stay open. If no approval arrives within 10 minutes the sync is given up
+  (state `error`) and the next one starts at the next interval.
+- A connection **without** `pin_env` cannot start by itself. When its schedule is due the app shows
+  "sync due" and waits for you to press Sync now and type the PIN.
+- **A refused login is never retried automatically.** After a wrong PIN or a locked login the
+  connection shows an error and the scheduler leaves it alone, also across restarts, until you sync
+  it by hand (so a wrong PIN in the environment cannot lock your online banking). Other failures
+  (bank unreachable, approval timed out) are retried at the next interval, not every minute. The
+  existing pause after two wrong PINs (15 minutes) applies to all syncs together.
+- **No duplicates.** Imports go through the same de-duplication as a CSV import and the manual
+  sync. After the first import a sync reads from the last successful one minus 7 days, so
+  overlapping periods are harmless.
+- `GET /v1/bank/connections` lists the connections without secrets (login and IBAN masked) with
+  `state` (`idle`, `syncing`, `needs_approval`, `error`), the bank's message, the last result and
+  the next scheduled time. `POST /v1/bank/connections/{name}/sync` (optional body `{"pin": "..."}`)
+  starts one and `POST .../cancel` stops waiting.
+- The older manual flow (`POST /v1/bank/sync`, **Spending > Sync with Sparkasse**) is unchanged. The
+  app offers it on the Bank connections card only when no connection is configured. The on-phone
+  backend has no config file, so it has no configured connections.
+- `fints_url` (with `bic`) is for a bank that `fints-rs` does not know by bank code.
+
+**What was tested:** all of the above against a scripted bank in the API tests (approval wait,
+import, idempotence, scheduling, no retry after a refused login, timeouts, cancel, nothing secret in
+any response), and the real server binary was started with such a file and answered the list and a
+sync request (the sync failed at the network, as the sandbox cannot reach a bank). The one new piece
+of FinTS client code, using `fints_url` instead of the registry, has a test against the `fints-rs`
+mock server that was **not run** here (the mock server binary was not available).
+**Not tested:** any of this against a real Sparkasse, how often a bank wants a fresh approval for a
+background login, and whether banks accept the repeated logins of a schedule without extra
+approvals or limits. Check the first few runs by hand.
+
 ## Protecting your account from lockout
 
 Banks typically lock online banking after about three wrong PINs. After **two** wrong PINs in a

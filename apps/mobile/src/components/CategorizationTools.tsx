@@ -1,20 +1,24 @@
-import { Link } from "expo-router";
+import { useRouter } from "expo-router";
 import { useState } from "react";
-import { View } from "react-native";
+import { Text as RNText, View } from "react-native";
 
 import type { Suggestions } from "@/api/client";
 import { useApi } from "@/api/config";
-import { Switch, Text } from "@/components/kit";
-import { Body, Button, Card, useColors } from "@/components/ui";
+import { ChunkyButton, Switch } from "@/components/kit";
+import { ListGroup, ListRow } from "@/components/rows";
+import { Card } from "@/components/ui";
+import { categoryLabel } from "@/categoryIcons";
+import { space, typography, usePalette } from "@/theme";
 
 /**
- * Spending-screen card: a link to the rules, and "Suggest categories", which asks the
+ * Spending-screen tools: a link to the rules, and "Suggest categories", which asks the
  * configured AI about merchants still left as uncategorized/other. Only their names are sent.
  * Accepting suggestions creates rules; `onChanged` lets the list reload.
  */
 export function CategorizationTools({ onChanged }: { onChanged: (note: string) => void }) {
   const { api } = useApi();
-  const c = useColors();
+  const router = useRouter();
+  const p = usePalette();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Suggestions | null>(null);
   const [chosen, setChosen] = useState<Record<string, boolean>>({});
@@ -63,23 +67,28 @@ export function CategorizationTools({ onChanged }: { onChanged: (note: string) =
   const count = result ? result.suggestions.filter((s) => chosen[s.merchant]).length : 0;
 
   return (
-    <Card>
-      <View style={{ gap: 8 }}>
-        <Link href="/rules" asChild>
-          <Button label="Categorization rules" icon="format-list-bulleted" mode="outlined" onPress={() => {}} />
-        </Link>
-        <Button label="Suggest categories" icon="auto-fix" mode="outlined" onPress={suggest} disabled={busy} />
-      </View>
-      {message ? <Text variant="bodySmall" style={{ color: c.muted, marginTop: 8 }}>{message}</Text> : null}
+    <>
+      <ListGroup>
+        <ListRow icon="format-list-bulleted" title="Categorization rules" subtitle="Decide where merchants go" onPress={() => router.push("/rules")} />
+        <ListRow
+          icon="auto-fix"
+          iconTone="gold"
+          title="Suggest categories"
+          subtitle="AI help for unknown merchants"
+          onPress={busy ? undefined : () => void suggest()}
+          accessibilityHint={busy ? "Working" : undefined}
+        />
+      </ListGroup>
+      {message ? <RNText style={[typography.caption, { color: p.muted, marginBottom: space.md, paddingHorizontal: space.xs }]}>{message}</RNText> : null}
       {result && result.suggestions.length > 0 ? (
-        <View style={{ marginTop: 8 }}>
-          {result.suggestions.map((s) => (
-            <View key={s.merchant} style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8 }}>
-              <View style={{ flex: 1 }}>
-                <Body bold>{s.merchant}</Body>
-                <Text variant="bodySmall" style={{ color: c.muted }}>
-                  {s.category} · {s.transactions} transaction{s.transactions === 1 ? "" : "s"}
-                </Text>
+        <Card>
+          {result.suggestions.map((s, i) => (
+            <View key={s.merchant} style={{ flexDirection: "row", alignItems: "center", gap: space.md, marginTop: i === 0 ? 0 : space.md }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <RNText style={[typography.bodyStrong, { color: p.text }]}>{s.merchant}</RNText>
+                <RNText style={[typography.caption, { color: p.muted }]}>
+                  {categoryLabel(s.category)} · {s.transactions} transaction{s.transactions === 1 ? "" : "s"}
+                </RNText>
               </View>
               <Switch
                 value={!!chosen[s.merchant]}
@@ -88,11 +97,11 @@ export function CategorizationTools({ onChanged }: { onChanged: (note: string) =
               />
             </View>
           ))}
-          <View style={{ marginTop: 12 }}>
-            <Button label={`Create ${count} rule${count === 1 ? "" : "s"}`} icon="check" onPress={accept} disabled={busy || count === 0} />
+          <View style={{ marginTop: space.lg }}>
+            <ChunkyButton label={`Create ${count} rule${count === 1 ? "" : "s"}`} icon="check" onPress={() => void accept()} disabled={busy || count === 0} />
           </View>
-        </View>
+        </Card>
       ) : null}
-    </Card>
+    </>
   );
 }

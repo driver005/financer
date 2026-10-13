@@ -32,6 +32,14 @@ the workflow's own token does not start other workflows, so it is started explic
 release gets the desktop bundles, web zip, APK and generated notes as described above.
 
 - Skip one: put `[skip release]` in the merge commit message.
+- **Dependency-only merges are skipped automatically**, so a batch of Dependabot pull requests does
+  not produce a tag, a release build and a release for each. A merge counts as dependency-only when
+  its subject or author mentions `dependabot`, or when it touches nothing but `Cargo.toml` /
+  `Cargo.lock`, an app's `package.json` / `package-lock.json`, `.github/workflows/*` and
+  `.github/dependabot.yml`. Those changes are not lost: they are in the next release, because the
+  tag goes on a later commit. A dependency update that matters now (a security fix) can be released
+  by hand with **New version**, **Run workflow** (a forced bump ignores this rule). The rules are
+  tested in `.github/scripts/test-next-version.sh` (run by CI).
 - Force a bump: Actions tab, **New version**, **Run workflow**, choose `patch`, `minor` or `major`.
 - The tag is the version. The tagging workflow makes no commits to `master`, so the numbers in
   `package.json`, `app.json` and `Cargo.toml` stay as committed; instead the release build stamps

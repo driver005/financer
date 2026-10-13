@@ -1,14 +1,18 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { ScrollView, Text as RNText, View, type LayoutChangeEvent, type ScrollViewInstance } from "react-native";
+import { useReducedMotion } from "react-native-reanimated";
 
 import type { MealShoppingList, RecipeMatch } from "@/api/client";
 import { useApi } from "@/api/config";
 import { getSecret, setSecret } from "@/api/storage";
-import { HelperText, IconButton, Text } from "@/components/kit";
+import { Avatar, Badge, EmptyState, Panel, RoundIcon, SectionLabel, SkeletonCards, Stepper, Subtitle, Tap, space, useTones } from "@/components/grocery/primitives";
+import { ChunkyButton, HelperText, Text } from "@/components/kit";
 import { MealPicker } from "@/components/MealPicker";
-import { PantryEditor, ShoppingListView } from "@/components/ShoppingListView";
-import { Body, Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
+import { ListSummaryBar, PantryEditor, ShoppingListView, hasShoppingContent } from "@/components/ShoppingListView";
+import { Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { initials, mealTint } from "@/groceryView";
+import { usePalette } from "@/theme";
 import {
   RELATION_LABEL,
   clampServings,
@@ -35,7 +39,6 @@ import { localIsoDate } from "@/period";
 
 export default function MealPlanScreen() {
   const { api, loaded } = useApi();
-  const c = useColors();
   const today = localIsoDate();
   const [week, setWeek] = useState(() => weekStart(localIsoDate()));
   const [plan, setPlan] = useState<WeekPlan>({});
@@ -49,6 +52,9 @@ export default function MealPlanScreen() {
   const [tickState, setTickState] = useState<{ week: string; ids: string[] }>({ week, ids: [] });
   // answers of older requests (another week, an earlier save) are dropped
   const latest = useRef(0);
+  const scroller = useRef<ScrollViewInstance>(null);
+  const cardY = useRef<Record<string, number>>({});
+  const reduceMotion = useReducedMotion();
 
   const message = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
@@ -142,77 +148,198 @@ export default function MealPlanScreen() {
   if (!loaded) return <Screen><Loading /></Screen>;
 
   const relation = RELATION_LABEL[weekRelation(week, today)];
+  const showBar = !!list && hasShoppingContent(list);
+
+  const jumpTo = (iso: string) => {
+    const y = cardY.current[iso];
+    if (y !== undefined) scroller.current?.scrollTo({ y: Math.max(0, y - space.sm), animated: !reduceMotion });
+  };
 
   return (
     <Screen>
       <Title>Meal plan</Title>
+      {api ? <Subtitle>Plan the meals, get one shopping list.</Subtitle> : null}
       {!api ? (
         <NeedsSetup />
       ) : (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-            <IconButton icon="chevron-left" onPress={() => setWeek(shiftWeek(week, -1))} accessibilityLabel="Previous week" />
-            <View style={{ flex: 1, alignItems: "center" }}>
-              <Text variant="titleSmall">{weekLabel(week)}</Text>
-              {relation ? <Text variant="bodySmall" style={{ color: c.muted }}>{relation}</Text> : null}
+        <View style={{ flex: 1 }}>
+          <ScrollView ref={scroller} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space.lg }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: space.sm }}>
+              <RoundIcon icon="chevron-left" onPress={() => setWeek(shiftWeek(week, -1))} label="Previous week" />
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text variant="titleSmall" style={{ fontVariant: ["tabular-nums"] }}>{weekLabel(week)}</Text>
+                {relation ? <Text variant="bodySmall" className="text-muted">{relation}</Text> : null}
+              </View>
+              <RoundIcon icon="chevron-right" onPress={() => setWeek(shiftWeek(week, 1))} label="Next week" />
             </View>
-            <IconButton icon="chevron-right" onPress={() => setWeek(shiftWeek(week, 1))} accessibilityLabel="Next week" />
-          </View>
-          {relation !== "This week" ? (
-            <View style={{ marginBottom: 12 }}>
-              <Button label="Back to this week" icon="calendar-today" mode="outlined" onPress={() => setWeek(weekStart(today))} />
-            </View>
-          ) : null}
-          {error ? <HelperText type="error" visible>{error}</HelperText> : null}
 
-          {weekDays(week).map((iso) => {
-            const entry = plan[iso];
-            return (
-              <Card key={iso}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                  <View style={{ width: 52 }}>
-                    <Text variant="titleSmall" style={{ color: iso === today ? c.accent : c.text }}>{weekdayName(iso)}</Text>
-                    <Text variant="bodySmall" style={{ color: c.muted }}>{shortDate(iso)}</Text>
-                  </View>
-                  {entry ? (
-                    <View style={{ flex: 1 }}>
-                      <Body bold>{entry.title}</Body>
-                      <View style={{ flexDirection: "row", alignItems: "center" }}>
-                        <IconButton icon="minus" onPress={() => changeServings(iso, entry, -1)} accessibilityLabel={`Fewer servings of ${entry.title}`} />
-                        <Text variant="bodyMedium" style={{ minWidth: 76, textAlign: "center" }}>
-                          {entry.servings} {entry.servings === 1 ? "serving" : "servings"}
-                        </Text>
-                        <IconButton icon="plus" onPress={() => changeServings(iso, entry, 1)} accessibilityLabel={`More servings of ${entry.title}`} />
-                      </View>
-                    </View>
-                  ) : (
-                    <View style={{ flex: 1 }}>
-                      <Button label="Pick a recipe" icon="plus" mode="outlined" onPress={() => void openPicker(iso)} />
-                    </View>
-                  )}
-                  {entry ? (
-                    <View>
-                      <IconButton icon="swap-horizontal" onPress={() => void openPicker(iso)} accessibilityLabel={`Change the meal on ${weekdayName(iso)}`} />
-                      <IconButton icon="close" onPress={() => void commit(setDay(plan, iso, null))} accessibilityLabel={`Clear the meal on ${weekdayName(iso)}`} />
-                    </View>
+            <WeekStrip days={weekDays(week)} plan={plan} today={today} onPick={jumpTo} />
+
+            {relation !== "This week" ? (
+              <View style={{ marginBottom: space.md }}>
+                <ChunkyButton label="Back to this week" icon="calendar-today" outline onPress={() => setWeek(weekStart(today))} />
+              </View>
+            ) : null}
+            {error ? <HelperText type="error" visible>{error}</HelperText> : null}
+
+            <SectionLabel right={<Text variant="bodySmall" className="text-muted">{plannedCount(plan)} of 7 planned</Text>}>Meals</SectionLabel>
+            {weekDays(week).map((iso) => (
+              <View
+                key={iso}
+                onLayout={(e: LayoutChangeEvent) => {
+                  cardY.current[iso] = e.nativeEvent.layout.y;
+                }}
+              >
+                <DayCard
+                  iso={iso}
+                  today={today}
+                  entry={plan[iso]}
+                  onPick={() => void openPicker(iso)}
+                  onClear={() => void commit(setDay(plan, iso, null))}
+                  onServings={(entry, delta) => changeServings(iso, entry, delta)}
+                >
+                  {pickDay === iso ? (
+                    <MealPicker api={api} recipes={recipes} loading={recipesLoading} onPick={(e) => pick(iso, e)} onClose={() => setPickDay(null)} />
                   ) : null}
-                </View>
-                {pickDay === iso ? (
-                  <MealPicker api={api} recipes={recipes} loading={recipesLoading} onPick={(e) => pick(iso, e)} onClose={() => setPickDay(null)} />
-                ) : null}
-              </Card>
-            );
-          })}
+                </DayCard>
+              </View>
+            ))}
 
-          <Title>Shopping list</Title>
-          {busy && !list ? <Loading /> : null}
-          {list ? (
-            <ShoppingListView list={list} ticks={shownTicks} onToggle={toggle} onEditPantry={() => setPantryOpen(true)} />
-          ) : null}
-          {pantryOpen ? <PantryEditor api={api} onChanged={() => void load()} onClose={() => setPantryOpen(false)} /> : null}
-          {plannedCount(plan) === 0 && !busy ? <Body muted>Nothing planned this week.</Body> : null}
-        </ScrollView>
+            <SectionLabel>Shopping list</SectionLabel>
+            {busy && !list ? <SkeletonCards count={2} label="Loading the shopping list" /> : null}
+            {list && (hasShoppingContent(list) || plannedCount(plan) > 0) ? (
+              <ShoppingListView list={list} ticks={shownTicks} onToggle={toggle} onEditPantry={() => setPantryOpen(true)} />
+            ) : null}
+            {pantryOpen ? <PantryEditor api={api} onChanged={() => void load()} onClose={() => setPantryOpen(false)} /> : null}
+            {plannedCount(plan) === 0 && !busy && !error ? (
+              <EmptyState
+                title="Nothing planned this week"
+                body="Pick a recipe for a day and the ingredients land on your shopping list, grouped by chain."
+                actionLabel="Plan Monday"
+                actionIcon="plus"
+                onAction={() => {
+                  const first = weekDays(week)[0];
+                  void openPicker(first);
+                  jumpTo(first);
+                }}
+              />
+            ) : null}
+          </ScrollView>
+          {showBar && list ? <ListSummaryBar list={list} ticks={shownTicks} /> : null}
+        </View>
       )}
     </Screen>
+  );
+}
+
+/** Seven pills, Monday to Sunday: today filled, a dot under every day that has a meal. Tap jumps to the day. */
+function WeekStrip({ days, plan, today, onPick }: { days: string[]; plan: WeekPlan; today: string; onPick: (iso: string) => void }) {
+  const p = usePalette();
+  return (
+    <View style={{ flexDirection: "row", gap: 6, marginBottom: space.md }}>
+      {days.map((iso) => {
+        const isToday = iso === today;
+        const meal = plan[iso];
+        return (
+          <Tap
+            key={iso}
+            onPress={() => onPick(iso)}
+            accessibilityLabel={`${weekdayName(iso)} ${shortDate(iso)}${isToday ? ", today" : ""}${meal ? `, ${meal.title}` : ", nothing planned"}`}
+            style={{
+              flex: 1,
+              minHeight: 64,
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 2,
+              borderRadius: 16,
+              borderWidth: 2,
+              borderColor: isToday ? p.accent : p.border,
+              borderBottomWidth: isToday ? 5 : 2,
+              borderBottomColor: isToday ? p.accentEdge : p.border,
+              backgroundColor: isToday ? p.accent : p.surface,
+            }}
+          >
+            <RNText style={{ color: isToday ? p.onAccent : p.muted, fontSize: 12, fontWeight: "800" }} numberOfLines={1}>
+              {weekdayName(iso)}
+            </RNText>
+            <RNText style={{ color: isToday ? p.onAccent : p.text, fontSize: 18, fontWeight: "800", fontVariant: ["tabular-nums"] }} numberOfLines={1}>
+              {Number(iso.slice(8, 10))}
+            </RNText>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: meal ? (isToday ? p.onAccent : p.accent) : "transparent" }} />
+          </Tap>
+        );
+      })}
+    </View>
+  );
+}
+
+function DayCard({
+  iso,
+  today,
+  entry,
+  onPick,
+  onClear,
+  onServings,
+  children,
+}: {
+  iso: string;
+  today: string;
+  entry: MealEntry | undefined;
+  onPick: () => void;
+  onClear: () => void;
+  onServings: (entry: MealEntry, delta: number) => void;
+  children?: ReactNode;
+}) {
+  const p = usePalette();
+  const tones = useTones();
+  const isToday = iso === today;
+  return (
+    <Panel padding={space.md} tone={isToday ? "accent" : undefined}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.sm }}>
+        <RNText style={{ color: isToday ? tones.accent.fg : p.text, fontSize: 14, fontWeight: "800" }}>{weekdayName(iso)}</RNText>
+        <RNText style={{ color: p.muted, fontSize: 13, fontVariant: ["tabular-nums"] }}>{shortDate(iso)}</RNText>
+        {isToday ? <Badge tone="accent" label="Today" /> : null}
+      </View>
+      {entry ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+          <Avatar tint={mealTint(entry.title)} label={initials(entry.title)} size={48} square />
+          <View style={{ flex: 1, gap: space.sm }}>
+            <Text variant="titleSmall" numberOfLines={2}>{entry.title}</Text>
+            <Stepper
+              value={entry.servings}
+              unit={entry.servings === 1 ? "serving" : "servings"}
+              onMinus={() => onServings(entry, -1)}
+              onPlus={() => onServings(entry, 1)}
+              minusLabel={`Fewer servings of ${entry.title}`}
+              plusLabel={`More servings of ${entry.title}`}
+            />
+          </View>
+          <View>
+            <RoundIcon icon="swap-horizontal" onPress={onPick} label={`Change the meal on ${weekdayName(iso)}`} />
+            <RoundIcon icon="close" onPress={onClear} label={`Clear the meal on ${weekdayName(iso)}`} />
+          </View>
+        </View>
+      ) : (
+        <Tap
+          onPress={onPick}
+          accessibilityLabel={`Pick a recipe for ${weekdayName(iso)}`}
+          style={{
+            minHeight: 52,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: space.sm,
+            borderRadius: 16,
+            borderWidth: 2,
+            borderStyle: "dashed",
+            borderColor: p.border,
+          }}
+        >
+          <RNText style={{ color: p.accent, fontSize: 20, fontWeight: "800" }}>+</RNText>
+          <RNText style={{ color: p.accent, fontSize: 15, fontWeight: "800" }}>Pick a recipe</RNText>
+        </Tap>
+      )}
+      {children}
+    </Panel>
   );
 }

@@ -3,6 +3,7 @@
 mod auth;
 mod backup;
 mod bank;
+mod bank_connections;
 mod budget_period;
 mod categorization;
 mod dto;
@@ -12,6 +13,7 @@ mod grocery;
 mod mealplan;
 mod routes;
 mod scan;
+mod stores;
 mod watchdog;
 
 use std::sync::Arc;
@@ -21,6 +23,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
+use financer_core::{StoreAlias, StoreMatcher};
 use financer_fints::{BankClient, UnconfiguredBank};
 use financer_llm::{LlmError, LlmProvider, LlmSettings, ProviderFactory};
 use financer_prices::{Http, HttpResponse, PriceError, SourceConfig};
@@ -29,6 +32,7 @@ use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 
 pub use auth::TokenHash;
+pub use bank_connections::{BankConnection, ConnectionState};
 pub use financer_fints::{BankClient as BankClientTrait, BankData, BankError, MockBank};
 pub use financer_llm::MockProvider;
 pub use financer_prices::{FakeHttp, SourceConfig as PriceSourceConfig};
@@ -42,6 +46,9 @@ pub struct LlmKeys {
     pub claude: Option<String>,
     pub openai: Option<String>,
 }
+
+/// Reads a PIN from the environment variable of the given name.
+type PinLookup = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
 
 type LlmFactory = Arc<dyn Fn(&LlmSettings) -> Result<Box<dyn LlmProvider>, LlmError> + Send + Sync>;
 
@@ -67,9 +74,14 @@ pub struct AppState {
     pub(crate) sync_ttl: std::time::Duration,
     pub(crate) pin_guard: Arc<tokio::sync::Mutex<bank::PinGuard>>,
     pub(crate) pin_pause: std::time::Duration,
+    pub(crate) bank_connections: Arc<bank_connections::Connections>,
+    pub(crate) pin_lookup: PinLookup,
+    pub(crate) connection_poll: std::time::Duration,
     pub(crate) http: Arc<dyn Http>,
     pub(crate) price_sources: Arc<Vec<SourceConfig>>,
     pub(crate) llm_keys: LlmKeys,
+    pub(crate) default_llm_provider: Option<financer_llm::Provider>,
+    pub(crate) store_matcher: Arc<StoreMatcher>,
     pub(crate) llm: LlmFactory,
 }
 
@@ -83,9 +95,14 @@ impl AppState {
             sync_ttl: bank::DEFAULT_SYNC_TTL,
             pin_guard: Arc::new(tokio::sync::Mutex::new(bank::PinGuard::default())),
             pin_pause: bank::DEFAULT_PIN_PAUSE,
+            bank_connections: Arc::new(bank_connections::Connections::new(Vec::new())),
+            pin_lookup: Arc::new(|var| std::env::var(var).ok().filter(|v| !v.is_empty())),
+            connection_poll: bank_connections::DEFAULT_POLL,
             http: Arc::new(NoNetwork),
             price_sources: Arc::new(Vec::new()),
             llm_keys: LlmKeys::default(),
+            default_llm_provider: None,
+            store_matcher: Arc::new(StoreMatcher::builtin()),
             llm: Arc::new(ProviderFactory::create),
         }
     }
@@ -100,6 +117,29 @@ impl AppState {
     /// How long syncing pauses after repeated wrong PINs (tests shorten it).
     pub fn with_pin_pause(mut self, pause: std::time::Duration) -> Self {
         self.pin_pause = pause;
+        self
+    }
+
+    /// The bank connections of the server configuration (`[[bank.accounts]]`). They sync with the
+    /// client set by [`AppState::with_bank`].
+    pub fn with_bank_connections(mut self, connections: Vec<BankConnection>) -> Self {
+        self.bank_connections = Arc::new(bank_connections::Connections::new(connections));
+        self
+    }
+
+    /// How a connection's `pin_env` is looked up (tests use a fixed map instead of the
+    /// environment).
+    pub fn with_pin_lookup(
+        mut self,
+        lookup: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
+        self.pin_lookup = Arc::new(lookup);
+        self
+    }
+
+    /// How often a started sync asks the bank whether you approved (tests shorten it).
+    pub fn with_connection_poll(mut self, interval: std::time::Duration) -> Self {
+        self.connection_poll = interval;
         self
     }
 
@@ -122,6 +162,19 @@ impl AppState {
 
     pub fn with_llm_keys(mut self, keys: LlmKeys) -> Self {
         self.llm_keys = keys;
+        self
+    }
+
+    /// The provider used until the app chooses one (the server's `[llm] provider` setting).
+    pub fn with_default_llm_provider(mut self, provider: Option<financer_llm::Provider>) -> Self {
+        self.default_llm_provider = provider;
+        self
+    }
+
+    /// Your own spellings for supermarket chains (`[[stores]]` in the server configuration), added
+    /// to the built-in table used for the spending-per-store report.
+    pub fn with_store_aliases(mut self, aliases: &[StoreAlias]) -> Self {
+        self.store_matcher = Arc::new(StoreMatcher::with_aliases(aliases));
         self
     }
 
@@ -154,6 +207,11 @@ impl AppState {
         bank::start_sync,
         bank::confirm_sync,
         bank::bank_status,
+        bank_connections::list_connections,
+        bank_connections::sync_connection,
+        bank_connections::cancel_connection,
+        stores::store_spending,
+        stores::store_transactions,
         grocery::refresh_prices,
         grocery::list_prices,
         grocery::best_prices,
@@ -218,6 +276,13 @@ impl AppState {
         dto::SyncStarted,
         dto::SyncDone,
         dto::BankStatus,
+        bank_connections::BankConnectionDto,
+        bank_connections::SyncOutcomeDto,
+        bank_connections::SyncNowRequest,
+        bank_connections::ConnectionState,
+        stores::StoresPeriod,
+        stores::StoreSpendDto,
+        stores::StoresDto,
         dto::PriceDto,
         scan::EanLookupDto,
         scan::ChainPriceDto,
@@ -329,6 +394,20 @@ impl Api {
             .route("/bank/sync", post(bank::start_sync))
             .route("/bank/sync/{id}/confirm", post(bank::confirm_sync))
             .route("/bank/status", get(bank::bank_status))
+            .route("/bank/connections", get(bank_connections::list_connections))
+            .route(
+                "/bank/connections/{name}/sync",
+                post(bank_connections::sync_connection),
+            )
+            .route(
+                "/bank/connections/{name}/cancel",
+                post(bank_connections::cancel_connection),
+            )
+            .route("/spending/stores", get(stores::store_spending))
+            .route(
+                "/spending/stores/{chain}/transactions",
+                get(stores::store_transactions),
+            )
             .route("/prices", get(grocery::list_prices))
             .route("/prices/best", get(grocery::best_prices))
             .route("/prices/ean/{ean}", get(scan::ean_lookup))
@@ -435,6 +514,18 @@ impl Api {
             Err(routes::ApiError::Unavailable(m)) => Err(m),
             Err(_) => Err("price refresh failed".into()),
         }
+    }
+
+    /// Start every configured bank connection whose schedule is due and whose PIN the server has;
+    /// returns how many started. The server calls [`Api::run_bank_scheduler`]; this is the one
+    /// step, for tests.
+    pub async fn run_due_bank_syncs(state: &AppState) -> usize {
+        bank_connections::BankSync::run_due(state).await
+    }
+
+    /// Runs forever, starting due bank syncs once a minute (returns at once without connections).
+    pub async fn run_bank_scheduler(state: AppState) {
+        bank_connections::BankSync::run_scheduler(state).await
     }
 
     pub fn openapi_json() -> String {

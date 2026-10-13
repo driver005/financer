@@ -4,7 +4,7 @@ import { useFocusEffect } from "expo-router";
 
 import type { Subscriptions } from "@/api/client";
 import { useApi } from "@/api/config";
-import { SegmentedButtons } from "@/components/kit";
+import { EmptyState, FieldMessage, Segmented } from "@/components/settings/SettingsKit";
 import { Badge } from "@/components/Watchdog";
 import { Body, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
@@ -67,7 +67,7 @@ export default function SubscriptionsScreen() {
       {!api ? (
         <NeedsSetup />
       ) : !data ? (
-        error ? <Body muted>{error}</Body> : <Loading />
+        error ? <FieldMessage tone="error">{error}</FieldMessage> : <Loading />
       ) : (
         <ScrollView
           contentContainerStyle={{ paddingBottom: 24 }}
@@ -75,12 +75,11 @@ export default function SubscriptionsScreen() {
           refreshControl={<RefreshControl refreshing={busy} onRefresh={() => load(days)} />}
         >
           {nothing ? (
-            <Card>
-              <Body bold>No recurring payments found yet</Body>
-              <Text style={{ color: c.muted, marginTop: 4 }}>
-                A payment counts once it has been booked three times on a steady rhythm. Import more history from your bank to find more.
-              </Text>
-            </Card>
+            <EmptyState
+              mood="happy"
+              title="No recurring payments yet"
+              body="A payment counts once it has been booked three times on a steady rhythm. Import more history from your bank to find more."
+            />
           ) : (
             <Card>
               <Text style={{ color: c.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1 }}>RUNNING SUBSCRIPTIONS</Text>
@@ -114,7 +113,7 @@ export default function SubscriptionsScreen() {
           ) : null}
 
           <Section title="Coming up">
-            <SegmentedButtons<Horizon>
+            <Segmented<Horizon>
               value={days}
               onValueChange={setDays}
               buttons={HORIZONS.map((h) => ({ value: h, label: `${h} days` }))}

@@ -11,8 +11,26 @@
 # "feat: ..." makes a minor release. With no tag yet, the first release is the version in the
 # Rust workspace (Cargo.toml), unbumped. Nothing is printed if HEAD is already tagged or the
 # latest commit says [skip release].
+#
+# With "auto", a dependency-only change is not released on its own: a merge of a dependabot/*
+# branch, a commit by dependabot[bot], or a commit that touches nothing but manifests, lockfiles
+# and workflow files (see is_dependency_only). Those changes ship with the next real release,
+# because the tag lands on a later commit. Forcing a bump (patch/minor/major) ignores this.
 set -euo pipefail
 mode="${1:-auto}"
+
+# True for a commit that only updates dependencies: see the header.
+is_dependency_only() {
+  local subject author files
+  subject=$(git log -1 --format=%s)
+  author=$(git log -1 --format=%an)
+  grep -qi 'dependabot' <<<"$subject" && return 0
+  grep -qi 'dependabot' <<<"$author" && return 0
+  # What this commit brought in: against the first parent (the branch it merged into).
+  files=$(git diff --name-only HEAD^1 HEAD 2>/dev/null || true)
+  [ -n "$files" ] || return 1
+  ! grep -qvE '^(Cargo\.(toml|lock)|crates/[^/]+/Cargo\.toml|apps/[^/]+/package(-lock)?\.json|\.github/workflows/.+|\.github/dependabot\.yml)$' <<<"$files"
+}
 
 last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
 
@@ -26,6 +44,7 @@ fi
 git log -1 --format=%B | grep -qi '\[skip release\]' && exit 0
 
 if [ "$mode" = auto ]; then
+  is_dependency_only && exit 0
   log=$(git log --format=%B "$last"..HEAD)
   if grep -qE '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE' <<<"$log"; then mode=major
   elif grep -qE '^feat(\([^)]*\))?:' <<<"$log"; then mode=minor

@@ -1,31 +1,29 @@
-import { Pressable, Text, View } from "react-native";
-
 import type { Transaction } from "@/api/client";
-import { Body, Card, useColors } from "@/components/ui";
-import { formatCents, formatDate } from "@/format";
+import { ListRow } from "@/components/rows";
+import { Money } from "@/components/Money";
+import { categoryIcon, categoryLabel } from "@/categoryIcons";
+import { spokenMoney } from "@/format";
 
-/** One transaction in the spending list. Tap to recategorize or split it. */
+/**
+ * One transaction in the spending list: category icon, counterparty, category, and the amount
+ * (income in green with a plus, spending in the normal text colour with a minus). Tap to
+ * recategorize or split it. Put rows inside a `ListGroup`.
+ */
 export function TransactionRow({ item, split, onPress }: { item: Transaction; split?: boolean; onPress: () => void }) {
-  const c = useColors();
+  const cat = categoryIcon(item.category);
+  const name = item.counterparty || "Unknown";
   return (
-    <Pressable
+    <ListRow
+      icon={cat.icon}
+      iconTone={cat.tone}
+      title={name}
+      subtitle={split ? "Split" : categoryLabel(item.category)}
+      titleLines={1}
+      subtitleLines={1}
+      value={<Money cents={item.amount_cents} variant="bodyStrong" signed />}
+      chevron={false}
       onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.counterparty || "Unknown"}, ${formatCents(item.amount_cents)}. Change category or split`}
-    >
-      <Card>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Body bold>{item.counterparty || "Unknown"}</Body>
-            <Text numberOfLines={1} style={{ color: c.muted, fontSize: 13 }}>
-              {formatDate(item.booking_date)} · {split ? "split" : (item.category ?? "uncategorized")}
-            </Text>
-          </View>
-          <Text style={{ color: item.amount_cents < 0 ? c.text : c.good, fontSize: 16, fontWeight: "600" }}>
-            {formatCents(item.amount_cents)}
-          </Text>
-        </View>
-      </Card>
-    </Pressable>
+      accessibilityLabel={`${name}, ${spokenMoney(item.amount_cents)}, ${split ? "split" : categoryLabel(item.category)}. Change category or split`}
+    />
   );
 }

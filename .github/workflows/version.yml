@@ -6,7 +6,9 @@ name: New version
 #
 # Which number: a "feat:" commit or PR title is a minor version, a breaking one ("feat!:" or a
 # BREAKING CHANGE line) is major, everything else is a patch. Put [skip release] in the merge
-# commit message to skip one. By hand (Actions tab, "Run workflow") you can force the bump.
+# commit message to skip one. Dependency-only merges (dependabot branches, or changes that touch
+# only manifests, lockfiles and workflow files) are skipped on their own and ship with the next
+# real release. By hand (Actions tab, "Run workflow") you can force the bump.
 # Details: docs/RELEASE.md.
 
 on:

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Linking, Platform, View } from "react-native";
 
 import { useApi } from "@/api/config";
-import { Button, Card, useColors } from "@/components/ui";
-import { HelperText, Switch, Text } from "@/components/kit";
+import { FieldMessage, PanelText, RowNotes, SettingsPanel, SettingsRow, SettingsToggleRow } from "@/components/settings/SettingsKit";
+import { Button } from "@/components/ui";
 import { refreshBackgroundRegistration } from "@/native/background";
 import {
   getPrefs,
@@ -17,19 +17,24 @@ import {
 import { DEFAULT_PREFS, type NotifyKind, type NotifyPrefs } from "@/notifyPlan";
 import { formatDate } from "@/format";
 
-const ROWS: { kind: NotifyKind; title: string; hint: string }[] = [
-  { kind: "evening", title: "Evening check", hint: "Around 18:00: what is still safe to spend today." },
-  { kind: "payday", title: "Payday reminder", hint: "Around 08:00 on the day your next budget period starts." },
-  { kind: "priceDrop", title: "Price drops", hint: "When something from your usual items gets cheaper. Needs your own list (My list or receipts)." },
+const ROWS: { kind: NotifyKind; icon: string; title: string; hint: string }[] = [
+  { kind: "evening", icon: "weather-night", title: "Evening check", hint: "Around 18:00: what is still safe to spend today." },
+  { kind: "payday", icon: "calendar-star", title: "Payday reminder", hint: "Around 08:00 on the day your next budget period starts." },
+  {
+    kind: "priceDrop",
+    icon: "tag-arrow-down-outline",
+    title: "Price drops",
+    hint: "When something from your usual items gets cheaper. Needs your own list (My list or receipts).",
+  },
 ];
 
 /**
- * Settings: one switch per kind of local notification, the permission state and an honest note on
- * timing. Does nothing on the web or in a build without the notification module.
+ * Settings, Privacy & security: one switch per kind of local notification, the permission state
+ * and an honest note on timing. Shows a plain read-only row on the web or in a build without the
+ * notification module.
  */
 export function NotificationsCard() {
   const { api } = useApi();
-  const c = useColors();
   const [supported, setSupported] = useState<boolean | null>(null);
   const [prefs, setPrefs] = useState<NotifyPrefs>(DEFAULT_PREFS);
   const [permission, setPermission] = useState<PermissionState>("unsupported");
@@ -73,66 +78,56 @@ export function NotificationsCard() {
 
   if (!supported) {
     return (
-      <Card>
-        <Text variant="titleMedium">Notifications</Text>
-        <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
-          {Platform.OS === "web"
+      <SettingsRow
+        icon="bell-off-outline"
+        title="Notifications"
+        subtitle={
+          Platform.OS === "web"
             ? "Reminders and price alerts need the phone app; the web version cannot show them."
-            : "This build does not include notifications."}
-        </Text>
-      </Card>
+            : "This build does not include notifications."
+        }
+      />
     );
   }
 
+  const nextFor = (kind: NotifyKind) =>
+    kind === "evening" && prefs.evening && next.evening
+      ? `Next: ${formatDate(next.evening)}`
+      : kind === "payday" && prefs.payday && next.payday
+        ? `Next: ${formatDate(next.payday)}`
+        : undefined;
+
   return (
-    <Card>
-      <Text variant="titleMedium">Notifications</Text>
-      <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
-        Your phone schedules these itself; no server sends anything. Amounts can show on the lock screen.
-      </Text>
-
+    <>
       {ROWS.map((row) => (
-        <View key={row.kind} style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14 }}>
-          <View style={{ flex: 1 }}>
-            <Text variant="titleSmall">{row.title}</Text>
-            <Text variant="bodySmall" style={{ color: c.muted }}>
-              {row.hint}
-            </Text>
-            {row.kind === "evening" && prefs.evening && next.evening ? (
-              <Text variant="bodySmall" style={{ color: c.muted }}>
-                Next: {formatDate(next.evening)}
-              </Text>
-            ) : null}
-            {row.kind === "payday" && prefs.payday && next.payday ? (
-              <Text variant="bodySmall" style={{ color: c.muted }}>
-                Next: {formatDate(next.payday)}
-              </Text>
-            ) : null}
-          </View>
-          <Switch value={prefs[row.kind]} onValueChange={(v) => !busy && void toggle(row.kind, v)} accessibilityLabel={row.title} />
-        </View>
+        <SettingsToggleRow
+          key={row.kind}
+          icon={row.icon}
+          title={row.title}
+          subtitle={row.hint}
+          note={nextFor(row.kind)}
+          value={prefs[row.kind]}
+          onValueChange={(v) => !busy && void toggle(row.kind, v)}
+        />
       ))}
-
-      {permission === "denied" ? (
-        <View style={{ marginTop: 12 }}>
-          <HelperText type="error" visible>
-            Notifications are blocked for Financer in the phone's settings.
-          </HelperText>
-          <Button label="Open phone settings" icon="cog-outline" mode="outlined" onPress={() => void Linking.openSettings()} />
-        </View>
+      {permission === "denied" || message ? (
+        <RowNotes>
+          {permission === "denied" ? (
+            <View style={{ marginTop: 4 }}>
+              <FieldMessage tone="error">Notifications are blocked for Financer in the phone's settings.</FieldMessage>
+              <View style={{ marginTop: 8 }}>
+                <Button label="Open phone settings" icon="cog-outline" mode="outlined" onPress={() => void Linking.openSettings()} />
+              </View>
+            </View>
+          ) : null}
+          {message ? <FieldMessage tone="info">{message}</FieldMessage> : null}
+        </RowNotes>
       ) : null}
-      {message ? <HelperText type="info" visible>{message}</HelperText> : null}
-
-      <Text variant="titleSmall" style={{ marginTop: 16 }}>
-        What to expect
-      </Text>
-      <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
-        The evening message and the payday reminder are set up in advance, with the numbers from the last time the app ran, so
-        they can be a little behind and may arrive a few minutes off. Price drops are looked for when you open the app and
-        when iOS or Android lets Financer run in the background. The system decides how often, and may not do it at all (for
-        example in battery saver mode, or if you rarely open the app), so an alert can come late or be missed. Each drop is
-        announced once.
-      </Text>
-    </Card>
+      <SettingsPanel icon="clock-outline" title="What to expect" summary="Your phone schedules these itself; no server sends anything.">
+        <PanelText style={{ marginTop: 4 }}>
+          Amounts can show on the lock screen. The evening message and the payday reminder are set up in advance, with the numbers from the last time the app ran, so they can be a little behind and may arrive a few minutes off. Price drops are looked for when you open the app and when iOS or Android lets Financer run in the background. The system decides how often, and may not do it at all (for example in battery saver mode, or if you rarely open the app), so an alert can come late or be missed. Each drop is announced once.
+        </PanelText>
+      </SettingsPanel>
+    </>
   );
 }

@@ -3,7 +3,8 @@ import { Platform } from "react-native";
 
 import { Api } from "@/api/client";
 import { useApi } from "@/api/config";
-import { HelperText, TextInput } from "@/components/kit";
+import { TextInput } from "@/components/kit";
+import { FieldMessage } from "@/components/settings/SettingsKit";
 import { ChoiceCard, FieldLabel, Note, StepFrame } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
 import { mascotFor, validateServer, type BackendChoice } from "@/onboarding";
@@ -24,6 +25,7 @@ export function DataStep({ ctx }: { ctx: StepCtx }) {
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tokenTouched, setTokenTouched] = useState(false);
   // a saved server counts as connected until the address or token is edited
   const [connected, setConnected] = useState(false);
 
@@ -42,6 +44,10 @@ export function DataStep({ ctx }: { ctx: StepCtx }) {
   }, [config, mode]);
 
   const check = validateServer(baseUrl, token);
+  // inline hints: the address as soon as something is typed, the token once its field was left
+  const addressCheck = baseUrl.trim() ? validateServer(baseUrl, "x") : null;
+  const addressProblem = addressCheck && !addressCheck.ok ? addressCheck.error : null;
+  const tokenProblem = tokenTouched && !token.trim() ? "Enter the API token you set on the server." : null;
 
   async function test() {
     setBusy(true);
@@ -107,7 +113,7 @@ export function DataStep({ ctx }: { ctx: StepCtx }) {
         onPress={() => void choose("server")}
       />
 
-      {choice === "embedded" && embeddedError ? <HelperText type="error" visible>{embeddedError}</HelperText> : null}
+      {choice === "embedded" && embeddedError ? <FieldMessage tone="error">{embeddedError}</FieldMessage> : null}
 
       {choice === "server" ? (
         <>
@@ -125,7 +131,9 @@ export function DataStep({ ctx }: { ctx: StepCtx }) {
             autoCorrect={false}
             keyboardType="url"
             placeholder="https://financer.example.com"
+            error={!!addressProblem}
           />
+          {addressProblem ? <FieldMessage tone="error">{addressProblem}</FieldMessage> : null}
           <TextInput
             mode="outlined"
             label="API token"
@@ -138,11 +146,13 @@ export function DataStep({ ctx }: { ctx: StepCtx }) {
             autoCapitalize="none"
             autoCorrect={false}
             secureTextEntry
+            onBlur={() => setTokenTouched(true)}
+            error={!!tokenProblem}
             style={{ marginTop: 8 }}
           />
-          {baseUrl.trim() && token.trim() && !check.ok ? <HelperText type="error" visible>{check.error}</HelperText> : null}
-          {check.ok && check.warning ? <HelperText type="error" visible>{check.warning}</HelperText> : null}
-          {status ? <HelperText type={status.ok ? "info" : "error"} visible>{status.text}</HelperText> : null}
+          {tokenProblem ? <FieldMessage tone="error">{tokenProblem}</FieldMessage> : null}
+          {check.ok && check.warning ? <FieldMessage tone="error">{check.warning}</FieldMessage> : null}
+          {status ? <FieldMessage tone={status.ok ? "ok" : "error"}>{status.text}</FieldMessage> : null}
           <Note icon="shield-lock-outline">
             Why we ask: the token is the password you set on the server (FINANCER_API_TOKEN). It is kept in this phone's secure storage and only sent to the address above.
           </Note>

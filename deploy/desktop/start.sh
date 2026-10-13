@@ -1,6 +1,6 @@
 #!/bin/sh
 # Starts Financer on this computer and opens it in your browser.
-# Your data (financer.db) and login token (financer-token.txt) are kept in this folder.
+# Your data (financer.db), login token (financer-token.txt) and settings (financer.toml) are kept in this folder.
 cd "$(dirname "$0")" || exit 1
 
 if [ ! -f financer-token.txt ]; then
@@ -9,6 +9,40 @@ if [ ! -f financer-token.txt ]; then
   chmod 600 financer-token.txt
 fi
 TOKEN=$(cat financer-token.txt)
+
+if [ ! -f financer.toml ]; then
+  # settings file next to the token; everything in it is commented out
+  cat > financer.toml <<'FINANCER_TOML'
+# Financer server settings. Everything is commented out: remove the leading # of a line to use it.
+# Settings made by start.sh/start.bat (token, database, listen address) win over this file.
+# Full list of options: financer.example.toml in the project, and docs/CONFIG.md.
+# Do not write secrets here if you can avoid it: use ${NAME} to read an environment variable.
+
+[llm]
+#anthropic_api_key = "${ANTHROPIC_API_KEY}"
+#openai_api_key = "${OPENAI_API_KEY}"
+
+[bank]
+#fints_product_id = "${FINTS_PRODUCT_ID}"
+
+# Sync a bank account on a schedule. The PIN is never stored here: type it in the app, or
+# name an environment variable with pin_env. You still approve every login in your banking app.
+#[[bank.accounts]]
+#name = "Girokonto"
+#bank_code = "37050198"
+#login = "your-login-name"
+#iban = "DE89 3704 0044 0532 0130 00"
+#sync_every_hours = 12
+
+# Bank texts that belong to a supermarket chain (for the Stores screen).
+#[[stores]]
+#chain = "edeka"
+#match = ["Mueller Frischemarkt"]
+
+[receipts]
+FINANCER_TOML
+  chmod 600 financer.toml
+fi
 
 export FINANCER_API_TOKEN="$TOKEN"
 export FINANCER_DATABASE_URL="sqlite://financer.db?mode=rwc"

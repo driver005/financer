@@ -255,7 +255,19 @@ impl BankClient for FintsBank {
         let user = UserId::new(params.user_id.trim());
         let pin = Pin::new(params.pin.clone());
         let product = ProductId::new(self.product_id.clone());
-        let (flow, challenge) = match &self.endpoint {
+        // an address given with the request (a configured connection) is used like `with_endpoint`
+        let endpoint = self.endpoint.clone().or_else(|| {
+            params
+                .fints_url
+                .as_deref()
+                .map(str::trim)
+                .filter(|u| !u.is_empty())
+                .map(|url| Endpoint {
+                    bic: params.bic.trim().to_string(),
+                    url: url.to_string(),
+                })
+        });
+        let (flow, challenge) = match &endpoint {
             Some(e) => {
                 let config = fints::BankConfig::new(
                     "custom",
@@ -473,6 +485,7 @@ mod tests {
             iban: "i".into(),
             bic: String::new(),
             days: 1,
+            fints_url: None,
         };
         assert!(matches!(
             FintsBank::new("  ").start(&params).await,
