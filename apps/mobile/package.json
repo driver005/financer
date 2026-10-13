@@ -28,7 +28,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.0-rc.4",
-    "react-native-gesture-handler": "~2.32.0",
+    "react-native-gesture-handler": "~3.2.1",
     "react-native-reanimated": "4.7.0",
     "react-native-safe-area-context": "~5.9.1",
     "react-native-screens": "~4.28.0",
@@ -63,7 +63,8 @@
       "react-native": "$react-native"
     },
     "heroui-native": {
-      "react-native": "$react-native"
+      "react-native": "$react-native",
+      "react-native-gesture-handler": "$react-native-gesture-handler"
     },
     "uniwind": {
       "react-native": "$react-native"
