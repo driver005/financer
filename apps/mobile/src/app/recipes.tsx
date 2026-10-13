@@ -84,7 +84,7 @@ export default function Recipes() {
               {busy && !data ? <Loading /> : null}
             </View>
           }
-          ListEmptyComponent={busy ? null : <Body muted>No recipe fits these filters.</Body>}
+          ListEmptyComponent={busy ? undefined : <Body muted>No recipe fits these filters.</Body>}
           renderItem={({ item }) => <RecipeCard recipe={item} muted={c.muted} />}
         />
       )}
