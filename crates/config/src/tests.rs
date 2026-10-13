@@ -713,6 +713,7 @@ fn every_option_in_the_example_file_is_real() {
         ("OPENAI_API_KEY", "sk-o"),
         ("FINTS_PRODUCT_ID", "PID"),
         ("SPARKASSE_PIN", "1234"),
+        ("FINANCER_IMAP_PASSWORD", "x"),
     ];
     let l = Fixture::ok(&uncommented, &env);
     let c = &l.config;
@@ -723,5 +724,16 @@ fn every_option_in_the_example_file_is_real() {
     assert_eq!(c.bank.accounts.len(), 1);
     assert_eq!(c.bank.accounts[0].sync_every_hours, 12);
     assert_eq!(c.stores.len(), 2);
-    assert!(l.warnings.is_empty(), "{:?}", l.warnings);
+    let r = &c.receipts.value;
+    assert_eq!(r.email.as_ref().unwrap().senders.len(), 1);
+    assert_eq!(r.folder.as_ref().unwrap().poll_seconds, 60);
+    assert!(!r.lidl_plus.enabled);
+    // the only thing left to say is that the example folder does not exist on this machine
+    assert!(
+        l.warnings
+            .iter()
+            .all(|w| w.contains("receipts.folder.path")),
+        "{:?}",
+        l.warnings
+    );
 }

@@ -172,12 +172,12 @@ fn sync_error(e: financer_receipt_sources::error::SyncError) -> ApiError {
 pub struct ReceiptSourceRoutes;
 
 impl ReceiptSourceRoutes {
-    fn lidl<'a>(
-        state: &'a AppState,
+    fn lidl(
+        state: &AppState,
     ) -> Result<
         (
-            &'a financer_receipt_sources::ReceiptSyncer,
-            &'a financer_receipt_sources::lidl::LidlPlus,
+            &financer_receipt_sources::ReceiptSyncer,
+            &financer_receipt_sources::lidl::LidlPlus,
         ),
         ApiError,
     > {

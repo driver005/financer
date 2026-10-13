@@ -584,6 +584,31 @@ mod tests {
         assert!(c.any_enabled());
     }
 
+    /// The paste-ready block in docs/RECEIPT_SOURCES.md must load as the `[receipts]` table.
+    #[test]
+    fn the_documented_example_loads() {
+        #[derive(Deserialize)]
+        struct File {
+            receipts: ReceiptSourcesConfig,
+        }
+        let doc = include_str!("../../../docs/RECEIPT_SOURCES.md");
+        let block = doc
+            .split("```toml\n")
+            .nth(1)
+            .and_then(|rest| rest.split("```").next())
+            .expect("a toml block in the doc");
+        let f: File = toml::from_str(block).unwrap();
+        let r = f.receipts;
+        let e = r.email.as_ref().unwrap();
+        assert_eq!(
+            (e.host.as_str(), e.port, e.folder.as_str()),
+            ("imap.example.org", 993, "INBOX")
+        );
+        assert!(!r.lidl_plus.enabled);
+        assert_eq!(r.folder.as_ref().unwrap().on_done, OnDone::Keep);
+        assert!(r.problems().is_empty());
+    }
+
     #[test]
     fn env_overlays_the_file_value_by_value() {
         let file: ReceiptSourcesConfig = toml::from_str(

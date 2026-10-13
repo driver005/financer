@@ -250,7 +250,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!(
             "financer-folder-{name}-{}-{}",
             std::process::id(),
-            sha256_hex(name.as_bytes())[..6].to_string()
+            &sha256_hex(name.as_bytes())[..6]
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

@@ -27,13 +27,16 @@ const TICK: Duration = Duration::from_secs(15);
 /// Wait after start-up before the first run, so the server is up and answering first.
 const STARTUP_DELAY: Duration = Duration::from_secs(20);
 
+/// Reads an environment variable.
+pub type EnvLookup = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+
 /// Everything outside the process, replaceable in tests.
 #[derive(Clone)]
 pub struct SyncDeps {
     pub connector: Arc<dyn MailboxConnector>,
     pub lidl_http: Arc<dyn LidlHttp>,
     /// Reads environment variables (the mailbox password lives in one).
-    pub env: Arc<dyn Fn(&str) -> Option<String> + Send + Sync>,
+    pub env: EnvLookup,
     pub lidl_gap: Duration,
 }
 
@@ -511,8 +514,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!(
             "financer-syncer-{}-{}",
             std::process::id(),
-            crate::text::sha256_hex(format!("{:?}", std::time::Instant::now()).as_bytes())[..8]
-                .to_string()
+            &crate::text::sha256_hex(format!("{:?}", std::time::Instant::now()).as_bytes())[..8]
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let store = Store::connect("sqlite::memory:").await.unwrap();
