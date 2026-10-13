@@ -307,22 +307,39 @@ impl ReceiptSourcesConfig {
         out
     }
 
-    /// Build from the process environment (see [`Self::from_env_with`]).
+    /// Build from the process environment alone (see [`Self::apply_env`]).
     pub fn from_env() -> Result<Self, String> {
-        Self::from_env_with(|k| std::env::var(k).ok())
+        Self::default().apply_env(|k| std::env::var(k).ok()).map(|(c, _)| c)
     }
 
-    /// Build from variables, until the TOML loader embeds this type:
-    ///
-    /// - `FINANCER_RECEIPTS_IMAP_HOST` (enables the mailbox), `_PORT`, `_USERNAME`, `_FOLDER`,
-    ///   `_POLL_MINUTES`, `_MARK_SEEN` (`1`/`true`), `_MAX_AGE_DAYS`, `_PASSWORD_ENV`
-    ///   (the *name* of the variable holding the password, default `FINANCER_IMAP_PASSWORD`),
-    ///   `_SENDERS` (`rewe=rewe.de,rewe-group.com;lidl=lidl.de`)
-    /// - `FINANCER_RECEIPTS_LIDL_PLUS` (`1` enables), `FINANCER_RECEIPTS_LIDL_COUNTRY`,
-    ///   `_LANGUAGE`, `_POLL_HOURS`
-    /// - `FINANCER_RECEIPTS_FOLDER` (the path; enables), `_POLL_SECONDS`, `_ON_DONE` (`keep`/`move`)
+    /// [`Self::apply_env`] on an empty configuration.
     pub fn from_env_with(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
-        let var = |k: &str| get(k).map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+        Self::default().apply_env(get).map(|(c, _)| c)
+    }
+
+    /// Overlay `FINANCER_RECEIPTS_*` variables on this configuration (a variable that is set and
+    /// not blank wins over the file). Returns the result and the names of the variables used.
+    ///
+    /// - mailbox: `FINANCER_RECEIPTS_IMAP_HOST` (creates the section), `_USERNAME`, `_PORT`,
+    ///   `_FOLDER`, `_POLL_MINUTES`, `_MARK_SEEN` (`1`/`true`), `_MAX_AGE_DAYS`, `_ENABLED`,
+    ///   `_PASSWORD_ENV` (the *name* of the variable holding the password, default
+    ///   `FINANCER_IMAP_PASSWORD`), `_SENDERS` (`rewe=rewe.de,rewe-group.com;lidl=lidl.de`)
+    /// - Lidl Plus: `FINANCER_RECEIPTS_LIDL_PLUS` (`1` enables, `0` disables),
+    ///   `FINANCER_RECEIPTS_LIDL_COUNTRY`, `_LANGUAGE`, `_POLL_HOURS`
+    /// - folder: `FINANCER_RECEIPTS_FOLDER` (the path; creates the section), `_FOLDER_POLL_SECONDS`,
+    ///   `_FOLDER_ON_DONE` (`keep`/`move`)
+    pub fn apply_env(
+        mut self,
+        get: impl Fn(&str) -> Option<String>,
+    ) -> Result<(Self, Vec<String>), String> {
+        let mut used: Vec<String> = Vec::new();
+        let mut var = |k: &str| {
+            let v = get(k).map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+            if v.is_some() {
+                used.push(k.to_string());
+            }
+            v
+        };
         fn num<T: std::str::FromStr>(name: &str, v: Option<String>) -> Result<Option<T>, String> {
             v.map(|s| {
                 s.parse::<T>()
@@ -330,22 +347,35 @@ impl ReceiptSourcesConfig {
             })
             .transpose()
         }
-        fn flag(v: Option<String>) -> bool {
-            v.is_some_and(|s| matches!(s.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        fn flag(v: &str) -> bool {
+            matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on")
         }
 
-        let mut cfg = ReceiptSourcesConfig::default();
-
-        if let Some(host) = var("FINANCER_RECEIPTS_IMAP_HOST") {
-            let username = var("FINANCER_RECEIPTS_IMAP_USERNAME")
-                .ok_or("FINANCER_RECEIPTS_IMAP_USERNAME is not set")?;
-            let mut senders = Vec::new();
-            if let Some(spec) = var("FINANCER_RECEIPTS_IMAP_SENDERS") {
+        // mailbox
+        let host = var("FINANCER_RECEIPTS_IMAP_HOST");
+        let username = var("FINANCER_RECEIPTS_IMAP_USERNAME");
+        let port = num("FINANCER_RECEIPTS_IMAP_PORT", var("FINANCER_RECEIPTS_IMAP_PORT"))?;
+        let password_env = var("FINANCER_RECEIPTS_IMAP_PASSWORD_ENV");
+        let folder = var("FINANCER_RECEIPTS_IMAP_FOLDER");
+        let poll = num(
+            "FINANCER_RECEIPTS_IMAP_POLL_MINUTES",
+            var("FINANCER_RECEIPTS_IMAP_POLL_MINUTES"),
+        )?;
+        let mark_seen = var("FINANCER_RECEIPTS_IMAP_MARK_SEEN").map(|v| flag(&v));
+        let max_age = num(
+            "FINANCER_RECEIPTS_IMAP_MAX_AGE_DAYS",
+            var("FINANCER_RECEIPTS_IMAP_MAX_AGE_DAYS"),
+        )?;
+        let enabled = var("FINANCER_RECEIPTS_IMAP_ENABLED").map(|v| flag(&v));
+        let senders = match var("FINANCER_RECEIPTS_IMAP_SENDERS") {
+            None => None,
+            Some(spec) => {
+                let mut rules = Vec::new();
                 for part in spec.split(';').filter(|p| !p.trim().is_empty()) {
-                    let (retailer, from) = part
-                        .split_once('=')
-                        .ok_or("FINANCER_RECEIPTS_IMAP_SENDERS: use retailer=domain,domain;...")?;
-                    senders.push(SenderRule {
+                    let (retailer, from) = part.split_once('=').ok_or(
+                        "FINANCER_RECEIPTS_IMAP_SENDERS: use retailer=domain,domain;...",
+                    )?;
+                    rules.push(SenderRule {
                         retailer: retailer.trim().to_lowercase(),
                         from: from
                             .split(',')
@@ -355,74 +385,111 @@ impl ReceiptSourcesConfig {
                         subject_contains: Vec::new(),
                     });
                 }
+                Some(rules)
             }
-            cfg.email = Some(EmailConfig {
+        };
+        if host.is_some() && self.email.is_none() && username.is_none() {
+            return Err("FINANCER_RECEIPTS_IMAP_USERNAME is not set".into());
+        }
+        if let Some(e) = self.email.as_mut() {
+            if let Some(h) = host {
+                e.host = h;
+            }
+            if let Some(u) = username {
+                e.username = u;
+            }
+        } else if let Some(h) = host {
+            self.email = Some(EmailConfig {
                 enabled: true,
-                host,
-                port: num("FINANCER_RECEIPTS_IMAP_PORT", var("FINANCER_RECEIPTS_IMAP_PORT"))?
-                    .unwrap_or_else(default_port),
-                username,
-                password_env: var("FINANCER_RECEIPTS_IMAP_PASSWORD_ENV")
-                    .unwrap_or_else(default_password_env),
-                folder: var("FINANCER_RECEIPTS_IMAP_FOLDER").unwrap_or_else(default_folder),
-                poll_minutes: num(
-                    "FINANCER_RECEIPTS_IMAP_POLL_MINUTES",
-                    var("FINANCER_RECEIPTS_IMAP_POLL_MINUTES"),
-                )?
-                .unwrap_or_else(default_poll_minutes),
-                mark_seen: flag(var("FINANCER_RECEIPTS_IMAP_MARK_SEEN")),
-                max_age_days: num(
-                    "FINANCER_RECEIPTS_IMAP_MAX_AGE_DAYS",
-                    var("FINANCER_RECEIPTS_IMAP_MAX_AGE_DAYS"),
-                )?
-                .unwrap_or_else(default_max_age_days),
-                senders,
+                host: h,
+                port: default_port(),
+                username: username.unwrap_or_default(),
+                password_env: default_password_env(),
+                folder: default_folder(),
+                poll_minutes: default_poll_minutes(),
+                mark_seen: false,
+                max_age_days: default_max_age_days(),
+                senders: Vec::new(),
             });
         }
-
-        if flag(var("FINANCER_RECEIPTS_LIDL_PLUS")) {
-            let mut l = LidlPlusConfig {
-                enabled: true,
-                ..Default::default()
-            };
-            if let Some(c) = var("FINANCER_RECEIPTS_LIDL_COUNTRY") {
-                l.country = c.to_uppercase();
+        if let Some(e) = self.email.as_mut() {
+            if let Some(v) = port {
+                e.port = v;
             }
-            if let Some(c) = var("FINANCER_RECEIPTS_LIDL_LANGUAGE") {
-                l.language = c.to_lowercase();
+            if let Some(v) = password_env {
+                e.password_env = v;
             }
-            if let Some(h) = num(
-                "FINANCER_RECEIPTS_LIDL_POLL_HOURS",
-                var("FINANCER_RECEIPTS_LIDL_POLL_HOURS"),
-            )? {
-                l.poll_hours = h;
+            if let Some(v) = folder {
+                e.folder = v;
             }
-            cfg.lidl_plus = l;
+            if let Some(v) = poll {
+                e.poll_minutes = v;
+            }
+            if let Some(v) = mark_seen {
+                e.mark_seen = v;
+            }
+            if let Some(v) = max_age {
+                e.max_age_days = v;
+            }
+            if let Some(v) = enabled {
+                e.enabled = v;
+            }
+            if let Some(v) = senders {
+                e.senders = v;
+            }
         }
 
-        if let Some(path) = var("FINANCER_RECEIPTS_FOLDER") {
-            let on_done = match var("FINANCER_RECEIPTS_FOLDER_ON_DONE").as_deref() {
-                None | Some("keep") => OnDone::Keep,
-                Some("move") => OnDone::Move,
-                Some(_) => return Err("FINANCER_RECEIPTS_FOLDER_ON_DONE must be keep or move".into()),
-            };
-            cfg.folder = Some(FolderConfig {
+        // Lidl Plus
+        if let Some(v) = var("FINANCER_RECEIPTS_LIDL_PLUS") {
+            self.lidl_plus.enabled = flag(&v);
+        }
+        if let Some(c) = var("FINANCER_RECEIPTS_LIDL_COUNTRY") {
+            self.lidl_plus.country = c.to_uppercase();
+        }
+        if let Some(c) = var("FINANCER_RECEIPTS_LIDL_LANGUAGE") {
+            self.lidl_plus.language = c.to_lowercase();
+        }
+        if let Some(h) = num(
+            "FINANCER_RECEIPTS_LIDL_POLL_HOURS",
+            var("FINANCER_RECEIPTS_LIDL_POLL_HOURS"),
+        )? {
+            self.lidl_plus.poll_hours = h;
+        }
+
+        // folder
+        let path = var("FINANCER_RECEIPTS_FOLDER");
+        let poll_s = num(
+            "FINANCER_RECEIPTS_FOLDER_POLL_SECONDS",
+            var("FINANCER_RECEIPTS_FOLDER_POLL_SECONDS"),
+        )?;
+        let on_done = match var("FINANCER_RECEIPTS_FOLDER_ON_DONE").as_deref() {
+            None => None,
+            Some("keep") => Some(OnDone::Keep),
+            Some("move") => Some(OnDone::Move),
+            Some(_) => return Err("FINANCER_RECEIPTS_FOLDER_ON_DONE must be keep or move".into()),
+        };
+        if let Some(p) = path {
+            let f = self.folder.get_or_insert(FolderConfig {
                 enabled: true,
-                path: PathBuf::from(path),
-                poll_seconds: num(
-                    "FINANCER_RECEIPTS_FOLDER_POLL_SECONDS",
-                    var("FINANCER_RECEIPTS_FOLDER_POLL_SECONDS"),
-                )?
-                .unwrap_or_else(default_poll_seconds),
-                on_done,
+                path: PathBuf::new(),
+                poll_seconds: default_poll_seconds(),
+                on_done: OnDone::Keep,
             });
+            f.path = PathBuf::from(p);
+        }
+        if let Some(f) = self.folder.as_mut() {
+            if let Some(v) = poll_s {
+                f.poll_seconds = v;
+            }
+            if let Some(v) = on_done {
+                f.on_done = v;
+            }
         }
 
-        let problems = cfg.problems();
-        if let Some(p) = problems.first() {
+        if let Some(p) = self.problems().first() {
             return Err(p.clone());
         }
-        Ok(cfg)
+        Ok((self, used))
     }
 }
 
@@ -494,6 +561,30 @@ mod tests {
         let f = c.folder.as_ref().unwrap();
         assert_eq!((f.path.to_str(), f.on_done), (Some("/data/receipts"), OnDone::Move));
         assert!(c.any_enabled());
+    }
+
+    #[test]
+    fn env_overlays_the_file_value_by_value() {
+        let file: ReceiptSourcesConfig = toml::from_str(
+            "[email]\nhost = \"imap.file.example\"\nusername = \"me@file.example\"\npoll_minutes = 10\n\n[lidl_plus]\nenabled = true\n\n[folder]\npath = \"/from/file\"\n",
+        )
+        .unwrap();
+        let (c, used) = file
+            .apply_env(env(&[
+                ("FINANCER_RECEIPTS_IMAP_HOST", "imap.env.example"),
+                ("FINANCER_RECEIPTS_IMAP_MARK_SEEN", "1"),
+                ("FINANCER_RECEIPTS_LIDL_PLUS", "0"),
+                ("FINANCER_RECEIPTS_FOLDER_POLL_SECONDS", "30"),
+                ("FINANCER_RECEIPTS_IMAP_PORT", "  "),
+            ]))
+            .unwrap();
+        let e = c.email.unwrap();
+        assert_eq!((e.host.as_str(), e.username.as_str()), ("imap.env.example", "me@file.example"));
+        assert_eq!((e.poll_minutes, e.mark_seen, e.port), (10, true, 993), "blank means not set");
+        assert!(!c.lidl_plus.enabled, "0 switches it off");
+        let f = c.folder.unwrap();
+        assert_eq!((f.path.to_str(), f.poll_seconds), (Some("/from/file"), 30));
+        assert_eq!(used.len(), 4);
     }
 
     #[test]

@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use financer_core::{StoreAlias, StoreMatcher};
 use financer_store::Store;
 use serde::{Deserialize, Serialize};
 
@@ -124,6 +125,8 @@ pub struct ReceiptSyncer {
     cfg: ReceiptSourcesConfig,
     deps: SyncDeps,
     lidl: Option<LidlPlus>,
+    /// Decides which chain a booking belongs to (the Stores screen's table plus your spellings).
+    matcher: StoreMatcher,
     running: Mutex<HashSet<SourceKind>>,
     run_lock: tokio::sync::Mutex<()>,
 }
@@ -134,6 +137,7 @@ impl ReceiptSyncer {
         cfg: ReceiptSourcesConfig,
         deps: SyncDeps,
         server_secret: &str,
+        store_aliases: &[StoreAlias],
     ) -> Result<Arc<Self>, String> {
         if let Some(p) = cfg.problems().first() {
             return Err(p.clone());
@@ -155,6 +159,7 @@ impl ReceiptSyncer {
             cfg,
             deps,
             lidl,
+            matcher: StoreMatcher::with_aliases(store_aliases),
             running: Mutex::new(HashSet::new()),
             run_lock: tokio::sync::Mutex::new(()),
         }))
@@ -167,6 +172,7 @@ impl ReceiptSyncer {
         store: Store,
         cfg: ReceiptSourcesConfig,
         api_token: &str,
+        store_aliases: &[StoreAlias],
     ) -> Result<Option<Arc<Self>>, String> {
         if !cfg.any_enabled() {
             return Ok(None);
@@ -175,12 +181,7 @@ impl ReceiptSyncer {
             .ok()
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| api_token.to_string());
-        Self::new(store, cfg, SyncDeps::live()?, &secret).map(Some)
-    }
-
-    /// `live` with the configuration taken from the environment (until the TOML loader exists).
-    pub fn live_from_env(store: Store, api_token: &str) -> Result<Option<Arc<Self>>, String> {
-        Self::live(store, ReceiptSourcesConfig::from_env()?, api_token)
+        Self::new(store, cfg, SyncDeps::live()?, &secret, store_aliases).map(Some)
     }
 
     pub fn config(&self) -> &ReceiptSourcesConfig {
@@ -413,7 +414,7 @@ impl ReceiptSyncer {
             }
             imported += self.run_source(kind).await?;
         }
-        let linked = Linker::run(&self.store).await?;
+        let linked = Linker::run(&self.store, &self.matcher).await?;
         Ok(SyncReport {
             sources: self.statuses().await?,
             imported,
@@ -459,7 +460,7 @@ impl ReceiptSyncer {
                             Err(e) => tracing::warn!("receipt source {}: {e}", kind.key()),
                         }
                     }
-                    if let Err(e) = Linker::run(&self.store).await {
+                    if let Err(e) = Linker::run(&self.store, &self.matcher).await {
                         tracing::warn!("linking receipts to transactions failed: {e}");
                     }
                     drop(guard);
@@ -533,7 +534,7 @@ mod tests {
             env: Arc::new(move |k| (k == "TEST_IMAP_PASSWORD").then(|| password.map(String::from)).flatten()),
             lidl_gap: Duration::ZERO,
         };
-        let syncer = ReceiptSyncer::new(store.clone(), cfg, deps, SECRET).unwrap();
+        let syncer = ReceiptSyncer::new(store.clone(), cfg, deps, SECRET, &[]).unwrap();
         Rig {
             syncer,
             store,
@@ -653,6 +654,7 @@ mod tests {
                 lidl_gap: Duration::ZERO,
             },
             SECRET,
+            &[],
         )
         .unwrap();
         again.sync_now(Some(SourceKind::Email)).await.unwrap();
@@ -707,6 +709,7 @@ mod tests {
                 lidl_gap: Duration::ZERO,
             },
             SECRET,
+            &[],
         )
         .unwrap();
         assert!(off.due(now_unix()).await.unwrap().is_empty());
@@ -744,7 +747,7 @@ mod tests {
                 },
                 ..Default::default()
             };
-            let e = ReceiptSyncer::new(store.clone(), lidl_on, deps.clone(), "short").err().unwrap();
+            let e = ReceiptSyncer::new(store.clone(), lidl_on, deps.clone(), "short", &[]).err().unwrap();
             assert!(e.contains("too short"), "{e}");
             let bad = ReceiptSourcesConfig {
                 folder: Some(FolderConfig {
@@ -755,7 +758,7 @@ mod tests {
                 }),
                 ..Default::default()
             };
-            assert!(ReceiptSyncer::new(store, bad, deps, SECRET).is_err());
+            assert!(ReceiptSyncer::new(store, bad, deps, SECRET, &[]).is_err());
         });
     }
 }

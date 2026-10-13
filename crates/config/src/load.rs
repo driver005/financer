@@ -3,6 +3,8 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use financer_receipt_sources::ReceiptSourcesConfig;
+
 use crate::file::{BankAccount, FileConfig, StoreAlias};
 use crate::interpolate::Interpolator;
 use crate::{ConfigError, Env};
@@ -135,6 +137,8 @@ pub struct Config {
     pub llm: LlmSettings,
     pub bank: BankSettings,
     pub stores: Vec<StoreAlias>,
+    /// `[receipts]` with the `FINANCER_RECEIPTS_*` variables applied.
+    pub receipts: Setting<ReceiptSourcesConfig>,
 }
 
 /// A configuration plus where it was read from.
@@ -208,13 +212,9 @@ impl Loader {
             Self::warn_if_readable(path, warnings);
         }
 
-        // Second pass: the same document with `${NAME}` references replaced. The reserved
-        // [receipts] table is left alone.
+        // Second pass: the same document with `${NAME}` references replaced.
         let mut value: toml::Value = toml::from_str(text)
             .map_err(|e| ConfigError::one(format!("{shown}: {}", e.to_string().trim_end())))?;
-        if let Some(table) = value.as_table_mut() {
-            table.remove("receipts");
-        }
         Interpolator::expand_value(&mut value, env, "").map_err(|(key, missing)| {
             let line = Self::line_of(text, &missing.name)
                 .map(|l| format!(" (line {l})"))
@@ -224,10 +224,9 @@ impl Loader {
                 name = missing.name
             ))
         })?;
-        let mut expanded: FileConfig = value
+        let expanded: FileConfig = value
             .try_into()
             .map_err(|e| ConfigError::one(format!("{shown}: {e}")))?;
-        expanded.receipts = raw.receipts;
         Ok(expanded)
     }
 
@@ -481,7 +480,34 @@ impl Loader {
             accounts: file.bank.accounts,
         };
 
+        // [receipts]: the file, then the FINANCER_RECEIPTS_* variables on top
+        let mut receipts_file = file.receipts;
+        if let (Some(dir), Some(f)) = (base, receipts_file.folder.as_mut()) {
+            if f.path.is_relative() && !f.path.as_os_str().is_empty() {
+                f.path = dir.join(&f.path);
+            }
+        }
+        let from_file = receipts_file != ReceiptSourcesConfig::default();
+        let receipts = match receipts_file.apply_env(|k| env.nonempty(k)) {
+            Ok((cfg, used)) => Setting {
+                value: cfg,
+                source: match used.first() {
+                    Some(var) => Source::Env(var.clone()),
+                    None if from_file => Source::File,
+                    None => Source::Default,
+                },
+            },
+            Err(e) => {
+                errors.push(format!("receipts: {e}"));
+                Setting {
+                    value: ReceiptSourcesConfig::default(),
+                    source: Source::Default,
+                }
+            }
+        };
+
         let mut warnings = warnings;
+        crate::Validator::receipts(&receipts.value, env, &mut warnings);
         crate::Validator::accounts(&bank.accounts, env, &mut errors, &mut warnings);
         if !bank.accounts.is_empty() && bank.fints_product_id.value.is_none() {
             warnings.push(
@@ -503,6 +529,7 @@ impl Loader {
                 llm,
                 bank,
                 stores: file.stores,
+                receipts,
             },
             path,
             warnings,

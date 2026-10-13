@@ -1,6 +1,7 @@
 //! The shape of `financer.toml` exactly as written in the file. Unknown keys are an error
-//! everywhere except under `[receipts]`, which is reserved for a later feature.
+//! everywhere, including under `[receipts]`.
 
+use financer_receipt_sources::ReceiptSourcesConfig;
 use serde::Deserialize;
 
 #[derive(Debug, Default, Deserialize)]
@@ -13,8 +14,8 @@ pub struct FileConfig {
     pub llm: FileLlm,
     pub bank: FileBank,
     pub stores: Vec<StoreAlias>,
-    /// Reserved: accepted and ignored, whatever it contains.
-    pub receipts: toml::Table,
+    /// Automatic receipt import (mailbox, Lidl Plus, watched folder).
+    pub receipts: ReceiptSourcesConfig,
 }
 
 #[derive(Debug, Default, Deserialize)]

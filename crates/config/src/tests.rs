@@ -270,17 +270,79 @@ fn an_unknown_key_is_an_error_that_names_it() {
 }
 
 #[test]
-fn receipts_accepts_and_ignores_anything() {
-    let text = r#"
-        [receipts]
-        folder = "/mnt/scans"
-        enabled = true
-        [receipts.nested]
-        x = "${NEVER_SET_ANYWHERE}"
-    "#;
-    // nothing in [receipts] is validated or expanded
-    let c = Fixture::ok(text, &[]).config;
-    assert_eq!(c.server.bind.source, Source::Default);
+fn receipts_table_is_typed_and_rejects_unknown_keys() {
+    let c = Fixture::ok(
+        "[receipts.email]\nhost = \"imap.example.org\"\nusername = \"me@example.org\"\n[receipts.lidl_plus]\nenabled = true\n[receipts.folder]\npath = \"scans\"\n",
+        &[],
+    )
+    .config;
+    let r = &c.receipts.value;
+    assert_eq!(r.email.as_ref().unwrap().port, 993);
+    assert!(r.lidl_plus.enabled);
+    assert_eq!(c.receipts.source, Source::File);
+    // a relative folder is relative to the config file
+    assert!(r.folder.as_ref().unwrap().path.is_absolute());
+    for text in [
+        "[receipts]\nbogus = 1\n",
+        "[receipts.email]\nhost = \"h\"\nusername = \"u\"\npassword = \"x\"\n",
+        "[receipts.lidl_plus]\nenable = true\n",
+    ] {
+        assert!(Fixture::load(text, &[]).is_err(), "{text}");
+    }
+    let e = Fixture::err("[receipts.folder]\npath = \"\"\n", &[]);
+    assert!(e.contains("receipts.folder.path"), "{e}");
+}
+
+#[test]
+fn receipts_strings_can_refer_to_the_environment() {
+    let c = Fixture::ok(
+        "[receipts.email]\nhost = \"${IMAP_HOST}\"\nusername = \"me\"\n",
+        &[("IMAP_HOST", "imap.example.org")],
+    )
+    .config;
+    assert_eq!(c.receipts.value.email.unwrap().host, "imap.example.org");
+}
+
+#[test]
+fn receipts_environment_wins_and_is_attributed() {
+    let c = Fixture::ok(
+        "[receipts.lidl_plus]\nenabled = false\n",
+        &[("FINANCER_RECEIPTS_LIDL_PLUS", "1")],
+    )
+    .config;
+    assert!(c.receipts.value.lidl_plus.enabled);
+    assert_eq!(
+        c.receipts.source,
+        Source::Env("FINANCER_RECEIPTS_LIDL_PLUS".into())
+    );
+    let none = Fixture::ok("", &[]).config;
+    assert_eq!(none.receipts.source, Source::Default);
+    assert!(!none.receipts.value.any_enabled());
+}
+
+#[test]
+fn receipts_warnings_name_the_missing_password_variable() {
+    let text = "[receipts.email]\nhost = \"h\"\nusername = \"u\"\npassword_env = \"MY_MAIL_PW\"\n";
+    let loaded = Fixture::ok(text, &[]);
+    assert!(
+        loaded.warnings.iter().any(|w| w.contains("MY_MAIL_PW")),
+        "{:?}",
+        loaded.warnings
+    );
+    let set = Fixture::ok(text, &[("MY_MAIL_PW", "x")]);
+    assert!(!set.warnings.iter().any(|w| w.contains("MY_MAIL_PW")));
+}
+
+#[test]
+fn print_config_hides_the_mail_login_and_never_has_a_password() {
+    let loaded = Fixture::ok(
+        "[receipts.email]\nhost = \"imap.example.org\"\nusername = \"jane.doe@example.org\"\n",
+        &[("FINANCER_IMAP_PASSWORD", "hunter2-hunter2")],
+    );
+    let out = Renderer::render(&loaded);
+    assert!(out.contains("j***@example.org"), "{out}");
+    assert!(!out.contains("jane.doe") && !out.contains("hunter2"), "{out}");
+    assert!(out.contains("password_env = \"FINANCER_IMAP_PASSWORD\""));
 }
 
 #[test]

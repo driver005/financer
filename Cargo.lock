@@ -1639,6 +1639,7 @@ dependencies = [
 name = "financer-config"
 version = "0.1.0"
 dependencies = [
+ "financer-receipt-sources",
  "serde",
  "tempfile",
  "toml 0.9.12+spec-1.1.0",

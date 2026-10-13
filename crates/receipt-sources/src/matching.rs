@@ -7,11 +7,10 @@
 
 use std::collections::HashMap;
 
-use financer_core::Transaction;
+use financer_core::{StoreMatcher, Transaction};
 use financer_store::{ReceiptMeta, Store};
 use time::Date;
 
-use crate::brand::brand_of;
 use crate::error::SyncError;
 
 /// Largest difference between receipt date and booking date.
@@ -37,10 +36,11 @@ pub struct PaymentFacts {
 }
 
 impl PaymentFacts {
-    pub fn from_transaction(id: i64, t: &Transaction) -> Self {
+    /// The chain comes from the Stores screen's matcher (with the user's own spellings).
+    pub fn from_transaction(id: i64, t: &Transaction, matcher: &StoreMatcher) -> Self {
         PaymentFacts {
             id,
-            brand: brand_of(&t.counterparty).or_else(|| brand_of(&t.purpose)),
+            brand: matcher.match_transaction(t).map(|c| c.id.clone()),
             date: t.booking_date,
             amount_cents: t.amount.cents(),
         }
@@ -93,7 +93,7 @@ pub struct Linker;
 impl Linker {
     /// Link every receipt that has no link yet to its payment where that is unambiguous.
     /// Returns how many links were made.
-    pub async fn run(store: &Store) -> Result<usize, SyncError> {
+    pub async fn run(store: &Store, matcher: &StoreMatcher) -> Result<usize, SyncError> {
         let metas: Vec<ReceiptMeta> = store.receipt_metas().await?;
         let taken: std::collections::HashSet<i64> =
             metas.iter().filter_map(|m| m.transaction_id).collect();
@@ -115,7 +115,7 @@ impl Linker {
             .await?
             .iter()
             .filter(|t| !taken.contains(&t.id))
-            .map(|t| PaymentFacts::from_transaction(t.id, &t.transaction))
+            .map(|t| PaymentFacts::from_transaction(t.id, &t.transaction, matcher))
             .collect();
         let pairs = Matcher::link(&receipts, &payments);
         for (receipt, payment) in &pairs {
@@ -240,14 +240,14 @@ mod tests {
             category: None,
         };
         assert_eq!(
-            PaymentFacts::from_transaction(1, &t("REWE SAGT DANKE", "Kartenzahlung")).brand.as_deref(),
+            PaymentFacts::from_transaction(1, &t("REWE SAGT DANKE", "Kartenzahlung"), &StoreMatcher::builtin()).brand.as_deref(),
             Some("rewe")
         );
         assert_eq!(
-            PaymentFacts::from_transaction(1, &t("PayPal", "EDEKA Müller 1234")).brand.as_deref(),
+            PaymentFacts::from_transaction(1, &t("PayPal", "EDEKA Müller 1234"), &StoreMatcher::builtin()).brand.as_deref(),
             Some("edeka")
         );
-        assert_eq!(PaymentFacts::from_transaction(1, &t("Vermieter", "Miete")).brand, None);
+        assert_eq!(PaymentFacts::from_transaction(1, &t("Vermieter", "Miete"), &StoreMatcher::builtin()).brand, None);
     }
 
     #[tokio::test]
@@ -276,7 +276,7 @@ mod tests {
         let r = ReceiptReader::read(REWE_EBON, None, None, Trust::Document).unwrap();
         Ingest::store(&store, SourceKind::Email, &r).await.unwrap();
 
-        assert_eq!(Linker::run(&store).await.unwrap(), 1);
+        assert_eq!(Linker::run(&store, &StoreMatcher::builtin()).await.unwrap(), 1);
         let metas = store.receipt_metas().await.unwrap();
         let txs = store.list_transactions().await.unwrap();
         let rewe_tx = txs
@@ -285,7 +285,7 @@ mod tests {
             .unwrap();
         assert_eq!(metas[0].transaction_id, Some(rewe_tx.id));
         // nothing new to link, and the link is stable
-        assert_eq!(Linker::run(&store).await.unwrap(), 0);
+        assert_eq!(Linker::run(&store, &StoreMatcher::builtin()).await.unwrap(), 0);
 
         // a second identical purchase on the same day cannot take the same payment
         let again = ReceiptReader::read(
@@ -296,7 +296,7 @@ mod tests {
         )
         .unwrap();
         Ingest::store(&store, SourceKind::Email, &again).await.unwrap();
-        assert_eq!(Linker::run(&store).await.unwrap(), 0);
+        assert_eq!(Linker::run(&store, &StoreMatcher::builtin()).await.unwrap(), 0);
         assert_eq!(
             store
                 .receipt_metas()

@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+use financer_receipt_sources::ReceiptSourcesConfig;
+
 use crate::file::{BankAccount, StoreAlias};
 use crate::load::{Config, MIN_TOKEN_LEN};
 use crate::Env;
@@ -110,6 +112,35 @@ impl Validator {
                         Self::MAX_SINCE_DAYS
                     ));
                 }
+            }
+        }
+    }
+
+    /// `[receipts]`: things that are likely wrong but do not stop the server.
+    pub fn receipts(cfg: &ReceiptSourcesConfig, env: &dyn Env, warnings: &mut Vec<String>) {
+        if let Some(e) = cfg.email.as_ref().filter(|e| e.enabled) {
+            let var = e.password_env.trim();
+            let valid = var
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                && var.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            if !valid {
+                warnings.push(format!(
+                    "receipts.email.password_env: {var:?} is not an environment variable name (the password itself must not be written in the file)"
+                ));
+            } else if env.nonempty(var).is_none() {
+                warnings.push(format!(
+                    "receipts.email.password_env: the environment variable {var} is not set right now; the mailbox cannot be read until it is"
+                ));
+            }
+        }
+        if let Some(f) = cfg.folder.as_ref().filter(|f| f.enabled) {
+            if !f.path.is_dir() {
+                warnings.push(format!(
+                    "receipts.folder.path: {} is not a folder (yet); nothing is imported until it exists",
+                    f.path.display()
+                ));
             }
         }
     }

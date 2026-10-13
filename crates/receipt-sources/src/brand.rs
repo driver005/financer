@@ -1,44 +1,22 @@
-//! Which retailer a name belongs to, for receipts and bank counterparties alike.
+//! Which retailer a name belongs to, for receipts and bank counterparties alike. The chain table
+//! is the one of the Stores screen (`financer_core::StoreMatcher`); there is no second list.
 
-use financer_core::Chain;
+use std::sync::OnceLock;
 
-/// Brands recognised besides the four price-tracked chains. Each is matched as a whole word
-/// (or a word starting with it, for names of at least four letters), so `dm` does not match
-/// `Admin`.
-const OTHER_BRANDS: &[&str] = &[
-    "edeka",
-    "dm",
-    "rossmann",
-    "penny",
-    "netto",
-    "norma",
-    "globus",
-    "tegut",
-    "denns",
-    "alnatura",
-];
+use financer_core::{Chain, StoreMatcher};
 
-/// Brand key (`rewe`, `lidl`, `edeka`, ...) found in a merchant, store or counterparty name.
-pub fn brand_of(name: &str) -> Option<String> {
-    if let Some(chain) = Chain::from_name(name) {
-        return Some(chain_key(chain).to_string());
-    }
-    let lower = name.to_lowercase();
-    let words: Vec<&str> = lower
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .collect();
-    OTHER_BRANDS
-        .iter()
-        .find(|b| {
-            words
-                .iter()
-                .any(|w| w == *b || (b.len() >= 4 && w.starts_with(**b)))
-        })
-        .map(|b| b.to_string())
+fn builtin() -> &'static StoreMatcher {
+    static MATCHER: OnceLock<StoreMatcher> = OnceLock::new();
+    MATCHER.get_or_init(StoreMatcher::builtin)
 }
 
-/// The brand key of a price-tracked chain.
+/// Chain id (`rewe`, `lidl`, `edeka`, `dm`, ...) found in a merchant or store name, by the
+/// built-in table of the Stores screen.
+pub fn brand_of(name: &str) -> Option<String> {
+    builtin().match_text(name, "").map(|c| c.id.clone())
+}
+
+/// The id of a price-tracked chain; the same ids the Stores screen uses.
 pub fn chain_key(chain: Chain) -> &'static str {
     match chain {
         Chain::Rewe => "rewe",
@@ -48,9 +26,10 @@ pub fn chain_key(chain: Chain) -> &'static str {
     }
 }
 
-/// Normalise a configured or detected retailer name to a brand key where it is one.
+/// A configured or detected retailer name as a chain id: the id of a known chain, or else the
+/// name written the way the Stores screen writes ids of chains of your own.
 pub fn normalize_brand(name: &str) -> String {
-    brand_of(name).unwrap_or_else(|| name.trim().to_lowercase())
+    brand_of(name).unwrap_or_else(|| StoreMatcher::slug(name))
 }
 
 #[cfg(test)]
@@ -68,15 +47,23 @@ mod tests {
     }
 
     #[test]
-    fn short_brands_need_a_whole_word() {
+    fn look_alikes_and_short_names_are_not_chains() {
         assert_eq!(brand_of("Admin Services GmbH"), None);
         assert_eq!(brand_of("Café Müller"), None);
+        assert_eq!(brand_of("Lidl Connect"), None);
         assert_eq!(brand_of(""), None);
     }
 
     #[test]
-    fn normalize_keeps_unknown_names_lowercase() {
+    fn chain_ids_agree_with_the_stores_screen() {
+        for c in [Chain::Rewe, Chain::Lidl, Chain::Aldi, Chain::Kaufland] {
+            assert!(builtin().chain(chain_key(c)).is_some(), "{c:?}");
+        }
+    }
+
+    #[test]
+    fn normalize_gives_ids_for_unknown_names() {
         assert_eq!(normalize_brand("Rewe"), "rewe");
-        assert_eq!(normalize_brand(" Bäckerei Schmidt "), "bäckerei schmidt");
+        assert_eq!(normalize_brand(" Bäckerei Schmidt "), "bäckerei-schmidt");
     }
 }
