@@ -10,6 +10,7 @@ pub mod recurring;
 pub mod rules;
 pub mod safe_to_spend;
 pub mod split;
+pub mod stores;
 pub mod subscriptions;
 pub mod transaction;
 
@@ -28,6 +29,10 @@ pub use recurring::{Cadence, RecurringDetector, RecurringPayment};
 pub use rules::{AmountSign, MatchKind, RuleError, RuleSet, UserRule};
 pub use safe_to_spend::{Pace, SafeToSpend, SafeToSpendInput};
 pub use split::{SplitError, SplitPart, Splitter};
+pub use stores::{
+    Bucket, StoreAlias, StoreChain, StoreMatcher, StoreReport, StoreRow, StoreSpending, Totals,
+    OTHER_ID,
+};
 pub use subscriptions::{
     DuplicateReason, DuplicateSubscription, PriceHike, StaleSubscription, SubscriptionReport,
     SubscriptionWatch, UpcomingCharge, WatchConfig, WatchedSubscription,

@@ -81,6 +81,7 @@ impl Fixtures {
             iban: "DE89370400440532013000".into(),
             bic: "GENODE23X42".into(),
             days: 90,
+            fints_url: None,
         }
     }
 
@@ -127,6 +128,20 @@ async fn login_balance_and_transactions_over_the_real_protocol() {
         assert_ne!(t.amount.cents(), 0);
         assert_eq!(t.category, None, "categorizing is the API's job");
     }
+}
+
+#[tokio::test]
+async fn a_bank_address_given_with_the_request_is_used() {
+    // what a configured connection with `fints_url` does: no registry lookup, no preset endpoint
+    let server = server_or_skip!(&[]);
+    let mut params = Fixtures::params("1234");
+    params.fints_url = Some(server.url.clone());
+    let (mut pending, _) = FintsBank::new("TESTPRODUCT")
+        .start(&params)
+        .await
+        .expect("login at the given address");
+    let data = pending.confirm().await.expect("data");
+    assert_eq!(data.balance.expect("a balance").cents(), 152_342);
 }
 
 #[tokio::test]

@@ -8,6 +8,7 @@ import Animated, {
   useSharedValue,
   withDelay,
   withRepeat,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -20,6 +21,59 @@ import { tap } from "@/native/haptics";
 import { usePalette } from "@/theme";
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
+
+const MOOD_BADGE = { happy: null, cheer: "🎉", worried: "💦" } as const;
+
+/**
+ * The small Penny above the scrolling answers on a tall screen: the same look as `Mascot` at
+ * about two thirds of the size, so the answers get more room, and it stands still when the
+ * person has asked for less motion.
+ */
+function CompactMascot({ message, mood }: MascotLine) {
+  const p = usePalette();
+  const reduce = useReducedMotion();
+  const y = useSharedValue(0);
+  useEffect(() => {
+    if (reduce) {
+      y.value = 0;
+      return;
+    }
+    y.value = withRepeat(
+      withSequence(withTiming(-4, { duration: 700, easing: Easing.inOut(Easing.quad) }), withTiming(0, { duration: 700, easing: Easing.inOut(Easing.quad) })),
+      -1,
+    );
+  }, [reduce, y]);
+  const bob = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+  const badge = MOOD_BADGE[mood];
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+      <Animated.View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={[
+          { width: 52, height: 52, borderRadius: 26, backgroundColor: p.fill, borderBottomWidth: 3, borderBottomColor: p.accentEdge, alignItems: "center", justifyContent: "center" },
+          bob,
+        ]}
+      >
+        <RNText style={{ fontSize: 28 }}>🐷</RNText>
+        {badge ? <RNText style={{ position: "absolute", top: -6, right: -6, fontSize: 18 }}>{badge}</RNText> : null}
+      </Animated.View>
+      <View
+        accessibilityRole="text"
+        accessibilityLiveRegion="polite"
+        style={{ flex: 1, borderWidth: 2, borderColor: p.border, borderRadius: 16, backgroundColor: p.surface, paddingVertical: 8, paddingHorizontal: 12 }}
+      >
+        <RNText style={{ color: p.text, fontSize: 14, fontWeight: "700" }}>{message}</RNText>
+      </View>
+    </View>
+  );
+}
+
+/** "3/8" read out as "Step 3 of 8". */
+export function spokenStep(label: string): string {
+  const m = /^(\d+)\/(\d+)$/.exec(label);
+  return m ? `Step ${m[1]} of ${m[2]}` : label;
+}
 
 /** Content never gets wider than a phone, so the web build looks the same on a big screen. */
 const MAX_WIDTH = 560;
@@ -64,7 +118,7 @@ export function StepFrame({
   // On a tall screen the mascot stays above the scrolling answers, so its reaction to a tap is
   // always in view; on a short one it scrolls with the page to leave room for the question.
   const sticky = useWindowDimensions().height >= 700;
-  const bubble = <Mascot message={mascot.message} mood={mascot.mood} />;
+  const bubble = sticky ? <CompactMascot message={mascot.message} mood={mascot.mood} /> : <Mascot message={mascot.message} mood={mascot.mood} />;
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right", "bottom"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -85,11 +139,11 @@ export function StepFrame({
             <View style={{ flex: 1 }}>
               <Bar progress={fraction} height={10} marginTop={0} />
             </View>
-            <RNText style={{ color: p.muted, fontSize: 12, fontWeight: "800", minWidth: 36, textAlign: "right" }} accessibilityLabel={stepLabel}>
+            <RNText style={{ color: p.muted, fontSize: 12, fontWeight: "800", minWidth: 36, textAlign: "right" }} accessibilityLabel={spokenStep(stepLabel)}>
               {stepLabel}
             </RNText>
           </View>
-          {sticky ? <View style={{ paddingTop: 12 }}>{bubble}</View> : null}
+          {sticky ? <View style={{ paddingTop: 8, paddingBottom: 4 }}>{bubble}</View> : null}
         </View>
 
         <ScrollView
@@ -257,11 +311,42 @@ export function NumberTiles({
   );
 }
 
+/** A pill you can switch on and off (stores, for example): at least 44 high, a check mark when on. */
+export function ToggleChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  const p = usePalette();
+  return (
+    <Pressable
+      onPress={() => {
+        tap();
+        onPress();
+      }}
+      accessibilityRole="checkbox"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: selected }}
+      style={{
+        minHeight: 44,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        paddingHorizontal: 16,
+        borderRadius: 22,
+        borderWidth: 2,
+        borderBottomWidth: 4,
+        borderColor: selected ? p.accent : p.border,
+        backgroundColor: selected ? p.accent : p.surface,
+      }}
+    >
+      {selected ? <MaterialCommunityIcons name="check" size={18} color={p.onAccent} /> : null}
+      <RNText style={{ color: selected ? p.onAccent : p.text, fontSize: 15, fontWeight: "800" }}>{label}</RNText>
+    </Pressable>
+  );
+}
+
 /** A small label above a group of answers. */
 export function FieldLabel({ children }: { children: ReactNode }) {
   const p = usePalette();
   return (
-    <RNText style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", marginTop: 16, marginBottom: 8 }}>
+    <RNText accessibilityRole="header" style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", marginTop: 16, marginBottom: 8 }}>
       {children}
     </RNText>
   );

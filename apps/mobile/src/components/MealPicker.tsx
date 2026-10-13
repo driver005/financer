@@ -1,14 +1,38 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Text as RNText, View } from "react-native";
 
 import type { Api, Idea, RecipeMatch } from "@/api/client";
-import { HelperText, List, Searchbar, Text } from "@/components/kit";
-import { Body, Button, Loading } from "@/components/ui";
+import { Avatar, Badge, Group, RoundIcon, SkeletonCards, Tap, space } from "@/components/grocery/primitives";
+import { ChunkyButton, HelperText, Searchbar, Text } from "@/components/kit";
+import { initials, mealTint } from "@/groceryView";
 import { entryFromIdea, entryFromRecipe, type MealEntry } from "@/mealplan";
 import { usePalette } from "@/theme";
 
 const SHOWN = 8;
+
+function PickRow({ title, meta, seed, onPress, label, idea }: { title: string; meta: string; seed: string; onPress: () => void; label: string; idea?: boolean }) {
+  const p = usePalette();
+  return (
+    <Tap
+      onPress={onPress}
+      accessibilityLabel={label}
+      style={{ flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.lg, minHeight: 60 }}
+    >
+      <Avatar tint={mealTint(seed)} label={initials(title)} size={40} square />
+      <View style={{ flex: 1, gap: 2 }}>
+        <RNText style={{ color: p.text, fontSize: 15, fontWeight: "700" }} numberOfLines={2}>
+          {title}
+        </RNText>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+          <RNText style={{ color: p.muted, fontSize: 13 }}>{meta}</RNText>
+          {idea ? <Badge tone="accent" label="Idea" icon="creation" /> : null}
+        </View>
+      </View>
+      <MaterialCommunityIcons name="plus-circle" size={26} color={p.accent} />
+    </Tap>
+  );
+}
 
 /** Inline chooser for one day: search the recipes, or ask the language model for new ideas. */
 export function MealPicker({
@@ -49,40 +73,47 @@ export function MealPicker({
   }
 
   return (
-    <View style={{ marginTop: 12, borderTopWidth: 2, borderTopColor: p.border, paddingTop: 12 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+    <View style={{ marginTop: space.md, borderTopWidth: 2, borderTopColor: p.border, paddingTop: space.md }}>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: space.sm }}>
         <Text variant="titleSmall" style={{ flex: 1 }}>Choose a recipe</Text>
-        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close the recipe list" hitSlop={10}>
-          <MaterialCommunityIcons name="close" size={22} color={p.muted} />
-        </Pressable>
+        <RoundIcon icon="close" onPress={onClose} label="Close the recipe list" />
       </View>
-      <Searchbar placeholder="Search recipes" accessibilityLabel="Search recipes" value={query} onChangeText={setQuery} />
-      {loading && recipes.length === 0 ? <Loading /> : null}
-      {matches.map((r) => (
-        <List.Item
-          key={r.id}
-          title={r.title}
-          description={`${r.minutes} min · ${r.servings} servings`}
-          left={() => <List.Icon icon="plus-circle-outline" />}
-          onPress={() => onPick(entryFromRecipe(r))}
-          accessibilityLabel={`Plan ${r.title}`}
-        />
-      ))}
-      {!loading && matches.length === 0 ? <Body muted>No recipe matches.</Body> : null}
-      <View style={{ marginTop: 8 }}>
-        <Button label={asking ? "Thinking…" : "Suggest new ideas"} icon="creation" mode="contained-tonal" onPress={askForIdeas} disabled={asking} />
-      </View>
+      <Searchbar placeholder="Search recipes" accessibilityLabel="Search recipes" value={query} onChangeText={setQuery} style={{ marginBottom: space.md }} />
+      {loading && recipes.length === 0 ? <SkeletonCards count={2} label="Loading recipes" /> : null}
+      {matches.length > 0 ? (
+        <Group>
+          {matches.map((r) => (
+            <PickRow
+              key={r.id}
+              seed={r.id}
+              title={r.title}
+              meta={`${r.minutes} min · ${r.servings} servings`}
+              label={`Plan ${r.title}`}
+              onPress={() => onPick(entryFromRecipe(r))}
+            />
+          ))}
+        </Group>
+      ) : null}
+      {!loading && matches.length === 0 ? <Text variant="bodyMedium" style={{ color: p.muted, marginBottom: space.md }}>No recipe matches.</Text> : null}
+      <ChunkyButton label={asking ? "Thinking…" : "Suggest new ideas"} icon="creation" tone="blue" onPress={askForIdeas} disabled={asking} />
       {message ? <HelperText type="error" visible>{message}</HelperText> : null}
-      {ideas.map((idea) => (
-        <List.Item
-          key={idea.title}
-          title={idea.title}
-          description={`${idea.minutes} min · ${idea.servings} servings · idea`}
-          left={() => <List.Icon icon="creation" />}
-          onPress={() => onPick(entryFromIdea(idea))}
-          accessibilityLabel={`Plan the idea ${idea.title}`}
-        />
-      ))}
+      {ideas.length > 0 ? (
+        <View style={{ marginTop: space.md }}>
+          <Group>
+            {ideas.map((idea) => (
+              <PickRow
+                key={idea.title}
+                idea
+                seed={idea.title}
+                title={idea.title}
+                meta={`${idea.minutes} min · ${idea.servings} servings`}
+                label={`Plan the idea ${idea.title}`}
+                onPress={() => onPick(entryFromIdea(idea))}
+              />
+            ))}
+          </Group>
+        </View>
+      ) : null}
     </View>
   );
 }

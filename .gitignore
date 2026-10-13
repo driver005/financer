@@ -35,3 +35,6 @@ deploy/config/sources.json
 
 # Local development state (make dev): database, token, own settings
 .dev/
+
+# Your own server configuration (may hold secrets; see financer.example.toml)
+financer.toml

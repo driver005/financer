@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Linking, Platform, View } from "react-native";
 
+import { ScanFrame } from "@/components/grocery/ScanFrame";
 import { ActivityIndicator, Text } from "@/components/kit";
 import { Body, Button, useColors } from "@/components/ui";
 import { loadCamera } from "@/native/camera";
@@ -57,14 +58,14 @@ function Scanner({ cam, onCode }: { cam: CameraModule; onCode: (data: string) =>
 
   const { CameraView } = cam;
   return (
-    <View style={{ height: 260, borderRadius: 24, overflow: "hidden", borderWidth: 2, borderColor: c.border }}>
+    <ScanFrame live hint="Hold the barcode inside the frame" height={280}>
       <CameraView
-        style={{ flex: 1 }}
+        style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
         facing="back"
         barcodeScannerSettings={{ barcodeTypes: [...BARCODE_TYPES] }}
         onBarcodeScanned={(e) => onCode(e.data)}
         accessibilityLabel="Camera view for scanning a barcode"
       />
-    </View>
+    </ScanFrame>
   );
 }

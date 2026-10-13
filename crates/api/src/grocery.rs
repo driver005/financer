@@ -595,6 +595,7 @@ impl Grocery {
             .get_setting("llm_provider")
             .await?
             .and_then(|p| Self::parse_provider(&p))
+            .or(state.default_llm_provider)
             .unwrap_or(Provider::Claude);
         let model = state
             .store

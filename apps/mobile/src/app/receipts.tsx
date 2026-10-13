@@ -1,11 +1,15 @@
 import * as ImagePicker from "expo-image-picker";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useState } from "react";
-import { FlatList, View } from "react-native";
-import { HelperText, IconButton, Text, TextInput } from "@/components/kit";
+import { FlatList, Text as RNText, View } from "react-native";
 
 import type { Receipt } from "@/api/client";
 import { useApi } from "@/api/config";
-import { Body, Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
+import { Avatar, Badge, EmptyState, Money, Panel, RoundIcon, SectionLabel, SkeletonCards, Subtitle, Tap, space, useTones } from "@/components/grocery/primitives";
+import { ChunkyButton, Text, TextInput } from "@/components/kit";
+import { Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { chainTint, initials, mealTint } from "@/groceryView";
+import { usePalette } from "@/theme";
 import { formatCents, formatDate } from "@/format";
 import { toBase64 } from "@/native/base64";
 import { pickFileBytes } from "@/native/files";
@@ -13,11 +17,13 @@ import { useScreenData } from "@/hooks";
 
 export default function Receipts() {
   const { api, loaded } = useApi();
-  const c = useColors();
+  const p = usePalette();
+  const tones = useTones();
   const { data, error, reload } = useScreenData((a) => a.receipts());
   const [text, setText] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
 
   async function add() {
     if (!api || !text.trim()) return;
@@ -111,9 +117,13 @@ export default function Receipts() {
 
   if (!loaded) return <Screen><Loading /></Screen>;
 
+  const loading = !data && !error;
+  const pasteVisible = pasteOpen || text.trim() !== "";
+
   return (
     <Screen>
       <Title>Receipts</Title>
+      {api ? <Subtitle>Receipts show what you really buy and pay.</Subtitle> : null}
       {!api ? (
         <NeedsSetup />
       ) : (
@@ -121,57 +131,140 @@ export default function Receipts() {
           data={data ?? []}
           keyExtractor={(r) => String(r.id)}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: space.xl }}
           ListHeaderComponent={
-            <View style={{ marginBottom: 8 }}>
-              <Text variant="bodyMedium" style={{ color: c.muted, marginBottom: 8 }}>
-                Photograph a receipt, import a digital receipt PDF (a Rewe eBon or Lidl Plus receipt exported from their app), or paste the text. Photos and PDFs are read by your configured AI provider (Claude or
-                OpenAI), so the image leaves your server; only do this if you are fine with that.
-              </Text>
-              <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <Button label="Scan" icon="camera-outline" onPress={() => scan("camera")} disabled={busy} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Button label="Photo" icon="image-outline" mode="outlined" onPress={() => scan("library")} disabled={busy} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Button label="PDF" icon="file-pdf-box" mode="outlined" onPress={scanPdf} disabled={busy} />
-                </View>
+            <View style={{ marginBottom: space.sm }}>
+              <View style={{ flexDirection: "row", gap: space.sm }}>
+                <CaptureTile icon="camera-outline" label="Scan" hint="Camera" disabled={busy} onPress={() => scan("camera")} accessibilityLabel="Scan a receipt with the camera" primary />
+                <CaptureTile icon="image-outline" label="Photo" hint="From gallery" disabled={busy} onPress={() => scan("library")} accessibilityLabel="Add a receipt from a photo" />
+                <CaptureTile icon="file-pdf-box" label="PDF" hint="eBon, Lidl Plus" disabled={busy} onPress={scanPdf} accessibilityLabel="Add a receipt from a PDF" />
               </View>
-              <TextInput
-                mode="outlined"
-                label="Receipt text"
-                accessibilityLabel="Receipt text"
-                value={text}
-                onChangeText={setText}
-                multiline
-                numberOfLines={6}
-                style={{ minHeight: 120 }}
-              />
-              <View style={{ marginTop: 12 }}>
-                <Button label={busy ? "Adding…" : "Add receipt"} icon="receipt-text-plus-outline" onPress={add} disabled={busy || !text.trim()} />
+
+              <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.md, marginBottom: space.md }}>
+                <MaterialCommunityIcons name="shield-lock-outline" size={18} color={p.muted} style={{ marginTop: 2 }} />
+                <Text variant="bodySmall" style={{ color: p.muted, flex: 1 }}>
+                  Photos and PDFs are read by your configured AI provider (Claude or OpenAI), so the image leaves your server; only do this if you are fine with that.
+                </Text>
               </View>
-              {message || error ? <HelperText type="info" visible>{message ?? error}</HelperText> : null}
+
+              {pasteVisible ? (
+                <Panel>
+                  <TextInput
+                    mode="outlined"
+                    label="Receipt text"
+                    accessibilityLabel="Receipt text"
+                    value={text}
+                    onChangeText={setText}
+                    multiline
+                    numberOfLines={6}
+                    style={{ minHeight: 120 }}
+                  />
+                  <View style={{ marginTop: space.md }}>
+                    <ChunkyButton label={busy ? "Adding…" : "Add receipt"} icon="receipt-text-plus-outline" onPress={add} disabled={busy || !text.trim()} />
+                  </View>
+                </Panel>
+              ) : (
+                <ChunkyButton label="Paste receipt text" icon="text-box-plus-outline" outline onPress={() => setPasteOpen(true)} />
+              )}
+
+              {message || error ? (
+                <Panel tone={message ? "accent" : "bad"} padding={space.md} style={{ marginTop: space.md, marginBottom: 0 }}>
+                  <View accessibilityRole="alert" style={{ flexDirection: "row", gap: space.sm }}>
+                    <MaterialCommunityIcons name={message ? "information-outline" : "alert-circle-outline"} size={20} color={message ? tones.accent.fg : tones.bad.fg} />
+                    <Text variant="bodyMedium" style={{ flex: 1 }}>{message ?? error}</Text>
+                  </View>
+                </Panel>
+              ) : null}
+
+              {loading ? (
+                <View style={{ marginTop: space.lg }}>
+                  <SkeletonCards count={3} label="Loading receipts" />
+                </View>
+              ) : null}
+              {data && data.length > 0 ? <SectionLabel>{`${data.length} receipt${data.length === 1 ? "" : "s"}`}</SectionLabel> : <View style={{ height: space.md }} />}
             </View>
           }
-          ListEmptyComponent={<Body muted>No receipts yet.</Body>}
+          ListEmptyComponent={
+            loading ? null : (
+              <EmptyState
+                title="No receipts yet"
+                body="Scan your first receipt and Financer learns what you buy and where it is cheapest."
+                actionLabel="Scan a receipt"
+                actionIcon="camera-outline"
+                onAction={() => void scan("camera")}
+              />
+            )
+          }
           renderItem={({ item }) => (
-            <Card>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ flex: 1 }}>
-                  <Body bold>{item.merchant ?? "Receipt"}</Body>
-                  <Text variant="bodySmall" style={{ color: c.muted }}>
+            <Panel padding={space.md} style={{ marginBottom: space.sm }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+                <Avatar tint={item.chain ? chainTint(item.chain) : mealTint(item.merchant ?? "Receipt")} label={initials(item.merchant ?? "Receipt")} size={44} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <RNText style={{ color: p.text, fontSize: 16, fontWeight: "700" }} numberOfLines={1}>
+                    {item.merchant ?? "Receipt"}
+                  </RNText>
+                  <RNText style={{ color: p.muted, fontSize: 13, fontVariant: ["tabular-nums"] }}>
                     {item.date ? formatDate(item.date) : "no date"} · {item.items.length} items
-                    {item.total_cents != null ? ` · ${formatCents(item.total_cents)}` : ""}
-                    {item.reconciles ? "" : " · check"}
-                  </Text>
+                  </RNText>
+                  {!item.reconciles ? <Badge tone="bad" icon="alert-outline" label="Check: items differ from total" /> : null}
                 </View>
-                <IconButton icon="delete-outline" onPress={() => remove(item)} accessibilityLabel="Delete receipt" />
+                {item.total_cents != null ? <Money text={formatCents(item.total_cents)} size="lg" /> : null}
+                <RoundIcon icon="delete-outline" onPress={() => remove(item)} label="Delete receipt" />
               </View>
-            </Card>
+            </Panel>
           )}
         />
       )}
     </Screen>
+  );
+}
+
+/** A big button for one way to add a receipt: icon, name and a hint. */
+function CaptureTile({
+  icon,
+  label,
+  hint,
+  onPress,
+  disabled,
+  primary,
+  accessibilityLabel,
+}: {
+  icon: string;
+  label: string;
+  hint: string;
+  onPress: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+  accessibilityLabel: string;
+}) {
+  const p = usePalette();
+  const fg = primary ? p.onAccent : p.accent;
+  return (
+    <Tap
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityLabel={accessibilityLabel}
+      style={{
+        flex: 1,
+        minHeight: 92,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+        paddingHorizontal: space.sm,
+        borderRadius: 20,
+        backgroundColor: primary ? p.accent : p.surface,
+        borderWidth: 2,
+        borderColor: primary ? p.accent : p.border,
+        borderBottomWidth: 5,
+        borderBottomColor: primary ? p.accentEdge : p.border,
+      }}
+    >
+      <MaterialCommunityIcons name={icon as never} size={28} color={fg} />
+      <RNText style={{ color: primary ? p.onAccent : p.text, fontSize: 14, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase" }}>{label}</RNText>
+      <RNText style={{ color: primary ? p.onAccent : p.muted, fontSize: 11 }} numberOfLines={1}>
+        {hint}
+      </RNText>
+    </Tap>
   );
 }

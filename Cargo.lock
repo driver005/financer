@@ -1636,6 +1636,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "financer-config"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
 name = "financer-core"
 version = "0.1.0"
 dependencies = [
@@ -1768,6 +1777,8 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "financer-api",
+ "financer-config",
+ "financer-core",
  "financer-fints",
  "financer-llm",
  "financer-prices",
