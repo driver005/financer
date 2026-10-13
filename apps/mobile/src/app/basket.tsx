@@ -121,7 +121,7 @@ export default function BasketScreen() {
               </View>
             }
             ListEmptyComponent={
-              loading ? null : (
+              loading ? undefined : (
                 <EmptyState
                   title="Nothing on your list yet"
                   body="Search above for what you buy most. Financer compares these items across Aldi, Lidl, Kaufland and Rewe."

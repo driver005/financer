@@ -111,7 +111,7 @@ export default function Prices() {
             </View>
           }
           ListEmptyComponent={
-            loading ? null : empty ? (
+            loading ? undefined : empty ? (
               <EmptyState
                 mood="worried"
                 title="No prices yet"

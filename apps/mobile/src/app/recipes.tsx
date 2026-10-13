@@ -120,7 +120,7 @@ export default function Recipes() {
             </View>
           }
           ListEmptyComponent={
-            busy ? null : (
+            busy ? undefined : (
               <EmptyState
                 mood="worried"
                 title="No recipe fits these filters"

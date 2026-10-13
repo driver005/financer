@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useCallback, useRef, type ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, View, type ScrollViewInstance } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
 
 import { useApi } from "@/api/config";
@@ -36,7 +36,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const { data: settings, setData: setSettings, error } = useScreenData((a) => a.settings());
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const tops = useRef<Partial<Record<SectionId, number>>>({});
 
   const save: SaveSetting = useCallback(

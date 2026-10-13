@@ -1,6 +1,6 @@
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ScrollView, Text as RNText, View, type LayoutChangeEvent } from "react-native";
+import { ScrollView, Text as RNText, View, type LayoutChangeEvent, type ScrollViewInstance } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
 
 import type { MealShoppingList, RecipeMatch } from "@/api/client";
@@ -52,7 +52,7 @@ export default function MealPlanScreen() {
   const [tickState, setTickState] = useState<{ week: string; ids: string[] }>({ week, ids: [] });
   // answers of older requests (another week, an earlier save) are dropped
   const latest = useRef(0);
-  const scroller = useRef<ScrollView>(null);
+  const scroller = useRef<ScrollViewInstance>(null);
   const cardY = useRef<Record<string, number>>({});
   const reduceMotion = useReducedMotion();
 

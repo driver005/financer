@@ -186,7 +186,7 @@ export default function Receipts() {
             </View>
           }
           ListEmptyComponent={
-            loading ? null : (
+            loading ? undefined : (
               <EmptyState
                 title="No receipts yet"
                 body="Scan your first receipt and Financer learns what you buy and where it is cheapest."
