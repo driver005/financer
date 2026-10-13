@@ -67,6 +67,7 @@ export default function RootLayout() {
           <Tabs.Screen name="mealplan" options={{ href: null, title: "Meal plan" }} />
           <Tabs.Screen name="basket"options={{ href: null, title: "Usual items" }} />
           <Tabs.Screen name="receipts" options={{ href: null, title: "Receipts" }} />
+          <Tabs.Screen name="receipt-sources" options={{ href: null, title: "Receipt sources" }} />
           <Tabs.Screen name="sync" options={{ href: null, title: "Sync with Sparkasse" }} />
           <Tabs.Screen name="rules" options={{ href: null, title: "Rules" }} />
           <Tabs.Screen name="subscriptions" options={{ href: null, title: "Subscriptions" }} />

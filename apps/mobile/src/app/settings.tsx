@@ -107,6 +107,7 @@ export default function SettingsScreen() {
               {settings ? <HabitsCard settings={settings} onSave={save} /> : null}
               <SettingsRow icon="format-list-checks" title="Usual items" subtitle="What you buy most often" onPress={() => router.push("/basket")} />
               <SettingsRow icon="receipt-text-outline" title="Receipts" subtitle="Add and read receipts" onPress={() => router.push("/receipts")} />
+              <SettingsRow icon="email-sync-outline" title="Receipt sources" subtitle="Mailbox, Lidl Plus and a watched folder" onPress={() => router.push("/receipt-sources")} />
               <SettingsRow icon="silverware-fork-knife" title="Meal plan" subtitle="Plan the week and shop for it" onPress={() => router.push("/mealplan")} />
               {settings ? <AiCard settings={settings} onSave={save} /> : null}
               {settings ? (
