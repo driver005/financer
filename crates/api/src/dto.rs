@@ -237,6 +237,11 @@ pub struct ReceiptDto {
     pub total_cents: Option<Money>,
     /// Items add up to the printed total; if false, ask the user to check the receipt.
     pub reconciles: bool,
+    /// Where the receipt came from: `manual`, `email`, `lidl_plus` or `folder`.
+    pub source: String,
+    /// The bank transaction this receipt was matched to (same chain, amount within a cent, date
+    /// within three days, and no other candidate), when there is one.
+    pub transaction_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

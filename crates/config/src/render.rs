@@ -114,8 +114,101 @@ impl Renderer {
         );
         Self::accounts(&mut out, c);
         Self::stores(&mut out, c);
-        let _ = writeln!(out, "\n[receipts]\n# reserved");
+        Self::receipts(&mut out, c);
         out
+    }
+
+    /// `user@example.org` -> `u***@example.org`.
+    fn mask_login(login: &str) -> String {
+        match login.split_once('@') {
+            Some((user, domain)) => {
+                format!("{}***@{domain}", user.chars().next().unwrap_or('*'))
+            }
+            None => "<hidden>".to_string(),
+        }
+    }
+
+    fn receipts(out: &mut String, c: &Config) {
+        let r = &c.receipts.value;
+        let src = &c.receipts.source;
+        let _ = writeln!(out, "\n[receipts.email]   # {src}");
+        match &r.email {
+            None => {
+                let _ = writeln!(out, "# not configured");
+            }
+            Some(e) => {
+                let _ = writeln!(out, "enabled = {}", e.enabled);
+                let _ = writeln!(out, "host = {}", Self::q(&e.host));
+                let _ = writeln!(out, "port = {}", e.port);
+                let _ = writeln!(
+                    out,
+                    "username = {}",
+                    Self::q(&Self::mask_login(&e.username))
+                );
+                let _ = writeln!(
+                    out,
+                    "password_env = {}   # the password itself is only read from that variable",
+                    Self::q(&e.password_env)
+                );
+                let _ = writeln!(out, "folder = {}", Self::q(&e.folder));
+                let _ = writeln!(out, "poll_minutes = {}", e.poll_minutes);
+                let _ = writeln!(out, "mark_seen = {}", e.mark_seen);
+                let _ = writeln!(out, "max_age_days = {}", e.max_age_days);
+                let senders = if e.senders.is_empty() {
+                    "(built-in German retailers)".to_string()
+                } else {
+                    e.senders
+                        .iter()
+                        .map(|s| format!("{}: {}", s.retailer, s.from.join(", ")))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                };
+                let _ = writeln!(out, "# senders: {senders}");
+            }
+        }
+        let l = &r.lidl_plus;
+        let _ = writeln!(out, "\n[receipts.lidl_plus]   # {src}");
+        let _ = writeln!(out, "enabled = {}", l.enabled);
+        let _ = writeln!(out, "country = {}", Self::q(&l.country));
+        let _ = writeln!(out, "language = {}", Self::q(&l.language));
+        let _ = writeln!(out, "poll_hours = {}", l.poll_hours);
+        let overridden = [
+            ("client_id", &l.client_id),
+            ("authorize_url", &l.authorize_url),
+            ("token_url", &l.token_url),
+            ("tickets_url", &l.tickets_url),
+            ("redirect_uri", &l.redirect_uri),
+            ("scope", &l.scope),
+        ];
+        for (name, v) in overridden {
+            if let Some(v) = v {
+                let _ = writeln!(
+                    out,
+                    "{name} = {}   # overrides the built-in value",
+                    Self::q(v)
+                );
+            }
+        }
+        let _ = writeln!(
+            out,
+            "# the refresh token is kept encrypted in the database, never in this file"
+        );
+        let _ = writeln!(out, "\n[receipts.folder]   # {src}");
+        match &r.folder {
+            None => {
+                let _ = writeln!(out, "# not configured");
+            }
+            Some(f) => {
+                let _ = writeln!(out, "enabled = {}", f.enabled);
+                let _ = writeln!(out, "path = {}", Self::q(&f.path.to_string_lossy()));
+                let _ = writeln!(out, "poll_seconds = {}", f.poll_seconds);
+                let _ = writeln!(
+                    out,
+                    "on_done = {:?}",
+                    format!("{:?}", f.on_done).to_lowercase()
+                );
+            }
+        }
     }
 
     fn accounts(out: &mut String, c: &Config) {

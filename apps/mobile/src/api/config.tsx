@@ -78,6 +78,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
           setEmbeddedError(null);
           // refresh prices once now (the app is open) and ask the OS for background windows
           void backend.refreshPrices().catch(() => {});
+          void backend.syncReceiptsNow().catch(() => {}); // does nothing unless Lidl Plus is switched on
           void enableBackgroundRefresh().catch(() => {});
         }
       })

@@ -17,6 +17,7 @@ financer-core = { path = "../core" }
 financer-fints = { path = "../fints" }
 financer-llm = { path = "../llm" }
 financer-prices = { path = "../prices" }
+financer-receipt-sources = { path = "../receipt-sources" }
 financer-store = { path = "../store" }
 serde_json.workspace = true
 time.workspace = true

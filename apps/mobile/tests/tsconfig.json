@@ -11,5 +11,5 @@
     "types": ["node"],
     "lib": ["es2022", "dom"]
   },
-  "include": ["../src/api/transport.ts", "../src/api/client.ts", "../src/format.ts", "../src/ring.ts", "../src/charts.ts", "../src/categoryIcons.ts", "../src/a11y.ts", "../src/colors.ts", "../src/tokens.ts", "../src/native/base64.ts", "../src/rules.ts", "./*.test.ts"]
+  "include": ["../src/api/transport.ts", "../src/api/client.ts", "../src/format.ts", "../src/ring.ts", "../src/charts.ts", "../src/categoryIcons.ts", "../src/a11y.ts", "../src/colors.ts", "../src/tokens.ts", "../src/native/base64.ts", "../src/rules.ts", "../src/receiptSources.ts", "./*.test.ts"]
 }

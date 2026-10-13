@@ -18,15 +18,32 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "app.financer.mobile"
+      "package": "app.financer.mobile",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "com.lidlplus.app",
+              "host": "callback"
+            }
+          ]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "scheme": "financer",
     "plugins": [
+      "./plugins/withAndroidRelease",
       "expo-router",
       "expo-secure-store",
+      "expo-web-browser",
       [
         "expo-local-authentication",
         {

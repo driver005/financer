@@ -1641,6 +1641,160 @@
         ]
       }
     },
+    "/v1/receipts/lidl": {
+      "delete": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Disconnect Lidl Plus: the stored token is deleted. Receipts already imported stay.",
+        "operationId": "lidl_disconnect",
+        "responses": {
+          "204": {
+            "description": "Disconnected"
+          },
+          "409": {
+            "description": "Lidl Plus is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/lidl/finish": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Finish the sign-in with the address Lidl's page ended on. Only the refresh token is stored,\nencrypted. The first receipts are fetched right away.",
+        "operationId": "lidl_finish",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LidlFinishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LidlStatusDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown or expired sign-in, or an address that is not the callback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Lidl Plus is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Lidl did not accept the code or could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/lidl/start": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Start a Lidl Plus sign-in. Returns the address of Lidl's own sign-in page; nothing is sent to\nLidl by this call. Experimental and unofficial: see docs/RECEIPT_SOURCES.md.",
+        "operationId": "lidl_start",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LidlStartDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Lidl Plus is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/lidl/status": {
+      "get": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Whether Lidl Plus is connected, when it last synced and how many receipts came from it.",
+        "operationId": "lidl_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LidlStatusDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/receipts/scan": {
       "post": {
         "tags": [
@@ -1690,6 +1844,95 @@
           },
           "503": {
             "description": "No API key configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources": {
+      "get": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "The receipt sources: the mailbox, the Lidl Plus account and the watched folder, with state,\nlast run, receipts imported and the last error. Never contains a password or token.",
+        "operationId": "list_sources",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceiptSourceDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sync": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Run the enabled receipt sources now (or just one). New receipts are linked to bank\ntransactions where that is unambiguous. `409` while another sync is running.",
+        "operationId": "sync_now",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ReceiptSyncRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptSyncDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A sync is already running",
             "content": {
               "application/json": {
                 "schema": {
@@ -4141,6 +4384,100 @@
           }
         }
       },
+      "LidlFinishRequest": {
+        "type": "object",
+        "required": [
+          "state",
+          "callback_url"
+        ],
+        "properties": {
+          "callback_url": {
+            "type": "string",
+            "description": "The address the sign-in ended on, `com.lidlplus.app://callback?code=...`."
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "LidlStartDto": {
+        "type": "object",
+        "required": [
+          "authorization_url",
+          "state",
+          "callback_scheme",
+          "redirect_uri",
+          "expires_in_seconds"
+        ],
+        "properties": {
+          "authorization_url": {
+            "type": "string",
+            "description": "Open this address in a browser: it is Lidl's own sign-in page."
+          },
+          "callback_scheme": {
+            "type": "string",
+            "description": "The address scheme Lidl's page redirects to after sign-in (`com.lidlplus.app`); an app can\nwatch for it, a person can copy the address from the browser."
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "redirect_uri": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "description": "Send this back with the final address to `POST /v1/receipts/lidl/finish`."
+          }
+        }
+      },
+      "LidlStatusDto": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "state",
+          "receipts"
+        ],
+        "properties": {
+          "connected_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds of the sign-in."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Lidl Plus is switched on in the server configuration."
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_sync": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds of the last receipt sync."
+          },
+          "receipts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Receipts imported from Lidl Plus.",
+            "minimum": 0
+          },
+          "state": {
+            "type": "string",
+            "description": "`disabled`, `never`, `connected` or `needs_signin`."
+          }
+        }
+      },
       "MealBudgetDto": {
         "type": "object",
         "required": [
@@ -4697,7 +5034,8 @@
         "required": [
           "duplicate",
           "items",
-          "reconciles"
+          "reconciles",
+          "source"
         ],
         "properties": {
           "chain": {
@@ -4741,12 +5079,24 @@
             "type": "boolean",
             "description": "Items add up to the printed total; if false, ask the user to check the receipt."
           },
+          "source": {
+            "type": "string",
+            "description": "Where the receipt came from: `manual`, `email`, `lidl_plus` or `folder`."
+          },
           "total_cents": {
             "type": [
               "integer",
               "null"
             ],
             "format": "int64"
+          },
+          "transaction_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The bank transaction this receipt was matched to (same chain, amount within a cent, date\nwithin three days, and no other candidate), when there is one."
           }
         }
       },
@@ -4793,6 +5143,130 @@
           "mime_type": {
             "type": "string",
             "description": "`image/jpeg`, `image/png`, `image/webp` or `application/pdf`."
+          }
+        }
+      },
+      "ReceiptSourceDto": {
+        "type": "object",
+        "description": "One receipt source and how it is doing. Contains no secrets.",
+        "required": [
+          "source",
+          "configured",
+          "enabled",
+          "state",
+          "last_imported",
+          "imported_total",
+          "notes"
+        ],
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "description": "Has a setting in the server configuration (Lidl Plus always counts)."
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where it reads from (mail server and folder, folder path, account region); never a login."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "imported_total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Receipts from this source in the database.",
+            "minimum": 0
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_imported": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Receipts the last run stored.",
+            "minimum": 0
+          },
+          "last_run": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds."
+          },
+          "last_success": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "next_run": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Remarks from the last run, e.g. why a mail or file was skipped."
+          },
+          "source": {
+            "type": "string",
+            "description": "`email`, `lidl_plus` or `folder`."
+          },
+          "state": {
+            "type": "string",
+            "description": "`disabled`, `waiting`, `running`, `ok`, `error`, `not_connected` or `needs_signin`."
+          }
+        }
+      },
+      "ReceiptSyncDto": {
+        "type": "object",
+        "required": [
+          "sources",
+          "imported",
+          "linked"
+        ],
+        "properties": {
+          "imported": {
+            "type": "integer",
+            "format": "int32",
+            "description": "New receipts stored by this run.",
+            "minimum": 0
+          },
+          "linked": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Receipts newly linked to a bank transaction by this run.",
+            "minimum": 0
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceiptSourceDto"
+            }
+          }
+        }
+      },
+      "ReceiptSyncRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only this source (`email`, `lidl_plus`, `folder`); all enabled ones when absent."
           }
         }
       },

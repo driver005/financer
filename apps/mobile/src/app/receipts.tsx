@@ -1,5 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { FlatList, Text as RNText, View } from "react-native";
 
@@ -18,6 +19,7 @@ import { useScreenData } from "@/hooks";
 export default function Receipts() {
   const { api, loaded } = useApi();
   const p = usePalette();
+  const router = useRouter();
   const tones = useTones();
   const { data, error, reload } = useScreenData((a) => a.receipts());
   const [text, setText] = useState("");
@@ -167,6 +169,10 @@ export default function Receipts() {
               ) : (
                 <ChunkyButton label="Paste receipt text" icon="text-box-plus-outline" outline onPress={() => setPasteOpen(true)} />
               )}
+
+              <View style={{ marginTop: space.sm }}>
+                <ChunkyButton label="Receipt sources" icon="email-sync-outline" outline onPress={() => router.push("/receipt-sources")} accessibilityLabel="Open receipt sources: mailbox, Lidl Plus and a watched folder" />
+              </View>
 
               {message || error ? (
                 <Panel tone={message ? "accent" : "bad"} padding={space.md} style={{ marginTop: space.md, marginBottom: 0 }}>

@@ -22,6 +22,10 @@ export type CatalogItem = components["schemas"]["CatalogItemDto"];
 export type Basket = components["schemas"]["BasketDto"];
 export type BasketItem = components["schemas"]["BasketItemDto"];
 export type Receipt = components["schemas"]["ReceiptDto"];
+export type ReceiptSource = components["schemas"]["ReceiptSourceDto"];
+export type ReceiptSync = components["schemas"]["ReceiptSyncDto"];
+export type LidlStart = components["schemas"]["LidlStartDto"];
+export type LidlStatus = components["schemas"]["LidlStatusDto"];
 export type Affordability = components["schemas"]["AffordabilityDto"];
 export type RecipeMatch = components["schemas"]["RecipeMatchDto"];
 export type Idea = components["schemas"]["IdeaDto"];
@@ -204,6 +208,34 @@ export class Api {
 
   deleteReceipt(id: number) {
     return this.request<void>(`/v1/receipts/${id}`, { method: "DELETE" });
+  }
+
+  /** The automatic receipt sources (mailbox, Lidl Plus, watched folder) and how each is doing. */
+  receiptSources() {
+    return this.request<ReceiptSource[]>("/v1/receipts/sources");
+  }
+
+  /** Run the enabled sources now, or just one. */
+  syncReceipts(source?: string) {
+    return source ? this.json<ReceiptSync>("/v1/receipts/sync", "POST", { source }) : this.request<ReceiptSync>("/v1/receipts/sync", { method: "POST" });
+  }
+
+  /** Begin the Lidl Plus sign-in; the returned address is Lidl's own page. */
+  lidlStart() {
+    return this.request<LidlStart>("/v1/receipts/lidl/start", { method: "POST" });
+  }
+
+  /** Finish the sign-in with the address the page redirected to. */
+  lidlFinish(state: string, callbackUrl: string) {
+    return this.json<LidlStatus>("/v1/receipts/lidl/finish", "POST", { state, callback_url: callbackUrl });
+  }
+
+  lidlStatus() {
+    return this.request<LidlStatus>("/v1/receipts/lidl/status");
+  }
+
+  lidlDisconnect() {
+    return this.request<void>("/v1/receipts/lidl", { method: "DELETE" });
   }
 
   affordability(budgetCents?: number, daysPerBasket?: number) {
