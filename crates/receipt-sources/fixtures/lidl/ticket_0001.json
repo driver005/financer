@@ -1,0 +1,48 @@
+{
+  "id": "FIXTURE-TICKET-0001",
+  "date": "2026-03-02T18:42:07+01:00",
+  "totalAmount": "5,65",
+  "currency": { "code": "EUR", "symbol": "€" },
+  "store": { "id": "DE0001", "name": "Köln-Ehrenfeld", "address": "Musterweg 5", "postalCode": "50823", "locality": "Köln" },
+  "itemsLine": [
+    {
+      "currentUnitPrice": "2,19",
+      "quantity": "1",
+      "isWeight": false,
+      "originalAmount": "2,19",
+      "name": "Vegane Frikadellen",
+      "taxGroup": "1",
+      "taxGroupName": "A",
+      "codeInput": "4023456245134",
+      "discounts": [ { "description": "5€ Coupon", "amount": "0,21" } ],
+      "deposit": null,
+      "giftSerialNumber": null
+    },
+    {
+      "currentUnitPrice": "1,09",
+      "quantity": "2",
+      "isWeight": false,
+      "originalAmount": "2,18",
+      "name": "Vollmilch 3,5%",
+      "taxGroup": "1",
+      "taxGroupName": "A",
+      "codeInput": "4023456245141",
+      "discounts": [],
+      "deposit": null,
+      "giftSerialNumber": null
+    },
+    {
+      "currentUnitPrice": "1,84",
+      "quantity": "0,812",
+      "isWeight": true,
+      "originalAmount": "1,49",
+      "name": "Bio Bananen",
+      "taxGroup": "1",
+      "taxGroupName": "A",
+      "codeInput": "2000000012345",
+      "discounts": [],
+      "deposit": null,
+      "giftSerialNumber": null
+    }
+  ]
+}

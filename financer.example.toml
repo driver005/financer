@@ -13,7 +13,7 @@
 # If you do put a secret in this file, keep the file private (chmod 600); the server warns when
 # other users can read it.
 #
-# Unknown keys are an error (to catch typos), except under [receipts].
+# Unknown keys are an error (to catch typos), everywhere.
 #
 # Check your file without starting the server:
 #   financer-server --check-config      validate, exit 0 or 1
@@ -108,5 +108,42 @@
 #chain = "Bio Company"
 #match = "BIO COMPANY"
 
-# Reserved for the receipts feature. Anything written here is accepted and ignored for now.
-[receipts]
+# Automatic receipt import, so "what I normally buy" and the spending per store have item-level
+# data. Three sources, each off until you configure it; see docs/RECEIPT_SOURCES.md. No password
+# or token is ever written here: the mailbox password is read from the environment variable named
+# by password_env, and the Lidl Plus sign-in is kept encrypted in the database.
+#
+# 1. Email: REWE mails the eBon as a PDF to your account address; other shops' mails work too.
+#    Over IMAP with TLS (port 993). Only mails from the listed senders are downloaded.
+#[receipts.email]
+#host = "imap.example.org"
+#username = "you@example.org"
+#password_env = "FINANCER_IMAP_PASSWORD"   # the NAME of the variable, not the password
+#port = 993
+#folder = "INBOX"
+#poll_minutes = 30
+#mark_seen = false          # true marks processed receipt mails as read (needs write access)
+#max_age_days = 90          # on the first run, only look at mails this new
+## Which senders are receipt mails. Leave out to use the built-in German retailers
+## (rewe.de, lidl.de, kaufland.de, edeka.de, dm.de, rossmann.de, penny.de, netto-online.de).
+## `from` is a domain (matches its subdomains too) or an exact address. `retailer = "auto"` reads
+## the shop from the receipt itself, for mails you forward to yourself.
+#[[receipts.email.senders]]
+#retailer = "rewe"
+#from = ["rewe.de", "ebon@mailing.rewe.de"]
+#
+# 2. Lidl Plus (experimental, unofficial, off by default): you sign in on Lidl's own page from the
+#    app (Settings > Receipt sources); only a refresh token is kept, encrypted. It may stop working
+#    whenever Lidl changes something. Set FINANCER_SECRET_KEY (16+ characters) to encrypt the token
+#    with a key of its own; without it a key derived from the API token is used.
+#[receipts.lidl_plus]
+#enabled = false
+#country = "DE"
+#language = "de"
+#poll_hours = 12
+#
+# 3. Watched folder: PDF, text, HTML or .eml receipts dropped into a folder on the server.
+#[receipts.folder]
+#path = "/data/receipts"    # relative paths are relative to this file
+#poll_seconds = 60
+#on_done = "keep"           # "keep" remembers files by content; "move" files them under done/

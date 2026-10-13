@@ -37,7 +37,7 @@ database URL is passed on as written (a relative SQLite path is relative to the 
 
 - Any **string** value may refer to the environment: `${NAME}`. It is an error if `NAME` is not set
   or blank, unless the reference has a default: `${NAME:-fallback}`. Write `$$` for a literal `$`.
-  References work in every string of the file (not in numbers, and not inside `[receipts]`).
+  References work in every string of the file (not in numbers).
 - Prefer references for secrets, so the file itself holds none. If the file holds a secret as plain
   text (`api_token`, an API key, `fints_product_id`), the server logs a warning, and on Linux and
   macOS an additional warning when other users can read the file (`chmod 600 financer.toml`).
@@ -62,7 +62,7 @@ warning (it may only be set for the running service).
 
 ## Reference
 
-Unknown keys are an error that names the key (to catch typos), everywhere except under `[receipts]`.
+Unknown keys are an error that names the key (to catch typos), everywhere, `[receipts]` included.
 
 | Key | Environment variable | Default | |
 |---|---|---|---|
@@ -80,7 +80,7 @@ Unknown keys are an error that names the key (to catch typos), everywhere except
 | `[bank] fints_product_id` | `FINANCER_FINTS_PRODUCT_ID` | none | enables live bank sync, see `docs/FINTS.md` |
 | `[[bank.accounts]]` | | none | connections to sync, below |
 | `[[stores]]` | | none | your own supermarket spellings, below |
-| `[receipts]` | | | reserved; accepted and ignored |
+| `[receipts.email]`, `[receipts.lidl_plus]`, `[receipts.folder]` | `FINANCER_RECEIPTS_*` | all off | automatic receipt import, below |
 
 `FINANCER_CONFIG` (path of the file) is the only variable without a key. `RUST_LOG` is unchanged.
 
@@ -120,6 +120,43 @@ Bank texts are compared without upper/lower case, accents folded the way the res
 purpose second. Your entries are tried before the built-in table, so they can also correct a
 built-in guess. A `chain` that is not built in becomes a chain of its own on the Stores screen. The
 name `other` is reserved. Each text needs at least 3 letters. See `docs/STORES.md`.
+
+### `[receipts]`
+
+Automatic receipt import; the full explanation, security notes and what is and is not verified are
+in [RECEIPT_SOURCES.md](RECEIPT_SOURCES.md). Every source is off until it is configured.
+
+```toml
+[receipts.email]                  # IMAP over TLS
+host = "imap.example.org"
+username = "you@example.org"
+password_env = "FINANCER_IMAP_PASSWORD"   # the NAME of the variable that holds the password
+# port = 993, folder = "INBOX", poll_minutes = 30, mark_seen = false, max_age_days = 90
+# [[receipts.email.senders]]      # optional; the default is the German retailers
+# retailer = "rewe"
+# from = ["rewe.de"]
+
+[receipts.lidl_plus]              # experimental, unofficial
+enabled = true                    # default false; country = "DE", language = "de", poll_hours = 12
+
+[receipts.folder]
+path = "/data/receipts"           # relative paths are relative to the file; poll_seconds = 60
+# on_done = "keep"                # or "move" (to done/)
+```
+
+Environment variables (they win over the file, value by value; a blank one counts as not set):
+`FINANCER_RECEIPTS_IMAP_HOST` (also creates the section), `_USERNAME`, `_PORT`, `_FOLDER`,
+`_POLL_MINUTES`, `_MARK_SEEN`, `_MAX_AGE_DAYS`, `_ENABLED`, `_PASSWORD_ENV`, `_SENDERS`
+(`rewe=rewe.de,rewe-group.com;lidl=lidl.de`); `FINANCER_RECEIPTS_LIDL_PLUS` (`1` or `0`),
+`FINANCER_RECEIPTS_LIDL_COUNTRY`, `_LIDL_LANGUAGE`, `_LIDL_POLL_HOURS`;
+`FINANCER_RECEIPTS_FOLDER` (also creates the section), `_FOLDER_POLL_SECONDS`, `_FOLDER_ON_DONE`.
+The mailbox password itself is only ever read from the variable named by `password_env`
+(default `FINANCER_IMAP_PASSWORD`). `FINANCER_SECRET_KEY` (16+ characters) encrypts the stored
+Lidl Plus token; without it the API token is used.
+
+`--print-config` shows the section with the mail login masked (`j***@example.org`) and only the
+*name* of the password variable. `--check-config` fails on an empty host, username or folder path and
+warns when the password variable is not set or the folder does not exist.
 
 ## Docker
 

@@ -563,6 +563,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/receipts/lidl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Disconnect Lidl Plus: the stored token is deleted. Receipts already imported stay. */
+        delete: operations["lidl_disconnect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/lidl/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish the sign-in with the address Lidl's page ended on. Only the refresh token is stored,
+         *     encrypted. The first receipts are fetched right away.
+         */
+        post: operations["lidl_finish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/lidl/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a Lidl Plus sign-in. Returns the address of Lidl's own sign-in page; nothing is sent to
+         *     Lidl by this call. Experimental and unofficial: see docs/RECEIPT_SOURCES.md.
+         */
+        post: operations["lidl_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/lidl/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether Lidl Plus is connected, when it last synced and how many receipts came from it. */
+        get: operations["lidl_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/receipts/scan": {
         parameters: {
             query?: never;
@@ -578,6 +652,46 @@ export interface paths {
          *     and the transcript is parsed like pasted text. The photo is sent to that provider.
          */
         post: operations["scan_receipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The receipt sources: the mailbox, the Lidl Plus account and the watched folder, with state,
+         *     last run, receipts imported and the last error. Never contains a password or token.
+         */
+        get: operations["list_sources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the enabled receipt sources now (or just one). New receipts are linked to bank
+         *     transactions where that is unambiguous. `409` while another sync is running.
+         */
+        post: operations["sync_now"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1445,6 +1559,47 @@ export interface components {
             transactions_added: number;
             transactions_known: number;
         };
+        LidlFinishRequest: {
+            /** @description The address the sign-in ended on, `com.lidlplus.app://callback?code=...`. */
+            callback_url: string;
+            state: string;
+        };
+        LidlStartDto: {
+            /** @description Open this address in a browser: it is Lidl's own sign-in page. */
+            authorization_url: string;
+            /**
+             * @description The address scheme Lidl's page redirects to after sign-in (`com.lidlplus.app`); an app can
+             *     watch for it, a person can copy the address from the browser.
+             */
+            callback_scheme: string;
+            /** Format: int64 */
+            expires_in_seconds: number;
+            redirect_uri: string;
+            /** @description Send this back with the final address to `POST /v1/receipts/lidl/finish`. */
+            state: string;
+        };
+        LidlStatusDto: {
+            /**
+             * Format: int64
+             * @description Unix seconds of the sign-in.
+             */
+            connected_at?: number | null;
+            /** @description Lidl Plus is switched on in the server configuration. */
+            enabled: boolean;
+            last_error?: string | null;
+            /**
+             * Format: int64
+             * @description Unix seconds of the last receipt sync.
+             */
+            last_sync?: number | null;
+            /**
+             * Format: int64
+             * @description Receipts imported from Lidl Plus.
+             */
+            receipts: number;
+            /** @description `disabled`, `never`, `connected` or `needs_signin`. */
+            state: string;
+        };
         MealBudgetDto: {
             /**
              * Format: int64
@@ -1684,8 +1839,16 @@ export interface components {
             merchant?: string | null;
             /** @description Items add up to the printed total; if false, ask the user to check the receipt. */
             reconciles: boolean;
+            /** @description Where the receipt came from: `manual`, `email`, `lidl_plus` or `folder`. */
+            source: string;
             /** Format: int64 */
             total_cents?: number | null;
+            /**
+             * Format: int64
+             * @description The bank transaction this receipt was matched to (same chain, amount within a cent, date
+             *     within three days, and no other candidate), when there is one.
+             */
+            transaction_id?: number | null;
         };
         ReceiptItemDto: {
             /** @description Catalog key when recognised. */
@@ -1701,6 +1864,57 @@ export interface components {
             image_base64: string;
             /** @description `image/jpeg`, `image/png`, `image/webp` or `application/pdf`. */
             mime_type: string;
+        };
+        /** @description One receipt source and how it is doing. Contains no secrets. */
+        ReceiptSourceDto: {
+            /** @description Has a setting in the server configuration (Lidl Plus always counts). */
+            configured: boolean;
+            /** @description Where it reads from (mail server and folder, folder path, account region); never a login. */
+            detail?: string | null;
+            enabled: boolean;
+            /**
+             * Format: int64
+             * @description Receipts from this source in the database.
+             */
+            imported_total: number;
+            last_error?: string | null;
+            /**
+             * Format: int32
+             * @description Receipts the last run stored.
+             */
+            last_imported: number;
+            /**
+             * Format: int64
+             * @description Unix seconds.
+             */
+            last_run?: number | null;
+            /** Format: int64 */
+            last_success?: number | null;
+            /** Format: int64 */
+            next_run?: number | null;
+            /** @description Remarks from the last run, e.g. why a mail or file was skipped. */
+            notes: string[];
+            /** @description `email`, `lidl_plus` or `folder`. */
+            source: string;
+            /** @description `disabled`, `waiting`, `running`, `ok`, `error`, `not_connected` or `needs_signin`. */
+            state: string;
+        };
+        ReceiptSyncDto: {
+            /**
+             * Format: int32
+             * @description New receipts stored by this run.
+             */
+            imported: number;
+            /**
+             * Format: int32
+             * @description Receipts newly linked to a bank transaction by this run.
+             */
+            linked: number;
+            sources: components["schemas"]["ReceiptSourceDto"][];
+        };
+        ReceiptSyncRequest: {
+            /** @description Only this source (`email`, `lidl_plus`, `folder`); all enabled ones when absent. */
+            source?: string | null;
         };
         ReceiptUpload: {
             /** @description Text recognised from the receipt photo. */
@@ -3381,6 +3595,130 @@ export interface operations {
             };
         };
     };
+    lidl_disconnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Lidl Plus is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    lidl_finish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidlFinishRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidlStatusDto"];
+                };
+            };
+            /** @description Unknown or expired sign-in, or an address that is not the callback */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Lidl Plus is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Lidl did not accept the code or could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    lidl_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidlStartDto"];
+                };
+            };
+            /** @description Lidl Plus is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    lidl_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidlStatusDto"];
+                };
+            };
+        };
+    };
     scan_receipt: {
         parameters: {
             query?: never;
@@ -3422,6 +3760,66 @@ export interface operations {
             };
             /** @description No API key configured */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_sources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptSourceDto"][];
+                };
+            };
+        };
+    };
+    sync_now: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReceiptSyncRequest"] | null;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptSyncDto"];
+                };
+            };
+            /** @description Unknown source */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description A sync is already running */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

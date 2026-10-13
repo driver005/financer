@@ -1,0 +1,6 @@
+{
+  "id": "FIXTURE-TICKET-0002",
+  "date": "2026-03-05T07:15:00Z",
+  "totalAmount": "3,58",
+  "htmlPrintedReceipt": "<span class=\"css_bold\">Lidl Dienstleistung GmbH &amp; Co. KG</span><br/><span>Musterweg 5</span><br/><span>Butter</span> <span>2,19 B</span><br/><span>Bio Eier 10er</span> <span>1,39 B</span><br/><span class=\"css_bold\">zu zahlen</span> <span>3,58</span><br/><span>05.03.2026 08:15</span>"
+}

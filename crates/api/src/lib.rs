@@ -11,6 +11,7 @@ mod export;
 mod forecast;
 mod grocery;
 mod mealplan;
+mod receipt_sources;
 mod routes;
 mod scan;
 mod stores;
@@ -83,6 +84,7 @@ pub struct AppState {
     pub(crate) default_llm_provider: Option<financer_llm::Provider>,
     pub(crate) store_matcher: Arc<StoreMatcher>,
     pub(crate) llm: LlmFactory,
+    pub(crate) receipt_syncer: Option<Arc<financer_receipt_sources::ReceiptSyncer>>,
 }
 
 impl AppState {
@@ -104,6 +106,7 @@ impl AppState {
             default_llm_provider: None,
             store_matcher: Arc::new(StoreMatcher::builtin()),
             llm: Arc::new(ProviderFactory::create),
+            receipt_syncer: None,
         }
     }
 
@@ -178,6 +181,16 @@ impl AppState {
         self
     }
 
+    /// The automatic receipt sources (mailbox, Lidl Plus, watched folder). Without it the receipt
+    /// source endpoints report every source as disabled.
+    pub fn with_receipt_syncer(
+        mut self,
+        syncer: Arc<financer_receipt_sources::ReceiptSyncer>,
+    ) -> Self {
+        self.receipt_syncer = Some(syncer);
+        self
+    }
+
     /// Replace how LLM providers are built (tests use a mock).
     pub fn with_llm_factory(mut self, factory: LlmFactory) -> Self {
         self.llm = factory;
@@ -223,6 +236,12 @@ impl AppState {
         grocery::scan_receipt,
         grocery::list_receipts,
         grocery::delete_receipt,
+        receipt_sources::list_sources,
+        receipt_sources::sync_now,
+        receipt_sources::lidl_start,
+        receipt_sources::lidl_finish,
+        receipt_sources::lidl_status,
+        receipt_sources::lidl_disconnect,
         grocery::affordability,
         grocery::recipes,
         grocery::recipe_ideas,
@@ -297,6 +316,12 @@ impl AppState {
         dto::ReceiptItemDto,
         dto::ReceiptDto,
         dto::ReceiptScan,
+        receipt_sources::ReceiptSourceDto,
+        receipt_sources::ReceiptSyncDto,
+        receipt_sources::ReceiptSyncRequest,
+        receipt_sources::LidlStartDto,
+        receipt_sources::LidlFinishRequest,
+        receipt_sources::LidlStatusDto,
         dto::ScanDto,
         dto::ChainAffordabilityDto,
         dto::StapleDto,
@@ -423,6 +448,12 @@ impl Api {
                 post(grocery::scan_receipt).layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
             )
             .route("/receipts/{id}", delete(grocery::delete_receipt))
+            .route("/receipts/sources", get(receipt_sources::list_sources))
+            .route("/receipts/sync", post(receipt_sources::sync_now))
+            .route("/receipts/lidl/start", post(receipt_sources::lidl_start))
+            .route("/receipts/lidl/finish", post(receipt_sources::lidl_finish))
+            .route("/receipts/lidl/status", get(receipt_sources::lidl_status))
+            .route("/receipts/lidl", delete(receipt_sources::lidl_disconnect))
             .route("/affordability", get(grocery::affordability))
             .route("/recipes", get(grocery::recipes))
             .route("/recipes/ideas", post(grocery::recipe_ideas))

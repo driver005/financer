@@ -19,6 +19,8 @@
 //! - `FINANCER_OPENAI_API_KEY`     enables recipe ideas with OpenAI
 //! - `FINANCER_LLM_PROVIDER`       `claude` or `openai`: the provider used until the app chooses one
 //! - `FINANCER_CONFIG`             path of the config file
+//! - `FINANCER_RECEIPTS_*`         automatic receipt import, see docs/RECEIPT_SOURCES.md
+//!   (`FINANCER_SECRET_KEY` encrypts the stored Lidl Plus token; the API token is used without it)
 //!
 //! Commands: `--print-openapi` prints the OpenAPI document; `--probe-prices` fetches every
 //! configured price source once and reports what it found, without touching the database;
@@ -245,6 +247,7 @@ impl Server {
             .map_err(|e| format!("cannot open database: {e}"))?;
         tracing::info!(backend = ?store.backend(), price_sources = sources.len(), "database ready");
 
+        let receipt_store = store.clone();
         let mut state = AppState::new(store)
             .with_http(Self::polite_http()?)
             .with_price_sources(sources.clone())
@@ -259,6 +262,21 @@ impl Server {
         if let Some(product_id) = Self::secret(&config.bank.fints_product_id) {
             state = state.with_bank(Arc::new(financer_fints::FintsBank::new(&product_id)));
             tracing::info!("live bank sync enabled (FinTS)");
+        }
+
+        // automatic receipt import (mailbox, Lidl Plus, watched folder) from [receipts]
+        match financer_receipt_sources::ReceiptSyncer::live(
+            receipt_store,
+            config.receipts.value.clone(),
+            &token,
+            &Self::store_aliases(config),
+        )? {
+            Some(syncer) => {
+                tracing::info!("receipt sources enabled ({})", config.receipts.source);
+                state = state.with_receipt_syncer(syncer.clone());
+                tokio::spawn(syncer.run());
+            }
+            None => tracing::info!("no receipt source is enabled"),
         }
 
         if !config.bank.accounts.is_empty() {
