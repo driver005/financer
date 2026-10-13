@@ -17,6 +17,13 @@ import { elevation, space, usePalette } from "@/theme";
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 /** A tab with a soft pill behind the icon of the selected one (so colour is not the only cue). */
+/**
+ * Screens that are reached by a link, not from the tab bar. `href: null` used to do this, but
+ * since expo-router 58 it means `hidden`, and a hidden tab cannot be navigated to (every such
+ * screen bounced back to Today). Hiding only the tab button keeps the route reachable.
+ */
+const hiddenTab = { tabBarButton: () => null, tabBarItemStyle: { display: "none" as const } };
+
 function tab(title: string, icon: IconName, pill: string) {
   return {
     title,
@@ -64,19 +71,19 @@ export default function RootLayout() {
           <Tabs.Screen name="recipes" options={tab("Recipes", "chef-hat", p.accentSoft)} />
           <Tabs.Screen name="settings" options={tab("Settings", "cog-outline", p.accentSoft)} />
           {/* reachable from Settings, not shown in the tab bar */}
-          <Tabs.Screen name="mealplan" options={{ href: null, title: "Meal plan" }} />
-          <Tabs.Screen name="basket"options={{ href: null, title: "Usual items" }} />
-          <Tabs.Screen name="receipts" options={{ href: null, title: "Receipts" }} />
-          <Tabs.Screen name="receipt-sources" options={{ href: null, title: "Receipt sources" }} />
-          <Tabs.Screen name="sync" options={{ href: null, title: "Sync with Sparkasse" }} />
-          <Tabs.Screen name="rules" options={{ href: null, title: "Rules" }} />
-          <Tabs.Screen name="subscriptions" options={{ href: null, title: "Subscriptions" }} />
-          <Tabs.Screen name="alerts" options={{ href: null, title: "Alerts" }} />
-          <Tabs.Screen name="trophies" options={{ href: null, title: "Trophies" }} />
-          <Tabs.Screen name="scan" options={{ href: null, title: "Scan a product" }} />
-          <Tabs.Screen name="stores" options={{ href: null, title: "Stores" }} />
+          <Tabs.Screen name="mealplan" options={{ ...hiddenTab, title: "Meal plan" }} />
+          <Tabs.Screen name="basket" options={{ ...hiddenTab, title: "Usual items" }} />
+          <Tabs.Screen name="receipts" options={{ ...hiddenTab, title: "Receipts" }} />
+          <Tabs.Screen name="receipt-sources" options={{ ...hiddenTab, title: "Receipt sources" }} />
+          <Tabs.Screen name="sync" options={{ ...hiddenTab, title: "Sync with Sparkasse" }} />
+          <Tabs.Screen name="rules" options={{ ...hiddenTab, title: "Rules" }} />
+          <Tabs.Screen name="subscriptions" options={{ ...hiddenTab, title: "Subscriptions" }} />
+          <Tabs.Screen name="alerts" options={{ ...hiddenTab, title: "Alerts" }} />
+          <Tabs.Screen name="trophies" options={{ ...hiddenTab, title: "Trophies" }} />
+          <Tabs.Screen name="scan" options={{ ...hiddenTab, title: "Scan a product" }} />
+          <Tabs.Screen name="stores" options={{ ...hiddenTab, title: "Stores" }} />
           {/* first-run setup: full screen, no tab bar */}
-          <Tabs.Screen name="onboarding" options={{ href: null, title: "Setup", tabBarStyle: { display: "none" } }} />
+          <Tabs.Screen name="onboarding" options={{ ...hiddenTab, title: "Setup", tabBarStyle: { display: "none" } }} />
         </Tabs>
         <BackupOnOpen />
         <AppLockOverlay />
