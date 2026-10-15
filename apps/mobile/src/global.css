@@ -4,47 +4,47 @@
 
 @source "../node_modules/heroui-native/lib";
 
-/* Bright, game-like purple palette (purple with orange / gold accents on white, or near-black
+/* Trust-blue palette on cool slate neutrals (navy-leaning blue on near-white, or near-black navy
    in dark mode). Keep in sync with src/theme.ts, which the few JS-only colour users read. */
 @layer theme {
   :root {
     @variant light {
-      --background: #ffffff;
-      --foreground: #2d2438;
+      --background: #f8fafc;
+      --foreground: #0f172a;
       --surface: #ffffff;
-      --surface-secondary: #faf5ff;
-      --surface-tertiary: #f1e8fd;
-      --muted: #6b5f7a;
-      --default: #efe7fb;
-      --default-foreground: #2d2438;
-      --accent: #7c3aed;
+      --surface-secondary: #f1f5f9;
+      --surface-tertiary: #e0e7ff;
+      --muted: #475569;
+      --default: #e8edf5;
+      --default-foreground: #0f172a;
+      --accent: #1e40af;
       --accent-foreground: #ffffff;
-      --field-background: #faf5ff;
-      --field-border: #e9defa;
-      --border: #e9defa;
-      --separator: #e9defa;
+      --field-background: #f1f5f9;
+      --field-border: #e2e8f0;
+      --border: #e2e8f0;
+      --separator: #e2e8f0;
       --success: #15803d;
       --danger: #c81e1e;
       --segment: #ffffff;
     }
     @variant dark {
-      --background: #0a0a0d;
-      --foreground: #f2f2f7;
-      --surface: #16161b;
-      --surface-secondary: #1e1e25;
-      --surface-tertiary: #272730;
-      --muted: #9a9aa8;
-      --default: #272730;
-      --default-foreground: #f2f2f7;
-      --accent: #a78bfa;
-      --accent-foreground: #1a0b3a;
-      --field-background: #16161b;
-      --field-border: #2a2a33;
-      --border: #2a2a33;
-      --separator: #2a2a33;
+      --background: #0b0f17;
+      --foreground: #f1f5f9;
+      --surface: #131a26;
+      --surface-secondary: #1b2332;
+      --surface-tertiary: #263043;
+      --muted: #9aa7bb;
+      --default: #263043;
+      --default-foreground: #f1f5f9;
+      --accent: #93b4ff;
+      --accent-foreground: #0b1a44;
+      --field-background: #131a26;
+      --field-border: #263043;
+      --border: #263043;
+      --separator: #263043;
       --success: #4ade80;
       --danger: #ff6b6b;
-      --segment: #272730;
+      --segment: #263043;
     }
   }
 }

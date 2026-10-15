@@ -54,7 +54,7 @@ export function ForecastCard({ data }: { data: Forecast | null }) {
       {/* the grocery sentence is the reason itself when groceries caused the warning */}
       <RNText style={[typography.body, { color: p.text, marginTop: space.md }]}>{view.reason}</RNText>
       {view.groceries && view.groceries !== view.reason ? (
-        <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>🛒 {view.groceries}</RNText>
+        <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>{view.groceries}</RNText>
       ) : null}
       {view.early ? <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>{view.early}</RNText> : null}
       {view.amountCents !== null ? (

@@ -43,14 +43,14 @@ function longDate(iso: string): string {
   return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}, ${d} ${MONTH_NAMES[m - 1]}`;
 }
 
-function Pill({ icon, text, color, bg, label }: { icon: string; text: string; color: string; bg: string; label: string }) {
+function Pill({ icon, text, color, bg, label }: { icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"]; text: string; color: string; bg: string; label: string }) {
   return (
     <View
       accessible
       accessibilityLabel={label}
       style={{ flexDirection: "row", alignItems: "center", gap: space.xs, borderRadius: 999, paddingHorizontal: space.md, minHeight: 32, backgroundColor: bg }}
     >
-      <RNText style={{ fontSize: 15 }}>{icon}</RNText>
+      <MaterialCommunityIcons name={icon} size={16} color={color} />
       <RNText style={{ color, fontSize: 14, lineHeight: 20, fontWeight: "800" }}>{text}</RNText>
     </View>
   );
@@ -214,10 +214,10 @@ export default function Today() {
         right={
           data ? (
             <View style={{ flexDirection: "row", gap: space.sm }}>
-              <Pill icon="🔥" text={`${days}`} color={p.warn} bg={p.warnSoft} label={`Streak: ${days} days`} />
+              <Pill icon="fire" text={`${days}`} color={p.warn} bg={p.warnSoft} label={`Streak: ${days} days`} />
               {rewards ? (
                 <Pill
-                  icon="❄️"
+                  icon="snowflake"
                   text={`${rewards.streak.freezes}`}
                   color={p.blue}
                   bg={p.blueSoft}
