@@ -14,7 +14,7 @@ import { chainLabel, useScreenData } from "@/hooks";
 import { usePalette } from "@/theme";
 
 export default function Prices() {
-  const { api, loaded } = useApi();
+  const { api, loaded, mode } = useApi();
   const c = useColors();
   const { data, error, busy, reload } = useScreenData((a) => a.prices());
   const [query, setQuery] = useState("");
@@ -115,7 +115,11 @@ export default function Prices() {
               <EmptyState
                 mood="worried"
                 title="No prices yet"
-                body="Set up price sources on the server (see docs/PRICES.md), then fetch the first prices."
+                body={
+                  mode === "embedded"
+                    ? "Choose your price sources in Settings > On-phone settings (see docs/PRICES.md), then fetch the first prices."
+                    : "Set up price sources on the server (see docs/PRICES.md), then fetch the first prices."
+                }
                 actionLabel={refreshing ? "Refreshing…" : "Refresh prices"}
                 actionIcon="refresh"
                 onAction={refresh}

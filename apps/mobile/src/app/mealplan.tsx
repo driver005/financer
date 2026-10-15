@@ -298,7 +298,11 @@ function DayCard({
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: entry ? space.sm : 0 }}>
         <RNText style={{ color: isToday ? tones.accent.fg : p.text, fontSize: 14, fontWeight: "800" }}>{weekdayName(iso)}</RNText>
         <RNText style={{ color: p.muted, fontSize: 13, fontVariant: ["tabular-nums"] }}>{shortDate(iso)}</RNText>
-        {isToday ? <Badge tone="accent" label="Today" /> : null}
+        {isToday ? (
+          <View style={{ alignSelf: "center" }}>
+            <Badge tone="accent" label="Today" />
+          </View>
+        ) : null}
         {entry ? null : (
           <Tap
             onPress={onPick}
