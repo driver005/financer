@@ -5,6 +5,7 @@ import { FieldMessage, SettingsGroup, SettingsToggleRow } from "@/components/set
 import { blzProblem, ibanProblem } from "@/settingsPlan";
 
 import { ApiError } from "@/api/client";
+import { liveSyncMissing } from "@/bankConnections";
 import { useApi } from "@/api/config";
 import { deleteSecret, getSecret, setSecret } from "@/api/storage";
 import { Body, Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
@@ -18,7 +19,8 @@ const GIVE_UP_MS = 10 * 60 * 1000;
 type Phase = { kind: "idle" } | { kind: "waiting"; challenge: string } | { kind: "done"; text: string } | { kind: "error"; text: string };
 
 export default function Sync() {
-  const { api, loaded } = useApi();
+  const { api, loaded, mode } = useApi();
+  const missing = liveSyncMissing(mode === "embedded");
   const c = useColors();
   const { data: status, reload } = useScreenData((a) => a.bankStatus());
   const [blz, setBlz] = useState("");
@@ -94,10 +96,9 @@ export default function Sync() {
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
           {status && !status.configured ? (
             <Card>
-              <Body bold>Live sync is not set up on the server</Body>
+              <Body bold>{missing.title}</Body>
               <Text variant="bodyMedium" style={{ color: c.muted, marginTop: 4 }}>
-                It needs a FinTS product id (FINANCER_FINTS_PRODUCT_ID), which you request from the Deutsche
-                Kreditwirtschaft. See docs/FINTS.md. Until then, import a CSV export on the Spending tab.
+                {missing.body}
               </Text>
             </Card>
           ) : null}

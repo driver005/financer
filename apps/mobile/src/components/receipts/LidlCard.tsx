@@ -167,7 +167,7 @@ export function LidlCard({
         <StatusPill label={pill.label} tone={pill.tone} icon={pill.icon} />
       </View>
 
-      <RNText style={[typography.body, { color: p.text, marginTop: space.md }]}>{lidlStateText(state, status?.connected_at, now)}</RNText>
+      <RNText style={[typography.body, { color: p.text, marginTop: space.md }]}>{lidlStateText(state, status?.connected_at, now, onPhone)}</RNText>
 
       {switchedOff ? (
         <View style={{ marginTop: space.sm, gap: space.sm }}>

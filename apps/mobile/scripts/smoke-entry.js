@@ -20,6 +20,19 @@ const log = (msg) => console.warn(`${TAG} ${msg}`);
     const rows = JSON.parse(list.text);
     const ok = health.status === 200 && health.text === "ok" && imp.status === 200 && rows[0]?.category === "groceries";
     log(`${ok ? "OK" : "FAIL"} health=${health.status}:${health.text} import=${imp.status} category=${rows[0]?.category}`);
+    if (ok) {
+      // The screenshot job (native.yml) reuses this build: give the app demo data and open it in
+      // on-phone mode, so the next start shows every screen filled in and skips the onboarding.
+      try {
+        const { seedDemo } = require("./scripts/demo-seed");
+        const { setSecret } = require("./src/api/storage");
+        const { MODE_KEY } = require("./src/api/keys");
+        await setSecret(MODE_KEY, "embedded");
+        console.warn(`FINANCER_DEMO ${await seedDemo(t)}`);
+      } catch (e) {
+        console.warn(`FINANCER_DEMO FAIL ${e && e.message ? e.message : e}`);
+      }
+    }
   } catch (e) {
     log(`FAIL ${e && e.stack ? e.stack : e}`);
   }

@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import { useEffect, type ReactNode } from "react";
 import { Text as RNText, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ActivityIndicator, ChunkyButton, Text } from "@/components/kit";
@@ -25,11 +25,25 @@ export function useColors() {
   };
 }
 
+/**
+ * A full-height page in the theme's background colour, safe-area aware. Written with style props,
+ * not utility classes: on a phone the classes were not applied (the page collapsed to nothing and
+ * the scrolling content inside it was invisible), while style props always are.
+ */
+export function Page({ edges = ["top", "left", "right"], children }: { edges?: Edge[]; children: ReactNode }) {
+  const p = usePalette();
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: p.background }} edges={edges}>
+      {children}
+    </SafeAreaView>
+  );
+}
+
 export function Screen({ children }: { children: ReactNode }) {
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
-      <View className="flex-1 px-4">{children}</View>
-    </SafeAreaView>
+    <Page>
+      <View style={{ flex: 1, paddingHorizontal: 16 }}>{children}</View>
+    </Page>
   );
 }
 

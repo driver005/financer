@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { Modal, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { Split, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
 import { CategoryPicker } from "@/components/CategoryPicker";
 import { SplitEditor } from "@/components/SplitEditor";
 import { HelperText, Switch, Text } from "@/components/kit";
-import { Body, Button, useColors } from "@/components/ui";
+import { Body, Button, Page, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
 
 /**
@@ -57,7 +56,7 @@ export function RecategorizeSheet({
 
   return (
     <Modal visible={tx !== null} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right", "bottom"]}>
+      <Page edges={["top", "left", "right", "bottom"]}>
         {tx ? (
           <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
             <Text variant="headlineSmall" accessibilityRole="header">
@@ -113,7 +112,7 @@ export function RecategorizeSheet({
             )}
           </ScrollView>
         ) : null}
-      </SafeAreaView>
+      </Page>
     </Modal>
   );
 }

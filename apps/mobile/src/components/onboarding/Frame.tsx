@@ -11,11 +11,10 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Mascot } from "@/components/Mascot";
 import { ChunkyButton, Text } from "@/components/kit";
-import { Bar } from "@/components/ui";
+import { Bar, Page } from "@/components/ui";
 import type { MascotLine } from "@/onboarding";
 import { tap } from "@/native/haptics";
 import { usePalette } from "@/theme";
@@ -120,7 +119,7 @@ export function StepFrame({
   const sticky = useWindowDimensions().height >= 700;
   const bubble = sticky ? <CompactMascot message={mascot.message} mood={mascot.mood} /> : <Mascot message={mascot.message} mood={mascot.mood} />;
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right", "bottom"]}>
+    <Page edges={["top", "left", "right", "bottom"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={{ width: "100%", maxWidth: MAX_WIDTH, alignSelf: "center", paddingHorizontal: 16 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 8 }}>
@@ -185,7 +184,7 @@ export function StepFrame({
         </View>
       </KeyboardAvoidingView>
       {confetti ? <Confetti /> : null}
-    </SafeAreaView>
+    </Page>
   );
 }
 

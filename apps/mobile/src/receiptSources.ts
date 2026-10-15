@@ -237,7 +237,7 @@ export function callbackHasResult(url: string): boolean {
 }
 
 /** The one-line state of the Lidl card. */
-export function lidlStateText(state: string, connectedAt: number | null | undefined, nowSec: number): string {
+export function lidlStateText(state: string, connectedAt: number | null | undefined, nowSec: number, onPhone = false): string {
   switch (state) {
     case "connected":
       return connectedAt ? `Connected ${lastSyncText(connectedAt, nowSec).toLowerCase()}` : "Connected";
@@ -246,6 +246,6 @@ export function lidlStateText(state: string, connectedAt: number | null | undefi
     case "never":
       return "Not connected";
     default:
-      return "Switched off on this server";
+      return `Switched off on this ${onPhone ? "phone" : "server"}`;
   }
 }

@@ -572,4 +572,45 @@ mod tests {
         assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(a, b);
     }
+
+    /// Everything the screens read must work on the phone too: a piece of setup that only the
+    /// server does (a scheduler, a config section) would show up here as a 5xx.
+    #[tokio::test]
+    async fn every_read_endpoint_answers_without_a_server_error() {
+        let b = Backend::start_with(Fixtures::with_lidl("all-gets"))
+            .await
+            .unwrap();
+        let doc: serde_json::Value = serde_json::from_str(&Api::openapi_json()).unwrap();
+        let mut checked = Vec::new();
+        for (path, item) in doc["paths"].as_object().unwrap() {
+            // `{id}` paths need a real id; they are covered by their own tests
+            if item.get("get").is_none() || path.contains('{') {
+                continue;
+            }
+            let res = b.handle_request(Fixtures::get(path)).await;
+            assert!(
+                res.status < 500,
+                "GET {path} answered {} on the phone: {}",
+                res.status,
+                String::from_utf8_lossy(&res.body)
+            );
+            checked.push(path.clone());
+        }
+        // a few that must exist, so the loop above cannot pass by finding nothing
+        for must in [
+            "/v1/transactions",
+            "/v1/forecast",
+            "/v1/spending/stores",
+            "/v1/bank/connections",
+            "/v1/receipts/sources",
+            "/v1/meal-plan/pantry",
+        ] {
+            assert!(checked.iter().any(|p| p == must), "{must} was not checked");
+        }
+        assert!(
+            checked.len() >= 20,
+            "only {} endpoints checked",
+            checked.len()
+        );
+    }
 }

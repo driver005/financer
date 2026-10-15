@@ -22,7 +22,16 @@ for _ in $(seq 1 90); do
   line=$(adb logcat -d | grep -m1 FINANCER_SMOKE || true)
   if [ -n "$line" ]; then
     echo "$line"
-    case "$line" in *"FINANCER_SMOKE OK"*) exit 0 ;; *) diagnose; exit 1 ;; esac
+    case "$line" in
+      *"FINANCER_SMOKE OK"*)
+        # The screenshot run (native.yml, workflow_dispatch with screenshots) continues here.
+        if [ "${SCREENSHOTS:-}" = "true" ]; then
+          sleep 10 # let the demo data finish importing
+          bash "$(dirname "$0")/emulator-screens.sh" "$pkg" screens || true
+        fi
+        exit 0 ;;
+      *) diagnose; exit 1 ;;
+    esac
   fi
   sleep 2
 done

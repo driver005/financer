@@ -2,6 +2,7 @@ import { useRootNavigationState, useRouter, useSegments } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 
 import { useApi } from "@/api/config";
+import { isSetUp } from "@/api/mode";
 import { loadOnboarding, markOnboardingDone } from "@/native/onboardingStore";
 import { entryAction, type Stored } from "@/onboarding";
 
@@ -14,7 +15,7 @@ import { entryAction, type Stored } from "@/onboarding";
  * pulled back on every navigation.
  */
 export function OnboardingGate() {
-  const { loaded, config, mode } = useApi();
+  const { loaded, config, mode, modeChosen } = useApi();
   const router = useRouter();
   const segments = useSegments();
   const navigationReady = useRootNavigationState()?.key != null;
@@ -38,14 +39,14 @@ export function OnboardingGate() {
     const action = entryAction({
       stored,
       apiLoaded: loaded,
-      configured: config !== null || mode === "embedded",
+      configured: isSetUp({ hasServer: config !== null, mode, chosen: modeChosen }),
       onOnboarding,
     });
     if (action === "wait") return;
     handled.current = true;
     if (action === "redirect") router.replace("/onboarding");
     else if (action === "mark_done") void markOnboardingDone();
-  }, [stored, loaded, config, mode, onOnboarding, navigationReady, router]);
+  }, [stored, loaded, config, mode, modeChosen, onOnboarding, navigationReady, router]);
 
   return null;
 }

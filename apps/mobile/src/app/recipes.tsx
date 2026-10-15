@@ -8,7 +8,7 @@ import { useApi } from "@/api/config";
 import { Avatar, Badge, EmptyState, FilterChip, MatchRing, Money, Panel, SkeletonCards, Subtitle, space } from "@/components/grocery/primitives";
 import { ChunkyButton, HelperText, List, Text, TextInput } from "@/components/kit";
 import { Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
-import { formatCents, parseEuroInput } from "@/format";
+import { formatCents, parseEuroInput, servingsText } from "@/format";
 import { costPerServing, initials, mealTint, shortList } from "@/groceryView";
 import { useScreenData } from "@/hooks";
 import { usePalette } from "@/theme";
@@ -171,7 +171,7 @@ function RecipeCard({ recipe: r, best }: { recipe: RecipeMatch; best: boolean })
           <Text variant="titleMedium" accessibilityRole="header">{r.title}</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: space.md }}>
             <Meta icon="clock-outline" text={`${r.minutes} min`} />
-            <Meta icon="account-multiple-outline" text={`${r.servings} servings`} />
+            <Meta icon="account-multiple-outline" text={servingsText(r.servings)} />
           </View>
         </View>
         <MatchRing percent={r.coverage_percent} label={`You already buy ${r.coverage_percent} percent of the ingredients`} />
@@ -239,7 +239,7 @@ function IdeaCard({ idea }: { idea: Idea }) {
       <Text variant="bodyMedium" style={{ marginTop: space.sm }}>{idea.summary}</Text>
       <View style={{ flexDirection: "row", columnGap: space.md, marginTop: space.sm }}>
         <Meta icon="clock-outline" text={`${idea.minutes} min`} />
-        <Meta icon="account-multiple-outline" text={`${idea.servings} servings`} />
+        <Meta icon="account-multiple-outline" text={servingsText(idea.servings)} />
       </View>
       <List.Accordion title="Ingredients and steps">
         {idea.ingredients.map((i, n) => (
