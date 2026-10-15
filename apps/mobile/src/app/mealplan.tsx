@@ -295,10 +295,20 @@ function DayCard({
   const isToday = iso === today;
   return (
     <Panel padding={space.md} tone={isToday ? "accent" : undefined}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.sm }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: entry ? space.sm : 0 }}>
         <RNText style={{ color: isToday ? tones.accent.fg : p.text, fontSize: 14, fontWeight: "800" }}>{weekdayName(iso)}</RNText>
         <RNText style={{ color: p.muted, fontSize: 13, fontVariant: ["tabular-nums"] }}>{shortDate(iso)}</RNText>
         {isToday ? <Badge tone="accent" label="Today" /> : null}
+        {entry ? null : (
+          <Tap
+            onPress={onPick}
+            accessibilityLabel={`Pick a recipe for ${weekdayName(iso)}`}
+            style={{ marginLeft: "auto", minHeight: 44, flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.sm }}
+          >
+            <RNText style={{ color: p.accent, fontSize: 18, fontWeight: "800" }}>+</RNText>
+            <RNText style={{ color: p.accent, fontSize: 15, fontWeight: "700" }}>Pick a recipe</RNText>
+          </Tap>
+        )}
       </View>
       {entry ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
@@ -319,26 +329,7 @@ function DayCard({
             <RoundIcon icon="close" onPress={onClear} label={`Clear the meal on ${weekdayName(iso)}`} />
           </View>
         </View>
-      ) : (
-        <Tap
-          onPress={onPick}
-          accessibilityLabel={`Pick a recipe for ${weekdayName(iso)}`}
-          style={{
-            minHeight: 52,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: space.sm,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderStyle: "dashed",
-            borderColor: p.border,
-          }}
-        >
-          <RNText style={{ color: p.accent, fontSize: 20, fontWeight: "800" }}>+</RNText>
-          <RNText style={{ color: p.accent, fontSize: 15, fontWeight: "800" }}>Pick a recipe</RNText>
-        </Tap>
-      )}
+      ) : null}
       {children}
     </Panel>
   );

@@ -6,6 +6,7 @@
  * Spacing is on a 4/8 grid (`space`), touch targets are at least 44, and every animation checks
  * the system's reduce-motion setting first.
  */
+import { EmptyState as CenteredEmptyState } from "@/components/EmptyState";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Children, Fragment, useEffect, type ComponentProps, type ReactNode } from "react";
 import { Pressable, Text as RNText, View, useColorScheme, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
@@ -442,7 +443,7 @@ export function SkeletonCards({ count = 3, label = "Loading" }: { count?: number
   );
 }
 
-/** The pig says what is missing and there is one thing to do about it. */
+/** What is missing and the one thing to do about it: the shared centred empty state. */
 export function EmptyState({
   title,
   body,
@@ -458,14 +459,7 @@ export function EmptyState({
   actionIcon?: string;
   onAction?: () => void;
 }) {
-  const p = usePalette();
-  return (
-    <View style={{ paddingVertical: space.lg }}>
-      <Mascot message={title} mood={mood} />
-      {body ? <RNText style={{ color: p.muted, fontSize: 15, lineHeight: 22, marginBottom: space.lg }}>{body}</RNText> : null}
-      {actionLabel && onAction ? <ChunkyButton label={actionLabel} icon={actionIcon} onPress={onAction} /> : null}
-    </View>
-  );
+  return <CenteredEmptyState title={title} message={body} mood={mood} actionLabel={actionLabel} actionIcon={actionIcon} onAction={onAction} />;
 }
 
 /** One line under the screen title (put it right after `Title`), so the screen says what it is for. */
