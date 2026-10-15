@@ -166,12 +166,11 @@ export default function Receipts() {
                     <ChunkyButton label={busy ? "Adding…" : "Add receipt"} icon="receipt-text-plus-outline" onPress={add} disabled={busy || !text.trim()} />
                   </View>
                 </Panel>
-              ) : (
-                <ChunkyButton label="Paste receipt text" icon="text-box-plus-outline" outline onPress={() => setPasteOpen(true)} />
-              )}
+              ) : null}
 
-              <View style={{ marginTop: space.sm }}>
-                <ChunkyButton label="Receipt sources" icon="email-sync-outline" outline onPress={() => router.push("/receipt-sources")} accessibilityLabel="Open receipt sources: mailbox, Lidl Plus and a watched folder" />
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs, marginLeft: -space.sm }}>
+                {pasteVisible ? null : <ChunkyButton compact flat label="Paste receipt text" icon="text-box-plus-outline" onPress={() => setPasteOpen(true)} />}
+                <ChunkyButton compact flat label="Receipt sources" icon="email-sync-outline" onPress={() => router.push("/receipt-sources")} accessibilityLabel="Open receipt sources: mailbox, Lidl Plus and a watched folder" />
               </View>
 
               {message || error ? (

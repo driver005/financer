@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Text as RNText, View } from "react-native";
 
 import type { Forecast } from "@/api/client";
+import { ChunkyButton } from "@/components/kit";
 import { IconBadge, StatusPill, type Tone } from "@/components/rows";
 import { Money } from "@/components/Money";
 import { Card } from "@/components/ui";
@@ -20,6 +22,7 @@ const TONE: Record<"good" | "warn" | "bad" | "muted", Tone> = { good: "good", wa
  */
 export function ForecastCard({ data }: { data: Forecast | null }) {
   const p = usePalette();
+  const [open, setOpen] = useState(false);
   if (!data) return null;
 
   const view = forecastView(data);
@@ -56,12 +59,21 @@ export function ForecastCard({ data }: { data: Forecast | null }) {
       {view.groceries && view.groceries !== view.reason ? (
         <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>{view.groceries}</RNText>
       ) : null}
+      {view.early || view.amountCents !== null ? (
+        <View style={{ alignSelf: "flex-start", marginTop: space.xs, marginLeft: -space.sm }}>
+          <ChunkyButton compact flat icon={open ? "chevron-up" : "chevron-down"} label={open ? "Hide details" : "Details"} onPress={() => setOpen((v) => !v)} />
+        </View>
+      ) : null}
+      {open ? (
+        <View>
       {view.early ? <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>{view.early}</RNText> : null}
-      {view.amountCents !== null ? (
-        <RNText style={[typography.caption, { color: p.muted, marginTop: space.md, fontSize: 12 }]}>
-          Income {formatMoney(data.income_received_cents + data.income_upcoming_cents)} − spent so far {formatMoney(data.spent_so_far_cents)} − fixed costs still due{" "}
-          {formatMoney(data.fixed_costs_due_cents)} − {formatMoney(data.projected_extra_spend_cents)} more at your current pace. A budget estimate, not your bank balance.
-        </RNText>
+        {view.amountCents !== null ? (
+          <RNText style={[typography.caption, { color: p.muted, marginTop: space.md, fontSize: 12 }]}>
+            Income {formatMoney(data.income_received_cents + data.income_upcoming_cents)} − spent so far {formatMoney(data.spent_so_far_cents)} − fixed costs still due{" "}
+            {formatMoney(data.fixed_costs_due_cents)} − {formatMoney(data.projected_extra_spend_cents)} more at your current pace. A budget estimate, not your bank balance.
+          </RNText>
+        ) : null}
+        </View>
       ) : null}
     </Card>
   );

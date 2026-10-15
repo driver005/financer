@@ -6,8 +6,8 @@ import { FlatList, ScrollView, Text as RNText, View } from "react-native";
 import type { Idea, RecipeMatch } from "@/api/client";
 import { useApi } from "@/api/config";
 import { Avatar, Badge, EmptyState, FilterChip, MatchRing, Money, Panel, SkeletonCards, Subtitle, space } from "@/components/grocery/primitives";
-import { ChunkyButton, HelperText, List, Text, TextInput } from "@/components/kit";
-import { Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
+import { HelperText, List, Text, TextInput } from "@/components/kit";
+import { HeaderAction, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { formatCents, parseEuroInput, servingsText } from "@/format";
 import { costPerServing, initials, mealTint, shortList } from "@/groceryView";
 import { useScreenData } from "@/hooks";
@@ -49,7 +49,16 @@ export default function Recipes() {
 
   return (
     <Screen>
-      <Title>Recipes</Title>
+      <Title
+        right={
+          <View style={{ flexDirection: "row", gap: space.sm }}>
+            <HeaderAction icon="calendar-week" label="Plan my week" onPress={() => router.push("/mealplan")} />
+            <HeaderAction icon="creation" label={asking ? "Thinking of ideas" : "Surprise me with new ideas"} onPress={askForIdeas} disabled={asking} />
+          </View>
+        }
+      >
+        Recipes
+      </Title>
       {api ? <Subtitle>Ranked by how much you already buy.</Subtitle> : null}
       {!api ? (
         <NeedsSetup />
@@ -77,24 +86,15 @@ export default function Recipes() {
               <TextInput
                 mode="outlined"
                 dense
-                label="Max. cost of missing ingredients (€)"
+                label="Max. cost of missing ingredients"
                 accessibilityLabel="Max. cost of missing ingredients in euro"
                 value={budgetText}
                 onChangeText={setBudgetText}
                 keyboardType="decimal-pad"
+                right={<TextInput.Affix text="€" />}
                 style={{ marginTop: space.md }}
                 error={budgetText.trim() !== "" && budget === null}
               />
-              <View style={{ marginTop: space.lg, gap: space.sm }}>
-                <ChunkyButton label="Plan my week" icon="calendar-week" onPress={() => router.push("/mealplan")} />
-                <ChunkyButton
-                  label={asking ? "Thinking…" : "Surprise me with new ideas"}
-                  icon="creation"
-                  tone="blue"
-                  onPress={askForIdeas}
-                  disabled={asking}
-                />
-              </View>
               {ideaMessage ? <HelperText type="error" visible>{ideaMessage}</HelperText> : null}
               {ideas.length > 0 ? (
                 <View style={{ marginTop: space.lg }}>

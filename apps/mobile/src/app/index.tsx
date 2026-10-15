@@ -248,7 +248,7 @@ export default function Today() {
           refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void reload()} tintColor={p.accent} />}
         >
           <SafeToSpendCard data={data.safe} />
-          <ForecastCard data={data.forecast} />
+
           <Card>
             <RNText style={[typography.overline, { color: p.muted }]}>Today's grocery goal</RNText>
             {allowance > 0 ? (
@@ -278,22 +278,11 @@ export default function Today() {
             )}
           </Card>
 
+          <ForecastCard data={data.forecast} />
+
           <WatchdogCard />
 
-          <Mascot
-            mood={moodFor({ streakDays: days, allowanceCents: allowance, spentTodayCents: spentToday, celebrating, freezeUsedToday: rewards?.streak.frozenToday })}
-            message={coachMessage({
-              progress: data.progress,
-              streakDays: days,
-              allowanceCents: allowance,
-              spentTodayCents: spentToday,
-              freezeUsedToday: rewards?.streak.frozenToday,
-            })}
-          />
-
           <StoresLink />
-
-          {rewards ? <TrophiesCard rewards={rewards} /> : null}
 
           <Card>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.md }}>
@@ -316,6 +305,19 @@ export default function Today() {
               ))}
             </View>
           </Card>
+
+          {rewards ? <TrophiesCard rewards={rewards} /> : null}
+
+          <Mascot
+            mood={moodFor({ streakDays: days, allowanceCents: allowance, spentTodayCents: spentToday, celebrating, freezeUsedToday: rewards?.streak.frozenToday })}
+            message={coachMessage({
+              progress: data.progress,
+              streakDays: days,
+              allowanceCents: allowance,
+              spentTodayCents: spentToday,
+              freezeUsedToday: rewards?.streak.frozenToday,
+            })}
+          />
         </ScrollView>
       )}
     </Screen>

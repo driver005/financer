@@ -7,7 +7,7 @@ import { Money } from "@/components/Money";
 import { Ring } from "@/components/Ring";
 import { StatusPill, type Tone } from "@/components/rows";
 import { useCountUp } from "@/components/motion";
-import { Card } from "@/components/ui";
+import { Card, LedgerRow } from "@/components/ui";
 import { formatMoney, spokenMoney, splitMoney } from "@/format";
 import { periodLabel } from "@/period";
 import { heroFontSize, periodLeft } from "@/ring";
@@ -100,17 +100,6 @@ export function SafeToSpendCard({ data }: { data: SafeToSpend | null }) {
       </Card>
       <ExplainSheet data={data} visible={open} onClose={() => setOpen(false)} />
     </>
-  );
-}
-
-/** One line of the ledger under the daily number: label on the left, amount on the right. */
-function LedgerRow({ label, value }: { label: string; value: React.ReactNode }) {
-  const p = usePalette();
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, minHeight: 44 }}>
-      <RNText style={[typography.body, { color: p.muted, flexShrink: 1 }]}>{label}</RNText>
-      {value}
-    </View>
   );
 }
 

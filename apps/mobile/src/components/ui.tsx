@@ -1,6 +1,7 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, type ReactNode } from "react";
-import { Text as RNText, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, Text as RNText, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
@@ -85,6 +86,45 @@ export function Title({ children, subtitle, right }: { children: ReactNode; subt
         {subtitle ? <RNText style={[typography.caption, { color: p.muted }]}>{subtitle}</RNText> : null}
       </View>
       {right}
+    </View>
+  );
+}
+
+/**
+ * A round icon button for the title bar (`Title`'s `right`): the screen's tools live here instead
+ * of as full-width buttons above the content. Always give it a `label`, it is the accessible name.
+ */
+export function HeaderAction({ icon, label, onPress, disabled }: { icon: string; label: string; onPress: () => void; disabled?: boolean }) {
+  const p = usePalette();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={4}
+      style={({ pressed }) => ({
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: pressed ? p.accentSoft : p.surfaceAlt,
+        opacity: disabled ? 0.5 : 1,
+      })}
+    >
+      <MaterialCommunityIcons name={icon as React.ComponentProps<typeof MaterialCommunityIcons>["name"]} size={22} color={p.accent} />
+    </Pressable>
+  );
+}
+
+/** One line of a summary card: label on the left, amount on the right, at least 44 high. */
+export function LedgerRow({ label, value }: { label: string; value: ReactNode }) {
+  const p = usePalette();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, minHeight: 44 }}>
+      <RNText style={[typography.body, { color: p.muted, flexShrink: 1 }]}>{label}</RNText>
+      {value}
     </View>
   );
 }
