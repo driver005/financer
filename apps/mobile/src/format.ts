@@ -69,3 +69,8 @@ export function parseEuroInput(input: string): number | null {
   const [int, frac = ""] = s.replace(/\./g, "").split(",");
   return Number(int) * 100 + Number(frac.padEnd(2, "0"));
 }
+
+/** "1 serving", "2 servings". */
+export function servingsText(n: number): string {
+  return `${n} ${n === 1 ? "serving" : "servings"}`;
+}

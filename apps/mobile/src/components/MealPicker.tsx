@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { servingsText } from "@/format";
 import { useMemo, useState } from "react";
 import { Text as RNText, View } from "react-native";
 
@@ -87,7 +88,7 @@ export function MealPicker({
               key={r.id}
               seed={r.id}
               title={r.title}
-              meta={`${r.minutes} min · ${r.servings} servings`}
+              meta={`${r.minutes} min · ${servingsText(r.servings)}`}
               label={`Plan ${r.title}`}
               onPress={() => onPick(entryFromRecipe(r))}
             />
@@ -106,7 +107,7 @@ export function MealPicker({
                 idea
                 seed={idea.title}
                 title={idea.title}
-                meta={`${idea.minutes} min · ${idea.servings} servings`}
+                meta={`${idea.minutes} min · ${servingsText(idea.servings)}`}
                 label={`Plan the idea ${idea.title}`}
                 onPress={() => onPick(entryFromIdea(idea))}
               />

@@ -129,6 +129,7 @@ export function TextInput({
   mode?: "outlined" | "flat";
   style?: StyleProp<ViewStyle>;
 }) {
+  const p = usePalette();
   return (
     <TextField isInvalid={error} style={style}>
       {label ? <Label>{label}</Label> : null}
@@ -137,6 +138,18 @@ export function TextInput({
           containerClassName="min-w-0 flex-1"
           className="min-w-0 flex-1"
           accessibilityLabel={rest.accessibilityLabel ?? label}
+          placeholderTextColor={p.muted}
+          // A visible field: on a phone the utility classes gave a pale box with no edge, which
+          // nearly disappeared in dark mode. A border and the theme's colours always apply.
+          style={{
+            minHeight: 48,
+            borderWidth: 2,
+            borderRadius: radius.md,
+            borderColor: error ? p.bad : p.border,
+            backgroundColor: p.surfaceAlt,
+            color: p.text,
+            paddingHorizontal: 12,
+          }}
           {...rest}
         />
         {right}

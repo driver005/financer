@@ -99,3 +99,16 @@ export function approvalLeftText(c: BankConnection, nowSeconds: number): string 
 export function connectionKey(c: BankConnection): string {
   return c.name.trim().toLowerCase();
 }
+
+/** What to tell someone when live bank sync has no FinTS product id yet. */
+export function liveSyncMissing(onPhone: boolean): { title: string; body: string } {
+  return onPhone
+    ? {
+        title: "Live sync is not set up on this phone",
+        body: "It needs a FinTS product id, which you request from the Deutsche Kreditwirtschaft. Add it under Settings > On-phone settings. See docs/FINTS.md. Until then, import a CSV export on the Spending tab.",
+      }
+    : {
+        title: "Live sync is not set up on the server",
+        body: "It needs a FinTS product id (FINANCER_FINTS_PRODUCT_ID, or bank.fints_product_id in financer.toml), which you request from the Deutsche Kreditwirtschaft. See docs/FINTS.md. Until then, import a CSV export on the Spending tab.",
+      };
+}
