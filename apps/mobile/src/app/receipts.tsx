@@ -257,7 +257,7 @@ function CaptureTile({
         justifyContent: "center",
         gap: 2,
         paddingHorizontal: space.sm,
-        borderRadius: 20,
+        borderRadius: 12,
         backgroundColor: primary ? p.accent : p.surface,
         borderWidth: 1,
         borderColor: primary ? p.accent : p.border,

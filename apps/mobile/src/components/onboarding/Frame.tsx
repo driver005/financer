@@ -228,7 +228,7 @@ export function ChoiceCard({
         gap: 12,
         padding: 14,
         marginBottom: 10,
-        borderRadius: 20,
+        borderRadius: 12,
         borderWidth: 1,
         borderBottomWidth: 1,
         borderColor: selected ? p.accent : p.border,

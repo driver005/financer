@@ -111,7 +111,7 @@ export function RhythmStep({ ctx }: { ctx: StepCtx }) {
           {!allowance.ok ? <FieldMessage tone="error">{allowance.error}</FieldMessage> : null}
           {daily !== null && limit !== null ? (
             <View
-              style={{ marginTop: 12, padding: 14, borderRadius: 20, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }}
+              style={{ marginTop: 12, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }}
               accessibilityLabel={`Your daily grocery goal is ${formatCents(daily)}`}
             >
               <RNText style={{ color: p.muted, fontSize: 13, fontWeight: "600" }}>Your daily grocery goal</RNText>

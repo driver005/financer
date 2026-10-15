@@ -12,16 +12,16 @@
  * - `*Soft`: a pale tint of the colour, for badge and icon backgrounds.
  */
 const light = {
-  background: "#f8fafc",
+  background: "#ffffff",
   surface: "#ffffff",
-  surfaceAlt: "#f1f5f9",
-  text: "#0f172a",
-  muted: "#475569",
-  border: "#e2e8f0",
-  accent: "#1e40af", // trust blue: buttons and text on white (contrast 8.7:1)
-  accentEdge: "#1e3a8a", // pressed / darker shade of the accent
+  surfaceAlt: "#f6f9fc",
+  text: "#1a1f36",
+  muted: "#5b6577",
+  border: "#e3e8ee",
+  accent: "#4f46e5", // indigo: buttons and text on white (contrast 6.3:1)
+  accentEdge: "#4338ca", // pressed / darker shade of the accent
   onAccent: "#ffffff",
-  fill: "#2563eb", // progress fills and decorations
+  fill: "#635bff", // progress fills and decorations
   blue: "#0b6fa4",
   blueEdge: "#08547d",
   onBlue: "#ffffff",
@@ -33,7 +33,7 @@ const light = {
   good: "#15803d",
   warn: "#b45309", // orange that can be read as text
   goldText: "#8a5a00", // gold that can be read as text
-  accentSoft: "#e0e7ff",
+  accentSoft: "#eef0ff",
   goodSoft: "#ecf9f1",
   badSoft: "#fde8e8",
   warnSoft: "#fef5e7",
@@ -48,10 +48,10 @@ const dark: typeof light = {
   text: "#f1f5f9",
   muted: "#9aa7bb",
   border: "#263043",
-  accent: "#93b4ff",
-  accentEdge: "#3b5bdb",
-  onAccent: "#0b1a44",
-  fill: "#5b8def",
+  accent: "#a5b4fc",
+  accentEdge: "#6366f1",
+  onAccent: "#0f1236",
+  fill: "#818cf8",
   blue: "#1cb0f6",
   blueEdge: "#1388bd",
   onBlue: "#04283b",
@@ -63,7 +63,7 @@ const dark: typeof light = {
   good: "#4ade80",
   warn: "#ff9600",
   goldText: "#ffc800",
-  accentSoft: "#1c2a4d",
+  accentSoft: "#1c2340",
   goodSoft: "#14301f",
   badSoft: "#3a1c1f",
   warnSoft: "#3a2a12",

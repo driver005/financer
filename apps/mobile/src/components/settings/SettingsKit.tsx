@@ -59,14 +59,14 @@ export function SectionFootnote({ children }: { children: ReactNode }) {
 }
 
 /**
- * A rounded box whose rows are separated by hairlines. Each row draws its own bottom line; the
+ * A flat strip between two hairlines whose rows are separated by hairlines. Each row draws its own bottom line; the
  * box pulls its content 1px down so the last line is clipped, which also works when some of the
  * children render nothing (the app lock row on the web, say).
  */
 export function SettingsGroup({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const p = usePalette();
   return (
-    <View style={[{ borderRadius: 20, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface, overflow: "hidden" }, style]}>
+    <View style={[{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: p.border, backgroundColor: p.surface, overflow: "hidden" }, style]}>
       <View style={{ marginBottom: -1 }}>{children}</View>
     </View>
   );

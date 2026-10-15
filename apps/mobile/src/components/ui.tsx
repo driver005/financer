@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ActivityIndicator, ChunkyButton, Text } from "@/components/kit";
 import { useReduceMotion } from "@/components/motion";
 import { SkeletonList } from "@/components/Skeleton";
-import { elevation, motion, radius, space, typography, usePalette } from "@/theme";
+import { motion, space, typography, usePalette } from "@/theme";
 
 /** Colours used by the screens, taken from the active (light or dark) palette. */
 export function useColors() {
@@ -49,8 +49,9 @@ export function Screen({ children }: { children: ReactNode }) {
 }
 
 /**
- * The standard surface: a rounded card with a hairline border and a barely visible shadow
- * (`elevation.card`). Pass `flush` to drop the padding, e.g. for a list that runs to the edges.
+ * The standard section: a flat strip on the page background, closed by a hairline. No box, no
+ * shadow, so figures and lists line up on the page margin. Pass `flush` to drop the bottom
+ * padding, e.g. for a list that runs to the edge.
  */
 export function Card({ children, style, flush }: { children: ReactNode; style?: StyleProp<ViewStyle>; flush?: boolean }) {
   const p = usePalette();
@@ -58,14 +59,11 @@ export function Card({ children, style, flush }: { children: ReactNode; style?: 
     <View
       style={[
         {
-          marginBottom: space.md,
-          borderRadius: radius.lg,
-          borderWidth: 1,
-          borderColor: p.border,
-          backgroundColor: p.surface,
-          padding: flush ? 0 : space.lg,
+          marginBottom: space.lg,
+          paddingBottom: flush ? 0 : space.lg,
+          borderBottomWidth: 1,
+          borderBottomColor: p.border,
         },
-        elevation.card,
         style,
       ]}
     >

@@ -4,25 +4,25 @@
 
 @source "../node_modules/heroui-native/lib";
 
-/* Trust-blue palette on cool slate neutrals (navy-leaning blue on near-white, or near-black navy
-   in dark mode). Keep in sync with src/theme.ts, which the few JS-only colour users read. */
+/* Indigo accent on cool grey-blue neutrals, white sections separated by hairlines (or near-black
+   navy in dark mode). Keep in sync with src/theme.ts, which the few JS-only colour users read. */
 @layer theme {
   :root {
     @variant light {
-      --background: #f8fafc;
-      --foreground: #0f172a;
+      --background: #ffffff;
+      --foreground: #1a1f36;
       --surface: #ffffff;
-      --surface-secondary: #f1f5f9;
-      --surface-tertiary: #e0e7ff;
-      --muted: #475569;
-      --default: #e8edf5;
-      --default-foreground: #0f172a;
-      --accent: #1e40af;
+      --surface-secondary: #f6f9fc;
+      --surface-tertiary: #eef0ff;
+      --muted: #5b6577;
+      --default: #e3e8ee;
+      --default-foreground: #1a1f36;
+      --accent: #4f46e5;
       --accent-foreground: #ffffff;
-      --field-background: #f1f5f9;
-      --field-border: #e2e8f0;
-      --border: #e2e8f0;
-      --separator: #e2e8f0;
+      --field-background: #f6f9fc;
+      --field-border: #e3e8ee;
+      --border: #e3e8ee;
+      --separator: #e3e8ee;
       --success: #15803d;
       --danger: #c81e1e;
       --segment: #ffffff;
@@ -36,8 +36,8 @@
       --muted: #9aa7bb;
       --default: #263043;
       --default-foreground: #f1f5f9;
-      --accent: #93b4ff;
-      --accent-foreground: #0b1a44;
+      --accent: #a5b4fc;
+      --accent-foreground: #0f1236;
       --field-background: #131a26;
       --field-border: #263043;
       --border: #263043;

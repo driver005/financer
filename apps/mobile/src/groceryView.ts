@@ -59,7 +59,7 @@ const CHAIN_TINT: Record<string, Tint> = {
 
 /** Calm, distinct colours for meal and recipe avatars (white text, at least 4.5:1). */
 export const MEAL_TINTS: readonly Tint[] = [
-  { bg: "#1e40af", fg: "#ffffff" },
+  { bg: "#4f46e5", fg: "#ffffff" },
   { bg: "#0369a1", fg: "#ffffff" },
   { bg: "#b45309", fg: "#ffffff" },
   { bg: "#15803d", fg: "#ffffff" },
@@ -198,8 +198,8 @@ export type ToneName = "good" | "bad" | "offer" | "accent";
 export type ToneColours = { fg: string; bg: string; border: string };
 
 const TONE_FG = {
-  light: { good: "#166534", bad: "#b91c1c", offer: "#9a3412", accent: "#1e40af" },
-  dark: { good: "#4ade80", bad: "#ff6b6b", offer: "#ffb454", accent: "#93b4ff" },
+  light: { good: "#166534", bad: "#b91c1c", offer: "#9a3412", accent: "#4f46e5" },
+  dark: { good: "#4ade80", bad: "#ff6b6b", offer: "#ffb454", accent: "#a5b4fc" },
 } as const;
 
 /**

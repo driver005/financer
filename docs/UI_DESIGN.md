@@ -1,6 +1,6 @@
 # UI design
 
-The app has a game-like look (purple, chunky 3D buttons, the pig mascot, a real dark theme). This
+The app has a calm, dashboard-style look: an indigo accent on cool grey-blue neutrals, flat sections closed by hairlines (no boxed cards), flat buttons with 8-12 point corners, sentence-case labels, the pig mascot and a real dark theme. This
 page describes the system behind it so new screens look like the old ones. The code lives in
 `apps/mobile/src`.
 
@@ -86,7 +86,7 @@ spending trend and the sentences for it), `format.ts` (`formatMoney`, `spokenMon
 - **States.** Loading shows skeletons shaped like the content, an empty list shows `EmptyState`
   with one action, errors show `EmptyState` with "Try again". Pull-to-refresh stays on every list
   or scroll view that loads data.
-- **Motion** is restrained: button press (the 3D lip squashes), the ring and bars sliding to their
+- **Motion** is restrained: button press (the face dims), the ring and bars sliding to their
   value, the Today count-up, the mascot bob, skeleton pulse. All of it is skipped with the system
   "reduce motion" setting (`useReduceMotion`).
 - **Charts** use `react-native-svg` only. Pass the sentence from `charts.ts` as `summary`; it is

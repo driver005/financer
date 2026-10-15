@@ -13,7 +13,7 @@ import "@/native/background"; // defines the background task at startup
 import { NotificationSync } from "@/components/NotificationSync";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import "@/global.css";
-import { elevation, space, usePalette } from "@/theme";
+import { space, usePalette } from "@/theme";
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -61,7 +61,6 @@ export default function RootLayout() {
               height: 60 + insets.bottom,
               paddingTop: space.sm,
               paddingBottom: insets.bottom + space.xs,
-              ...elevation.raised,
             },
             tabBarItemStyle: { minHeight: 48 },
             tabBarLabelStyle: { fontSize: narrow ? 10 : 11, lineHeight: 14, fontWeight: "700", marginTop: 2 },
