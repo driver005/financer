@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import { Api, type ApiConfig } from "./client";
 import { CONFIG_KEY, MODE_KEY } from "./keys";
+import { initialMode, type BackendMode } from "./mode";
 import { deleteSecret, getSecret, setSecret } from "./storage";
 import { EmbeddedTransport } from "./transport";
 import { disableBackgroundRefresh, enableBackgroundRefresh } from "../native/background";
@@ -15,13 +16,15 @@ import {
 
 const KEY = CONFIG_KEY;
 
-export type BackendMode = "remote" | "embedded";
+export type { BackendMode };
 
 type ConfigState = {
   /** `false` until the stored config has been read (and the on-phone backend started, if used). */
   loaded: boolean;
   /** Where the backend runs: a server you host, or inside this app. */
   mode: BackendMode;
+  /** True once a mode was saved. A compact build starts in on-phone mode before that (see mode.ts). */
+  modeChosen: boolean;
   setMode: (mode: BackendMode) => Promise<void>;
   /** Server address and token (remote mode). */
   config: ApiConfig | null;
@@ -40,6 +43,7 @@ const Ctx = createContext<ConfigState | null>(null);
 export function ApiProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [mode, setModeState] = useState<BackendMode>("remote");
+  const [modeChosen, setModeChosen] = useState(false);
   const [config, setConfig] = useState<ApiConfig | null>(null);
   const [embedded, setEmbedded] = useState<EmbeddedSettings>(EMPTY_EMBEDDED_SETTINGS);
   const [embeddedApi, setEmbeddedApi] = useState<Api | null>(null);
@@ -51,7 +55,9 @@ export function ApiProvider({ children }: { children: ReactNode }) {
         const raw = await getSecret(KEY);
         if (raw) setConfig(JSON.parse(raw) as ApiConfig);
         const storedMode = await getSecret(MODE_KEY);
-        if (storedMode === "embedded") setModeState("embedded");
+        const start = initialMode({ storedMode, hasServer: raw !== null, embeddedAvailable });
+        setModeState(start.mode);
+        setModeChosen(start.chosen);
         const rawEmbedded = await getSecret(EMBEDDED_KEY);
         if (rawEmbedded) setEmbedded({ ...EMPTY_EMBEDDED_SETTINGS, ...(JSON.parse(rawEmbedded) as Partial<EmbeddedSettings>) });
       } catch {
@@ -106,6 +112,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
   const setMode = useCallback(async (next: BackendMode) => {
     await setSecret(MODE_KEY, next);
     setModeState(next);
+    setModeChosen(true);
   }, []);
 
   const saveEmbedded = useCallback(async (next: EmbeddedSettings) => {
@@ -118,6 +125,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     () => ({
       loaded,
       mode,
+      modeChosen,
       setMode,
       config,
       api: mode === "embedded" ? embeddedApi : remoteApi,
