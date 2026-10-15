@@ -224,7 +224,7 @@ function RuleForm({
 }) {
   const p = usePalette();
   const set = (patch: Partial<RuleDraft>) => onChange({ ...draft, ...patch });
-  const label = { color: p.muted, fontSize: 12, fontWeight: "800" as const, letterSpacing: 1, textTransform: "uppercase" as const, marginTop: 16, marginBottom: 8 };
+  const label = { color: p.muted, fontSize: 12, fontWeight: "800" as const, marginTop: 16, marginBottom: 8 };
   return (
     <Card style={{ marginTop: 16 }}>
       <Text variant="titleMedium" accessibilityRole="header">{isEdit ? "Edit rule" : "New rule"}</Text>

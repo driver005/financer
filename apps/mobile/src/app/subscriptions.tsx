@@ -82,7 +82,7 @@ export default function SubscriptionsScreen() {
             />
           ) : (
             <Card>
-              <Text style={{ color: c.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1 }}>RUNNING SUBSCRIPTIONS</Text>
+              <Text style={{ color: c.muted, fontSize: 13, fontWeight: "600" }}>Running subscriptions</Text>
               <Text style={{ color: c.text, fontSize: 26, fontWeight: "800", marginTop: 4 }}>{formatCents(data.monthly_total_cents)} / month</Text>
               <Text style={{ color: c.muted, fontSize: 13, marginTop: 2 }}>
                 {data.active.length} recurring payment{data.active.length === 1 ? "" : "s"}, yearly and quarterly ones averaged per month.

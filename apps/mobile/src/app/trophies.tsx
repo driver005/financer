@@ -47,7 +47,7 @@ async function load(a: Api) {
 
 function Label({ children }: { children: string }) {
   const p = usePalette();
-  return <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>{children}</RNText>;
+  return <RNText style={[typography.overline, { color: p.muted }]}>{children}</RNText>;
 }
 
 /** Streak freezes, badges, personal bests and the savings goal. Everything is derived from the bookings. */

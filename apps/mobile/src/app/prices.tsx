@@ -153,7 +153,7 @@ function Hero({ summary }: { summary: ReturnType<typeof summarizePrices> }) {
       accessibilityLabel={`${leader ? `${headline} is cheapest, ${sub}` : `${headline}, ${sub}`}. Choosing the cheapest chain per item saves up to ${formatCents(summary.savingCents)}.`}
       style={{ backgroundColor: p.accent, borderRadius: 16, padding: space.lg, marginBottom: space.lg }}
     >
-      <RNText style={{ color: p.onAccent, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" }}>Best chain right now</RNText>
+      <RNText style={{ color: p.onAccent, fontSize: 12, fontWeight: "800" }}>Best chain right now</RNText>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.sm }}>
         <View style={{ flexDirection: "row" }}>
           {summary.top.slice(0, 3).map((chain, i) => (

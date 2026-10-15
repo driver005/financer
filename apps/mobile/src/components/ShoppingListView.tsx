@@ -196,7 +196,7 @@ export function ShoppingListView({
           >
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md }}>
               <View style={{ flex: 1 }}>
-                <RNText style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" }}>
+                <RNText style={{ color: p.muted, fontSize: 12, fontWeight: "800" }}>
                   {plan.split ? `Best split over ${plan.stops.length} shops` : "Cheapest shop"}
                 </RNText>
                 {!plan.split && plan.stops[0] ? (

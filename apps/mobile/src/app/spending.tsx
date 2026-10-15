@@ -99,7 +99,7 @@ export default function Spending() {
     <View>
       {items.length > 0 ? (
         <Card>
-          <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>Spent, last {TREND_DAYS} days</RNText>
+          <RNText style={[typography.overline, { color: p.muted }]}>Spent, last {TREND_DAYS} days</RNText>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, flexWrap: "wrap", marginTop: space.xs }}>
             <Money cents={trend.total} variant="display" tone="plain" style={{ fontSize: 36, lineHeight: 42 }} label={`Spent ${spokenMoney(trend.total)} in the last ${TREND_DAYS} days`} />
             {delta !== null && delta !== 0 ? (

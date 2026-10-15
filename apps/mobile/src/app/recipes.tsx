@@ -112,7 +112,7 @@ export default function Recipes() {
               {data && data.length > 0 ? (
                 <RNText
                   accessibilityRole="header"
-                  style={{ color: c.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", marginTop: space.lg }}
+                  style={{ color: c.muted, fontSize: 12, fontWeight: "800", marginTop: space.lg }}
                 >
                   {`${data.length} recipe${data.length === 1 ? "" : "s"}`}
                 </RNText>

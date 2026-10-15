@@ -28,7 +28,7 @@ export function ForecastCard({ data }: { data: Forecast | null }) {
 
   return (
     <Card>
-      <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>End of period forecast</RNText>
+      <RNText style={[typography.overline, { color: p.muted }]}>End of period forecast</RNText>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.sm }}>
         <IconBadge icon={ICON[view.tone]} tone={tone} />
         <View style={{ flex: 1, minWidth: 0 }}>

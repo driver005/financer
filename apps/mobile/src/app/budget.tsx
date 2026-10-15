@@ -112,7 +112,7 @@ export default function Budget() {
           {data ? (
             <>
               <Card>
-                <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>Left to budget per month</RNText>
+                <RNText style={[typography.overline, { color: p.muted }]}>Left to budget per month</RNText>
                 <View style={{ marginTop: space.xs }}>
                   <Money cents={left} variant="display" tone={left < 0 ? "bad" : "plain"} label={`Left to budget per month: ${spokenMoney(left)}`} />
                 </View>

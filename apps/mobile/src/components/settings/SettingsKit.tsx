@@ -44,7 +44,7 @@ export function SectionHeader({ title, hint }: { title: string; hint?: string })
   const p = usePalette();
   return (
     <View style={{ marginTop: 24, marginBottom: 8, paddingHorizontal: 4 }}>
-      <RNText accessibilityRole="header" style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" }}>
+      <RNText accessibilityRole="header" style={{ color: p.muted, fontSize: 12, fontWeight: "800" }}>
         {title}
       </RNText>
       {hint ? <RNText style={{ color: p.muted, fontSize: 13, marginTop: 2 }}>{hint}</RNText> : null}

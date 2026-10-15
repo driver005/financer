@@ -345,7 +345,7 @@ export function ToggleChip({ label, selected, onPress }: { label: string; select
 export function FieldLabel({ children }: { children: ReactNode }) {
   const p = usePalette();
   return (
-    <RNText accessibilityRole="header" style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", marginTop: 16, marginBottom: 8 }}>
+    <RNText accessibilityRole="header" style={{ color: p.muted, fontSize: 12, fontWeight: "800", marginTop: 16, marginBottom: 8 }}>
       {children}
     </RNText>
   );

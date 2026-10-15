@@ -83,7 +83,7 @@ export function SectionLabel({ children, right }: { children: ReactNode; right?:
     <View style={{ flexDirection: "row", alignItems: "center", marginTop: space.sm, marginBottom: space.sm, gap: space.sm }}>
       <RNText
         accessibilityRole="header"
-        style={{ flex: 1, color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" }}
+        style={{ flex: 1, color: p.muted, fontSize: 12, fontWeight: "800" }}
       >
         {children}
       </RNText>

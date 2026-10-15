@@ -250,7 +250,7 @@ export default function Today() {
           <SafeToSpendCard data={data.safe} />
           <ForecastCard data={data.forecast} />
           <Card>
-            <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>Today's grocery goal</RNText>
+            <RNText style={[typography.overline, { color: p.muted }]}>Today's grocery goal</RNText>
             {allowance > 0 ? (
               <>
                 <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.sm, marginTop: space.xs, flexWrap: "wrap" }}>

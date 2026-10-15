@@ -82,7 +82,7 @@ export function SectionHeader({ title, action }: { title: string; action?: React
   const p = usePalette();
   return (
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: space.sm, marginBottom: space.sm, paddingHorizontal: space.xs, minHeight: 24 }}>
-      <RNText accessibilityRole="header" style={[typography.overline, { color: p.muted, textTransform: "uppercase", flexShrink: 1 }]}>
+      <RNText accessibilityRole="header" style={[typography.overline, { color: p.muted, flexShrink: 1 }]}>
         {title}
       </RNText>
       {action}
