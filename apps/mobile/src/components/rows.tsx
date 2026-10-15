@@ -99,7 +99,7 @@ export function ListGroup({ children, style, inset = 68 }: { children: ReactNode
       style={[
         {
           backgroundColor: p.surface,
-          borderWidth: 2,
+          borderWidth: 1,
           borderColor: p.border,
           borderRadius: radius.xl,
           overflow: "hidden",

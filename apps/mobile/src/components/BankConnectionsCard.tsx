@@ -166,7 +166,7 @@ export function BankConnectionsCard() {
                 {waiting ? (
                   <View
                     accessibilityLiveRegion="polite"
-                    style={{ marginTop: 10, padding: 12, borderRadius: 16, borderWidth: 2, borderColor: c.accent }}
+                    style={{ marginTop: 10, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: c.accent }}
                   >
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                       <ActivityIndicator />

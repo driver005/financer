@@ -28,7 +28,7 @@ function tab(title: string, icon: IconName, pill: string) {
   return {
     title,
     tabBarIcon: ({ color, focused }: { color: ColorValue; size: number; focused: boolean }) => (
-      <View style={{ width: 56, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: focused ? pill : "transparent" }}>
+      <View style={{ width: 52, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: focused ? pill : "transparent" }}>
         <MaterialCommunityIcons name={icon} color={color as string} size={24} />
       </View>
     ),
@@ -52,10 +52,10 @@ export default function RootLayout() {
             tabBarInactiveTintColor: p.muted,
             tabBarStyle: {
               backgroundColor: p.surface,
-              borderTopWidth: 2,
+              borderTopWidth: 1,
               borderTopColor: p.border,
               // the system's bottom inset (home indicator) goes inside the bar, not onto the labels
-              height: 72 + insets.bottom,
+              height: 60 + insets.bottom,
               paddingTop: space.sm,
               paddingBottom: insets.bottom + space.xs,
               ...elevation.raised,

@@ -200,7 +200,7 @@ function ResultCard({ r, onAdd, usualMessage }: { r: EanLookup; onAdd: (item: st
             padding: space.md,
             borderRadius: 16,
             backgroundColor: tone.bg,
-            borderWidth: 2,
+            borderWidth: 1,
             borderColor: tone.border,
             flexDirection: "row",
             alignItems: "center",

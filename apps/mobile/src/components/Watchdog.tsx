@@ -12,7 +12,7 @@ export function Badge({ text, tone = "muted" }: { text: string; tone?: "bad" | "
   const p = usePalette();
   const edge = { bad: p.bad, warn: p.warn, good: p.good, muted: p.border }[tone];
   return (
-    <View style={{ borderWidth: 2, borderColor: edge, borderRadius: radius.md, paddingHorizontal: space.sm, paddingVertical: 1, alignSelf: "flex-start" }}>
+    <View style={{ borderWidth: 1, borderColor: edge, borderRadius: radius.md, paddingHorizontal: space.sm, paddingVertical: 1, alignSelf: "flex-start" }}>
       <RNText style={{ color: tone === "bad" ? p.bad : p.text, fontSize: 12, lineHeight: 16, fontWeight: "800" }}>{text}</RNText>
     </View>
   );

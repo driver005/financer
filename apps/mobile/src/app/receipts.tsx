@@ -260,14 +260,14 @@ function CaptureTile({
         paddingHorizontal: space.sm,
         borderRadius: 20,
         backgroundColor: primary ? p.accent : p.surface,
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: primary ? p.accent : p.border,
-        borderBottomWidth: 5,
+        borderBottomWidth: 1,
         borderBottomColor: primary ? p.accentEdge : p.border,
       }}
     >
       <MaterialCommunityIcons name={icon as never} size={28} color={fg} />
-      <RNText style={{ color: primary ? p.onAccent : p.text, fontSize: 14, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase" }}>{label}</RNText>
+      <RNText style={{ color: primary ? p.onAccent : p.text, fontSize: 14, fontWeight: "700" }}>{label}</RNText>
       <RNText style={{ color: primary ? p.onAccent : p.muted, fontSize: 11 }} numberOfLines={1}>
         {hint}
       </RNText>

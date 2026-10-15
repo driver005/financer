@@ -114,7 +114,7 @@ export function Panel({
         {
           backgroundColor: tone ? tones[tone].bg : p.surface,
           borderColor: tone ? tones[tone].border : p.border,
-          borderWidth: 2,
+          borderWidth: 1,
           borderRadius: radius.lg,
           padding,
           marginBottom: space.md,
@@ -137,7 +137,7 @@ export function Group({ children, style }: { children: ReactNode; style?: StyleP
         {
           backgroundColor: p.surface,
           borderColor: p.border,
-          borderWidth: 2,
+          borderWidth: 1,
           borderRadius: radius.lg,
           overflow: "hidden",
           marginBottom: space.md,
@@ -279,7 +279,7 @@ export function Checkbox({ checked, size = 28 }: { checked: boolean; size?: numb
           width: size,
           height: size,
           borderRadius: 9,
-          borderWidth: 2,
+          borderWidth: 1,
           borderColor: checked ? p.accent : p.muted,
           backgroundColor: checked ? p.accent : "transparent",
           alignItems: "center",
@@ -321,7 +321,7 @@ export function Stepper({
         alignSelf: "flex-start",
         backgroundColor: p.surfaceAlt,
         borderRadius: 999,
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: p.border,
       }}
     >
@@ -373,7 +373,7 @@ export function FilterChip({
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: selected ? p.accent : p.surface,
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: selected ? p.accent : p.border,
         transform: [{ scale: pressed ? 0.96 : 1 }],
       })}

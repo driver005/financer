@@ -72,7 +72,7 @@ export function FinishStep({ ctx }: { ctx: StepCtx }) {
       {rows.length ? (
         <>
           <FieldLabel>Your choices</FieldLabel>
-          <View style={{ borderRadius: 20, borderWidth: 2, borderColor: p.border, backgroundColor: p.surface, paddingHorizontal: 14, paddingVertical: 6 }}>
+          <View style={{ borderRadius: 20, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface, paddingHorizontal: 14, paddingVertical: 6 }}>
             {rows.map((r, i) => (
               <View
                 key={r.label}
@@ -92,7 +92,7 @@ export function FinishStep({ ctx }: { ctx: StepCtx }) {
       {saved.kind === "failed" ? <ChunkyButton outline icon="refresh" label="Try saving again" onPress={() => void save()} /> : null}
 
       <FieldLabel>Your first quest</FieldLabel>
-      <View style={{ flexDirection: "row", gap: 12, alignItems: "center", padding: 14, borderRadius: 20, borderWidth: 2, borderColor: p.accent, backgroundColor: p.surfaceAlt }}>
+      <View style={{ flexDirection: "row", gap: 12, alignItems: "center", padding: 14, borderRadius: 20, borderWidth: 1, borderColor: p.accent, backgroundColor: p.surfaceAlt }}>
         <MaterialCommunityIcons name="flag-checkered" size={28} color={p.accent} />
         <View style={{ flex: 1 }}>
           <RNText style={{ color: p.text, fontSize: 16, fontWeight: "800" }}>{quest.title}</RNText>

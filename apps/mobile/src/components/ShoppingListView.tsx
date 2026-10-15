@@ -122,7 +122,7 @@ export function ListSummaryBar({ list, ticks }: { list: MealShoppingList; ticks:
       style={{
         backgroundColor: p.surface,
         borderColor: colours.border,
-        borderWidth: 2,
+        borderWidth: 1,
         borderRadius: radius.md,
         paddingVertical: space.md,
         paddingHorizontal: space.lg,

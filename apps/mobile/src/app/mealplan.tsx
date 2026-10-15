@@ -252,9 +252,9 @@ function WeekStrip({ days, plan, today, onPick }: { days: string[]; plan: WeekPl
               justifyContent: "center",
               gap: 2,
               borderRadius: 16,
-              borderWidth: 2,
+              borderWidth: 1,
               borderColor: isToday ? p.accent : p.border,
-              borderBottomWidth: isToday ? 5 : 2,
+              borderBottomWidth: isToday ? 2 : 1,
               borderBottomColor: isToday ? p.accentEdge : p.border,
               backgroundColor: isToday ? p.accent : p.surface,
             }}
@@ -330,7 +330,7 @@ function DayCard({
             justifyContent: "center",
             gap: space.sm,
             borderRadius: 16,
-            borderWidth: 2,
+            borderWidth: 1,
             borderStyle: "dashed",
             borderColor: p.border,
           }}

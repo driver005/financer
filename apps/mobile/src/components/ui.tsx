@@ -58,8 +58,8 @@ export function Card({ children, style, flush }: { children: ReactNode; style?: 
       style={[
         {
           marginBottom: space.md,
-          borderRadius: radius.xl,
-          borderWidth: 2,
+          borderRadius: radius.lg,
+          borderWidth: 1,
           borderColor: p.border,
           backgroundColor: p.surface,
           padding: flush ? 0 : space.lg,
@@ -77,7 +77,7 @@ export function Card({ children, style, flush }: { children: ReactNode; style?: 
 export function Title({ children, subtitle, right }: { children: ReactNode; subtitle?: string; right?: ReactNode }) {
   const p = usePalette();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, marginTop: space.md, marginBottom: space.md }}>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, marginTop: space.xs, marginBottom: space.md }}>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text variant="headlineMedium" style={{ fontWeight: "800" }} accessibilityRole="header">
           {children}

@@ -249,19 +249,6 @@ export default function Today() {
         >
           <SafeToSpendCard data={data.safe} />
           <ForecastCard data={data.forecast} />
-          <WatchdogCard />
-
-          <Mascot
-            mood={moodFor({ streakDays: days, allowanceCents: allowance, spentTodayCents: spentToday, celebrating, freezeUsedToday: rewards?.streak.frozenToday })}
-            message={coachMessage({
-              progress: data.progress,
-              streakDays: days,
-              allowanceCents: allowance,
-              spentTodayCents: spentToday,
-              freezeUsedToday: rewards?.streak.frozenToday,
-            })}
-          />
-
           <Card>
             <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>Today's grocery goal</RNText>
             {allowance > 0 ? (
@@ -291,17 +278,18 @@ export default function Today() {
             )}
           </Card>
 
-          <Card>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.md }}>
-              <RNText style={[typography.heading, { color: p.text, flexShrink: 1 }]}>Level {lvl.level}</RNText>
-              <StatusPill tone="gold" icon="lightning-bolt" label={`${points} XP`} accessibilityLabel={`${points} experience points`} />
-            </View>
-            <RNText style={[typography.label, { color: p.muted }]}>{lvl.title}</RNText>
-            <Bar progress={lvl.into / lvl.size} color={p.gold} marginTop={space.md} accessibilityLabel={`${lvl.into} of ${lvl.size} experience points to level ${lvl.level + 1}`} />
-            <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>
-              {lvl.into} / {lvl.size} XP to level {lvl.level + 1}
-            </RNText>
-          </Card>
+          <WatchdogCard />
+
+          <Mascot
+            mood={moodFor({ streakDays: days, allowanceCents: allowance, spentTodayCents: spentToday, celebrating, freezeUsedToday: rewards?.streak.frozenToday })}
+            message={coachMessage({
+              progress: data.progress,
+              streakDays: days,
+              allowanceCents: allowance,
+              spentTodayCents: spentToday,
+              freezeUsedToday: rewards?.streak.frozenToday,
+            })}
+          />
 
           <StoresLink />
 
@@ -309,7 +297,16 @@ export default function Today() {
 
           <Card>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.md }}>
-              <RNText accessibilityRole="header" style={[typography.heading, { color: p.text }]}>Quests</RNText>
+              <View style={{ flexShrink: 1 }}>
+                <RNText accessibilityRole="header" style={[typography.heading, { color: p.text }]}>Level {lvl.level}</RNText>
+                <RNText style={[typography.caption, { color: p.muted }]}>{lvl.title} · {lvl.into} / {lvl.size} XP to level {lvl.level + 1}</RNText>
+              </View>
+              <StatusPill tone="gold" icon="lightning-bolt" label={`${points} XP`} accessibilityLabel={`${points} experience points`} />
+            </View>
+            <Bar progress={lvl.into / lvl.size} color={p.gold} marginTop={space.sm} accessibilityLabel={`${lvl.into} of ${lvl.size} experience points to level ${lvl.level + 1}`} />
+            <View style={{ height: 1, backgroundColor: p.border, marginVertical: space.md }} />
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.md }}>
+              <RNText style={[typography.bodyStrong, { color: p.text }]}>Quests</RNText>
               <StatusPill tone="accent" label={`${doneCount} / ${list.length}`} accessibilityLabel={`${doneCount} of ${list.length} quests done`} />
             </View>
             <Bar progress={doneCount / Math.max(1, list.length)} marginTop={space.md} accessibilityLabel={`${doneCount} of ${list.length} quests done`} />

@@ -48,17 +48,17 @@ export function SafeToSpendCard({ data }: { data: SafeToSpend | null }) {
 
   return (
     <>
-      <Card style={{ alignItems: "center", paddingVertical: space.xl }}>
+      <Card style={{ alignItems: "center" }}>
         <Label>Safe to spend today</Label>
         <View style={{ marginTop: space.md }}>
           <Ring
-            size={216}
-            stroke={16}
+            size={176}
+            stroke={12}
             progress={left}
             color={ringColor}
             accessibilityLabel={`Safe to spend today: ${spokenMoney(data.daily_cents)} per day. ${data.days_left} of ${data.days_total} days left in this period.`}
           >
-            <View style={{ alignItems: "center", maxWidth: 168 }}>
+            <View style={{ alignItems: "center", maxWidth: 136 }}>
               <RNText
                 numberOfLines={1}
                 adjustsFontSizeToFit
@@ -77,7 +77,7 @@ export function SafeToSpendCard({ data }: { data: SafeToSpend | null }) {
           </Ring>
         </View>
 
-        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", justifyContent: "center", gap: space.sm, marginTop: space.lg }}>
+        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", justifyContent: "center", gap: space.sm, marginTop: space.md }}>
           <StatusPill label={pace.title} tone={paceTone} icon={PACE_ICON[pace.tone]} accessibilityLabel={`Pace: ${pace.title}`} />
           <RNText style={[typography.caption, { color: p.muted }]}>{daysLeftText(data.days_left)}</RNText>
         </View>
@@ -86,13 +86,13 @@ export function SafeToSpendCard({ data }: { data: SafeToSpend | null }) {
           <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm, textAlign: "center" }]}>{headlineHint(data)}</RNText>
         ) : null}
 
-        <View style={{ alignSelf: "stretch", flexDirection: "row", marginTop: space.lg, paddingTop: space.lg, borderTopWidth: 1, borderTopColor: p.border }}>
+        <View style={{ alignSelf: "stretch", flexDirection: "row", marginTop: space.md, paddingTop: space.md, borderTopWidth: 1, borderTopColor: p.border }}>
           <Stat label="Free this period" value={<Money cents={data.available_cents} variant="bodyStrong" tone={over ? "bad" : "plain"} />} />
           <View style={{ width: 1, backgroundColor: p.border }} />
           <Stat label="Still to pay (fixed)" value={<Money cents={data.fixed_costs_due_cents} variant="bodyStrong" tone="plain" />} />
         </View>
 
-        <View style={{ marginTop: space.md }}>
+        <View style={{ marginTop: space.xs }}>
           <ChunkyButton compact flat icon="help-circle-outline" label="How is this calculated?" onPress={() => setOpen(true)} />
         </View>
       </Card>
@@ -133,7 +133,7 @@ function ExplainSheet({ data, visible, onClose }: { data: SafeToSpend; visible: 
               backgroundColor: p.surface,
               borderTopLeftRadius: 28,
               borderTopRightRadius: 28,
-              borderWidth: 2,
+              borderWidth: 1,
               borderBottomWidth: 0,
               borderColor: p.border,
               maxHeight: "85%",

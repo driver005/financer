@@ -267,8 +267,8 @@ export function IconButton({
 }
 
 /**
- * Chunky game-style button: a coloured face with a darker 3D lip that squashes when pressed.
- * `tone` picks the colours; `outline` is a white face with a grey lip.
+ * Button: a flat coloured face that dims when pressed. `tone` picks the colours; `outline` is a
+ * surface-coloured face with a hairline border.
  */
 export function ChunkyButton({
   label,
@@ -301,7 +301,6 @@ export function ChunkyButton({
     blue: { face: p.blue, edge: p.blueEdge, text: p.onBlue, ink: p.blue },
     red: { face: p.bad, edge: p.badEdge, text: p.onBad, ink: p.bad },
   }[tone];
-  const lip = flat ? 0 : 4;
   const textColour = flat || outline ? colours.ink : colours.text;
   return (
     <Pressable
@@ -326,16 +325,13 @@ export function ChunkyButton({
           justifyContent: "center",
           gap: 8,
           borderRadius: radius.lg,
-          minHeight: compact ? MIN_TOUCH : 52,
-          paddingVertical: compact ? 8 : 14,
+          minHeight: compact ? MIN_TOUCH : 48,
+          paddingVertical: compact ? 8 : 12,
           paddingHorizontal: compact ? 14 : 18,
           backgroundColor: flat ? "transparent" : outline ? p.surface : colours.face,
-          borderWidth: outline ? 2 : 0,
+          borderWidth: outline ? 1 : 0,
           borderColor: p.border,
-          borderBottomWidth: lip + (outline ? 2 : 0) - (pressed ? lip : 0),
-          borderBottomColor: outline ? p.border : colours.edge,
-          marginTop: pressed ? lip : 0,
-          opacity: disabled ? 0.5 : 1,
+          opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
         },
         style,
       ]}
@@ -344,10 +340,8 @@ export function ChunkyButton({
       <RNText
         style={{
           color: textColour,
-          fontWeight: "800",
+          fontWeight: "700",
           fontSize: compact ? 13 : 15,
-          letterSpacing: 0.8,
-          textTransform: "uppercase",
         }}
       >
         {label}
