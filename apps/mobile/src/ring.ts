@@ -4,6 +4,7 @@
  */
 
 export function clamp01(v: number): number {
+  "worklet"; // called from the ring's animated props, which run on the UI thread
   return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
 }
 
@@ -24,6 +25,7 @@ export function ringGeometry(size: number, stroke: number): RingGeometry {
 
 /** `strokeDashoffset` that leaves `progress` (0..1) of the circle drawn. */
 export function dashOffset(circumference: number, progress: number): number {
+  "worklet"; // runs on the UI thread (useAnimatedProps in Ring.tsx): a plain function there crashes the app on a phone
   return circumference * (1 - clamp01(progress));
 }
 
