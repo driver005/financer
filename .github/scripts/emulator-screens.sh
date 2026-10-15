@@ -27,11 +27,17 @@ for scheme in light dark; do
     adb shell am start -W -a android.intent.action.VIEW -d "$url" "$pkg" >/dev/null
     # the first screen also loads the JavaScript bundle and starts the Rust backend
     if [ "$first" = 1 ]; then sleep 20; first=0; else sleep 4; fi
+    pid=$(adb shell pidof "$pkg" 2>/dev/null | tr -d '\r' || true)
     shot "$scheme-$r"
-    echo "captured $scheme-$r"
+    echo "captured $scheme-$r${pid:+ (app running, pid $pid)}${pid:- (APP NOT RUNNING: it crashed or was killed)}"
   done
 done
 adb shell cmd uimode night no >/dev/null
+# The app's own log goes next to the pictures (the CI job log is too noisy to read a stack trace in).
+adb logcat -d > "$out/logcat-full.txt" || true
+grep -E "FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|ReactNative:|Hermes|SoLoader|UnsatisfiedLink|libc +: Fatal|DEBUG +: |tombstone|financer|$pkg" "$out/logcat-full.txt" > "$out/logcat-app.txt" || true
+rm -f "$out/logcat-full.txt"
 echo "== crashes during the run:"
-adb logcat -d | grep -E "FATAL EXCEPTION|AndroidRuntime: Process: $pkg" | head -5 || true
+grep -c "FATAL EXCEPTION" "$out/logcat-app.txt" || true
+grep -A12 "FATAL EXCEPTION" "$out/logcat-app.txt" | head -60 || true
 ls -l "$out" | head -50

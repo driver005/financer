@@ -185,13 +185,13 @@ jobs:
           disable-animations: true
           script: bash .github/scripts/emulator-smoke.sh financer-android-embedded.apk
       - name: Publish the screenshots (ci-screenshots branch)
-        if: always() && env.SCREENSHOTS == 'true' && hashFiles('screens/*.png') != ''
+        if: always() && env.SCREENSHOTS == 'true' && hashFiles('screens/*') != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          mkdir -p "$RUNNER_TEMP/shots" && cp screens/*.png "$RUNNER_TEMP/shots/"
+          mkdir -p "$RUNNER_TEMP/shots" && cp screens/* "$RUNNER_TEMP/shots/"
           git checkout -q --orphan ci-screenshots
           git rm -rfq --cached . && git clean -fdxq
-          cp "$RUNNER_TEMP"/shots/*.png .
+          cp "$RUNNER_TEMP"/shots/* .
           git add -A && git commit -qm "Screenshots of every screen on an Android emulator (run ${{ github.run_id }}, commit ${GITHUB_SHA::7})"
           git push -f origin ci-screenshots
