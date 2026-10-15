@@ -14,6 +14,11 @@ on:
       - "apps/mobile/scripts/enable-embedded.sh"
       - ".github/workflows/native.yml"
   workflow_dispatch:
+    inputs:
+      screenshots:
+        description: Also open every screen on the emulator and publish screenshots to the ci-screenshots branch
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -157,6 +162,10 @@ jobs:
   android-emulator:
     needs: android-app
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # only used to publish screenshots to the ci-screenshots branch
+    env:
+      SCREENSHOTS: ${{ inputs.screenshots && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -172,5 +181,17 @@ jobs:
           api-level: 33
           arch: x86_64
           target: google_apis
+          profile: pixel_5
           disable-animations: true
           script: bash .github/scripts/emulator-smoke.sh financer-android-embedded.apk
+      - name: Publish the screenshots (ci-screenshots branch)
+        if: always() && env.SCREENSHOTS == 'true' && hashFiles('screens/*.png') != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p "$RUNNER_TEMP/shots" && cp screens/*.png "$RUNNER_TEMP/shots/"
+          git checkout -q --orphan ci-screenshots
+          git rm -rfq --cached . && git clean -fdxq
+          cp "$RUNNER_TEMP"/shots/*.png .
+          git add -A && git commit -qm "Screenshots of every screen on an Android emulator (run ${{ github.run_id }}, commit ${GITHUB_SHA::7})"
+          git push -f origin ci-screenshots
