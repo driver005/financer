@@ -49,12 +49,36 @@ const VARIANT_CLASS = {
   bodySmall: "text-xs text-foreground",
 } as const;
 
+// The same sizes as the classes above, as style props. The classes alone were not applied on a
+// phone (text came out unstyled and, in dark mode, in the wrong colour); style props always are.
+const VARIANT_STYLE: Record<keyof typeof VARIANT_CLASS, TextStyle> = {
+  display: { fontSize: 48, lineHeight: 48, fontWeight: "900" },
+  caption: { fontSize: 13, lineHeight: 18 },
+  headlineMedium: { fontSize: 30, lineHeight: 36, fontWeight: "700" },
+  headlineSmall: { fontSize: 24, lineHeight: 32, fontWeight: "700" },
+  titleLarge: { fontSize: 20, lineHeight: 28, fontWeight: "600" },
+  titleSmall: { fontSize: 16, lineHeight: 24, fontWeight: "600" },
+  titleMedium: { fontSize: 18, lineHeight: 28, fontWeight: "600" },
+  bodyLarge: { fontSize: 16, lineHeight: 24 },
+  bodyMedium: { fontSize: 14, lineHeight: 20 },
+  bodySmall: { fontSize: 12, lineHeight: 16 },
+};
+
 export function Text({
   variant = "bodyMedium",
   className,
+  style,
   ...rest
 }: TextProps & { variant?: keyof typeof VARIANT_CLASS; className?: string; style?: StyleProp<TextStyle> }) {
-  return <RNText className={twMerge(VARIANT_CLASS[variant], className)} {...rest} />;
+  const p = usePalette();
+  const muted = !!className && /(^|\s)text-muted(\s|$)/.test(className);
+  return (
+    <RNText
+      className={twMerge(VARIANT_CLASS[variant], className)}
+      style={[{ color: muted ? p.muted : p.text }, VARIANT_STYLE[variant], style]}
+      {...rest}
+    />
+  );
 }
 
 /** Small status line under a form: red for errors, muted otherwise. */
@@ -67,10 +91,12 @@ export function HelperText({
   visible?: boolean;
   children?: ReactNode;
 }) {
+  const p = usePalette();
   if (!visible) return null;
   return (
     <RNText
       className={`mt-1 text-sm ${type === "error" ? "text-danger" : "text-muted"}`}
+      style={{ marginTop: 4, fontSize: 14, lineHeight: 20, color: type === "error" ? p.bad : p.muted }}
       accessibilityRole={type === "error" ? "alert" : undefined}
     >
       {children}
@@ -79,7 +105,12 @@ export function HelperText({
 }
 
 function Affix({ text }: { text: string }) {
-  return <RNText className="ml-2 text-base text-muted">{text}</RNText>;
+  const p = usePalette();
+  return (
+    <RNText className="ml-2 text-base text-muted" style={{ marginLeft: 8, fontSize: 16, color: p.muted }}>
+      {text}
+    </RNText>
+  );
 }
 
 export function TextInput({
@@ -101,7 +132,7 @@ export function TextInput({
   return (
     <TextField isInvalid={error} style={style}>
       {label ? <Label>{label}</Label> : null}
-      <View className="min-w-0 flex-row items-center">
+      <View className="min-w-0 flex-row items-center" style={{ minWidth: 0, flexDirection: "row", alignItems: "center" }}>
         <Input
           containerClassName="min-w-0 flex-1"
           className="min-w-0 flex-1"
@@ -325,7 +356,7 @@ export function SegmentedButtons<T extends string>({
   style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={style} className="flex-row gap-2" accessibilityRole="radiogroup">
+    <View style={[{ flexDirection: "row", gap: 8 }, style]} className="flex-row gap-2" accessibilityRole="radiogroup">
       {buttons.map((b) => {
         const on = b.value === value;
         return (
@@ -365,18 +396,24 @@ function ListItem({
   right?: (props?: unknown) => ReactNode;
   titleNumberOfLines?: number;
 }) {
+  const p = usePalette();
   return (
     <Pressable
       {...pressable}
       accessibilityRole={pressable.onPress ? "button" : undefined}
       className="min-h-11 flex-row items-center gap-3 py-2"
+      style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }}
     >
-      {left ? <View className="w-6 items-center">{left()}</View> : null}
-      <View className="flex-1">
-        <RNText className="text-base text-foreground" numberOfLines={titleNumberOfLines}>
+      {left ? <View className="w-6 items-center" style={{ width: 24, alignItems: "center" }}>{left()}</View> : null}
+      <View className="flex-1" style={{ flex: 1 }}>
+        <RNText className="text-base text-foreground" style={{ fontSize: 16, color: p.text }} numberOfLines={titleNumberOfLines}>
           {title}
         </RNText>
-        {description ? <RNText className="mt-0.5 text-sm text-muted">{description}</RNText> : null}
+        {description ? (
+          <RNText className="mt-0.5 text-sm text-muted" style={{ marginTop: 2, fontSize: 14, color: p.muted }}>
+            {description}
+          </RNText>
+        ) : null}
       </View>
       {right ? right() : null}
     </Pressable>
@@ -384,11 +421,12 @@ function ListItem({
 }
 
 function ListAccordion({ title, children }: { title: string; children: ReactNode }) {
+  const p = usePalette();
   return (
     <Accordion selectionMode="single" hideSeparator>
       <Accordion.Item value="a">
         <Accordion.Trigger>
-          <RNText className="flex-1 text-sm font-medium text-foreground">{title}</RNText>
+          <RNText className="flex-1 text-sm font-medium text-foreground" style={{ flex: 1, fontSize: 14, fontWeight: "500", color: p.text }}>{title}</RNText>
           <Accordion.Indicator />
         </Accordion.Trigger>
         <Accordion.Content>{children}</Accordion.Content>

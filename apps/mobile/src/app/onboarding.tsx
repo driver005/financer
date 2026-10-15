@@ -1,7 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { BackHandler, Platform } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useApi } from "@/api/config";
 import { DataStep } from "@/components/onboarding/DataStep";
@@ -13,7 +12,7 @@ import { RhythmStep } from "@/components/onboarding/RhythmStep";
 import { SafetyStep } from "@/components/onboarding/SafetyStep";
 import type { StepCtx } from "@/components/onboarding/types";
 import { WelcomeStep } from "@/components/onboarding/WelcomeStep";
-import { Loading } from "@/components/ui";
+import { Loading, Page } from "@/components/ui";
 import { loadOnboarding, markOnboardingDone, saveOnboardingState, saveProfile } from "@/native/onboardingStore";
 import {
   newState,
@@ -118,9 +117,9 @@ export default function Onboarding() {
 
   if (!state) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
+      <Page edges={["top", "left", "right", "bottom"]}>
         <Loading />
-      </SafeAreaView>
+      </Page>
     );
   }
 
