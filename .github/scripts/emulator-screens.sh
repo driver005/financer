@@ -29,6 +29,13 @@ for scheme in light dark; do
     if [ "$first" = 1 ]; then sleep 20; first=0; else sleep 4; fi
     pid=$(adb shell pidof "$pkg" 2>/dev/null | tr -d '\r' || true)
     shot "$scheme-$r"
+    # What is really on screen (views, bounds, text), for a few screens, to tell "drawn but invisible"
+    # from "never created". The accessibility tree and the full view hierarchy.
+    case "$scheme-$r" in
+      light-today|light-spending|light-settings|light-onboarding|dark-today)
+        adb exec-out uiautomator dump /dev/tty > "$out/ui-$scheme-$r.xml" 2>/dev/null || true
+        adb shell dumpsys activity top 2>/dev/null | sed -n '/View Hierarchy/,$p' | head -300 > "$out/views-$scheme-$r.txt" || true ;;
+    esac
     echo "captured $scheme-$r${pid:+ (app running, pid $pid)}${pid:- (APP NOT RUNNING: it crashed or was killed)}"
   done
 done
