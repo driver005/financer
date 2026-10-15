@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { View, useWindowDimensions, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HeroUINativeProvider } from "heroui-native";
@@ -43,6 +44,8 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <HeroUINativeProvider config={{ toast: { defaultProps: { placement: "bottom" } } }}>
       <ApiProvider>
+        {/* dark icons on the light theme, light icons on the dark one (the default left white ones on white) */}
+        <StatusBar style="auto" />
         <NotificationSync />
         <OnboardingGate />
         <Tabs
