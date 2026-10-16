@@ -20,7 +20,7 @@ export function SectionSwitch() {
       horizontal
       showsHorizontalScrollIndicator={false}
       accessibilityRole="tablist"
-      style={{ flexGrow: 0, marginBottom: space.md }}
+      style={{ flexGrow: 0, flexShrink: 0, marginBottom: space.md }}
       contentContainerStyle={{ gap: space.sm }}
     >
       {current.items.map((item) => {
