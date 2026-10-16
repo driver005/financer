@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { describe, it } from "node:test";
 
-import { BARE_SCREENS, SWITCHES, TABS, switchFor, tabFor } from "../src/navigation";
+import { BARE_SCREENS, SETTINGS_SCREENS, SWITCHES, TABS, areaFor, switchFor, tabFor } from "../src/navigation";
 
 /** Every route file of the app, as the path it is served at (`index` is `/`). */
 function routes(): string[] {
@@ -12,13 +12,13 @@ function routes(): string[] {
 }
 
 describe("tabs", () => {
-  it("has at most four tabs", () => assert.ok(TABS.length <= 4));
+  it("has at most three tabs", () => assert.ok(TABS.length <= 3));
   it("gives every screen a home tab, or marks it bare", () => {
-    const owned = new Set(TABS.flatMap((t) => t.screens));
-    for (const r of routes()) assert.ok(owned.has(r) || BARE_SCREENS.includes(r), `${r} belongs to no tab`);
+    const owned = new Set([...TABS.flatMap((t) => t.screens), ...SETTINGS_SCREENS, ...BARE_SCREENS]);
+    for (const r of routes()) assert.ok(owned.has(r), `${r} belongs to no tab and is not in the settings area`);
   });
   it("lists a screen under one tab only", () => {
-    const all = TABS.flatMap((t) => t.screens);
+    const all = [...TABS.flatMap((t) => t.screens), ...SETTINGS_SCREENS, ...BARE_SCREENS];
     assert.equal(new Set(all).size, all.length);
   });
   it("every tab and switcher target is a real screen", () => {
@@ -27,6 +27,7 @@ describe("tabs", () => {
       assert.ok(real.has(t.href), t.href);
       for (const s of t.screens) assert.ok(real.has(s), s);
     }
+    for (const s of [...SETTINGS_SCREENS, ...BARE_SCREENS]) assert.ok(real.has(s), s);
     for (const items of Object.values(SWITCHES)) for (const i of items ?? []) assert.ok(real.has(i.href), i.href);
   });
   it("the switcher only offers screens of its own tab", () => {
@@ -37,16 +38,24 @@ describe("tabs", () => {
   });
 });
 
-describe("tabFor", () => {
+describe("areaFor and tabFor", () => {
   it("maps screens to their tab", () => {
     assert.equal(tabFor("/"), "today");
     assert.equal(tabFor("/budget"), "money");
     assert.equal(tabFor("/recipes"), "groceries");
-    assert.equal(tabFor("/receipt-sources"), "groceries");
-    assert.equal(tabFor("/settings"), "settings");
+    assert.equal(tabFor("/stores"), "money");
   });
-  it("ignores a trailing slash and falls back to Today", () => {
+  it("puts Settings and the screens opened from it in their own area, with no tab", () => {
+    for (const path of ["/settings", "/sync", "/receipts", "/receipt-sources", "/rules"]) {
+      assert.equal(areaFor(path), "settings", path);
+      assert.equal(tabFor(path), null, path);
+    }
+    assert.equal(areaFor("/onboarding"), "bare");
+    assert.equal(areaFor("/spending"), "tab");
+  });
+  it("ignores a trailing slash and falls back to an everyday screen", () => {
     assert.equal(tabFor("/budget/"), "money");
+    assert.equal(areaFor("/nope"), "tab");
     assert.equal(tabFor("/nope"), "today");
   });
 });
@@ -57,9 +66,10 @@ describe("switchFor", () => {
     assert.equal(switchFor("/mealplan")?.items.length, 4);
     assert.equal(switchFor("/mealplan")?.active, "/mealplan");
   });
-  it("is not offered on screens opened from Settings", () => {
+  it("is not offered in the settings area or on Stores", () => {
     assert.equal(switchFor("/sync"), null);
     assert.equal(switchFor("/receipts"), null);
     assert.equal(switchFor("/settings"), null);
+    assert.equal(switchFor("/stores"), null);
   });
 });

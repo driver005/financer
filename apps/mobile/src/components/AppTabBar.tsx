@@ -5,13 +5,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MIN_TOUCH } from "@/a11y";
 import { tap } from "@/native/haptics";
-import { BARE_SCREENS, TABS, tabFor } from "@/navigation";
+import { TABS, areaFor, tabFor } from "@/navigation";
 import { space, usePalette } from "@/theme";
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 /**
- * The bottom bar: four tabs. A tab stays selected on every screen that belongs to it (Budget
+ * The bottom bar: three tabs. A tab stays selected on every screen that belongs to it (Budget
  * lights up Money, Recipes lights up Groceries), which the stock tab bar cannot do for routes it
  * does not list, so the bar is drawn here and reads the current path.
  */
@@ -21,7 +21,7 @@ export function AppTabBar() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const narrow = useWindowDimensions().width < 360;
-  if (BARE_SCREENS.includes(pathname)) return null;
+  if (areaFor(pathname) !== "tab") return null;
   const active = tabFor(pathname);
   return (
     <View

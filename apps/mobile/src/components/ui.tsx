@@ -1,11 +1,12 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { useEffect, type ReactNode } from "react";
-import { Pressable, Text as RNText, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, Text as RNText, View, useColorScheme, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
 import { EmptyState } from "@/components/EmptyState";
+import { areaFor } from "@/navigation";
 import { ActivityIndicator, ChunkyButton, Text } from "@/components/kit";
 import { useReduceMotion } from "@/components/motion";
 import { SkeletonList } from "@/components/Skeleton";
@@ -33,8 +34,11 @@ export function useColors() {
  */
 export function Page({ edges = ["top", "left", "right"], children }: { edges?: Edge[]; children: ReactNode }) {
   const p = usePalette();
+  const dark = useColorScheme() === "dark";
+  // the settings area has a faintly grey page (light theme), so it reads as a place of its own
+  const grey = areaFor(usePathname()) === "settings" && !dark;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: p.background }} edges={edges}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: grey ? p.surfaceAlt : p.background }} edges={edges}>
       {children}
     </SafeAreaView>
   );
@@ -72,11 +76,19 @@ export function Card({ children, style, flush }: { children: ReactNode; style?: 
   );
 }
 
-/** Screen title. `subtitle` is a quiet line under it; `right` sits at the end of the row. */
+/**
+ * Screen title. `subtitle` is a quiet line under it; `right` sits at the end of the row. On the
+ * everyday screens a Settings button ends the row; in the settings area a back button starts it.
+ */
 export function Title({ children, subtitle, right }: { children: ReactNode; subtitle?: string; right?: ReactNode }) {
   const p = usePalette();
+  const router = useRouter();
+  const area = areaFor(usePathname());
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, marginTop: space.xs, marginBottom: space.md }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.xs, marginBottom: space.md }}>
+      {area === "settings" ? (
+        <HeaderAction icon="arrow-left" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} />
+      ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text variant="headlineMedium" style={{ fontWeight: "800" }} accessibilityRole="header">
           {children}
@@ -84,6 +96,7 @@ export function Title({ children, subtitle, right }: { children: ReactNode; subt
         {subtitle ? <RNText style={[typography.caption, { color: p.muted }]}>{subtitle}</RNText> : null}
       </View>
       {right}
+      {area === "tab" ? <HeaderAction icon="cog-outline" label="Settings" onPress={() => router.push("/settings")} /> : null}
     </View>
   );
 }

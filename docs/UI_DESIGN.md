@@ -6,7 +6,7 @@ page describes the system behind it so new screens look like the old ones. The c
 
 ## Navigation
 
-Four tabs: **Today**, **Money** (Spending and Budget), **Groceries** (Prices, Recipes, Meal plan, Usual items) and **Settings**. Screens that share a tab have a switcher under the title (`SectionSwitch`); every other screen (Sync, Rules, Receipts, Stores, ...) is opened from Settings or from a link and keeps the tab it belongs to selected. The map is in `src/navigation.ts` and `tests/navigation.test.ts` fails when a screen has no tab. The bar itself is `AppTabBar`, drawn by the app because the stock tab bar cannot keep a tab selected on routes it does not list.
+Three tabs: **Today**, **Money** (Spending and Budget) and **Groceries** (Prices, Recipes, Meal plan, Usual items). **Settings** is a gear button at the top right of every everyday screen. Settings and the screens opened from it (Sync, Rules, Subscriptions, Alerts, Receipts, Receipt sources, Scan) are a separate area: no tab bar, a back button at the left of the title and a faintly grey page in the light theme. Screens that share a tab have a switcher under the title (`SectionSwitch`). The map is in `src/navigation.ts` and `tests/navigation.test.ts` fails when a screen is in neither a tab nor the settings area. The bar itself is `AppTabBar`, drawn by the app because the stock tab bar cannot keep a tab selected on routes it does not list; `Title` adds the gear or the back button by looking at the current path.
 
 ## Where the ideas come from (and what was not checked)
 
