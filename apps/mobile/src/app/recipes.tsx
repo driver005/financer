@@ -72,18 +72,12 @@ export default function Recipes() {
           contentContainerStyle={{ paddingBottom: space.xl }}
           ListHeaderComponent={
             <View style={{ marginBottom: space.sm }}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ gap: space.sm, paddingVertical: space.xs, paddingRight: space.lg }}
-                style={{ marginHorizontal: -space.lg, paddingHorizontal: space.lg, flexGrow: 0 }}
-              >
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingVertical: space.xs }}>
                 <FilterChip label="All" selected={!tag} onPress={() => setTag(undefined)} />
                 {TAGS.map((t) => (
                   <FilterChip key={t} label={t} selected={tag === t} onPress={() => setTag(tag === t ? undefined : t)} />
                 ))}
-              </ScrollView>
+              </View>
               <TextInput
                 mode="outlined"
                 dense
