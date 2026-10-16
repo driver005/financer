@@ -1,3 +1,4 @@
+import { SectionSwitch } from "@/components/SectionSwitch";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -59,7 +60,7 @@ export default function Recipes() {
       >
         Recipes
       </Title>
-      {api ? <Subtitle>Ranked by how much you already buy.</Subtitle> : null}
+      <SectionSwitch />
       {!api ? (
         <NeedsSetup />
       ) : (

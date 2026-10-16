@@ -1,3 +1,4 @@
+import { SectionSwitch } from "@/components/SectionSwitch";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, Text as RNText, View } from "react-native";
@@ -70,7 +71,7 @@ export default function BasketScreen() {
   return (
     <Screen>
       <Title>Usual items</Title>
-      {api ? <Subtitle>What you buy again and again. Prices are compared for these.</Subtitle> : null}
+      <SectionSwitch />
       {!api ? (
         <NeedsSetup />
       ) : (

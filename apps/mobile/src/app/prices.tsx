@@ -1,3 +1,4 @@
+import { SectionSwitch } from "@/components/SectionSwitch";
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { FlatList, RefreshControl, Text as RNText, View } from "react-native";
@@ -67,7 +68,7 @@ export default function Prices() {
   return (
     <Screen>
       <Title>Prices</Title>
-      {api ? <Subtitle>Which chain is cheapest, item by item.</Subtitle> : null}
+      <SectionSwitch />
       {!api ? (
         <NeedsSetup />
       ) : (

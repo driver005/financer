@@ -1,3 +1,4 @@
+import { SectionSwitch } from "@/components/SectionSwitch";
 import { useCallback, useMemo, useState } from "react";
 import { FlatList, RefreshControl, Text as RNText, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -141,6 +142,7 @@ export default function Spending() {
       >
         Spending
       </Title>
+      <SectionSwitch />
       {!api ? (
         <NeedsSetup />
       ) : (

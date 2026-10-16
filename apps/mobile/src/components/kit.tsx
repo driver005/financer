@@ -107,7 +107,7 @@ export function HelperText({
 function Affix({ text }: { text: string }) {
   const p = usePalette();
   return (
-    <RNText className="ml-2 text-base text-muted" style={{ marginLeft: 8, fontSize: 16, color: p.muted }}>
+    <RNText className="text-base text-muted" style={{ fontSize: 16, color: p.muted }}>
       {text}
     </RNText>
   );
@@ -148,11 +148,17 @@ export function TextInput({
             borderColor: error ? p.bad : p.border,
             backgroundColor: p.surfaceAlt,
             color: p.text,
-            paddingHorizontal: 12,
+            paddingLeft: 12,
+            // room for the suffix (a "€"), which sits inside the field at its right edge
+            paddingRight: right ? 56 : 12,
           }}
           {...rest}
         />
-        {right}
+        {right ? (
+          <View pointerEvents="none" style={{ position: "absolute", right: 12, top: 0, bottom: 0, justifyContent: "center" }}>
+            {right}
+          </View>
+        ) : null}
       </View>
     </TextField>
   );

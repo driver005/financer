@@ -1,3 +1,4 @@
+import { SectionSwitch } from "@/components/SectionSwitch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text as RNText, View } from "react-native";
 import { HelperText, SegmentedButtons, TextInput } from "@/components/kit";
@@ -100,6 +101,7 @@ export default function Budget() {
   return (
     <Screen>
       <Title subtitle={currentPeriod ? periodLabel(currentPeriod) : undefined}>Budget</Title>
+      <SectionSwitch />
       {!api ? (
         <NeedsSetup />
       ) : (

@@ -4,6 +4,10 @@ The app has a calm, dashboard-style look: an indigo accent on cool grey-blue neu
 page describes the system behind it so new screens look like the old ones. The code lives in
 `apps/mobile/src`.
 
+## Navigation
+
+Four tabs: **Today**, **Money** (Spending and Budget), **Groceries** (Prices, Recipes, Meal plan, Usual items) and **Settings**. Screens that share a tab have a switcher under the title (`SectionSwitch`); every other screen (Sync, Rules, Receipts, Stores, ...) is opened from Settings or from a link and keeps the tab it belongs to selected. The map is in `src/navigation.ts` and `tests/navigation.test.ts` fails when a screen has no tab. The bar itself is `AppTabBar`, drawn by the app because the stock tab bar cannot keep a tab selected on routes it does not list.
+
 ## Where the ideas come from (and what was not checked)
 
 The Mobbin reference library was **not available** while this was built (it needs a paid plan), so

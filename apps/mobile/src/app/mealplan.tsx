@@ -1,3 +1,4 @@
+import { SectionSwitch } from "@/components/SectionSwitch";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ScrollView, Text as RNText, View, type LayoutChangeEvent, type ScrollViewInstance } from "react-native";
@@ -158,7 +159,7 @@ export default function MealPlanScreen() {
   return (
     <Screen>
       <Title>Meal plan</Title>
-      {api ? <Subtitle>Plan the meals, get one shopping list.</Subtitle> : null}
+      <SectionSwitch />
       {!api ? (
         <NeedsSetup />
       ) : (
