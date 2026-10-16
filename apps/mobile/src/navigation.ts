@@ -27,8 +27,8 @@ export const SWITCHES: Partial<Record<TabId, readonly SwitchItem[]>> = {
   groceries: [
     { label: "Prices", href: "/prices" },
     { label: "Recipes", href: "/recipes" },
-    { label: "Meal plan", href: "/mealplan" },
-    { label: "Usual items", href: "/basket" },
+    { label: "Plan", href: "/mealplan" },
+    { label: "Items", href: "/basket" },
   ],
 };
 

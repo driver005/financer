@@ -36,7 +36,7 @@ export function SectionSwitch() {
             }}
             style={{
               minHeight: MIN_TOUCH,
-              paddingHorizontal: space.lg,
+              paddingHorizontal: space.md,
               borderRadius: radius.pill,
               alignItems: "center",
               justifyContent: "center",
