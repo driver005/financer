@@ -4,6 +4,13 @@ The app has a calm, dashboard-style look: an indigo accent on cool grey-blue neu
 page describes the system behind it so new screens look like the old ones. The code lives in
 `apps/mobile/src`.
 
+## Design watch
+
+Two things keep the look from drifting.
+
+- **The design guard** (`apps/mobile/tests/designGuard.test.mjs`, part of `npm test`, so part of CI) fails when a change breaks a rule the look depends on: hex colours outside the palette, tracked capitals, borders thicker than a hairline, a 3D button lip, text under 12 points, emoji used as interface icons, a screen without the shared `Screen` and `Title`. Each rule lists its few deliberate exceptions; add to a list only for content that really is an exception (the mascot, the camera frame).
+- **The gallery and the change report.** Run the Native workflow with `screenshots` ticked: it opens every screen on an Android emulator, light and dark, publishes the pictures and a browsable `README.md` to the `ci-screenshots` branch, and puts a table in the run summary that says how much of each screen changed since the previous run. A screen above 12% is marked **check**: that is usually a layout change that was or was not meant. `.github/scripts/design-gallery.sh` builds both.
+
 ## Navigation
 
 Three tabs: **Today**, **Money** (Spending and Budget) and **Groceries** (Prices, Recipes, Meal plan, Usual items). **Settings** is a gear button at the top right of every everyday screen. Settings and the screens opened from it (Sync, Rules, Subscriptions, Alerts, Receipts, Receipt sources, Scan) are a separate area: no tab bar, a back button at the left of the title and a faintly grey page in the light theme. Screens that share a tab have a switcher under the title (`SectionSwitch`). The map is in `src/navigation.ts` and `tests/navigation.test.ts` fails when a screen is in neither a tab nor the settings area. The bar itself is `AppTabBar`, drawn by the app because the stock tab bar cannot keep a tab selected on routes it does not list; `Title` adds the gear or the back button by looking at the current path.

@@ -129,7 +129,7 @@ export function ListSummaryBar({ list, ticks }: { list: MealShoppingList; ticks:
         marginTop: space.sm,
         marginBottom: space.sm,
         // lifts the bar off the list scrolling underneath it
-        shadowColor: "#000",
+        shadowColor: p.text,
         shadowOpacity: 0.12,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: -2 },

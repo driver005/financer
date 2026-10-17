@@ -72,7 +72,7 @@ function QuestRow({ quest, onGo }: { quest: Quest; onGo: () => void }) {
           borderColor: p.border,
         }}
       >
-        {quest.done ? <MaterialCommunityIcons name="check-bold" size={18} color="#ffffff" /> : null}
+        {quest.done ? <MaterialCommunityIcons name="check-bold" size={18} color={p.onAccent} /> : null}
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <RNText style={[typography.bodyStrong, { color: p.text, textDecorationLine: quest.done ? "line-through" : "none", opacity: quest.done ? 0.6 : 1 }]}>

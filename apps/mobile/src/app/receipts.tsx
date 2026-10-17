@@ -267,7 +267,7 @@ function CaptureTile({
     >
       <MaterialCommunityIcons name={icon as never} size={28} color={fg} />
       <RNText style={{ color: primary ? p.onAccent : p.text, fontSize: 14, fontWeight: "700" }}>{label}</RNText>
-      <RNText style={{ color: primary ? p.onAccent : p.muted, fontSize: 11 }} numberOfLines={1}>
+      <RNText style={{ color: primary ? p.onAccent : p.muted, fontSize: 12 }} numberOfLines={1}>
         {hint}
       </RNText>
     </Tap>

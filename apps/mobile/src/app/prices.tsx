@@ -162,7 +162,7 @@ function Hero({ summary }: { summary: ReturnType<typeof summarizePrices> }) {
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.sm }}>
         <View style={{ flexDirection: "row" }}>
           {summary.top.slice(0, 3).map((chain, i) => (
-            <View key={chain} style={{ marginLeft: i === 0 ? 0 : -12, borderRadius: 28, borderWidth: 3, borderColor: p.accent }}>
+            <View key={chain} style={{ marginLeft: i === 0 ? 0 : -12, borderRadius: 28, borderWidth: 1, borderColor: p.accent }}>
               <Avatar tint={chainTint(chain)} label={initials(chainLabel(chain))} size={48} />
             </View>
           ))}

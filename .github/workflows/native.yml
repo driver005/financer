@@ -189,7 +189,14 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          mkdir -p "$RUNNER_TEMP/shots" && cp screens/* "$RUNNER_TEMP/shots/"
+          mkdir -p "$RUNNER_TEMP/shots" "$RUNNER_TEMP/prev" && cp screens/* "$RUNNER_TEMP/shots/"
+          # the pictures of the run before, to see which screens changed (the design watch)
+          if git fetch -q --depth=1 origin ci-screenshots 2>/dev/null; then
+            git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/prev" 2>/dev/null || true
+          fi
+          sudo apt-get install -y -q imagemagick >/dev/null 2>&1 || true
+          bash .github/scripts/design-gallery.sh "$RUNNER_TEMP/shots" "$RUNNER_TEMP/prev" "$RUNNER_TEMP/shots/README.md" || true
+          { echo "## Design watch"; sed -n '/^| Screen/,/^$/p' "$RUNNER_TEMP/shots/README.md"; } >> "$GITHUB_STEP_SUMMARY" || true
           git checkout -q --orphan ci-screenshots
           git rm -rfq --cached . && git clean -fdxq
           cp "$RUNNER_TEMP"/shots/* .

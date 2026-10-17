@@ -39,7 +39,7 @@ export function useInk() {
 
 // ---------------------------------------------------------------- sections and groups
 
-/** Small uppercase heading above a group of rows. */
+/** Small heading above a group of rows (sentence case). */
 export function SectionHeader({ title, hint }: { title: string; hint?: string }) {
   const p = usePalette();
   return (
