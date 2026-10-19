@@ -9,7 +9,7 @@ rust-version.workspace = true
 [dependencies]
 financer-receipt-sources = { path = "../receipt-sources" }
 serde.workspace = true
-toml = { version = "0.9", default-features = false, features = ["std", "serde", "parse"] }
+toml = { version = "1.1", default-features = false, features = ["std", "serde", "parse"] }
 
 [dev-dependencies]
 tempfile = "3"
