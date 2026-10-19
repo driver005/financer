@@ -400,7 +400,7 @@ jobs:
           pattern: "{desktop-*,web,app-*}"
           merge-multiple: true
       - run: ls -lh dist
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           body_path: .github/release-body.md
