@@ -152,6 +152,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/bank/connections/{name}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plaid: forget the connection. Tells Plaid to drop it and deletes the stored access token, so
+         *     the next sync starts with signing in again. The imported transactions stay.
+         */
+        post: operations["disconnect_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/bank/connections/{name}/sync": {
         parameters: {
             query?: never;
@@ -1151,9 +1171,11 @@ export interface components {
         };
         /** @description A configured connection. The login is masked; the PIN is never part of it. */
         BankConnectionDto: {
+            /** @description Plaid: the accounts that were linked (put their ids in `account_ids` to read only some). */
+            accounts: components["schemas"]["LinkedAccountDto"][];
             /**
              * Format: int64
-             * @description Unix seconds after which a sync waiting for approval is given up.
+             * @description Unix seconds after which a sync waiting for approval, or Plaid's sign-in page, is given up.
              */
             approval_expires_at?: number | null;
             /** Format: int64 */
@@ -1162,7 +1184,7 @@ export interface components {
             balance_date?: string | null;
             bank_code: string;
             iban_masked: string;
-            /** @description Always `fints` today. */
+            /** @description `fints` or `plaid`. */
             kind: string;
             last_result?: components["schemas"]["SyncOutcomeDto"] | null;
             /**
@@ -1170,6 +1192,13 @@ export interface components {
              * @description Unix seconds of the last successful sync.
              */
             last_sync_at?: number | null;
+            /** @description Plaid, in `needs_link`: the page to open in the browser to sign in to your bank. */
+            link_url?: string | null;
+            /**
+             * @description Plaid: false until you have signed in to your bank once (press Sync now to start that);
+             *     always true for FinTS.
+             */
+            linked: boolean;
             login_masked: string;
             /** @description The bank's approval text in `needs_approval`, the reason in `error`. */
             message?: string | null;
@@ -1321,7 +1350,7 @@ export interface components {
          * @description Where a connection is in a sync.
          * @enum {string}
          */
-        ConnectionState: "idle" | "syncing" | "needs_approval" | "error";
+        ConnectionState: "idle" | "syncing" | "needs_approval" | "needs_link" | "error";
         DisposableDto: {
             /** Format: int64 */
             disposable_cents: number;
@@ -1599,6 +1628,16 @@ export interface components {
             receipts: number;
             /** @description `disabled`, `never`, `connected` or `needs_signin`. */
             state: string;
+        };
+        /** @description An account Plaid reported for a linked connection. */
+        LinkedAccountDto: {
+            /** @description Put this in `account_ids` of the connection to read only some accounts. */
+            id: string;
+            /** @description For example `depository` or `credit`. */
+            kind: string;
+            /** @description The last digits of the account number, when Plaid has them. */
+            mask?: string | null;
+            name: string;
         };
         MealBudgetDto: {
             /**
@@ -2739,6 +2778,46 @@ export interface operations {
             };
             /** @description Logging in right now */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    disconnect_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description connection name */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankConnectionDto"];
+                };
+            };
+            /** @description Not a Plaid connection */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such connection */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

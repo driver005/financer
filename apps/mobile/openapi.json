@@ -379,6 +379,62 @@
         ]
       }
     },
+    "/v1/bank/connections/{name}/disconnect": {
+      "post": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "Plaid: forget the connection. Tells Plaid to drop it and deletes the stored access token, so\nthe next sync starts with signing in again. The imported transactions stay.",
+        "operationId": "disconnect_connection",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "connection name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankConnectionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a Plaid connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/bank/connections/{name}/sync": {
       "post": {
         "tags": [
@@ -3337,16 +3393,25 @@
           "sync_every_hours",
           "pin_from_env",
           "state",
+          "linked",
+          "accounts",
           "sync_due"
         ],
         "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkedAccountDto"
+            },
+            "description": "Plaid: the accounts that were linked (put their ids in `account_ids` to read only some)."
+          },
           "approval_expires_at": {
             "type": [
               "integer",
               "null"
             ],
             "format": "int64",
-            "description": "Unix seconds after which a sync waiting for approval is given up."
+            "description": "Unix seconds after which a sync waiting for approval, or Plaid's sign-in page, is given up."
           },
           "balance_cents": {
             "type": [
@@ -3370,7 +3435,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "Always `fints` today."
+            "description": "`fints` or `plaid`."
           },
           "last_result": {
             "oneOf": [
@@ -3389,6 +3454,17 @@
             ],
             "format": "int64",
             "description": "Unix seconds of the last successful sync."
+          },
+          "link_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Plaid, in `needs_link`: the page to open in the browser to sign in to your bank."
+          },
+          "linked": {
+            "type": "boolean",
+            "description": "Plaid: false until you have signed in to your bank once (press Sync now to start that);\nalways true for FinTS."
           },
           "login_masked": {
             "type": "string"
@@ -3765,6 +3841,7 @@
           "idle",
           "syncing",
           "needs_approval",
+          "needs_link",
           "error"
         ]
       },
@@ -4475,6 +4552,35 @@
           "state": {
             "type": "string",
             "description": "`disabled`, `never`, `connected` or `needs_signin`."
+          }
+        }
+      },
+      "LinkedAccountDto": {
+        "type": "object",
+        "description": "An account Plaid reported for a linked connection.",
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Put this in `account_ids` of the connection to read only some accounts."
+          },
+          "kind": {
+            "type": "string",
+            "description": "For example `depository` or `credit`."
+          },
+          "mask": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The last digits of the account number, when Plaid has them."
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
