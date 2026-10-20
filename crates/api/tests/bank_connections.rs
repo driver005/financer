@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
-use financer_api::{Api, AppState, BankConnection, BankData, BankError, TokenHash};
+use financer_api::{Api, AppState, BankConnection, BankData, BankError, BankProvider, TokenHash};
 use financer_core::{Money, Transaction};
 use financer_fints::{BankClient, PendingSync, SyncParams, TanChallenge};
 use financer_store::Store;
@@ -125,6 +125,8 @@ impl Fixture {
     fn connection(name: &str, hours: u32, pin_env: Option<&str>) -> BankConnection {
         BankConnection {
             name: name.into(),
+            kind: BankProvider::Fints,
+            account_ids: vec![],
             bank_code: "37050198".into(),
             login: "login-name-123".into(),
             iban: "DE89 3704 0044 0532 0130 00".into(),

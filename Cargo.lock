@@ -1616,6 +1616,7 @@ dependencies = [
  "financer-core",
  "financer-fints",
  "financer-llm",
+ "financer-plaid",
  "financer-prices",
  "financer-receipt-sources",
  "financer-receipts",
@@ -1634,6 +1635,7 @@ dependencies = [
  "tracing",
  "utoipa",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
@@ -1703,6 +1705,22 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
+]
+
+[[package]]
+name = "financer-plaid"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "financer-core",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tracing",
+ "zeroize",
 ]
 
 [[package]]
@@ -1784,6 +1802,7 @@ dependencies = [
  "financer-core",
  "financer-fints",
  "financer-llm",
+ "financer-plaid",
  "financer-prices",
  "financer-receipt-sources",
  "financer-store",

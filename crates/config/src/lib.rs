@@ -22,8 +22,8 @@ pub use file::{BankAccount, FileConfig, OneOrMany, StoreAlias};
 pub use interpolate::Interpolator;
 pub use load::{
     AuthSettings, BankSettings, Config, DatabaseSettings, LlmSettings, Loaded, Loader,
-    PricesSettings, ProviderChoice, Secret, ServerSettings, Setting, Source, DEFAULT_BIND,
-    DEFAULT_DATABASE_URL, DEFAULT_FILE, DEFAULT_REFRESH_HOURS, MIN_TOKEN_LEN,
+    PlaidSettings, PricesSettings, ProviderChoice, Secret, ServerSettings, Setting, Source,
+    DEFAULT_BIND, DEFAULT_DATABASE_URL, DEFAULT_FILE, DEFAULT_REFRESH_HOURS, MIN_TOKEN_LEN,
 };
 pub use render::Renderer;
 pub use validate::Validator;

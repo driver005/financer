@@ -112,6 +112,7 @@ impl Renderer {
             Self::secret(&c.bank.fints_product_id.value),
             &c.bank.fints_product_id,
         );
+        Self::plaid(&mut out, c);
         Self::accounts(&mut out, c);
         Self::stores(&mut out, c);
         Self::receipts(&mut out, c);
@@ -211,11 +212,63 @@ impl Renderer {
         }
     }
 
+    /// `[bank.plaid]`: shown only when something about it is set. The client id and the secret
+    /// are never printed.
+    fn plaid(out: &mut String, c: &Config) {
+        let p = &c.bank.plaid;
+        let used = p.configured()
+            || p.client_id.value.is_some()
+            || p.secret.value.is_some()
+            || c.bank.accounts.iter().any(|a| a.kind == "plaid");
+        if !used {
+            return;
+        }
+        let _ = writeln!(out, "\n[bank.plaid]");
+        Self::line(
+            out,
+            "client_id",
+            Self::secret(&p.client_id.value),
+            &p.client_id,
+        );
+        Self::line(out, "secret", Self::secret(&p.secret.value), &p.secret);
+        Self::line(
+            out,
+            "environment",
+            Self::q(&p.environment.value),
+            &p.environment,
+        );
+        let _ = writeln!(
+            out,
+            "country_codes = [{}]",
+            p.country_codes
+                .iter()
+                .map(|c| Self::q(c))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let _ = writeln!(out, "language = {}", Self::q(&p.language));
+    }
+
     fn accounts(out: &mut String, c: &Config) {
         for a in &c.bank.accounts {
             let _ = writeln!(out, "\n[[bank.accounts]]   # file");
             let _ = writeln!(out, "name = {}", Self::q(&a.name));
             let _ = writeln!(out, "kind = {}", Self::q(&a.kind));
+            if a.kind == "plaid" {
+                if !a.account_ids.is_empty() {
+                    let _ = writeln!(
+                        out,
+                        "account_ids = {}   # {} account(s)",
+                        Self::HIDDEN,
+                        a.account_ids.len()
+                    );
+                }
+                let _ = writeln!(out, "sync_every_hours = {}", a.sync_every_hours);
+                if let Some(d) = a.since_days {
+                    let _ = writeln!(out, "since_days = {d}");
+                }
+                continue;
+            }
             let _ = writeln!(out, "bank_code = {}", Self::q(&a.bank_code));
             let _ = writeln!(out, "login = {}", Self::HIDDEN);
             let _ = writeln!(out, "iban = {}", Self::HIDDEN);

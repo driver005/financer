@@ -4,6 +4,7 @@ mod auth;
 mod backup;
 mod bank;
 mod bank_connections;
+mod bank_plaid;
 mod budget_period;
 mod categorization;
 mod dto;
@@ -33,7 +34,8 @@ use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 
 pub use auth::TokenHash;
-pub use bank_connections::{BankConnection, ConnectionState};
+pub use bank_connections::{BankConnection, BankProvider, ConnectionState};
+pub use bank_plaid::PlaidSetup;
 pub use financer_fints::{BankClient as BankClientTrait, BankData, BankError, MockBank};
 pub use financer_llm::MockProvider;
 pub use financer_prices::{FakeHttp, SourceConfig as PriceSourceConfig};
@@ -77,6 +79,8 @@ pub struct AppState {
     pub(crate) pin_pause: std::time::Duration,
     pub(crate) bank_connections: Arc<bank_connections::Connections>,
     pub(crate) pin_lookup: PinLookup,
+    pub(crate) plaid: Option<Arc<PlaidSetup>>,
+    pub(crate) secret_box: Option<Arc<financer_receipt_sources::SecretBox>>,
     pub(crate) connection_poll: std::time::Duration,
     pub(crate) http: Arc<dyn Http>,
     pub(crate) price_sources: Arc<Vec<SourceConfig>>,
@@ -99,6 +103,8 @@ impl AppState {
             pin_pause: bank::DEFAULT_PIN_PAUSE,
             bank_connections: Arc::new(bank_connections::Connections::new(Vec::new())),
             pin_lookup: Arc::new(|var| std::env::var(var).ok().filter(|v| !v.is_empty())),
+            plaid: None,
+            secret_box: None,
             connection_poll: bank_connections::DEFAULT_POLL,
             http: Arc::new(NoNetwork),
             price_sources: Arc::new(Vec::new()),
@@ -127,6 +133,20 @@ impl AppState {
     /// client set by [`AppState::with_bank`].
     pub fn with_bank_connections(mut self, connections: Vec<BankConnection>) -> Self {
         self.bank_connections = Arc::new(bank_connections::Connections::new(connections));
+        self
+    }
+
+    /// Plaid, for the connections with `kind = "plaid"`. Needs [`AppState::with_secret_box`] as
+    /// well, because the access token is kept sealed.
+    pub fn with_plaid(mut self, plaid: PlaidSetup) -> Self {
+        self.plaid = Some(Arc::new(plaid));
+        self
+    }
+
+    /// Seals the secrets the server keeps (the Plaid access token) with a key derived from a
+    /// server secret that is not in the database.
+    pub fn with_secret_box(mut self, secrets: financer_receipt_sources::SecretBox) -> Self {
+        self.secret_box = Some(Arc::new(secrets));
         self
     }
 
@@ -223,6 +243,7 @@ impl AppState {
         bank_connections::list_connections,
         bank_connections::sync_connection,
         bank_connections::cancel_connection,
+        bank_connections::disconnect_connection,
         stores::store_spending,
         stores::store_transactions,
         grocery::refresh_prices,
@@ -299,6 +320,7 @@ impl AppState {
         bank_connections::SyncOutcomeDto,
         bank_connections::SyncNowRequest,
         bank_connections::ConnectionState,
+        bank_plaid::LinkedAccountDto,
         stores::StoresPeriod,
         stores::StoreSpendDto,
         stores::StoresDto,
@@ -427,6 +449,10 @@ impl Api {
             .route(
                 "/bank/connections/{name}/cancel",
                 post(bank_connections::cancel_connection),
+            )
+            .route(
+                "/bank/connections/{name}/disconnect",
+                post(bank_connections::disconnect_connection),
             )
             .route("/spending/stores", get(stores::store_spending))
             .route(

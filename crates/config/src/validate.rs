@@ -35,67 +35,13 @@ impl Validator {
             } else if !names.insert(name.to_lowercase()) {
                 errors.push(format!("{}: {name:?} is used twice", key("name")));
             }
-            if a.kind != "fints" {
-                errors.push(format!(
-                    "{}: {:?} is not supported; the only kind is \"fints\"",
-                    key("kind"),
-                    a.kind
-                ));
-            }
-            let code = a.bank_code.trim();
-            if code.len() != 8 || !code.chars().all(|c| c.is_ascii_digit()) {
-                errors.push(format!(
-                    "{}: a bank code has 8 digits (for example 37050198)",
-                    key("bank_code")
-                ));
-            }
-            if a.login.trim().is_empty() {
-                errors.push(format!("{}: must not be empty", key("login")));
-            }
-            if !Self::iban_ok(&a.iban) {
-                errors.push(format!(
-                    "{}: not a valid IBAN (check the digits)",
-                    key("iban")
-                ));
-            }
-            let url = a
-                .fints_url
-                .as_deref()
-                .map(str::trim)
-                .filter(|u| !u.is_empty());
-            if let Some(url) = url {
-                if !(url.starts_with("https://") || url.starts_with("http://")) {
-                    errors.push(format!("{}: must start with https://", key("fints_url")));
-                }
-                if a.bic.as_deref().map(str::trim).unwrap_or("").is_empty() {
-                    errors.push(format!(
-                        "{}: needed together with fints_url (the bank's BIC)",
-                        key("bic")
-                    ));
-                }
-            }
-            if let Some(var) = a
-                .pin_env
-                .as_deref()
-                .map(str::trim)
-                .filter(|v| !v.is_empty())
-            {
-                let valid = var
-                    .chars()
-                    .next()
-                    .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-                    && var.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-                if !valid {
-                    errors.push(format!(
-                        "{}: {var:?} is not an environment variable name (the PIN itself must not be written in the file)",
-                        key("pin_env")
-                    ));
-                } else if env.nonempty(var).is_none() {
-                    warnings.push(format!(
-                        "{}: the environment variable {var} is not set right now; scheduled syncs for {name:?} cannot log in until it is",
-                        key("pin_env")
-                    ));
-                }
+            match a.kind.as_str() {
+                "fints" => Self::fints_account(a, env, &key, errors, warnings),
+                "plaid" => Self::plaid_account(a, &key, errors, warnings),
+                other => errors.push(format!(
+                    "{}: {other:?} is not supported; use \"fints\" or \"plaid\"",
+                    key("kind")
+                )),
             }
             if a.sync_every_hours > Self::MAX_SYNC_HOURS {
                 errors.push(format!(
@@ -113,6 +59,168 @@ impl Validator {
                     ));
                 }
             }
+        }
+    }
+
+    /// The checks of a `kind = "fints"` account: bank code, login, IBAN, FinTS address, PIN variable.
+    fn fints_account(
+        a: &BankAccount,
+        env: &dyn Env,
+        key: &dyn Fn(&str) -> String,
+        errors: &mut Vec<String>,
+        warnings: &mut Vec<String>,
+    ) {
+        let name = a.name.trim();
+        let code = a.bank_code.trim();
+        if code.len() != 8 || !code.chars().all(|c| c.is_ascii_digit()) {
+            errors.push(format!(
+                "{}: a bank code has 8 digits (for example 37050198)",
+                key("bank_code")
+            ));
+        }
+        if a.login.trim().is_empty() {
+            errors.push(format!("{}: must not be empty", key("login")));
+        }
+        if !Self::iban_ok(&a.iban) {
+            errors.push(format!(
+                "{}: not a valid IBAN (check the digits)",
+                key("iban")
+            ));
+        }
+        let url = a
+            .fints_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|u| !u.is_empty());
+        if let Some(url) = url {
+            if !(url.starts_with("https://") || url.starts_with("http://")) {
+                errors.push(format!("{}: must start with https://", key("fints_url")));
+            }
+            if a.bic.as_deref().map(str::trim).unwrap_or("").is_empty() {
+                errors.push(format!(
+                    "{}: needed together with fints_url (the bank's BIC)",
+                    key("bic")
+                ));
+            }
+        }
+        if let Some(var) = a
+            .pin_env
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            let valid = var
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                && var.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            if !valid {
+                errors.push(format!(
+                    "{}: {var:?} is not an environment variable name (the PIN itself must not be written in the file)",
+                    key("pin_env")
+                ));
+            } else if env.nonempty(var).is_none() {
+                warnings.push(format!(
+                    "{}: the environment variable {var} is not set right now; scheduled syncs for {name:?} cannot log in until it is",
+                    key("pin_env")
+                ));
+            }
+        }
+        if !a.account_ids.is_empty() {
+            warnings.push(format!(
+                "{}: only used by kind = \"plaid\"; ignored for a FinTS account",
+                key("account_ids")
+            ));
+        }
+    }
+
+    /// The checks of a `kind = "plaid"` account: nothing to type in the file, because you pick the
+    /// bank in Plaid's own window; the FinTS fields would only mislead.
+    fn plaid_account(
+        a: &BankAccount,
+        key: &dyn Fn(&str) -> String,
+        errors: &mut Vec<String>,
+        warnings: &mut Vec<String>,
+    ) {
+        for (field, set) in [
+            ("bank_code", !a.bank_code.trim().is_empty()),
+            ("login", !a.login.trim().is_empty()),
+            ("iban", !a.iban.trim().is_empty()),
+            (
+                "fints_url",
+                a.fints_url.as_deref().is_some_and(|u| !u.trim().is_empty()),
+            ),
+            (
+                "bic",
+                a.bic.as_deref().is_some_and(|u| !u.trim().is_empty()),
+            ),
+            (
+                "pin_env",
+                a.pin_env.as_deref().is_some_and(|u| !u.trim().is_empty()),
+            ),
+        ] {
+            if set {
+                warnings.push(format!(
+                    "{}: only used by kind = \"fints\"; ignored for a Plaid account (you sign in on Plaid's page)",
+                    key(field)
+                ));
+            }
+        }
+        for (i, id) in a.account_ids.iter().enumerate() {
+            let id = id.trim();
+            if id.is_empty()
+                || id.len() > 100
+                || !id
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                errors.push(format!(
+                    "{}[{i}]: not a Plaid account id (letters, digits, - and _ only)",
+                    key("account_ids")
+                ));
+            }
+        }
+    }
+
+    /// `[bank.plaid]`: the server-wide Plaid account.
+    pub fn plaid(bank: &crate::BankSettings, errors: &mut Vec<String>, warnings: &mut Vec<String>) {
+        let p = &bank.plaid;
+        if !matches!(p.environment.value.as_str(), "sandbox" | "production") {
+            errors.push(format!(
+                "bank.plaid.environment: {:?} is not known; use \"sandbox\" or \"production\"",
+                p.environment.value
+            ));
+        }
+        for c in &p.country_codes {
+            if c.len() != 2 || !c.chars().all(|ch| ch.is_ascii_uppercase()) {
+                errors.push(format!(
+                    "bank.plaid.country_codes: {c:?} is not a two-letter country code (for example \"DE\")"
+                ));
+            }
+        }
+        if p.language.len() != 2 || !p.language.chars().all(|c| c.is_ascii_lowercase()) {
+            errors.push(format!(
+                "bank.plaid.language: {:?} is not a two-letter language code (for example \"de\")",
+                p.language
+            ));
+        }
+        if let Some(uri) = p.redirect_uri.as_deref() {
+            if !uri.starts_with("https://") {
+                errors.push("bank.plaid.redirect_uri: must start with https://".to_string());
+            }
+        }
+        let wanted = bank.accounts.iter().any(|a| a.kind == "plaid");
+        if wanted && !p.configured() {
+            warnings.push(
+                "bank.accounts with kind \"plaid\" are configured but bank.plaid.client_id / bank.plaid.secret are not set (or FINANCER_PLAID_CLIENT_ID / FINANCER_PLAID_SECRET); syncing them stays off until they are"
+                    .to_string(),
+            );
+        }
+        if wanted && p.configured() && p.environment.value == "sandbox" {
+            warnings.push(
+                "bank.plaid.environment is \"sandbox\": Plaid only offers its test bank (user_good / pass_good); set \"production\" to link your real bank"
+                    .to_string(),
+            );
         }
     }
 

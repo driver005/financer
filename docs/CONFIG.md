@@ -78,6 +78,7 @@ Unknown keys are an error that names the key (to catch typos), everywhere, `[rec
 | `[llm] openai_api_key` | `FINANCER_OPENAI_API_KEY` | none | enables OpenAI |
 | `[llm] provider` | `FINANCER_LLM_PROVIDER` | `claude` | `claude` or `openai`; used until the app stores its own choice (Settings) |
 | `[bank] fints_product_id` | `FINANCER_FINTS_PRODUCT_ID` | none | enables live bank sync, see `docs/FINTS.md` |
+| `[bank.plaid] client_id`, `secret`, `environment`, `country_codes`, `language`, `redirect_uri` | `FINANCER_PLAID_CLIENT_ID`, `FINANCER_PLAID_SECRET`, `FINANCER_PLAID_ENV` | sandbox, DE, de | Plaid keys for `kind = "plaid"` connections, see `docs/BANK_PROVIDERS.md` |
 | `[[bank.accounts]]` | | none | connections to sync, below |
 | `[[stores]]` | | none | your own supermarket spellings, below |
 | `[receipts.email]`, `[receipts.lidl_plus]`, `[receipts.folder]` | `FINANCER_RECEIPTS_*` | all off | automatic receipt import, below |
@@ -89,7 +90,7 @@ Unknown keys are an error that names the key (to catch typos), everywhere, `[rec
 ```toml
 [[bank.accounts]]
 name = "Girokonto"                 # shown in the app; unique
-kind = "fints"                     # the only kind
+kind = "fints"                     # "fints" (default) or "plaid", see below
 bank_code = "37050198"             # 8 digits
 login = "your-login-name"          # online banking login
 iban = "DE89 3704 0044 0532 0130 00"   # FinTS needs the account; checked with the IBAN checksum
@@ -105,7 +106,26 @@ not tested. In short: the connection is in the file; the PIN is typed in the app
 `pin_env`; every login still needs your approval in the banking app. A scheduled sync starts by
 itself (when a PIN is available from `pin_env`) and then waits in the "needs approval" state.
 
-Without `fints_product_id`, accounts are accepted but cannot sync; the app shows why.
+Without `fints_product_id`, FinTS accounts are accepted but cannot sync; the app shows why.
+
+A second provider, **Plaid**, works without a PIN or a per-sync approval: you sign in to your bank
+once on Plaid's own page. Its account entry has no bank code, login, IBAN or PIN:
+
+```toml
+[bank.plaid]
+client_id = "${PLAID_CLIENT_ID}"
+secret = "${PLAID_SECRET}"
+environment = "production"         # "sandbox" (default) is Plaid's test bank
+
+[[bank.accounts]]
+name = "Plaid Girokonto"
+kind = "plaid"
+sync_every_hours = 12
+# account_ids = ["..."]            # optional: read only some linked accounts
+```
+
+Both kinds can be configured side by side. See `docs/BANK_PROVIDERS.md` for the sign-in, what is
+stored, and what was and was not tested.
 
 ### `[[stores]]`
 

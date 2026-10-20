@@ -31,7 +31,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use financer_api::{Api, AppState, BankConnection, LlmKeys, PriceSourceConfig, TokenHash};
+use financer_api::{
+    Api, AppState, BankConnection, BankProvider, LlmKeys, PlaidSetup, PriceSourceConfig, TokenHash,
+};
 use financer_config::{Config, Loaded, Loader, ProcessEnv, ProviderChoice, Renderer};
 use financer_core::StoreAlias;
 use financer_prices::{PoliteHttp, ReqwestHttp, Sources};
@@ -207,6 +209,16 @@ impl Server {
             .iter()
             .map(|a| BankConnection {
                 name: a.name.trim().to_string(),
+                kind: if a.kind == "plaid" {
+                    BankProvider::Plaid
+                } else {
+                    BankProvider::Fints
+                },
+                account_ids: a
+                    .account_ids
+                    .iter()
+                    .map(|id| id.trim().to_string())
+                    .collect(),
                 bank_code: a.bank_code.trim().to_string(),
                 login: a.login.trim().to_string(),
                 iban: a.iban.split_whitespace().collect(),
@@ -264,6 +276,50 @@ impl Server {
             tracing::info!("live bank sync enabled (FinTS)");
         }
 
+        // Plaid, for the connections with kind = "plaid": the access token is kept sealed with
+        // FINANCER_SECRET_KEY, or else a key derived from the API token (as the Lidl Plus token is)
+        let plaid_wanted = config.bank.accounts.iter().any(|a| a.kind == "plaid");
+        if config.bank.plaid.configured() {
+            let secret = std::env::var("FINANCER_SECRET_KEY")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| token.clone());
+            let secrets = financer_receipt_sources::SecretBox::new(&secret)
+                .map_err(|e| format!("cannot keep the Plaid access safe: {e}"))?;
+            let environment =
+                financer_plaid::PlaidEnvironment::parse(&config.bank.plaid.environment.value)
+                    .ok_or("bank.plaid.environment is not known")?;
+            let http = financer_plaid::ReqwestPlaidHttp::new()
+                .map_err(|e| format!("cannot start the Plaid client: {e}"))?;
+            let client = financer_plaid::PlaidClient::new(
+                financer_plaid::PlaidConfig::new(
+                    Self::secret(&config.bank.plaid.client_id).unwrap_or_default(),
+                    Self::secret(&config.bank.plaid.secret).unwrap_or_default(),
+                    environment,
+                ),
+                Arc::new(http),
+            );
+            state = state.with_secret_box(secrets).with_plaid(PlaidSetup {
+                client: Arc::new(client),
+                country_codes: config.bank.plaid.country_codes.clone(),
+                language: config.bank.plaid.language.clone(),
+                redirect_uri: config.bank.plaid.redirect_uri.clone(),
+            });
+            tracing::info!(
+                "Plaid enabled ({}){}",
+                environment.name(),
+                if environment == financer_plaid::PlaidEnvironment::Sandbox {
+                    ": test bank only"
+                } else {
+                    ""
+                }
+            );
+        } else if plaid_wanted {
+            tracing::warn!(
+                "bank accounts with kind \"plaid\" are configured but bank.plaid is not, so they cannot sync"
+            );
+        }
+
         // automatic receipt import (mailbox, Lidl Plus, watched folder) from [receipts]
         match financer_receipt_sources::ReceiptSyncer::live(
             receipt_store,
@@ -280,16 +336,19 @@ impl Server {
         }
 
         if !config.bank.accounts.is_empty() {
-            if Self::secret(&config.bank.fints_product_id).is_some() {
+            let fints_ready = Self::secret(&config.bank.fints_product_id).is_some();
+            let fints_wanted = config.bank.accounts.iter().any(|a| a.kind == "fints");
+            if fints_wanted && !fints_ready {
+                tracing::warn!(
+                    "bank accounts with kind \"fints\" are configured but there is no FinTS product id, so they cannot sync"
+                );
+            }
+            if (fints_wanted && fints_ready) || (plaid_wanted && config.bank.plaid.configured()) {
                 tracing::info!(
-                    "{} bank connection(s) from the config file; scheduled syncs wait for your approval in the banking app",
+                    "{} bank connection(s) from the config file; FinTS syncs wait for your approval in the banking app, Plaid syncs run by themselves once linked",
                     config.bank.accounts.len()
                 );
                 tokio::spawn(Api::run_bank_scheduler(state.clone()));
-            } else {
-                tracing::warn!(
-                    "bank accounts are configured but there is no FinTS product id, so they cannot sync"
-                );
             }
         }
 

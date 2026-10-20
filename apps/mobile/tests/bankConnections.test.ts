@@ -8,13 +8,18 @@ import {
   approvalLeftText,
   canSync,
   connectionKey,
+  connectionSubtitle,
   formatStamp,
   isBusy,
+  isSafeLinkUrl,
   lastResultText,
+  linkedAccountsText,
+  needsLinking,
   needsTypedPin,
   nextSyncText,
   stateLabel,
   stateTone,
+  syncButtonLabel,
 } from "../src/bankConnections";
 
 function conn(over: Partial<BankConnection> = {}): BankConnection {
@@ -29,6 +34,9 @@ function conn(over: Partial<BankConnection> = {}): BankConnection {
     state: "idle",
     message: null,
     approval_expires_at: null,
+    linked: true,
+    link_url: null,
+    accounts: [],
     sync_due: false,
     last_sync_at: null,
     last_result: null,
@@ -133,11 +141,86 @@ describe("API calls", () => {
     await api.syncConnection("Giro Konto", "1234");
     await api.syncConnection("Giro Konto");
     await api.cancelConnection("Giro Konto");
+    await api.disconnectConnection("Plaid Giro");
     assert.equal(calls[0].url, "https://x.test/v1/bank/connections");
     assert.equal(calls[1].url, "https://x.test/v1/bank/connections/Giro%20Konto/sync");
     assert.equal(calls[1].method, "POST");
     assert.equal(calls[1].body, '{"pin":"1234"}');
     assert.equal(calls[2].body, undefined); // the server has the PIN: nothing is sent
     assert.equal(calls[3].url, "https://x.test/v1/bank/connections/Giro%20Konto/cancel");
+    assert.equal(calls[4].url, "https://x.test/v1/bank/connections/Plaid%20Giro/disconnect");
+    assert.equal(calls[4].method, "POST");
+  });
+});
+
+/** A Plaid connection as the server lists it. */
+function plaid(over: Partial<BankConnection> = {}): BankConnection {
+  return conn({ name: "Plaid Giro", kind: "plaid", bank_code: "", login_masked: "", iban_masked: "", linked: false, ...over });
+}
+
+describe("Plaid connections", () => {
+  it("are not connected until you signed in once, and then need no PIN", () => {
+    const fresh = plaid();
+    assert.equal(needsLinking(fresh), true);
+    assert.equal(needsTypedPin(fresh), false);
+    assert.equal(canSync(fresh, ""), true, "no PIN to type for Plaid");
+    assert.equal(stateLabel(fresh), "Not connected");
+    assert.equal(stateTone(fresh), "muted");
+    assert.equal(syncButtonLabel(fresh, false), "Connect your bank");
+    assert.equal(syncButtonLabel(fresh, true), "Opening…");
+    const linked = plaid({ linked: true });
+    assert.equal(needsLinking(linked), false);
+    assert.equal(stateLabel(linked), "Ready");
+    assert.equal(syncButtonLabel(linked, false), "Sync now");
+    assert.equal(syncButtonLabel(linked, true), "Starting…");
+    // a FinTS connection is never "not connected"
+    assert.equal(needsLinking(conn({ linked: false })), false);
+  });
+
+  it("are busy while you sign in, and say how long the page is valid", () => {
+    const signingIn = plaid({ state: "needs_link", link_url: "https://secure.plaid.com/hl/abc", approval_expires_at: NOW + 10 * 60 });
+    assert.equal(isBusy(signingIn), true);
+    assert.equal(canSync(signingIn, ""), false);
+    assert.equal(stateLabel(signingIn), "Sign in to your bank");
+    assert.equal(stateTone(signingIn), "warn");
+    assert.equal(approvalLeftText(signingIn, NOW), "The server waits about 10 more minutes.");
+    assert.equal(anyBusy([conn(), signingIn]), true);
+  });
+
+  it("describe what they are connected to", () => {
+    assert.equal(connectionSubtitle(conn()), "Bank code 37050198 · login me**** · DE89****3000");
+    assert.equal(connectionSubtitle(plaid()), "Plaid · not connected yet");
+    assert.equal(connectionSubtitle(plaid({ linked: true })), "Plaid · connected");
+    const accounts = [
+      { id: "a1", name: "Giro", mask: "0000", kind: "depository" },
+      { id: "a2", name: "Tagesgeld", mask: null, kind: "depository" },
+    ];
+    assert.equal(connectionSubtitle(plaid({ linked: true, accounts })), "Plaid · 2 accounts connected");
+    assert.equal(connectionSubtitle(plaid({ linked: true, accounts: accounts.slice(0, 1) })), "Plaid · 1 account connected");
+    assert.equal(linkedAccountsText(plaid({ linked: true, accounts })), "Giro ••0000, Tagesgeld");
+    assert.equal(linkedAccountsText(plaid()), null);
+  });
+
+  it("explain how to connect before anything is scheduled", () => {
+    assert.match(nextSyncText(plaid(), NOW) ?? "", /Connect your bank .* no PIN and no approval/);
+    assert.equal(nextSyncText(plaid({ linked: true, sync_every_hours: 0 }), NOW), "Syncs only when you press Sync now.");
+  });
+
+  it("only open web addresses that are Plaid's own", () => {
+    assert.equal(isSafeLinkUrl("https://secure.plaid.com/hl/abc"), true);
+    assert.equal(isSafeLinkUrl("https://plaid.com/x"), true);
+    for (const bad of [
+      "http://secure.plaid.com/hl/abc", // not https
+      "https://plaid.com.evil.example/x", // another host
+      "https://evilplaid.com/x",
+      "javascript:alert(1)",
+      "intent://x#Intent;end",
+      "not a url",
+      "",
+      null,
+      undefined,
+    ]) {
+      assert.equal(isSafeLinkUrl(bad), false, String(bad));
+    }
   });
 });

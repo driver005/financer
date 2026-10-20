@@ -353,7 +353,12 @@ export class Api {
     return pin ? this.json<BankConnection>(path, "POST", { pin }) : this.request<BankConnection>(path, { method: "POST" });
   }
 
-  /** Stop waiting for an approval. */
+  /** Plaid: forget the connection (the server tells Plaid and deletes its access). Imported transactions stay. */
+  disconnectConnection(name: string) {
+    return this.request<BankConnection>(`/v1/bank/connections/${encodeURIComponent(name)}/disconnect`, { method: "POST" });
+  }
+
+  /** Stop waiting for an approval, or for the sign-in on Plaid's page. */
   cancelConnection(name: string) {
     return this.request<BankConnection>(`/v1/bank/connections/${encodeURIComponent(name)}/cancel`, { method: "POST" });
   }

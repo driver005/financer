@@ -16,6 +16,7 @@ financer-config = { path = "../config" }
 financer-core = { path = "../core" }
 financer-fints = { path = "../fints" }
 financer-llm = { path = "../llm" }
+financer-plaid = { path = "../plaid" }
 financer-prices = { path = "../prices" }
 financer-receipt-sources = { path = "../receipt-sources" }
 financer-store = { path = "../store" }

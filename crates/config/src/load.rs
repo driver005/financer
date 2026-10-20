@@ -124,7 +124,31 @@ pub struct LlmSettings {
 #[derive(Debug, Clone)]
 pub struct BankSettings {
     pub fints_product_id: Setting<Option<Secret>>,
+    pub plaid: PlaidSettings,
     pub accounts: Vec<BankAccount>,
+}
+
+/// `[bank.plaid]` with the `FINANCER_PLAID_*` variables applied.
+#[derive(Debug, Clone)]
+pub struct PlaidSettings {
+    pub client_id: Setting<Option<Secret>>,
+    pub secret: Setting<Option<Secret>>,
+    /// `sandbox` or `production`.
+    pub environment: Setting<String>,
+    pub country_codes: Vec<String>,
+    pub language: String,
+    pub redirect_uri: Option<String>,
+}
+
+impl PlaidSettings {
+    pub const DEFAULT_ENVIRONMENT: &'static str = "sandbox";
+    pub const DEFAULT_COUNTRY: &'static str = "DE";
+    pub const DEFAULT_LANGUAGE: &'static str = "de";
+
+    /// Both the client id and the secret are set.
+    pub fn configured(&self) -> bool {
+        self.client_id.value.is_some() && self.secret.value.is_some()
+    }
 }
 
 /// The effective configuration.
@@ -244,6 +268,8 @@ impl Loader {
             Some("llm.openai_api_key")
         } else if literal(&file.bank.fints_product_id) {
             Some("bank.fints_product_id")
+        } else if literal(&file.bank.plaid.secret) {
+            Some("bank.plaid.secret")
         } else {
             None
         }
@@ -471,12 +497,38 @@ impl Loader {
             ),
         };
 
+        let plaid_file = file.bank.plaid;
         let bank = BankSettings {
             fints_product_id: Self::secret(
                 env,
                 "FINANCER_FINTS_PRODUCT_ID",
                 file.bank.fints_product_id,
             ),
+            plaid: PlaidSettings {
+                client_id: Self::secret(env, "FINANCER_PLAID_CLIENT_ID", plaid_file.client_id),
+                secret: Self::secret(env, "FINANCER_PLAID_SECRET", plaid_file.secret),
+                environment: Self::pick(
+                    env,
+                    "FINANCER_PLAID_ENV",
+                    Self::non_empty(plaid_file.environment).map(|e| e.to_ascii_lowercase()),
+                    PlaidSettings::DEFAULT_ENVIRONMENT.to_string(),
+                    |s| Ok(s.trim().to_ascii_lowercase()),
+                    &mut errors,
+                ),
+                country_codes: if plaid_file.country_codes.is_empty() {
+                    vec![PlaidSettings::DEFAULT_COUNTRY.to_string()]
+                } else {
+                    plaid_file
+                        .country_codes
+                        .iter()
+                        .map(|c| c.trim().to_ascii_uppercase())
+                        .collect()
+                },
+                language: Self::non_empty(plaid_file.language)
+                    .map(|l| l.to_ascii_lowercase())
+                    .unwrap_or_else(|| PlaidSettings::DEFAULT_LANGUAGE.to_string()),
+                redirect_uri: Self::non_empty(plaid_file.redirect_uri),
+            },
             accounts: file.bank.accounts,
         };
 
@@ -509,9 +561,11 @@ impl Loader {
         let mut warnings = warnings;
         crate::Validator::receipts(&receipts.value, env, &mut warnings);
         crate::Validator::accounts(&bank.accounts, env, &mut errors, &mut warnings);
-        if !bank.accounts.is_empty() && bank.fints_product_id.value.is_none() {
+        crate::Validator::plaid(&bank, &mut errors, &mut warnings);
+        if bank.accounts.iter().any(|a| a.kind == "fints") && bank.fints_product_id.value.is_none()
+        {
             warnings.push(
-                "bank.accounts are configured but no FinTS product id is set (bank.fints_product_id or FINANCER_FINTS_PRODUCT_ID); syncing stays off until it is"
+                "bank.accounts with kind \"fints\" are configured but no FinTS product id is set (bank.fints_product_id or FINANCER_FINTS_PRODUCT_ID); syncing them stays off until it is"
                     .to_string(),
             );
         }
