@@ -117,7 +117,7 @@ impl SenderRule {
 }
 
 /// `[receipts.email]`: read receipt mails over IMAP (implicit TLS).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EmailConfig {
     /// Switch the source off without deleting its settings.
@@ -130,6 +130,11 @@ pub struct EmailConfig {
     /// Name of the environment variable that holds the password (never the password itself).
     #[serde(default = "default_password_env")]
     pub password_env: String,
+    /// The password itself, for when it is typed into the app (it is then kept in the server's
+    /// settings file, readable by the server's user only). Wins over `password_env`. Never
+    /// printed, logged or sent back to the app.
+    #[serde(default, skip_serializing)]
+    pub password: Option<String>,
     #[serde(default = "default_folder")]
     pub folder: String,
     #[serde(default = "default_poll_minutes")]
@@ -143,6 +148,24 @@ pub struct EmailConfig {
     /// Which senders are receipt mails. Empty means the built-in German defaults.
     #[serde(default)]
     pub senders: Vec<SenderRule>,
+}
+
+impl std::fmt::Debug for EmailConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EmailConfig")
+            .field("enabled", &self.enabled)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("username", &self.username)
+            .field("password_env", &self.password_env)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field("folder", &self.folder)
+            .field("poll_minutes", &self.poll_minutes)
+            .field("mark_seen", &self.mark_seen)
+            .field("max_age_days", &self.max_age_days)
+            .field("senders", &self.senders)
+            .finish()
+    }
 }
 
 fn yes() -> bool {
@@ -412,6 +435,7 @@ impl ReceiptSourcesConfig {
                 port: default_port(),
                 username: username.unwrap_or_default(),
                 password_env: default_password_env(),
+                password: None,
                 folder: default_folder(),
                 poll_minutes: default_poll_minutes(),
                 mark_seen: false,
@@ -540,10 +564,17 @@ mod tests {
         assert_eq!(e.password_env, DEFAULT_PASSWORD_ENV);
         assert_eq!(e.effective_senders(), SenderRule::defaults());
 
-        assert!(toml::from_str::<ReceiptSourcesConfig>(
-            "[email]\nhost = \"x\"\nusername = \"u\"\npassword = \"nope\"\n"
+        // the password can be given (the app does), but it never shows up in Debug output
+        let with_password: ReceiptSourcesConfig = toml::from_str(
+            "[email]\nhost = \"x\"\nusername = \"u\"\npassword = \"hunter2-secret\"\n",
         )
-        .is_err());
+        .unwrap();
+        let shown = format!("{with_password:?}");
+        assert!(!shown.contains("hunter2-secret"), "{shown}");
+        assert_eq!(
+            with_password.email.unwrap().password.as_deref(),
+            Some("hunter2-secret")
+        );
         assert!(toml::from_str::<ReceiptSourcesConfig>("bogus = 1\n").is_err());
         assert!(
             toml::from_str::<ReceiptSourcesConfig>("[lidl_plus]\nenabled = true\nnope = 1\n")

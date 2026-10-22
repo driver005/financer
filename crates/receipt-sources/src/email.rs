@@ -243,6 +243,7 @@ mod tests {
             port: 993,
             username: "me@example.org".into(),
             password_env: "X".into(),
+            password: None,
             folder: "INBOX".into(),
             poll_minutes: 30,
             mark_seen: false,

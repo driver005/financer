@@ -7,6 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+financer-config = { path = "../config", features = ["openapi"] }
 financer-core = { path = "../core" }
 financer-fints = { path = "../fints" }
 financer-llm = { path = "../llm" }
@@ -38,3 +39,4 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "test-
 financer-core = { path = "../core" }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+tempfile = "3"

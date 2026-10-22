@@ -226,7 +226,11 @@ impl Validator {
 
     /// `[receipts]`: things that are likely wrong but do not stop the server.
     pub fn receipts(cfg: &ReceiptSourcesConfig, env: &dyn Env, warnings: &mut Vec<String>) {
-        if let Some(e) = cfg.email.as_ref().filter(|e| e.enabled) {
+        if let Some(e) = cfg
+            .email
+            .as_ref()
+            .filter(|e| e.enabled && e.password.as_deref().is_none_or(|p| p.trim().is_empty()))
+        {
             let var = e.password_env.trim();
             let valid = var
                 .chars()

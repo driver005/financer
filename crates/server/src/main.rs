@@ -19,6 +19,8 @@
 //! - `FINANCER_OPENAI_API_KEY`     enables recipe ideas with OpenAI
 //! - `FINANCER_LLM_PROVIDER`       `claude` or `openai`: the provider used until the app chooses one
 //! - `FINANCER_CONFIG`             path of the config file
+//! - `FINANCER_SETTINGS_FILE`      where the settings made in the app are kept (default: next to the
+//!   SQLite database); they rank between the config file and the environment variables
 //! - `FINANCER_RECEIPTS_*`         automatic receipt import, see docs/RECEIPT_SOURCES.md
 //!   (`FINANCER_SECRET_KEY` encrypts the stored Lidl Plus token; the API token is used without it)
 //!
@@ -34,7 +36,9 @@ use std::time::Duration;
 use financer_api::{
     Api, AppState, BankConnection, BankProvider, LlmKeys, PlaidSetup, PriceSourceConfig, TokenHash,
 };
-use financer_config::{Config, Loaded, Loader, ProcessEnv, ProviderChoice, Renderer};
+use financer_config::{
+    Admin, Config, Loaded, Loader, Overlay, ProcessEnv, ProviderChoice, Renderer, SettingsFile,
+};
 use financer_core::StoreAlias;
 use financer_prices::{PoliteHttp, ReqwestHttp, Sources};
 use financer_store::Store;
@@ -113,25 +117,100 @@ impl Server {
             )
             .init();
 
-        let result = match Self::load(&cli) {
+        let admin = match Self::admin(&cli) {
+            Ok(a) => a,
+            Err(e) => {
+                eprintln!("financer-server: {e}");
+                std::process::exit(1);
+            }
+        };
+        // the settings made in the app; a change that failed to start before is undone here
+        let begin = admin.file().begin();
+        for w in &begin.warnings {
+            tracing::warn!("{w}");
+        }
+
+        let result = match Self::load(&cli, &begin.overlay) {
             Ok(loaded) if cli.probe_prices => Self::probe(&loaded.config).await,
-            Ok(loaded) => Self::run(loaded).await,
+            Ok(loaded) => Self::run(loaded, admin.clone()).await,
             Err(e) => Err(e),
         };
         if let Err(e) = result {
             eprintln!("financer-server: {e}");
+            // a change from the app that does not start is taken back, and the server starts
+            // again with the settings that worked
+            if begin.applying && admin.file().fail(&e) {
+                tracing::warn!(
+                    "the changed settings do not start; going back to the previous ones"
+                );
+                Self::restart_process();
+            }
             std::process::exit(1);
         }
     }
 
-    fn load(cli: &Cli) -> Result<Loaded, String> {
+    /// The settings made in the app, and the place they are kept.
+    fn admin(cli: &Cli) -> Result<Arc<Admin>, String> {
         let cwd = std::env::current_dir().map_err(|e| format!("no working directory: {e}"))?;
-        Loader::load(cli.config.as_deref(), &ProcessEnv, &cwd).map_err(|e| e.to_string())
+        let url = Loader::base_database_url(cli.config.as_deref(), &ProcessEnv, &cwd);
+        let file = SettingsFile::locate(&ProcessEnv, &url, &cwd);
+        Ok(Arc::new(Admin::new(
+            cli.config.clone(),
+            cwd,
+            Arc::new(ProcessEnv),
+            file,
+        )))
+    }
+
+    /// Start this program again with the same arguments and environment, in place of this
+    /// process (on Unix the process id stays, so a container keeps running). Returns only when
+    /// that did not work, and then the server exits: a supervisor starts it again, and the
+    /// settings file already holds the change, protected by the rollback.
+    fn restart_process() {
+        let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        if let Ok(exe) = std::env::current_exe() {
+            candidates.push(exe);
+        }
+        if let Some(first) = std::env::args_os().next() {
+            candidates.push(first.into());
+        }
+        for exe in candidates {
+            let mut command = std::process::Command::new(&exe);
+            command.args(&args);
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::CommandExt;
+                let err = command.exec();
+                tracing::error!("cannot restart through {}: {err}", exe.display());
+            }
+            #[cfg(not(unix))]
+            match command.spawn() {
+                Ok(_) => std::process::exit(0),
+                Err(err) => tracing::error!("cannot restart through {}: {err}", exe.display()),
+            }
+        }
+        tracing::error!("cannot restart the server; stopping so that it can be started again");
+        std::process::exit(1);
+    }
+
+    fn load(cli: &Cli, overlay: &Overlay) -> Result<Loaded, String> {
+        let cwd = std::env::current_dir().map_err(|e| format!("no working directory: {e}"))?;
+        Loader::load_with(cli.config.as_deref(), &ProcessEnv, &cwd, overlay)
+            .map_err(|e| e.to_string())
     }
 
     /// `--print-config` and `--check-config`. Returns the exit code.
     fn inspect_config(cli: &Cli) -> i32 {
-        let loaded = match Self::load(cli) {
+        // read-only: the settings made in the app count, but nothing is rolled back or written
+        let overlay = match Self::admin(cli) {
+            Ok(a) => a.file().overlay(),
+            Err(e) => {
+                eprintln!("config error: {e}");
+                return 1;
+            }
+        };
+        let loaded = match Self::load(cli, &overlay) {
             Ok(l) => l,
             Err(e) => {
                 eprintln!("config error: {e}");
@@ -149,6 +228,9 @@ impl Server {
             }
         }
         if cli.print_config {
+            if !overlay.is_empty() {
+                println!("# settings made in the app are applied (the comment says \"app\")");
+            }
             print!("{}", Renderer::render(&loaded));
         }
         for p in &problems {
@@ -235,7 +317,7 @@ impl Server {
         s.value.as_ref().map(|k| k.expose().to_string())
     }
 
-    async fn run(loaded: Loaded) -> Result<(), String> {
+    async fn run(loaded: Loaded, admin: Arc<Admin>) -> Result<(), String> {
         let config = &loaded.config;
         match &loaded.path {
             Some(p) => tracing::info!("configuration from {}", p.display()),
@@ -269,7 +351,9 @@ impl Server {
             })
             .with_default_llm_provider(config.llm.provider.value.map(Self::llm_provider))
             .with_store_aliases(&Self::store_aliases(config))
-            .with_bank_connections(Self::bank_connections(config));
+            .with_bank_connections(Self::bank_connections(config))
+            // the settings screen of the app: a saved change restarts the server to apply it
+            .with_config_admin(admin.clone(), Self::restart_process);
 
         if let Some(product_id) = Self::secret(&config.bank.fints_product_id) {
             state = state.with_bank(Arc::new(financer_fints::FintsBank::new(&product_id)));
@@ -395,6 +479,8 @@ impl Server {
             .await
             .map_err(|e| format!("cannot bind {bind}: {e}"))?;
         tracing::info!("listening on {bind}");
+        // started with what it was given: a change made in the app stays
+        admin.file().confirm();
         axum::serve(listener, app)
             .with_graceful_shutdown(async {
                 let _ = tokio::signal::ctrl_c().await;

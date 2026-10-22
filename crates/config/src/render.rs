@@ -148,9 +148,12 @@ impl Renderer {
                 );
                 let _ = writeln!(
                     out,
-                    "password_env = {}   # the password itself is only read from that variable",
+                    "password_env = {}   # read from that variable unless a password was entered in the app",
                     Self::q(&e.password_env)
                 );
+                if e.password.is_some() {
+                    let _ = writeln!(out, "password = {}", Self::HIDDEN);
+                }
                 let _ = writeln!(out, "folder = {}", Self::q(&e.folder));
                 let _ = writeln!(out, "poll_minutes = {}", e.poll_minutes);
                 let _ = writeln!(out, "mark_seen = {}", e.mark_seen);
@@ -251,7 +254,7 @@ impl Renderer {
 
     fn accounts(out: &mut String, c: &Config) {
         for a in &c.bank.accounts {
-            let _ = writeln!(out, "\n[[bank.accounts]]   # file");
+            let _ = writeln!(out, "\n[[bank.accounts]]   # {}", c.bank.accounts_source);
             let _ = writeln!(out, "name = {}", Self::q(&a.name));
             let _ = writeln!(out, "kind = {}", Self::q(&a.kind));
             if a.kind == "plaid" {
@@ -292,7 +295,7 @@ impl Renderer {
 
     fn stores(out: &mut String, c: &Config) {
         for s in &c.stores {
-            let _ = writeln!(out, "\n[[stores]]   # file");
+            let _ = writeln!(out, "\n[[stores]]   # {}", c.stores_source);
             let _ = writeln!(out, "chain = {}", Self::q(&s.chain));
             let list = s
                 .patterns

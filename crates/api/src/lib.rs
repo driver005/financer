@@ -15,6 +15,7 @@ mod mealplan;
 mod receipt_sources;
 mod routes;
 mod scan;
+mod server_config;
 mod stores;
 mod watchdog;
 
@@ -89,6 +90,7 @@ pub struct AppState {
     pub(crate) store_matcher: Arc<StoreMatcher>,
     pub(crate) llm: LlmFactory,
     pub(crate) receipt_syncer: Option<Arc<financer_receipt_sources::ReceiptSyncer>>,
+    pub(crate) config_control: Option<Arc<server_config::ConfigControl>>,
 }
 
 impl AppState {
@@ -113,7 +115,38 @@ impl AppState {
             store_matcher: Arc::new(StoreMatcher::builtin()),
             llm: Arc::new(ProviderFactory::create),
             receipt_syncer: None,
+            config_control: None,
         }
+    }
+
+    /// The server's configuration as a settings screen (`/v1/server-config`). `restart` is called
+    /// a moment after a saved change, to apply it; the hosted server re-executes itself there.
+    /// Without this the endpoints answer 404 (the on-phone backend has no configuration file).
+    pub fn with_config_admin(
+        mut self,
+        admin: Arc<financer_config::Admin>,
+        restart: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
+        self.config_control = Some(Arc::new(server_config::ConfigControl {
+            admin,
+            restart: Arc::new(restart),
+            delay: server_config::DEFAULT_RESTART_DELAY,
+            restarting: std::sync::atomic::AtomicBool::new(false),
+        }));
+        self
+    }
+
+    /// How long to wait between answering a saved change and restarting (tests shorten it).
+    pub fn with_restart_delay(mut self, delay: std::time::Duration) -> Self {
+        if let Some(control) = self.config_control.take() {
+            self.config_control = Some(Arc::new(server_config::ConfigControl {
+                admin: control.admin.clone(),
+                restart: control.restart.clone(),
+                delay,
+                restarting: std::sync::atomic::AtomicBool::new(false),
+            }));
+        }
+        self
     }
 
     /// The bank client used for live sync (the server passes the real FinTS client).
@@ -268,6 +301,8 @@ impl AppState {
         grocery::recipe_ideas,
         grocery::get_settings,
         grocery::put_settings,
+        server_config::get_config,
+        server_config::put_config,
         categorization::list_rules,
         categorization::create_rule,
         categorization::update_rule,
@@ -358,6 +393,13 @@ impl AppState {
         dto::IdeaIngredientDto,
         dto::SettingsDto,
         dto::SettingsUpdate,
+        financer_config::ConfigView,
+        financer_config::GroupView,
+        financer_config::KeyView,
+        financer_config::FieldView,
+        financer_config::Change,
+        server_config::ConfigSaved,
+        server_config::ConfigProblems,
         categorization::RuleDto,
         categorization::RuleInput,
         categorization::RuleOrder,
@@ -486,6 +528,10 @@ impl Api {
             .route(
                 "/settings",
                 get(grocery::get_settings).put(grocery::put_settings),
+            )
+            .route(
+                "/server-config",
+                get(server_config::get_config).put(server_config::put_config),
             )
             .route(
                 "/rules",

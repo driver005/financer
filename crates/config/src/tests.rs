@@ -284,7 +284,7 @@ fn receipts_table_is_typed_and_rejects_unknown_keys() {
     assert!(r.folder.as_ref().unwrap().path.is_absolute());
     for text in [
         "[receipts]\nbogus = 1\n",
-        "[receipts.email]\nhost = \"h\"\nusername = \"u\"\npassword = \"x\"\n",
+        "[receipts.email]\nhost = \"h\"\nusername = \"u\"\npasswort = \"x\"\n",
         "[receipts.lidl_plus]\nenable = true\n",
     ] {
         assert!(Fixture::load(text, &[]).is_err(), "{text}");
