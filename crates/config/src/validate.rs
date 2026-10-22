@@ -285,6 +285,57 @@ impl Validator {
         rem == 1
     }
 
+    /// `[[prices.sources]]`: the shape is checked by serde; this is what it cannot say.
+    pub fn price_sources(sources: &[financer_prices::SourceConfig], errors: &mut Vec<String>) {
+        use financer_prices::SourceConfig;
+        for (i, source) in sources.iter().enumerate() {
+            let at = |field: &str| format!("prices.sources[{i}].{field}");
+            match source {
+                SourceConfig::JsonLd { urls, .. } | SourceConfig::LlmPage { urls, .. } => {
+                    if urls.is_empty() {
+                        errors.push(format!("{}: needs at least one page address", at("urls")));
+                    }
+                    for url in urls {
+                        if !(url.starts_with("https://") || url.starts_with("http://"))
+                            || url.chars().any(char::is_whitespace)
+                        {
+                            errors.push(format!(
+                                "{}: {url:?} is not a web address (start with https://)",
+                                at("urls")
+                            ));
+                        }
+                    }
+                }
+                SourceConfig::OpenPrices {
+                    items,
+                    max_age_days,
+                } => {
+                    if items.is_empty() {
+                        errors.push(format!("{}: needs at least one item", at("items")));
+                    }
+                    for item in items {
+                        if item.item.trim().is_empty() {
+                            errors.push(format!("{}: an item name is empty", at("items")));
+                        }
+                        let code = item.barcode.trim();
+                        if !(8..=14).contains(&code.len())
+                            || !code.bytes().all(|b| b.is_ascii_digit())
+                        {
+                            errors.push(format!(
+                                "{}: {:?} is not a barcode (8 to 14 digits)",
+                                at("items"),
+                                item.barcode
+                            ));
+                        }
+                    }
+                    if !(1..=365).contains(max_age_days) {
+                        errors.push(format!("{}: must be between 1 and 365", at("max_age_days")));
+                    }
+                }
+            }
+        }
+    }
+
     /// `[[stores]]`.
     pub fn stores(stores: &[StoreAlias], errors: &mut Vec<String>) {
         let letters = |s: &str| s.chars().filter(|c| c.is_alphabetic()).count();

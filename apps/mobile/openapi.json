@@ -2448,6 +2448,114 @@
         ]
       }
     },
+    "/v1/server-config": {
+      "get": {
+        "tags": [
+          "server_config"
+        ],
+        "summary": "Every setting of the server with its value (secrets only as \"set\"), the place it comes from\nand what the app may change.",
+        "operationId": "get_config",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "This backend has no server configuration (the on-phone one)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "server_config"
+        ],
+        "summary": "Save new values (`set`; `null` clears one) and drop values set earlier from the app (`reset`).\nEverything is checked the way the server checks its configuration at start; one mistake and\nnothing is saved. The server restarts to apply the change; if the changed settings do not\nstart, the previous ones come back by themselves.",
+        "operationId": "put_config",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Change"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigSaved"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "This backend has no server configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A key is decided by an environment variable, or a restart is under way",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigProblems"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The change was refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigProblems"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The settings file cannot be written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/settings": {
       "get": {
         "tags": [
@@ -3834,6 +3942,131 @@
           }
         }
       },
+      "Change": {
+        "type": "object",
+        "description": "What to change: `set` writes values (`null` clears one), `reset` removes the app's value so the\nfile's, or the default, applies again.",
+        "properties": {
+          "reset": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "set": {
+            "type": "object",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ConfigProblems": {
+        "type": "object",
+        "description": "A change was refused; nothing was saved.",
+        "required": [
+          "error",
+          "problems"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "The problems as one text."
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "One entry per problem, naming the key."
+          }
+        }
+      },
+      "ConfigSaved": {
+        "type": "object",
+        "description": "A change was saved.",
+        "required": [
+          "changed",
+          "warnings",
+          "restarting"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The keys whose value is different now."
+          },
+          "restarting": {
+            "type": "boolean",
+            "description": "The server is restarting to apply the change (a few seconds). False when nothing changed."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Things that are legal but probably not what you want."
+          }
+        }
+      },
+      "ConfigView": {
+        "type": "object",
+        "description": "The whole settings screen.",
+        "required": [
+          "settings_file",
+          "writable",
+          "applying",
+          "state",
+          "problems",
+          "warnings",
+          "groups"
+        ],
+        "properties": {
+          "applying": {
+            "type": "boolean",
+            "description": "A change is saved but the server has not yet started with it. The app waits for this to\nturn false (or `state` to turn `rolled_back`) after it saved something."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupView"
+            }
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Problems with the configuration as it is now."
+          },
+          "settings_file": {
+            "type": "string",
+            "description": "Where the app's edits are kept."
+          },
+          "state": {
+            "type": "string",
+            "description": "`ok`, or `rolled_back` when the last change did not start and was undone."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "writable": {
+            "type": "boolean",
+            "description": "The server may write that file; without it nothing can be saved."
+          }
+        }
+      },
       "ConnectionState": {
         "type": "string",
         "description": "Where a connection is in a sync.",
@@ -4171,6 +4404,81 @@
           }
         }
       },
+      "FieldView": {
+        "type": "object",
+        "description": "One column of a table key.",
+        "required": [
+          "key",
+          "label",
+          "help",
+          "kind",
+          "options",
+          "required"
+        ],
+        "properties": {
+          "default": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "help": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`text`, `path`, `secret`, `number`, `toggle`, `choice` or `list`."
+          },
+          "label": {
+            "type": "string"
+          },
+          "max": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "min": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "placeholder": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "when_field": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Shown only while this other field of the row has `when_value` (one value, or several\nseparated by commas)."
+          },
+          "when_value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "ForecastDto": {
         "type": "object",
         "description": "The end-of-period projection. Amounts are integer cents.",
@@ -4316,6 +4624,36 @@
           }
         }
       },
+      "GroupView": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "hint",
+          "icon",
+          "keys"
+        ],
+        "properties": {
+          "hint": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KeyView"
+            }
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "IdeaDto": {
         "type": "object",
         "required": [
@@ -4458,6 +4796,111 @@
           "transactions_known": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "KeyView": {
+        "type": "object",
+        "description": "One key with what it is now.",
+        "required": [
+          "path",
+          "label",
+          "help",
+          "kind",
+          "options",
+          "source",
+          "locked",
+          "is_set",
+          "fields"
+        ],
+        "properties": {
+          "default": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "env": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The environment variable that overrides this key."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldView"
+            }
+          },
+          "help": {
+            "type": "string"
+          },
+          "is_set": {
+            "type": "boolean",
+            "description": "Has a value (not blank)."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`text`, `path`, `secret`, `number`, `toggle`, `choice`, `list` or `table`."
+          },
+          "label": {
+            "type": "string"
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "The environment variable is set, so the app cannot change it."
+          },
+          "max": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "min": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "path": {
+            "type": "string",
+            "description": "Dotted path, as in the file."
+          },
+          "placeholder": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preview": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A secret that is safe to show in part (a database address without its password)."
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the value in force comes from: `default`, `file`, `app` or `env`."
+          },
+          "value": {
+            "description": "The value in force; never present for a secret."
+          },
+          "warning": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Said before saving."
           }
         }
       },

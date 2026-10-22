@@ -1,6 +1,7 @@
 # Bank providers
 
-A bank connection in `financer.toml` (`[[bank.accounts]]`) has a `kind`, which says where its data
+A bank connection (`[[bank.accounts]]` in `financer.toml`, or **Settings > Server settings > Bank
+accounts** in the app, which needs no file at all) has a `kind`, which says where its data
 comes from. Everything after the data arrives (categories, budgets, the per-supermarket spending,
 de-duplication) is the same for every kind.
 
@@ -21,6 +22,11 @@ through Plaid, and Plaid has its own terms and, for real banks, its own pricing.
 everything between you and your bank. Use whichever you are comfortable with, or both.
 
 ### Set it up
+
+**From the app:** Settings > Server settings > *Bank providers* takes the Plaid client id, secret,
+environment, countries and language, and *Bank accounts* takes the connection itself (choose
+*plaid* as the provider). Save; the server restarts and the connection shows up under Settings >
+Bank connections. The steps below do the same in the file and the environment.
 
 1. Create a Plaid account and keys at <https://dashboard.plaid.com>. Turn on **Hosted Link** for
    them (the app opens Plaid's page in the browser; it needs no native Plaid component).

@@ -81,6 +81,11 @@ impl Renderer {
             &c.prices.sources_file,
         );
 
+        for source in &c.prices.sources {
+            let _ = writeln!(out, "\n[[prices.sources]]   # {}", c.prices.sources_source);
+            let _ = writeln!(out, "{}", Self::price_source(source));
+        }
+
         let _ = writeln!(out, "\n[llm]");
         Self::line(
             &mut out,
@@ -212,6 +217,35 @@ impl Renderer {
                     format!("{:?}", f.on_done).to_lowercase()
                 );
             }
+        }
+    }
+
+    fn price_source(source: &financer_prices::SourceConfig) -> String {
+        use financer_prices::SourceConfig;
+        match source {
+            SourceConfig::JsonLd {
+                chain,
+                urls,
+                is_offer,
+            } => format!(
+                "type = \"json_ld\"\nchain = {chain:?}\nurls = {} page(s)\nis_offer = {is_offer}",
+                urls.len()
+            ),
+            SourceConfig::LlmPage {
+                chain,
+                urls,
+                is_offer,
+            } => format!(
+                "type = \"llm_page\"\nchain = {chain:?}\nurls = {} page(s)\nis_offer = {is_offer}",
+                urls.len()
+            ),
+            SourceConfig::OpenPrices {
+                items,
+                max_age_days,
+            } => format!(
+                "type = \"open_prices\"\nitems = {} item(s)\nmax_age_days = {max_age_days}",
+                items.len()
+            ),
         }
     }
 

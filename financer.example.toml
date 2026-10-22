@@ -4,8 +4,10 @@
 # FINANCER_CONFIG at it). Everything is optional and every line below is commented out, so the
 # file as it stands changes nothing: remove the leading `#` of a setting to use it.
 #
-# Order of precedence for each setting: environment variable, then this file, then the default.
-# The environment variable that belongs to a setting is named in its comment.
+# Order of precedence for each setting: environment variable, then what was set in the app
+# (Settings > Server settings, kept in financer.settings.json next to the database), then this file,
+# then the default. The environment variable that belongs to a setting is named in its comment.
+# Every key below can also be set from the app, so this file is optional.
 #
 # Secrets: do not write them here if you can avoid it. Any text value may refer to the
 # environment as ${NAME}, or ${NAME:-fallback} to use "fallback" when NAME is not set. It is an
@@ -53,6 +55,19 @@
 # JSON file listing the price sources (see docs/PRICES.md and deploy/config/sources.example.json).
 # A relative path is relative to this file. Env: FINANCER_PRICE_SOURCES. Default: no sources.
 #sources_file = "sources.json"
+
+# Or write the price sources here, one block each (used together with the file above). The same
+# entries can be added in the app under Settings > Server settings > Prices. See docs/PRICES.md.
+#[[prices.sources]]
+#type = "json_ld"            # or "llm_page" (your AI model reads the page) or "open_prices"
+#chain = "rewe"              # rewe, lidl, aldi or kaufland
+#urls = ["https://example.org/replace-with-a-real-offers-page"]
+#is_offer = true
+#
+#[[prices.sources]]
+#type = "open_prices"
+#items = [{ item = "milch", barcode = "4012345678901" }]   # item = a key from GET /v1/catalog
+#max_age_days = 60
 
 [llm]
 # API keys for recipe ideas, receipt photos and AI category suggestions. Only the keys you set
@@ -135,8 +150,9 @@
 
 # Automatic receipt import, so "what I normally buy" and the spending per store have item-level
 # data. Three sources, each off until you configure it; see docs/RECEIPT_SOURCES.md. No password
-# or token is ever written here: the mailbox password is read from the environment variable named
-# by password_env, and the Lidl Plus sign-in is kept encrypted in the database.
+# or token is written here: the mailbox password is read from the environment variable named by
+# password_env (or typed into the app, which keeps it in the server's settings file), and the Lidl
+# Plus sign-in is kept encrypted in the database.
 #
 # 1. Email: REWE mails the eBon as a PDF to your account address; other shops' mails work too.
 #    Over IMAP with TLS (port 993). Only mails from the listed senders are downloaded.

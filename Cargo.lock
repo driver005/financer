@@ -1644,6 +1644,7 @@ dependencies = [
 name = "financer-config"
 version = "0.1.0"
 dependencies = [
+ "financer-prices",
  "financer-receipt-sources",
  "serde",
  "serde_json",

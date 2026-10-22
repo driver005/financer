@@ -20,7 +20,7 @@ export const TABS: readonly TabDef[] = [
  * Settings and everything opened from it (bank sync, rules, receipts, ...): a separate area with
  * no tab bar, a back button and a grey page, so it is clear you have left the everyday screens.
  */
-export const SETTINGS_SCREENS: readonly string[] = ["/settings", "/sync", "/rules", "/subscriptions", "/alerts", "/receipts", "/receipt-sources", "/scan"];
+export const SETTINGS_SCREENS: readonly string[] = ["/settings", "/sync", "/rules", "/subscriptions", "/alerts", "/receipts", "/receipt-sources", "/scan", "/server-config"];
 
 /** Routes with no chrome at all (first-run setup). */
 export const BARE_SCREENS: readonly string[] = ["/onboarding"];

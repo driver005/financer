@@ -46,7 +46,7 @@ describe("areaFor and tabFor", () => {
     assert.equal(tabFor("/stores"), "money");
   });
   it("puts Settings and the screens opened from it in their own area, with no tab", () => {
-    for (const path of ["/settings", "/sync", "/receipts", "/receipt-sources", "/rules"]) {
+    for (const path of ["/settings", "/sync", "/receipts", "/receipt-sources", "/rules", "/server-config"]) {
       assert.equal(areaFor(path), "settings", path);
       assert.equal(tabFor(path), null, path);
     }

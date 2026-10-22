@@ -65,6 +65,14 @@ export default function SettingsScreen() {
             <>
               <SettingsGroup>
                 <BackendCard settingsLoaded={settings !== null} settingsError={error} />
+                {api && mode === "remote" ? (
+                  <SettingsRow
+                    icon="server-network"
+                    title="Server settings"
+                    subtitle="Keys, bank providers, receipts: everything in financer.toml"
+                    onPress={() => router.push("/server-config")}
+                  />
+                ) : null}
                 <DataCard />
                 <BackupCard />
               </SettingsGroup>
@@ -103,7 +111,8 @@ export default function SettingsScreen() {
                   icon="tag-multiple-outline"
                   title="Price sources"
                   value={priceSourcesLabel(settings.price_sources)}
-                  subtitle={mode === "embedded" ? "Set in the on-phone settings" : "Configured on the server, not in the app"}
+                  subtitle={mode === "embedded" ? "Set in the on-phone settings" : "Add and change them under Server settings"}
+                  onPress={mode === "embedded" ? undefined : () => router.push("/server-config")}
                 />
               ) : null}
             </SettingsGroup>,

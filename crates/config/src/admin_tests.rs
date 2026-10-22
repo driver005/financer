@@ -189,10 +189,12 @@ fn row(k: &Key) -> Value {
     for f in k.fields {
         obj.insert(
             f.key.to_string(),
-            match f.kind {
-                Kind::Int => json!(f.min.max(1)),
-                Kind::Choice => json!(f.options[0]),
-                Kind::List => json!(["x"]),
+            match (f.kind, f.pair) {
+                (Kind::Int, _) => json!(f.min.max(1)),
+                (Kind::Bool, _) => json!(true),
+                (Kind::Choice, _) => json!(f.options[0]),
+                (Kind::List, Some(_)) => json!([{"item": "x", "barcode": "x"}]),
+                (Kind::List, None) => json!(["x"]),
                 _ => json!("x"),
             },
         );
@@ -829,4 +831,166 @@ fn a_broken_file_is_reported_not_hidden() {
         view.problems
     );
     assert_eq!(view.groups.len(), GROUPS.len(), "the screen is still drawn");
+}
+
+// ------------------------------------------------------------------ price sources
+
+#[test]
+fn every_field_of_a_price_source_is_a_column_of_the_schema() {
+    let k = schema_key("prices.sources").unwrap();
+    let kinds = k.field("type").unwrap().options;
+    assert_eq!(kinds, ["json_ld", "llm_page", "open_prices"]);
+    let mut seen = std::collections::BTreeSet::new();
+    for kind in kinds {
+        // a source with every column that applies to this kind, written as the file has it
+        let mut obj = serde_json::Map::new();
+        obj.insert("type".into(), json!(kind));
+        for f in k.fields.iter().filter(|f| f.applies_to(kind)) {
+            if f.key == "type" {
+                continue;
+            }
+            let v = match (f.kind, f.pair) {
+                (Kind::List, Some(_)) => json!([{"item": "milch", "barcode": "4012345678901"}]),
+                (Kind::List, None) => json!(["https://example.org/offers"]),
+                (Kind::Bool, _) => json!(true),
+                (Kind::Int, _) => json!(f.min.max(1)),
+                (Kind::Choice, _) => json!(f.options[0]),
+                _ => json!("x"),
+            };
+            obj.insert(f.key.into(), v);
+        }
+        let parsed: financer_prices::SourceConfig = serde_json::from_value(Value::Object(obj))
+            .unwrap_or_else(|e| {
+                panic!("{kind}: the schema describes a column the source does not have: {e}")
+            });
+        // what the source has again: every key must be a column
+        let back = serde_json::to_value(&parsed).unwrap();
+        for name in back.as_object().unwrap().keys() {
+            assert!(
+                k.field(name).is_some(),
+                "{kind} has a field {name:?} that the schema does not describe"
+            );
+            seen.insert(name.clone());
+        }
+    }
+    // nothing described that no kind has
+    for f in k.fields {
+        assert!(
+            seen.contains(f.key),
+            "column {} belongs to no source kind",
+            f.key
+        );
+    }
+}
+
+#[test]
+fn price_sources_are_saved_with_their_item_pairs_and_checked() {
+    let rig = Rig::new("", &[]);
+    rig.set(&[(
+        "prices.sources",
+        json!([
+            {"type": "open_prices", "items": ["milch = 4012345678901", "eier=4012345678902"], "max_age_days": 30},
+            {"type": "llm_page", "chain": "kaufland", "urls": ["https://example.org/angebote"], "is_offer": true},
+            {"type": "json_ld", "chain": "rewe", "urls": ["https://example.org/a", "https://example.org/b"]},
+        ]),
+    )])
+    .unwrap();
+    // stored the way the file would write it
+    let stored = rig.admin.file().overlay();
+    assert_eq!(
+        stored.get("prices.sources").unwrap()[0],
+        json!({"type": "open_prices", "items": [
+            {"item": "milch", "barcode": "4012345678901"},
+            {"item": "eier", "barcode": "4012345678902"}], "max_age_days": 30})
+    );
+    // and shown the way the form edits it
+    let k = rig.key("prices.sources");
+    assert_eq!(k.source, "app");
+    assert_eq!(
+        k.value.as_ref().unwrap()[0]["items"],
+        json!(["milch=4012345678901", "eier=4012345678902"])
+    );
+    // the loader has three sources, the server would use them with the file's
+    let loaded = Loader::load_with(
+        Some(&rig.dir.path().join("financer.toml")),
+        &MapEnv::new(&[("FINANCER_API_TOKEN", TOKEN)]),
+        rig.dir.path(),
+        &stored,
+    )
+    .unwrap();
+    assert_eq!(loaded.config.prices.sources.len(), 3);
+    assert_eq!(loaded.config.prices.sources_source, Source::App);
+    assert!(Renderer::render(&loaded).contains("[[prices.sources]]   # app"));
+}
+
+#[test]
+fn a_price_source_is_checked_row_by_row() {
+    let rig = Rig::new("", &[]);
+    for (rows, needle) in [
+        (
+            json!([{"type": "json_ld", "chain": "rewe"}]),
+            "prices.sources[0].urls: Pages is required",
+        ),
+        (
+            json!([{"type": "json_ld", "chain": "rewe", "urls": ["ftp://x"]}]),
+            "not a web address",
+        ),
+        (
+            json!([{"type": "open_prices"}]),
+            "prices.sources[0].items: Items is required",
+        ),
+        (
+            json!([{"type": "open_prices", "items": ["milch"]}]),
+            "write each entry as item=barcode",
+        ),
+        (
+            json!([{"type": "open_prices", "items": ["milch=12"]}]),
+            "not a barcode",
+        ),
+        (
+            json!([{"type": "open_prices", "items": ["milch=4012345678901"], "max_age_days": 999}]),
+            "must be between 1 and 365",
+        ),
+        (
+            json!([{"type": "whatever", "urls": ["https://x"]}]),
+            "use one of json_ld, llm_page, open_prices",
+        ),
+        (
+            json!([{"type": "json_ld", "chain": "tesco", "urls": ["https://x.org"]}]),
+            "use one of rewe, lidl, aldi, kaufland",
+        ),
+    ] {
+        let problems = Rig::problems(rig.set(&[("prices.sources", rows.clone())]));
+        assert!(
+            problems.iter().any(|p| p.contains(needle)),
+            "{rows}: {problems:?} should mention {needle:?}"
+        );
+    }
+    assert_eq!(rig.settings_text(), "");
+}
+
+#[test]
+fn price_sources_from_the_file_are_shown_and_the_app_replaces_them() {
+    let rig = Rig::new(
+        "[[prices.sources]]\ntype = \"json_ld\"\nchain = \"lidl\"\nurls = [\"https://example.org/lidl\"]\n\
+         [[prices.sources]]\ntype = \"open_prices\"\nitems = [{ item = \"milch\", barcode = \"4012345678901\" }]\n",
+        &[],
+    );
+    let k = rig.key("prices.sources");
+    assert_eq!(k.source, "file");
+    assert_eq!(k.value.as_ref().unwrap().as_array().unwrap().len(), 2);
+    assert_eq!(
+        k.value.as_ref().unwrap()[1]["items"],
+        json!(["milch=4012345678901"])
+    );
+    // clearing the list blanks what the file has
+    rig.set(&[("prices.sources", Value::Null)]).unwrap();
+    let loaded = Loader::load_with(
+        Some(&rig.dir.path().join("financer.toml")),
+        &MapEnv::new(&[("FINANCER_API_TOKEN", TOKEN)]),
+        rig.dir.path(),
+        &rig.admin.file().overlay(),
+    )
+    .unwrap();
+    assert!(loaded.config.prices.sources.is_empty());
 }

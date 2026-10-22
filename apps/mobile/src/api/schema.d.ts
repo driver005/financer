@@ -863,6 +863,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/server-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every setting of the server with its value (secrets only as "set"), the place it comes from
+         *     and what the app may change.
+         */
+        get: operations["get_config"];
+        /**
+         * Save new values (`set`; `null` clears one) and drop values set earlier from the app (`reset`).
+         *     Everything is checked the way the server checks its configuration at start; one mistake and
+         *     nothing is saved. The server restarts to apply the change; if the changed settings do not
+         *     start, the previous ones come back by themselves.
+         */
+        put: operations["put_config"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/settings": {
         parameters: {
             query?: never;
@@ -1347,6 +1373,51 @@ export interface components {
             total_cents: number;
         };
         /**
+         * @description What to change: `set` writes values (`null` clears one), `reset` removes the app's value so the
+         *     file's, or the default, applies again.
+         */
+        Change: {
+            reset?: string[];
+            set?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description A change was refused; nothing was saved. */
+        ConfigProblems: {
+            /** @description The problems as one text. */
+            error: string;
+            /** @description One entry per problem, naming the key. */
+            problems: string[];
+        };
+        /** @description A change was saved. */
+        ConfigSaved: {
+            /** @description The keys whose value is different now. */
+            changed: string[];
+            /** @description The server is restarting to apply the change (a few seconds). False when nothing changed. */
+            restarting: boolean;
+            /** @description Things that are legal but probably not what you want. */
+            warnings: string[];
+        };
+        /** @description The whole settings screen. */
+        ConfigView: {
+            /**
+             * @description A change is saved but the server has not yet started with it. The app waits for this to
+             *     turn false (or `state` to turn `rolled_back`) after it saved something.
+             */
+            applying: boolean;
+            groups: components["schemas"]["GroupView"][];
+            message?: string | null;
+            /** @description Problems with the configuration as it is now. */
+            problems: string[];
+            /** @description Where the app's edits are kept. */
+            settings_file: string;
+            /** @description `ok`, or `rolled_back` when the last change did not start and was undone. */
+            state: string;
+            warnings: string[];
+            /** @description The server may write that file; without it nothing can be saved. */
+            writable: boolean;
+        };
+        /**
          * @description Where a connection is in a sync.
          * @enum {string}
          */
@@ -1469,6 +1540,28 @@ export interface components {
             counterparty_iban?: string | null;
             purpose: string;
         };
+        /** @description One column of a table key. */
+        FieldView: {
+            default?: string | null;
+            help: string;
+            key: string;
+            /** @description `text`, `path`, `secret`, `number`, `toggle`, `choice` or `list`. */
+            kind: string;
+            label: string;
+            /** Format: int64 */
+            max?: number | null;
+            /** Format: int64 */
+            min?: number | null;
+            options: string[];
+            placeholder?: string | null;
+            required: boolean;
+            /**
+             * @description Shown only while this other field of the row has `when_value` (one value, or several
+             *     separated by commas).
+             */
+            when_field?: string | null;
+            when_value?: string | null;
+        };
         /** @description The end-of-period projection. Amounts are integer cents. */
         ForecastDto: {
             /**
@@ -1552,6 +1645,13 @@ export interface components {
             /** Format: date */
             today: string;
         };
+        GroupView: {
+            hint: string;
+            icon: string;
+            id: string;
+            keys: components["schemas"]["KeyView"][];
+            title: string;
+        };
         IdeaDto: {
             ingredients: components["schemas"]["IdeaIngredientDto"][];
             /** Format: int32 */
@@ -1587,6 +1687,37 @@ export interface components {
             receipts_known: number;
             transactions_added: number;
             transactions_known: number;
+        };
+        /** @description One key with what it is now. */
+        KeyView: {
+            default?: string | null;
+            /** @description The environment variable that overrides this key. */
+            env?: string | null;
+            fields: components["schemas"]["FieldView"][];
+            help: string;
+            /** @description Has a value (not blank). */
+            is_set: boolean;
+            /** @description `text`, `path`, `secret`, `number`, `toggle`, `choice`, `list` or `table`. */
+            kind: string;
+            label: string;
+            /** @description The environment variable is set, so the app cannot change it. */
+            locked: boolean;
+            /** Format: int64 */
+            max?: number | null;
+            /** Format: int64 */
+            min?: number | null;
+            options: string[];
+            /** @description Dotted path, as in the file. */
+            path: string;
+            placeholder?: string | null;
+            /** @description A secret that is safe to show in part (a database address without its password). */
+            preview?: string | null;
+            /** @description Where the value in force comes from: `default`, `file`, `app` or `env`. */
+            source: string;
+            /** @description The value in force; never present for a secret. */
+            value?: unknown;
+            /** @description Said before saving. */
+            warning?: string | null;
         };
         LidlFinishRequest: {
             /** @description The address the sign-in ended on, `com.lidlplus.app://callback?code=...`. */
@@ -4191,6 +4322,93 @@ export interface operations {
             };
             /** @description No such rule */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_config: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigView"];
+                };
+            };
+            /** @description This backend has no server configuration (the on-phone one) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_config: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Change"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigSaved"];
+                };
+            };
+            /** @description This backend has no server configuration */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description A key is decided by an environment variable, or a restart is under way */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigProblems"];
+                };
+            };
+            /** @description The change was refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigProblems"];
+                };
+            };
+            /** @description The settings file cannot be written */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

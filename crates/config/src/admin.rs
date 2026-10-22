@@ -32,7 +32,8 @@ pub struct FieldView {
     pub required: bool,
     pub default: Option<String>,
     pub placeholder: Option<String>,
-    /// Shown only while this other field of the row has `when_value`.
+    /// Shown only while this other field of the row has `when_value` (one value, or several
+    /// separated by commas).
     pub when_field: Option<String>,
     pub when_value: Option<String>,
 }
@@ -363,8 +364,26 @@ impl Admin {
                     .map(|row| match row {
                         Value::Object(mut obj) => {
                             for f in key.fields.iter().filter(|f| f.kind == Kind::List) {
-                                if let Some(Value::String(s)) = obj.get(f.key).cloned() {
-                                    obj.insert(f.key.into(), Value::Array(vec![Value::String(s)]));
+                                match (obj.get(f.key).cloned(), f.pair) {
+                                    (Some(Value::String(s)), None) => {
+                                        obj.insert(
+                                            f.key.into(),
+                                            Value::Array(vec![Value::String(s)]),
+                                        );
+                                    }
+                                    (Some(Value::Array(items)), Some((left, right))) => {
+                                        obj.insert(
+                                            f.key.into(),
+                                            Value::Array(
+                                                items
+                                                    .iter()
+                                                    .filter_map(|i| Self::pair_text(i, left, right))
+                                                    .map(Value::String)
+                                                    .collect(),
+                                            ),
+                                        );
+                                    }
+                                    _ => {}
                                 }
                             }
                             Value::Object(obj)
@@ -375,6 +394,29 @@ impl Admin {
             ),
             (_, other) => other,
         }
+    }
+
+    /// `{ "item": "milch", "barcode": "4012…" }` -> `milch=4012…`.
+    fn pair_text(v: &Value, left: &str, right: &str) -> Option<String> {
+        let obj = v.as_object()?;
+        Some(format!(
+            "{}={}",
+            obj.get(left)?.as_str()?,
+            obj.get(right)?.as_str()?
+        ))
+    }
+
+    /// `milch=4012…` -> `{ "item": "milch", "barcode": "4012…" }`.
+    fn pair_object(text: &str, left: &str, right: &str, label: &str) -> Result<Value, String> {
+        let (l, r) = text
+            .split_once('=')
+            .map(|(l, r)| (l.trim(), r.trim()))
+            .filter(|(l, r)| !l.is_empty() && !r.is_empty())
+            .ok_or_else(|| format!("{label}: write each entry as {left}={right}, not {text:?}"))?;
+        let mut obj = Map::new();
+        obj.insert(left.into(), Value::from(l));
+        obj.insert(right.into(), Value::from(r));
+        Ok(Value::Object(obj))
     }
 
     // -------------------------------------------------------------------------------- update
@@ -553,18 +595,31 @@ impl Admin {
             }
         }
         for f in key.fields.iter().filter(|f| f.required) {
-            if let Some((other, wanted)) = f.when {
+            if let Some((other, _)) = f.when {
                 let actual = out
                     .get(other)
                     .and_then(Value::as_str)
                     .or_else(|| key.field(other).map(|o| o.default))
                     .unwrap_or("");
-                if actual != wanted {
+                if !f.applies_to(actual) {
                     continue;
                 }
             }
             if !out.contains_key(f.key) {
                 return Err(format!("{}: {} is required", at(f.key), f.label));
+            }
+        }
+        // entries written `left=right` are stored as objects
+        for f in key.fields.iter().filter(|f| f.pair.is_some()) {
+            if let (Some((left, right)), Some(Value::Array(items))) =
+                (f.pair, out.get(f.key).cloned())
+            {
+                let objects = items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(|t| Self::pair_object(t, left, right, &at(f.key)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                out.insert(f.key.into(), Value::Array(objects));
             }
         }
         Ok(Value::Object(out))

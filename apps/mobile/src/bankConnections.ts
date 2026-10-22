@@ -164,6 +164,6 @@ export function liveSyncMissing(onPhone: boolean): { title: string; body: string
       }
     : {
         title: "Live sync is not set up on the server",
-        body: "It needs a FinTS product id (FINANCER_FINTS_PRODUCT_ID, or bank.fints_product_id in financer.toml), which you request from the Deutsche Kreditwirtschaft. See docs/FINTS.md. Until then, import a CSV export on the Spending tab.",
+        body: "It needs a FinTS product id, which you request from the Deutsche Kreditwirtschaft. Add it under Settings, Server settings, Bank providers (or set FINANCER_FINTS_PRODUCT_ID, or bank.fints_product_id in financer.toml). See docs/FINTS.md. Until then, import a CSV export on the Spending tab.",
       };
 }

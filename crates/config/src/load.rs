@@ -116,6 +116,10 @@ pub struct DatabaseSettings {
 #[derive(Debug, Clone)]
 pub struct PricesSettings {
     pub sources_file: Setting<Option<String>>,
+    /// `[[prices.sources]]`, used together with the ones in `sources_file`.
+    pub sources: Vec<financer_prices::SourceConfig>,
+    /// Where `sources` came from.
+    pub sources_source: Source,
 }
 
 #[derive(Debug, Clone)]
@@ -559,7 +563,10 @@ impl Loader {
                 base,
                 true,
             ),
+            sources_source: Self::list_source(overlay, "prices.sources", &file.prices.sources),
+            sources: file.prices.sources,
         };
+        crate::Validator::price_sources(&prices.sources, &mut errors);
 
         let provider_file = Self::non_empty(file.llm.provider).and_then(|p| {
             ProviderChoice::parse(&p)

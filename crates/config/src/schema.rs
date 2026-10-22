@@ -52,9 +52,13 @@ pub struct Field {
     pub required: bool,
     pub default: &'static str,
     pub placeholder: &'static str,
-    /// Only meaningful while another field of the row has this value (a FinTS field of a Plaid
-    /// account does nothing). The app hides the field otherwise.
+    /// Only meaningful while another field of the row has one of these values, written as a
+    /// comma-separated list (a FinTS field of a Plaid account does nothing). The app hides the
+    /// field otherwise.
     pub when: Option<(&'static str, &'static str)>,
+    /// A [`Kind::List`] whose entries are written `left=right` in the app and stored as objects
+    /// `{ left: .., right: .. }` (the items of an Open Prices source).
+    pub pair: Option<(&'static str, &'static str)>,
 }
 
 impl Field {
@@ -71,6 +75,7 @@ impl Field {
             default: "",
             placeholder: "",
             when: None,
+            pair: None,
         }
     }
     pub const fn help(mut self, v: &'static str) -> Self {
@@ -86,6 +91,10 @@ impl Field {
         self.max = max;
         self
     }
+    pub const fn pair(mut self, left: &'static str, right: &'static str) -> Self {
+        self.pair = Some((left, right));
+        self
+    }
     pub const fn required(mut self) -> Self {
         self.required = true;
         self
@@ -98,9 +107,18 @@ impl Field {
         self.placeholder = v;
         self
     }
-    pub const fn when(mut self, field: &'static str, value: &'static str) -> Self {
-        self.when = Some((field, value));
+    /// Applies only while `field` has one of `values` (comma-separated).
+    pub const fn when(mut self, field: &'static str, values: &'static str) -> Self {
+        self.when = Some((field, values));
         self
+    }
+
+    /// Whether the column applies to a row whose `field` has `actual`.
+    pub fn applies_to(&self, actual: &str) -> bool {
+        match self.when {
+            None => true,
+            Some((_, values)) => values.split(',').any(|v| v.trim() == actual),
+        }
     }
 }
 
@@ -328,6 +346,36 @@ const STORE_FIELDS: &[Field] = &[
         .help("Text that appears in the booking's counterparty or purpose. Case and punctuation do not matter; at least 3 letters each."),
 ];
 
+const PRICE_SOURCE_FIELDS: &[Field] = &[
+    Field::new("type", "Kind of source", Kind::Choice)
+        .options(&["json_ld", "llm_page", "open_prices"])
+        .default("json_ld")
+        .help("json_ld reads products embedded in a page (schema.org); llm_page has your AI model read a page's text (costs API calls); open_prices uses crowdsourced shelf prices for barcodes."),
+    Field::new("chain", "Shop", Kind::Choice)
+        .options(&["rewe", "lidl", "aldi", "kaufland"])
+        .default("rewe")
+        .help("Whose prices the pages show.")
+        .when("type", "json_ld,llm_page"),
+    Field::new("urls", "Pages", Kind::List)
+        .required()
+        .help("Offer or product pages to read. Only pages the shop's robots.txt allows are fetched.")
+        .placeholder("https://www.example.com/angebote")
+        .when("type", "json_ld,llm_page"),
+    Field::new("is_offer", "These are offers", Kind::Bool)
+        .help("The prices on these pages are limited-time offers, not the everyday price.")
+        .when("type", "json_ld,llm_page"),
+    Field::new("items", "Items", Kind::List)
+        .required()
+        .pair("item", "barcode")
+        .help("One per entry as item=barcode, for example milch=4012345678901. The item is a key from the catalog; the barcode is the EAN of a product you buy.")
+        .placeholder("milch=4012345678901")
+        .when("type", "open_prices"),
+    Field::new("max_age_days", "Ignore prices older than (days)", Kind::Int)
+        .range(1, 365)
+        .default("60")
+        .when("type", "open_prices"),
+];
+
 const SENDER_FIELDS: &[Field] = &[
     Field::new("retailer", "Shop", Kind::Text)
         .default("auto")
@@ -376,6 +424,9 @@ pub const KEYS: &[Key] = &[
         .help("JSON file listing the price sources (see docs/PRICES.md). Default: no sources.")
         .env("FINANCER_PRICE_SOURCES")
         .placeholder("sources.json"),
+    Key::new("prices.sources", "prices", "Price sources", Kind::Table)
+        .help("Where prices come from, written here instead of in a JSON file. Used together with the sources file above. See docs/PRICES.md.")
+        .fields(PRICE_SOURCE_FIELDS),
     Key::new("server.refresh_hours", "prices", "Refresh prices every (hours)", Kind::Int)
         .help("Hours between automatic price refreshes, 0 = off.")
         .env("FINANCER_REFRESH_HOURS")

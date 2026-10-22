@@ -44,6 +44,9 @@ pub struct FileDatabase {
 #[serde(deny_unknown_fields, default)]
 pub struct FilePrices {
     pub sources_file: Option<String>,
+    /// `[[prices.sources]]`: price sources written in place (the same entries as in the JSON
+    /// file). They are used together with the ones from `sources_file`.
+    pub sources: Vec<financer_prices::SourceConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]

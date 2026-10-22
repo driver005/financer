@@ -248,17 +248,22 @@ impl Server {
         0
     }
 
+    /// The price sources: the JSON file (if one is named) and the `[[prices.sources]]` entries.
     fn load_sources(config: &Config) -> Result<Vec<PriceSourceConfig>, String> {
-        let Some(path) = config.prices.sources_file.value.clone() else {
-            return Ok(Vec::new());
-        };
-        let text = std::fs::read_to_string(&path).map_err(|e| {
-            format!(
-                "cannot read the price sources file {path} ({}): {e}",
-                config.prices.sources_file.source
-            )
-        })?;
-        serde_json::from_str(&text).map_err(|e| format!("invalid price sources in {path}: {e}"))
+        let mut sources = Vec::new();
+        if let Some(path) = config.prices.sources_file.value.clone() {
+            let text = std::fs::read_to_string(&path).map_err(|e| {
+                format!(
+                    "cannot read the price sources file {path} ({}): {e}",
+                    config.prices.sources_file.source
+                )
+            })?;
+            let from_file: Vec<PriceSourceConfig> = serde_json::from_str(&text)
+                .map_err(|e| format!("invalid price sources in {path}: {e}"))?;
+            sources.extend(from_file);
+        }
+        sources.extend(config.prices.sources.iter().cloned());
+        Ok(sources)
     }
 
     fn polite_http() -> Result<Arc<PoliteHttp<ReqwestHttp>>, String> {
@@ -495,7 +500,7 @@ impl Server {
         let configs = Self::load_sources(config)?;
         if configs.is_empty() {
             return Err(
-                "no price sources: set FINANCER_PRICE_SOURCES (or prices.sources_file in financer.toml) to a JSON file, see docs/PRICES.md"
+                "no price sources: add some under Settings > Server settings > Prices in the app, or set FINANCER_PRICE_SOURCES (or prices.sources_file in financer.toml) to a JSON file, see docs/PRICES.md"
                     .into(),
             );
         }

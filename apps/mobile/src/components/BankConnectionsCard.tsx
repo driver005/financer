@@ -179,7 +179,7 @@ export function BankConnectionsCard() {
       ) : (
         <>
           <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
-            These connections are configured in financer.toml on the server; change them there. A bank (FinTS) connection never
+            These connections are set up under Server settings, Bank accounts (or in financer.toml on the server). A bank (FinTS) connection never
             stores your PIN: it comes from the server's environment or you type it here, and every login needs your approval in
             the banking app. A Plaid connection needs neither: you sign in to your bank once on Plaid's page.
           </Text>

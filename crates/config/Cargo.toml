@@ -7,6 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+financer-prices = { path = "../prices" }
 financer-receipt-sources = { path = "../receipt-sources" }
 serde.workspace = true
 serde_json.workspace = true

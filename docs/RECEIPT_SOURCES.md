@@ -65,7 +65,8 @@ receipt.
 
 **Setup**
 
-1. Put the mailbox password in an environment variable on the server (name it in `password_env`).
+1. Put the mailbox password in an environment variable on the server (name it in `password_env`),
+   or type it into the app under Settings > Server settings > Receipts: mailbox.
    Many providers (Gmail, iCloud, Outlook) require an *app password* for IMAP; use that, not your
    main password. Use a mailbox you control: the server reads it.
 2. Add `[receipts.email]` as above. Only implicit TLS is supported (port 993 or your provider's
@@ -191,7 +192,9 @@ Without a configured source every source reports `disabled`; the Lidl endpoints 
 ## Security notes
 
 * **No secret in the config file.** The mailbox password is read from the environment variable
-  named by `password_env`; `--print-config` shows that name and a masked login. Error messages
+  named by `password_env`, or typed into the app (Settings > Server settings), which keeps it in the
+  server's private settings file (`financer.settings.json`, mode 0600, see `docs/CONFIG.md`) and
+  never sends it back. `--print-config` shows that name (and that a password is set), and a masked login. Error messages
   from the mail server are shortened and have the password removed.
 * **The Lidl token is encrypted at rest**: XChaCha20-Poly1305, a key derived with HKDF-SHA256 from
   a server secret (`FINANCER_SECRET_KEY`, else the API token) and a random salt per value, bound to

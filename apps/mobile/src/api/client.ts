@@ -69,6 +69,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** One entry per problem when the server refused a change (saving the server settings). */
+    public problems: string[] = [],
   ) {
     super(message);
   }
@@ -87,13 +89,15 @@ export class Api {
     const res = await this.transport.send({ method: init.method ?? "GET", path, headers: init.headers, body: init.body });
     if (res.status < 200 || res.status >= 300) {
       let message = `HTTP ${res.status}`;
+      let problems: string[] = [];
       try {
         const body = JSON.parse(res.text);
         if (typeof body?.error === "string") message = body.error;
+        if (Array.isArray(body?.problems)) problems = body.problems.filter((p: unknown) => typeof p === "string");
       } catch {
         // body was not JSON; keep the status message
       }
-      throw new ApiError(res.status, res.status === 401 ? "Wrong or missing API token" : message);
+      throw new ApiError(res.status, res.status === 401 ? "Wrong or missing API token" : message, problems);
     }
     if (res.status === 204 || res.text === "") return undefined as T;
     return JSON.parse(res.text) as T;
@@ -287,6 +291,23 @@ export class Api {
 
   settings() {
     return this.request<Settings>("/v1/settings");
+  }
+
+  /**
+   * Every key of the server's financer.toml with its value and where it comes from. Answers 404 on
+   * the on-phone backend, which has no such file.
+   */
+  serverConfig() {
+    return this.request<components["schemas"]["ConfigView"]>("/v1/server-config");
+  }
+
+  /**
+   * Save changes to the server's configuration. The server checks them first (HTTP 422 with
+   * `problems` when it refuses; 409 when an environment variable decides a key), then restarts to
+   * apply them.
+   */
+  saveServerConfig(change: components["schemas"]["Change"]) {
+    return this.json<components["schemas"]["ConfigSaved"]>("/v1/server-config", "PUT", change);
   }
 
   saveSettings(update: SettingsUpdate) {
