@@ -78,7 +78,8 @@ and default, and where its current value comes from: `Set in the app`, `From fin
   app set, so the file's value (or the default) applies again; clearing a field blanks a value the
   file sets.
 - **Where it is kept.** In `financer.settings.json`, a small JSON file next to the SQLite database
-  (so inside the Docker volume `/data`), or at `FINANCER_SETTINGS_FILE`. It is written atomically and
+  (so inside the Docker volume `/data`; the image sets `FINANCER_SETTINGS_FILE` to
+  `/data/financer.settings.json`, which also covers a PostgreSQL setup), or at `FINANCER_SETTINGS_FILE`. It is written atomically and
   readable by the server's user only (`0600`). **Secrets typed into the app are kept in it in plain
   text**, like a secret written in `financer.toml`; they are never sent back to the app, printed or
   logged (the screen only says "Set"). Keep that file out of version control and backups you do not
@@ -98,6 +99,10 @@ and default, and where its current value comes from: `Set in the app`, `From fin
   listen address or port: then set the new address under Settings > Backend. When you change the
   API token the app switches to the new one by itself once the server is back; other devices need it
   entered again.
+- **Who can change it.** Anyone with the API token, which already reads and exports all your data.
+  The settings include paths on the server (`web_dir`, `sources_file`, the receipts folder, the
+  database), so treat the token like a password and keep the server behind HTTPS. The screen only
+  exists on the hosted server; the on-phone backend answers 404.
 - **What is not stored.** The bank **PIN** is still never stored anywhere; a FinTS connection names an
   environment variable (`pin_env`) or you type the PIN for each sync. The mailbox password is a key
   of its own (`[receipts.email] password`, new with this screen), used before `password_env`.
@@ -236,7 +241,10 @@ sets `FINANCER_CONFIG` to it. Create it before the first start (`cp financer.exa
 deploy/financer.toml`; a file with only comments is fine). The image and the compose file set
 `FINANCER_BIND` and `FINANCER_DATABASE_URL` themselves, and environment variables win over the file,
 so `bind` and `database.url` in the file have no effect there; change them in `deploy/.env`.
-A `${NAME}` in the file can only see variables the container has: the `FINANCER_*` ones that compose
+In the app (Settings > Server settings) those keys, and the API token, show as locked ("Set by
+FINANCER_BIND on the server") because the environment decides them; everything else can be changed
+there and is kept in the data volume (`/data/financer.settings.json`), so it survives a rebuild of
+the image. A `${NAME}` in the file can only see variables the container has: the `FINANCER_*` ones that compose
 already forwards, or any you add under `environment:` (for example a `SPARKASSE_PIN` for `pin_env`).
 
 This compose change was written but **not run** (no Docker in the sandbox). The nested mount of a

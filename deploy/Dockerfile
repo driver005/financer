@@ -17,7 +17,8 @@ RUN useradd --system --uid 10001 --create-home financer \
 COPY --from=build /src/target/release/financer-server /usr/local/bin/financer-server
 USER financer
 ENV FINANCER_BIND=0.0.0.0:8080 \
-    FINANCER_DATABASE_URL=sqlite:///data/financer.db?mode=rwc
+    FINANCER_DATABASE_URL=sqlite:///data/financer.db?mode=rwc \
+    FINANCER_SETTINGS_FILE=/data/financer.settings.json
 VOLUME /data
 EXPOSE 8080
 CMD ["financer-server"]
