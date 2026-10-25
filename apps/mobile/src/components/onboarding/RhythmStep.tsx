@@ -111,10 +111,10 @@ export function RhythmStep({ ctx }: { ctx: StepCtx }) {
           {!allowance.ok ? <FieldMessage tone="error">{allowance.error}</FieldMessage> : null}
           {daily !== null && limit !== null ? (
             <View
-              style={{ marginTop: 12, padding: 14, borderRadius: 20, borderWidth: 2, borderColor: p.border, backgroundColor: p.surface }}
+              style={{ marginTop: 12, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }}
               accessibilityLabel={`Your daily grocery goal is ${formatCents(daily)}`}
             >
-              <RNText style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1 }}>YOUR DAILY GROCERY GOAL</RNText>
+              <RNText style={{ color: p.muted, fontSize: 13, fontWeight: "600" }}>Your daily grocery goal</RNText>
               <RNText style={{ color: p.text, fontSize: 30, fontWeight: "800", marginTop: 4 }}>{formatCents(daily)} a day</RNText>
               <RNText style={{ color: p.muted, fontSize: 13, marginTop: 4 }}>
                 {formatCents(limit)} over {periodDays(period)} days ({periodLabel(period)}). This is what the Today screen counts down.

@@ -137,8 +137,8 @@ export default function Stores() {
           {data ? (
             <>
               <Card>
-                <RNText style={{ color: c.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1 }}>
-                  {periodLabel({ start: data.start, end: data.end }).toUpperCase()}
+                <RNText style={{ color: c.muted, fontSize: 13, fontWeight: "600" }}>
+                  {periodLabel({ start: data.start, end: data.end })}
                 </RNText>
                 <RNText
                   accessibilityLabel={`Spent in stores: ${formatCents(data.total_cents)}`}

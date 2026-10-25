@@ -45,7 +45,7 @@ export function ChainPriceRow({
         gap: space.md,
         padding: space.md,
         borderRadius: radius.md,
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: isCheapest ? tones.good.border : "transparent",
         backgroundColor: isCheapest ? tones.good.bg : p.surfaceAlt,
       }}

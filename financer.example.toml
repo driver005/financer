@@ -4,8 +4,10 @@
 # FINANCER_CONFIG at it). Everything is optional and every line below is commented out, so the
 # file as it stands changes nothing: remove the leading `#` of a setting to use it.
 #
-# Order of precedence for each setting: environment variable, then this file, then the default.
-# The environment variable that belongs to a setting is named in its comment.
+# Order of precedence for each setting: environment variable, then what was set in the app
+# (Settings > Server settings, kept in financer.settings.json next to the database), then this file,
+# then the default. The environment variable that belongs to a setting is named in its comment.
+# Every key below can also be set from the app, so this file is optional.
 #
 # Secrets: do not write them here if you can avoid it. Any text value may refer to the
 # environment as ${NAME}, or ${NAME:-fallback} to use "fallback" when NAME is not set. It is an
@@ -54,6 +56,19 @@
 # A relative path is relative to this file. Env: FINANCER_PRICE_SOURCES. Default: no sources.
 #sources_file = "sources.json"
 
+# Or write the price sources here, one block each (used together with the file above). The same
+# entries can be added in the app under Settings > Server settings > Prices. See docs/PRICES.md.
+#[[prices.sources]]
+#type = "json_ld"            # or "llm_page" (your AI model reads the page) or "open_prices"
+#chain = "rewe"              # rewe, lidl, aldi or kaufland
+#urls = ["https://example.org/replace-with-a-real-offers-page"]
+#is_offer = true
+#
+#[[prices.sources]]
+#type = "open_prices"
+#items = [{ item = "milch", barcode = "4012345678901" }]   # item = a key from GET /v1/catalog
+#max_age_days = 60
+
 [llm]
 # API keys for recipe ideas, receipt photos and AI category suggestions. Only the keys you set
 # enable a provider. Env: FINANCER_ANTHROPIC_API_KEY, FINANCER_OPENAI_API_KEY.
@@ -68,14 +83,31 @@
 # bank sync stays off. Env: FINANCER_FINTS_PRODUCT_ID.
 #fints_product_id = "${FINTS_PRODUCT_ID}"
 
-# One block per account to sync automatically. The connection is described here; the PIN is
-# never written in this file: name an environment variable (pin_env) or type the PIN in the app.
-# A pushTAN approval is always needed from you: a scheduled sync logs in by itself and then
-# waits in the app ("needs approval") until you approve it in your banking app.
+# Plaid is the second way to connect a bank (the first is FinTS above): you sign in once on
+# Plaid's own page, and afterwards syncs need no PIN and no approval. Create keys on the Plaid
+# dashboard (https://dashboard.plaid.com), turn on "Hosted Link" for them, and see
+# docs/BANK_PROVIDERS.md. Keep the secret out of this file.
+#[bank.plaid]
+#client_id = "${PLAID_CLIENT_ID}"       # Env: FINANCER_PLAID_CLIENT_ID
+#secret = "${PLAID_SECRET}"             # Env: FINANCER_PLAID_SECRET
+# "sandbox" is Plaid's test bank (user_good / pass_good); "production" is for your real bank.
+# Env: FINANCER_PLAID_ENV. Default: sandbox.
+#environment = "sandbox"
+# Countries whose banks you can pick (default ["DE"]) and the language of Plaid's page (default "de").
+#country_codes = ["DE"]
+#language = "de"
+# Where Plaid's page sends the browser when you are done (https only). Optional.
+#redirect_uri = "https://example.org/done"
+
+# One block per account to sync automatically. The connection is described here; the PIN of a
+# FinTS account is never written in this file: name an environment variable (pin_env) or type the
+# PIN in the app. A FinTS sync always needs your pushTAN approval: a scheduled sync logs in by
+# itself and then waits in the app ("needs approval") until you approve it in your banking app.
+# A Plaid account needs neither PIN nor approval once you have signed in on Plaid's page.
 #[[bank.accounts]]
 # Shown in the app. Must be unique.
 #name = "Girokonto"
-# Only "fints" exists.
+# "fints" (default) or "plaid".
 #kind = "fints"
 # The 8-digit bank code (BLZ).
 #bank_code = "37050198"
@@ -92,6 +124,14 @@
 #sync_every_hours = 12
 # How many days the first import reaches back (1 to 365, default 90; banks often allow ~90).
 #since_days = 90
+
+# A Plaid account has no bank code, login, IBAN or PIN here: you pick the bank on Plaid's page.
+#[[bank.accounts]]
+#name = "Plaid Girokonto"
+#kind = "plaid"
+#sync_every_hours = 12
+# Optional: read only some of the accounts you linked (the ids are shown in the app once linked).
+#account_ids = ["abc123"]
 
 # Bank texts that belong to a supermarket chain, for "what I spend at each supermarket".
 # The built-in list already knows Lidl, Aldi, Kaufland, Rewe, Edeka, Netto, Penny, dm, Rossmann,
@@ -110,8 +150,9 @@
 
 # Automatic receipt import, so "what I normally buy" and the spending per store have item-level
 # data. Three sources, each off until you configure it; see docs/RECEIPT_SOURCES.md. No password
-# or token is ever written here: the mailbox password is read from the environment variable named
-# by password_env, and the Lidl Plus sign-in is kept encrypted in the database.
+# or token is written here: the mailbox password is read from the environment variable named by
+# password_env (or typed into the app, which keeps it in the server's settings file), and the Lidl
+# Plus sign-in is kept encrypted in the database.
 #
 # 1. Email: REWE mails the eBon as a PDF to your account address; other shops' mails work too.
 #    Over IMAP with TLS (port 993). Only mails from the listed senders are downloaded.

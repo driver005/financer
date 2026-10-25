@@ -81,6 +81,11 @@ impl Renderer {
             &c.prices.sources_file,
         );
 
+        for source in &c.prices.sources {
+            let _ = writeln!(out, "\n[[prices.sources]]   # {}", c.prices.sources_source);
+            let _ = writeln!(out, "{}", Self::price_source(source));
+        }
+
         let _ = writeln!(out, "\n[llm]");
         Self::line(
             &mut out,
@@ -112,6 +117,7 @@ impl Renderer {
             Self::secret(&c.bank.fints_product_id.value),
             &c.bank.fints_product_id,
         );
+        Self::plaid(&mut out, c);
         Self::accounts(&mut out, c);
         Self::stores(&mut out, c);
         Self::receipts(&mut out, c);
@@ -147,9 +153,12 @@ impl Renderer {
                 );
                 let _ = writeln!(
                     out,
-                    "password_env = {}   # the password itself is only read from that variable",
+                    "password_env = {}   # read from that variable unless a password was entered in the app",
                     Self::q(&e.password_env)
                 );
+                if e.password.is_some() {
+                    let _ = writeln!(out, "password = {}", Self::HIDDEN);
+                }
                 let _ = writeln!(out, "folder = {}", Self::q(&e.folder));
                 let _ = writeln!(out, "poll_minutes = {}", e.poll_minutes);
                 let _ = writeln!(out, "mark_seen = {}", e.mark_seen);
@@ -211,11 +220,92 @@ impl Renderer {
         }
     }
 
+    fn price_source(source: &financer_prices::SourceConfig) -> String {
+        use financer_prices::SourceConfig;
+        match source {
+            SourceConfig::JsonLd {
+                chain,
+                urls,
+                is_offer,
+            } => format!(
+                "type = \"json_ld\"\nchain = {chain:?}\nurls = {} page(s)\nis_offer = {is_offer}",
+                urls.len()
+            ),
+            SourceConfig::LlmPage {
+                chain,
+                urls,
+                is_offer,
+            } => format!(
+                "type = \"llm_page\"\nchain = {chain:?}\nurls = {} page(s)\nis_offer = {is_offer}",
+                urls.len()
+            ),
+            SourceConfig::OpenPrices {
+                items,
+                max_age_days,
+            } => format!(
+                "type = \"open_prices\"\nitems = {} item(s)\nmax_age_days = {max_age_days}",
+                items.len()
+            ),
+        }
+    }
+
+    /// `[bank.plaid]`: shown only when something about it is set. The client id and the secret
+    /// are never printed.
+    fn plaid(out: &mut String, c: &Config) {
+        let p = &c.bank.plaid;
+        let used = p.configured()
+            || p.client_id.value.is_some()
+            || p.secret.value.is_some()
+            || c.bank.accounts.iter().any(|a| a.kind == "plaid");
+        if !used {
+            return;
+        }
+        let _ = writeln!(out, "\n[bank.plaid]");
+        Self::line(
+            out,
+            "client_id",
+            Self::secret(&p.client_id.value),
+            &p.client_id,
+        );
+        Self::line(out, "secret", Self::secret(&p.secret.value), &p.secret);
+        Self::line(
+            out,
+            "environment",
+            Self::q(&p.environment.value),
+            &p.environment,
+        );
+        let _ = writeln!(
+            out,
+            "country_codes = [{}]",
+            p.country_codes
+                .iter()
+                .map(|c| Self::q(c))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let _ = writeln!(out, "language = {}", Self::q(&p.language));
+    }
+
     fn accounts(out: &mut String, c: &Config) {
         for a in &c.bank.accounts {
-            let _ = writeln!(out, "\n[[bank.accounts]]   # file");
+            let _ = writeln!(out, "\n[[bank.accounts]]   # {}", c.bank.accounts_source);
             let _ = writeln!(out, "name = {}", Self::q(&a.name));
             let _ = writeln!(out, "kind = {}", Self::q(&a.kind));
+            if a.kind == "plaid" {
+                if !a.account_ids.is_empty() {
+                    let _ = writeln!(
+                        out,
+                        "account_ids = {}   # {} account(s)",
+                        Self::HIDDEN,
+                        a.account_ids.len()
+                    );
+                }
+                let _ = writeln!(out, "sync_every_hours = {}", a.sync_every_hours);
+                if let Some(d) = a.since_days {
+                    let _ = writeln!(out, "since_days = {d}");
+                }
+                continue;
+            }
             let _ = writeln!(out, "bank_code = {}", Self::q(&a.bank_code));
             let _ = writeln!(out, "login = {}", Self::HIDDEN);
             let _ = writeln!(out, "iban = {}", Self::HIDDEN);
@@ -239,7 +329,7 @@ impl Renderer {
 
     fn stores(out: &mut String, c: &Config) {
         for s in &c.stores {
-            let _ = writeln!(out, "\n[[stores]]   # file");
+            let _ = writeln!(out, "\n[[stores]]   # {}", c.stores_source);
             let _ = writeln!(out, "chain = {}", Self::q(&s.chain));
             let list = s
                 .patterns

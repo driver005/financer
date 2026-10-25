@@ -1,3 +1,4 @@
+import { SectionSwitch } from "@/components/SectionSwitch";
 import { useCallback, useMemo, useState } from "react";
 import { FlatList, RefreshControl, Text as RNText, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -7,13 +8,12 @@ import { useApi } from "@/api/config";
 import { BarChart } from "@/components/Charts";
 import { CategorizationTools } from "@/components/CategorizationTools";
 import { EmptyState } from "@/components/EmptyState";
-import { ChunkyButton } from "@/components/kit";
 import { Money } from "@/components/Money";
 import { RecategorizeSheet } from "@/components/RecategorizeSheet";
 import { ListGroup, SectionHeader, StatusPill } from "@/components/rows";
 import { SkeletonList } from "@/components/Skeleton";
 import { TransactionRow } from "@/components/TransactionRow";
-import { Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { Card, HeaderAction, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
 import { peakText, spendingTrend, trendSummary } from "@/charts";
 import { dayHeading, spokenMoney } from "@/format";
 import { pickFileBytes } from "@/native/files";
@@ -99,7 +99,7 @@ export default function Spending() {
     <View>
       {items.length > 0 ? (
         <Card>
-          <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>Spent, last {TREND_DAYS} days</RNText>
+          <RNText style={[typography.overline, { color: p.muted }]}>Spent, last {TREND_DAYS} days</RNText>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, flexWrap: "wrap", marginTop: space.xs }}>
             <Money cents={trend.total} variant="display" tone="plain" style={{ fontSize: 36, lineHeight: 42 }} label={`Spent ${spokenMoney(trend.total)} in the last ${TREND_DAYS} days`} />
             {delta !== null && delta !== 0 ? (
@@ -117,30 +117,32 @@ export default function Spending() {
         </Card>
       ) : null}
 
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginBottom: space.md }}>
-        <View style={{ flex: 1, minWidth: 150 }}>
-          <ChunkyButton compact icon="bank-transfer" label="Sync bank" accessibilityLabel="Sync with Sparkasse" onPress={() => router.push("/sync")} />
-        </View>
-        <View style={{ flex: 1, minWidth: 150 }}>
-          <ChunkyButton compact outline icon="storefront-outline" label="By store" accessibilityLabel="Spending by store" onPress={() => router.push("/stores")} />
-        </View>
-        <View style={{ flex: 1, minWidth: 150 }}>
-          <ChunkyButton compact outline icon="file-delimited-outline" label="Import CSV" accessibilityLabel="Import Sparkasse CSV" onPress={() => void importCsv()} disabled={busy} />
-        </View>
-      </View>
       {message ? (
         <RNText accessibilityLiveRegion="polite" style={[typography.caption, { color: p.muted, marginBottom: space.md, paddingHorizontal: space.xs }]}>
           {message}
         </RNText>
       ) : null}
 
-      <CategorizationTools onChanged={(note) => void load().then(() => setMessage(note))} />
     </View>
   );
 
   return (
     <Screen>
-      <Title subtitle={items.length > 0 ? `${items.length} bookings` : undefined}>Spending</Title>
+      <Title
+        subtitle={items.length > 0 ? `${items.length} bookings` : undefined}
+        right={
+          api ? (
+            <View style={{ flexDirection: "row", gap: space.sm }}>
+              <HeaderAction icon="bank-transfer" label="Sync with Sparkasse" onPress={() => router.push("/sync")} />
+              <HeaderAction icon="storefront-outline" label="Spending by store" onPress={() => router.push("/stores")} />
+              <HeaderAction icon="file-delimited-outline" label="Import Sparkasse CSV" onPress={() => void importCsv()} disabled={busy} />
+            </View>
+          ) : null
+        }
+      >
+        Spending
+      </Title>
+      <SectionSwitch />
       {!api ? (
         <NeedsSetup />
       ) : (
@@ -162,6 +164,7 @@ export default function Spending() {
             contentContainerStyle={{ paddingBottom: space.xl }}
             refreshControl={<RefreshControl refreshing={busy && fetched} onRefresh={load} tintColor={p.accent} />}
             ListHeaderComponent={header}
+            ListFooterComponent={groups.length > 0 ? <CategorizationTools onChanged={(note) => void load().then(() => setMessage(note))} /> : undefined}
             ListEmptyComponent={
               !fetched ? (
                 <SkeletonList rows={5} />

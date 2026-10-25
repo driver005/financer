@@ -1,6 +1,6 @@
 /**
  * Shared building blocks for lists and small status labels:
- * `ListGroup` (a rounded card that holds rows with hairline separators), `ListRow` (leading icon
+ * `ListGroup` (a flat strip of rows between two hairlines), `ListRow` (leading icon
  * or avatar, title, subtitle, trailing value, optional chevron), `IconBadge`, `StatusPill` and
  * `SectionHeader`. Screens compose these instead of hand-building each row.
  */
@@ -82,7 +82,7 @@ export function SectionHeader({ title, action }: { title: string; action?: React
   const p = usePalette();
   return (
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: space.sm, marginBottom: space.sm, paddingHorizontal: space.xs, minHeight: 24 }}>
-      <RNText accessibilityRole="header" style={[typography.overline, { color: p.muted, textTransform: "uppercase", flexShrink: 1 }]}>
+      <RNText accessibilityRole="header" style={[typography.overline, { color: p.muted, flexShrink: 1 }]}>
         {title}
       </RNText>
       {action}
@@ -90,7 +90,7 @@ export function SectionHeader({ title, action }: { title: string; action?: React
   );
 }
 
-/** A card holding rows. Rows are separated by an inset hairline; the card clips its corners. */
+/** A flat strip holding rows, closed by hairlines top and bottom. Rows are separated by an inset hairline. */
 export function ListGroup({ children, style, inset = 68 }: { children: ReactNode; style?: StyleProp<ViewStyle>; inset?: number }) {
   const p = usePalette();
   const rows = Children.toArray(children).filter(isValidElement);
@@ -99,13 +99,11 @@ export function ListGroup({ children, style, inset = 68 }: { children: ReactNode
       style={[
         {
           backgroundColor: p.surface,
-          borderWidth: 2,
+          borderTopWidth: 1,
+          borderBottomWidth: 1,
           borderColor: p.border,
-          borderRadius: radius.xl,
-          overflow: "hidden",
-          marginBottom: space.md,
+          marginBottom: space.lg,
         },
-        elevation.card,
         style,
       ]}
     >

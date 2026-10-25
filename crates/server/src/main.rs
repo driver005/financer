@@ -19,6 +19,8 @@
 //! - `FINANCER_OPENAI_API_KEY`     enables recipe ideas with OpenAI
 //! - `FINANCER_LLM_PROVIDER`       `claude` or `openai`: the provider used until the app chooses one
 //! - `FINANCER_CONFIG`             path of the config file
+//! - `FINANCER_SETTINGS_FILE`      where the settings made in the app are kept (default: next to the
+//!   SQLite database); they rank between the config file and the environment variables
 //! - `FINANCER_RECEIPTS_*`         automatic receipt import, see docs/RECEIPT_SOURCES.md
 //!   (`FINANCER_SECRET_KEY` encrypts the stored Lidl Plus token; the API token is used without it)
 //!
@@ -31,8 +33,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use financer_api::{Api, AppState, BankConnection, LlmKeys, PriceSourceConfig, TokenHash};
-use financer_config::{Config, Loaded, Loader, ProcessEnv, ProviderChoice, Renderer};
+use financer_api::{
+    Api, AppState, BankConnection, BankProvider, LlmKeys, PlaidSetup, PriceSourceConfig, TokenHash,
+};
+use financer_config::{
+    Admin, Config, Loaded, Loader, Overlay, ProcessEnv, ProviderChoice, Renderer, SettingsFile,
+};
 use financer_core::StoreAlias;
 use financer_prices::{PoliteHttp, ReqwestHttp, Sources};
 use financer_store::Store;
@@ -111,25 +117,100 @@ impl Server {
             )
             .init();
 
-        let result = match Self::load(&cli) {
+        let admin = match Self::admin(&cli) {
+            Ok(a) => a,
+            Err(e) => {
+                eprintln!("financer-server: {e}");
+                std::process::exit(1);
+            }
+        };
+        // the settings made in the app; a change that failed to start before is undone here
+        let begin = admin.file().begin();
+        for w in &begin.warnings {
+            tracing::warn!("{w}");
+        }
+
+        let result = match Self::load(&cli, &begin.overlay) {
             Ok(loaded) if cli.probe_prices => Self::probe(&loaded.config).await,
-            Ok(loaded) => Self::run(loaded).await,
+            Ok(loaded) => Self::run(loaded, admin.clone()).await,
             Err(e) => Err(e),
         };
         if let Err(e) = result {
             eprintln!("financer-server: {e}");
+            // a change from the app that does not start is taken back, and the server starts
+            // again with the settings that worked
+            if begin.applying && admin.file().fail(&e) {
+                tracing::warn!(
+                    "the changed settings do not start; going back to the previous ones"
+                );
+                Self::restart_process();
+            }
             std::process::exit(1);
         }
     }
 
-    fn load(cli: &Cli) -> Result<Loaded, String> {
+    /// The settings made in the app, and the place they are kept.
+    fn admin(cli: &Cli) -> Result<Arc<Admin>, String> {
         let cwd = std::env::current_dir().map_err(|e| format!("no working directory: {e}"))?;
-        Loader::load(cli.config.as_deref(), &ProcessEnv, &cwd).map_err(|e| e.to_string())
+        let url = Loader::base_database_url(cli.config.as_deref(), &ProcessEnv, &cwd);
+        let file = SettingsFile::locate(&ProcessEnv, &url, &cwd);
+        Ok(Arc::new(Admin::new(
+            cli.config.clone(),
+            cwd,
+            Arc::new(ProcessEnv),
+            file,
+        )))
+    }
+
+    /// Start this program again with the same arguments and environment, in place of this
+    /// process (on Unix the process id stays, so a container keeps running). Returns only when
+    /// that did not work, and then the server exits: a supervisor starts it again, and the
+    /// settings file already holds the change, protected by the rollback.
+    fn restart_process() {
+        let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        if let Ok(exe) = std::env::current_exe() {
+            candidates.push(exe);
+        }
+        if let Some(first) = std::env::args_os().next() {
+            candidates.push(first.into());
+        }
+        for exe in candidates {
+            let mut command = std::process::Command::new(&exe);
+            command.args(&args);
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::CommandExt;
+                let err = command.exec();
+                tracing::error!("cannot restart through {}: {err}", exe.display());
+            }
+            #[cfg(not(unix))]
+            match command.spawn() {
+                Ok(_) => std::process::exit(0),
+                Err(err) => tracing::error!("cannot restart through {}: {err}", exe.display()),
+            }
+        }
+        tracing::error!("cannot restart the server; stopping so that it can be started again");
+        std::process::exit(1);
+    }
+
+    fn load(cli: &Cli, overlay: &Overlay) -> Result<Loaded, String> {
+        let cwd = std::env::current_dir().map_err(|e| format!("no working directory: {e}"))?;
+        Loader::load_with(cli.config.as_deref(), &ProcessEnv, &cwd, overlay)
+            .map_err(|e| e.to_string())
     }
 
     /// `--print-config` and `--check-config`. Returns the exit code.
     fn inspect_config(cli: &Cli) -> i32 {
-        let loaded = match Self::load(cli) {
+        // read-only: the settings made in the app count, but nothing is rolled back or written
+        let overlay = match Self::admin(cli) {
+            Ok(a) => a.file().overlay(),
+            Err(e) => {
+                eprintln!("config error: {e}");
+                return 1;
+            }
+        };
+        let loaded = match Self::load(cli, &overlay) {
             Ok(l) => l,
             Err(e) => {
                 eprintln!("config error: {e}");
@@ -147,6 +228,9 @@ impl Server {
             }
         }
         if cli.print_config {
+            if !overlay.is_empty() {
+                println!("# settings made in the app are applied (the comment says \"app\")");
+            }
             print!("{}", Renderer::render(&loaded));
         }
         for p in &problems {
@@ -164,17 +248,22 @@ impl Server {
         0
     }
 
+    /// The price sources: the JSON file (if one is named) and the `[[prices.sources]]` entries.
     fn load_sources(config: &Config) -> Result<Vec<PriceSourceConfig>, String> {
-        let Some(path) = config.prices.sources_file.value.clone() else {
-            return Ok(Vec::new());
-        };
-        let text = std::fs::read_to_string(&path).map_err(|e| {
-            format!(
-                "cannot read the price sources file {path} ({}): {e}",
-                config.prices.sources_file.source
-            )
-        })?;
-        serde_json::from_str(&text).map_err(|e| format!("invalid price sources in {path}: {e}"))
+        let mut sources = Vec::new();
+        if let Some(path) = config.prices.sources_file.value.clone() {
+            let text = std::fs::read_to_string(&path).map_err(|e| {
+                format!(
+                    "cannot read the price sources file {path} ({}): {e}",
+                    config.prices.sources_file.source
+                )
+            })?;
+            let from_file: Vec<PriceSourceConfig> = serde_json::from_str(&text)
+                .map_err(|e| format!("invalid price sources in {path}: {e}"))?;
+            sources.extend(from_file);
+        }
+        sources.extend(config.prices.sources.iter().cloned());
+        Ok(sources)
     }
 
     fn polite_http() -> Result<Arc<PoliteHttp<ReqwestHttp>>, String> {
@@ -207,6 +296,16 @@ impl Server {
             .iter()
             .map(|a| BankConnection {
                 name: a.name.trim().to_string(),
+                kind: if a.kind == "plaid" {
+                    BankProvider::Plaid
+                } else {
+                    BankProvider::Fints
+                },
+                account_ids: a
+                    .account_ids
+                    .iter()
+                    .map(|id| id.trim().to_string())
+                    .collect(),
                 bank_code: a.bank_code.trim().to_string(),
                 login: a.login.trim().to_string(),
                 iban: a.iban.split_whitespace().collect(),
@@ -223,7 +322,7 @@ impl Server {
         s.value.as_ref().map(|k| k.expose().to_string())
     }
 
-    async fn run(loaded: Loaded) -> Result<(), String> {
+    async fn run(loaded: Loaded, admin: Arc<Admin>) -> Result<(), String> {
         let config = &loaded.config;
         match &loaded.path {
             Some(p) => tracing::info!("configuration from {}", p.display()),
@@ -257,11 +356,57 @@ impl Server {
             })
             .with_default_llm_provider(config.llm.provider.value.map(Self::llm_provider))
             .with_store_aliases(&Self::store_aliases(config))
-            .with_bank_connections(Self::bank_connections(config));
+            .with_bank_connections(Self::bank_connections(config))
+            // the settings screen of the app: a saved change restarts the server to apply it
+            .with_config_admin(admin.clone(), Self::restart_process);
 
         if let Some(product_id) = Self::secret(&config.bank.fints_product_id) {
             state = state.with_bank(Arc::new(financer_fints::FintsBank::new(&product_id)));
             tracing::info!("live bank sync enabled (FinTS)");
+        }
+
+        // Plaid, for the connections with kind = "plaid": the access token is kept sealed with
+        // FINANCER_SECRET_KEY, or else a key derived from the API token (as the Lidl Plus token is)
+        let plaid_wanted = config.bank.accounts.iter().any(|a| a.kind == "plaid");
+        if config.bank.plaid.configured() {
+            let secret = std::env::var("FINANCER_SECRET_KEY")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| token.clone());
+            let secrets = financer_receipt_sources::SecretBox::new(&secret)
+                .map_err(|e| format!("cannot keep the Plaid access safe: {e}"))?;
+            let environment =
+                financer_plaid::PlaidEnvironment::parse(&config.bank.plaid.environment.value)
+                    .ok_or("bank.plaid.environment is not known")?;
+            let http = financer_plaid::ReqwestPlaidHttp::new()
+                .map_err(|e| format!("cannot start the Plaid client: {e}"))?;
+            let client = financer_plaid::PlaidClient::new(
+                financer_plaid::PlaidConfig::new(
+                    Self::secret(&config.bank.plaid.client_id).unwrap_or_default(),
+                    Self::secret(&config.bank.plaid.secret).unwrap_or_default(),
+                    environment,
+                ),
+                Arc::new(http),
+            );
+            state = state.with_secret_box(secrets).with_plaid(PlaidSetup {
+                client: Arc::new(client),
+                country_codes: config.bank.plaid.country_codes.clone(),
+                language: config.bank.plaid.language.clone(),
+                redirect_uri: config.bank.plaid.redirect_uri.clone(),
+            });
+            tracing::info!(
+                "Plaid enabled ({}){}",
+                environment.name(),
+                if environment == financer_plaid::PlaidEnvironment::Sandbox {
+                    ": test bank only"
+                } else {
+                    ""
+                }
+            );
+        } else if plaid_wanted {
+            tracing::warn!(
+                "bank accounts with kind \"plaid\" are configured but bank.plaid is not, so they cannot sync"
+            );
         }
 
         // automatic receipt import (mailbox, Lidl Plus, watched folder) from [receipts]
@@ -280,16 +425,19 @@ impl Server {
         }
 
         if !config.bank.accounts.is_empty() {
-            if Self::secret(&config.bank.fints_product_id).is_some() {
+            let fints_ready = Self::secret(&config.bank.fints_product_id).is_some();
+            let fints_wanted = config.bank.accounts.iter().any(|a| a.kind == "fints");
+            if fints_wanted && !fints_ready {
+                tracing::warn!(
+                    "bank accounts with kind \"fints\" are configured but there is no FinTS product id, so they cannot sync"
+                );
+            }
+            if (fints_wanted && fints_ready) || (plaid_wanted && config.bank.plaid.configured()) {
                 tracing::info!(
-                    "{} bank connection(s) from the config file; scheduled syncs wait for your approval in the banking app",
+                    "{} bank connection(s) from the config file; FinTS syncs wait for your approval in the banking app, Plaid syncs run by themselves once linked",
                     config.bank.accounts.len()
                 );
                 tokio::spawn(Api::run_bank_scheduler(state.clone()));
-            } else {
-                tracing::warn!(
-                    "bank accounts are configured but there is no FinTS product id, so they cannot sync"
-                );
             }
         }
 
@@ -336,6 +484,8 @@ impl Server {
             .await
             .map_err(|e| format!("cannot bind {bind}: {e}"))?;
         tracing::info!("listening on {bind}");
+        // started with what it was given: a change made in the app stays
+        admin.file().confirm();
         axum::serve(listener, app)
             .with_graceful_shutdown(async {
                 let _ = tokio::signal::ctrl_c().await;
@@ -350,7 +500,7 @@ impl Server {
         let configs = Self::load_sources(config)?;
         if configs.is_empty() {
             return Err(
-                "no price sources: set FINANCER_PRICE_SOURCES (or prices.sources_file in financer.toml) to a JSON file, see docs/PRICES.md"
+                "no price sources: add some under Settings > Server settings > Prices in the app, or set FINANCER_PRICE_SOURCES (or prices.sources_file in financer.toml) to a JSON file, see docs/PRICES.md"
                     .into(),
             );
         }

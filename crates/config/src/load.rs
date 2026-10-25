@@ -7,6 +7,7 @@ use financer_receipt_sources::ReceiptSourcesConfig;
 
 use crate::file::{BankAccount, FileConfig, StoreAlias};
 use crate::interpolate::Interpolator;
+use crate::overlay::Overlay;
 use crate::{ConfigError, Env};
 
 /// Name of the file looked up in the working directory.
@@ -23,6 +24,8 @@ pub const MIN_TOKEN_LEN: usize = 32;
 pub enum Source {
     Default,
     File,
+    /// Set from the app (Settings > Server), kept in the server's settings file.
+    App,
     /// The environment variable of this name.
     Env(String),
 }
@@ -32,6 +35,7 @@ impl fmt::Display for Source {
         match self {
             Source::Default => write!(f, "default"),
             Source::File => write!(f, "file"),
+            Source::App => write!(f, "app"),
             Source::Env(name) => write!(f, "env {name}"),
         }
     }
@@ -112,6 +116,10 @@ pub struct DatabaseSettings {
 #[derive(Debug, Clone)]
 pub struct PricesSettings {
     pub sources_file: Setting<Option<String>>,
+    /// `[[prices.sources]]`, used together with the ones in `sources_file`.
+    pub sources: Vec<financer_prices::SourceConfig>,
+    /// Where `sources` came from.
+    pub sources_source: Source,
 }
 
 #[derive(Debug, Clone)]
@@ -124,7 +132,33 @@ pub struct LlmSettings {
 #[derive(Debug, Clone)]
 pub struct BankSettings {
     pub fints_product_id: Setting<Option<Secret>>,
+    pub plaid: PlaidSettings,
     pub accounts: Vec<BankAccount>,
+    /// Where the list of accounts came from.
+    pub accounts_source: Source,
+}
+
+/// `[bank.plaid]` with the `FINANCER_PLAID_*` variables applied.
+#[derive(Debug, Clone)]
+pub struct PlaidSettings {
+    pub client_id: Setting<Option<Secret>>,
+    pub secret: Setting<Option<Secret>>,
+    /// `sandbox` or `production`.
+    pub environment: Setting<String>,
+    pub country_codes: Vec<String>,
+    pub language: String,
+    pub redirect_uri: Option<String>,
+}
+
+impl PlaidSettings {
+    pub const DEFAULT_ENVIRONMENT: &'static str = "sandbox";
+    pub const DEFAULT_COUNTRY: &'static str = "DE";
+    pub const DEFAULT_LANGUAGE: &'static str = "de";
+
+    /// Both the client id and the secret are set.
+    pub fn configured(&self) -> bool {
+        self.client_id.value.is_some() && self.secret.value.is_some()
+    }
 }
 
 /// The effective configuration.
@@ -137,6 +171,8 @@ pub struct Config {
     pub llm: LlmSettings,
     pub bank: BankSettings,
     pub stores: Vec<StoreAlias>,
+    /// Where the list of store names came from.
+    pub stores_source: Source,
     /// `[receipts]` with the `FINANCER_RECEIPTS_*` variables applied.
     pub receipts: Setting<ReceiptSourcesConfig>,
 }
@@ -162,6 +198,14 @@ enum Wanted {
 
 pub struct Loader;
 
+/// The file as written, with `${NAME}` references replaced, before anything else is applied.
+#[derive(Debug, Clone)]
+pub struct FileLayer {
+    pub doc: toml::Value,
+    pub path: Option<PathBuf>,
+    pub warnings: Vec<String>,
+}
+
 impl Loader {
     /// Load the configuration. `config_arg` is the value of `--config`; `cwd` is where
     /// `financer.toml` is looked for. Order of the file: `--config`, `FINANCER_CONFIG`,
@@ -171,6 +215,36 @@ impl Loader {
         env: &dyn Env,
         cwd: &Path,
     ) -> Result<Loaded, ConfigError> {
+        Self::load_with(config_arg, env, cwd, &Overlay::default())
+    }
+
+    /// [`Loader::load`] with what was set from the app on top of the file (and below the
+    /// environment variables).
+    pub fn load_with(
+        config_arg: Option<&Path>,
+        env: &dyn Env,
+        cwd: &Path,
+        overlay: &Overlay,
+    ) -> Result<Loaded, ConfigError> {
+        let mut layer = Self::file_layer(config_arg, env, cwd)?;
+        overlay.apply(&mut layer.doc).map_err(ConfigError::one)?;
+        let shown = match &layer.path {
+            Some(p) => p.display().to_string(),
+            None => "the settings".to_string(),
+        };
+        let file: FileConfig = layer
+            .doc
+            .try_into()
+            .map_err(|e| ConfigError::one(format!("{shown}: {e}")))?;
+        Self::resolve(file, layer.path, env, layer.warnings, overlay)
+    }
+
+    /// The configuration file alone, as a document. Without a file it is empty.
+    pub fn file_layer(
+        config_arg: Option<&Path>,
+        env: &dyn Env,
+        cwd: &Path,
+    ) -> Result<FileLayer, ConfigError> {
         let wanted = if let Some(p) = config_arg {
             Wanted::Explicit(p.to_path_buf())
         } else if let Some(p) = env.nonempty("FINANCER_CONFIG") {
@@ -181,16 +255,43 @@ impl Loader {
             Wanted::None
         };
         match wanted {
-            Wanted::None => Self::resolve(FileConfig::default(), None, env, Vec::new()),
+            Wanted::None => Ok(FileLayer {
+                doc: toml::Value::Table(toml::map::Map::new()),
+                path: None,
+                warnings: Vec::new(),
+            }),
             Wanted::Explicit(path) | Wanted::Implicit(path) => {
                 let text = std::fs::read_to_string(&path).map_err(|e| {
                     ConfigError::one(format!("cannot read config file {}: {e}", path.display()))
                 })?;
                 let mut warnings = Vec::new();
-                let file = Self::parse(&text, &path, env, &mut warnings)?;
-                Self::resolve(file, Some(path), env, warnings)
+                let doc = Self::expand(&text, &path, env, &mut warnings)?;
+                Ok(FileLayer {
+                    doc,
+                    path: Some(path),
+                    warnings,
+                })
             }
         }
+    }
+
+    /// The database address the environment and the file give, without the app's edits and
+    /// without failing: it only tells where the settings file belongs.
+    pub fn base_database_url(config_arg: Option<&Path>, env: &dyn Env, cwd: &Path) -> String {
+        if let Some(url) = env.nonempty("FINANCER_DATABASE_URL") {
+            return url.trim().to_string();
+        }
+        Self::file_layer(config_arg, env, cwd)
+            .ok()
+            .and_then(|l| {
+                l.doc
+                    .get("database")
+                    .and_then(|d| d.get("url"))
+                    .and_then(|u| u.as_str())
+                    .map(|u| u.trim().to_string())
+            })
+            .filter(|u| !u.is_empty())
+            .unwrap_or_else(|| DEFAULT_DATABASE_URL.to_string())
     }
 
     /// Parse and expand `text`. `path` is only used in messages.
@@ -200,6 +301,21 @@ impl Loader {
         env: &dyn Env,
         warnings: &mut Vec<String>,
     ) -> Result<FileConfig, ConfigError> {
+        let shown = path.display();
+        let value = Self::expand(text, path, env, warnings)?;
+        let expanded: FileConfig = value
+            .try_into()
+            .map_err(|e| ConfigError::one(format!("{shown}: {e}")))?;
+        Ok(expanded)
+    }
+
+    /// Check the file's text and replace its `${NAME}` references.
+    fn expand(
+        text: &str,
+        path: &Path,
+        env: &dyn Env,
+        warnings: &mut Vec<String>,
+    ) -> Result<toml::Value, ConfigError> {
         let shown = path.display();
         // First pass on the text as written: syntax errors and unknown keys carry line numbers.
         let raw: FileConfig = toml::from_str(text)
@@ -224,10 +340,7 @@ impl Loader {
                 name = missing.name
             ))
         })?;
-        let expanded: FileConfig = value
-            .try_into()
-            .map_err(|e| ConfigError::one(format!("{shown}: {e}")))?;
-        Ok(expanded)
+        Ok(value)
     }
 
     /// The name of the first secret key that holds a literal value instead of a reference.
@@ -244,6 +357,8 @@ impl Loader {
             Some("llm.openai_api_key")
         } else if literal(&file.bank.fints_product_id) {
             Some("bank.fints_product_id")
+        } else if literal(&file.bank.plaid.secret) {
+            Some("bank.plaid.secret")
         } else {
             None
         }
@@ -359,6 +474,7 @@ impl Loader {
         path: Option<PathBuf>,
         env: &dyn Env,
         warnings: Vec<String>,
+        overlay: &Overlay,
     ) -> Result<Loaded, ConfigError> {
         let base = path.as_deref().and_then(Path::parent).map(|p| {
             if p.as_os_str().is_empty() {
@@ -447,7 +563,10 @@ impl Loader {
                 base,
                 true,
             ),
+            sources_source: Self::list_source(overlay, "prices.sources", &file.prices.sources),
+            sources: file.prices.sources,
         };
+        crate::Validator::price_sources(&prices.sources, &mut errors);
 
         let provider_file = Self::non_empty(file.llm.provider).and_then(|p| {
             ProviderChoice::parse(&p)
@@ -471,12 +590,39 @@ impl Loader {
             ),
         };
 
+        let plaid_file = file.bank.plaid;
         let bank = BankSettings {
             fints_product_id: Self::secret(
                 env,
                 "FINANCER_FINTS_PRODUCT_ID",
                 file.bank.fints_product_id,
             ),
+            plaid: PlaidSettings {
+                client_id: Self::secret(env, "FINANCER_PLAID_CLIENT_ID", plaid_file.client_id),
+                secret: Self::secret(env, "FINANCER_PLAID_SECRET", plaid_file.secret),
+                environment: Self::pick(
+                    env,
+                    "FINANCER_PLAID_ENV",
+                    Self::non_empty(plaid_file.environment).map(|e| e.to_ascii_lowercase()),
+                    PlaidSettings::DEFAULT_ENVIRONMENT.to_string(),
+                    |s| Ok(s.trim().to_ascii_lowercase()),
+                    &mut errors,
+                ),
+                country_codes: if plaid_file.country_codes.is_empty() {
+                    vec![PlaidSettings::DEFAULT_COUNTRY.to_string()]
+                } else {
+                    plaid_file
+                        .country_codes
+                        .iter()
+                        .map(|c| c.trim().to_ascii_uppercase())
+                        .collect()
+                },
+                language: Self::non_empty(plaid_file.language)
+                    .map(|l| l.to_ascii_lowercase())
+                    .unwrap_or_else(|| PlaidSettings::DEFAULT_LANGUAGE.to_string()),
+                redirect_uri: Self::non_empty(plaid_file.redirect_uri),
+            },
+            accounts_source: Self::list_source(overlay, "bank.accounts", &file.bank.accounts),
             accounts: file.bank.accounts,
         };
 
@@ -509,9 +655,11 @@ impl Loader {
         let mut warnings = warnings;
         crate::Validator::receipts(&receipts.value, env, &mut warnings);
         crate::Validator::accounts(&bank.accounts, env, &mut errors, &mut warnings);
-        if !bank.accounts.is_empty() && bank.fints_product_id.value.is_none() {
+        crate::Validator::plaid(&bank, &mut errors, &mut warnings);
+        if bank.accounts.iter().any(|a| a.kind == "fints") && bank.fints_product_id.value.is_none()
+        {
             warnings.push(
-                "bank.accounts are configured but no FinTS product id is set (bank.fints_product_id or FINANCER_FINTS_PRODUCT_ID); syncing stays off until it is"
+                "bank.accounts with kind \"fints\" are configured but no FinTS product id is set (bank.fints_product_id or FINANCER_FINTS_PRODUCT_ID); syncing them stays off until it is"
                     .to_string(),
             );
         }
@@ -520,19 +668,104 @@ impl Loader {
         if !errors.is_empty() {
             return Err(ConfigError { problems: errors });
         }
+        let stores_source = Self::list_source(overlay, "stores", &file.stores);
+        let mut config = Config {
+            server,
+            auth: AuthSettings { api_token },
+            database,
+            prices,
+            llm,
+            bank,
+            stores: file.stores,
+            stores_source,
+            receipts,
+        };
+        Self::mark_app(&mut config, overlay);
         Ok(Loaded {
-            config: Config {
-                server,
-                auth: AuthSettings { api_token },
-                database,
-                prices,
-                llm,
-                bank,
-                stores: file.stores,
-                receipts,
-            },
+            config,
             path,
             warnings,
         })
+    }
+
+    /// Where a list of rows came from: the app's edit, the file, or nowhere.
+    fn list_source<T>(overlay: &Overlay, path: &str, rows: &[T]) -> Source {
+        if overlay.has(path) {
+            Source::App
+        } else if rows.is_empty() {
+            Source::Default
+        } else {
+            Source::File
+        }
+    }
+
+    /// A value that came out of the merged document as "file" was set from the app when the app
+    /// has an entry for that key (environment variables are decided before and stay as they are).
+    fn mark_app(config: &mut Config, overlay: &Overlay) {
+        fn mark<T>(setting: &mut Setting<T>, overlay: &Overlay, paths: &[&str]) {
+            if setting.source == Source::File && paths.iter().any(|p| overlay.has(p)) {
+                setting.source = Source::App;
+            }
+        }
+        if overlay.is_empty() {
+            return;
+        }
+        mark(&mut config.server.bind, overlay, &["server.bind"]);
+        mark(&mut config.server.web_dir, overlay, &["server.web_dir"]);
+        mark(
+            &mut config.server.cors_origins,
+            overlay,
+            &["server.cors_origins"],
+        );
+        mark(
+            &mut config.server.refresh_hours,
+            overlay,
+            &["server.refresh_hours"],
+        );
+        mark(
+            &mut config.auth.api_token,
+            overlay,
+            &["auth.api_token", "auth.api_token_file"],
+        );
+        mark(&mut config.database.url, overlay, &["database.url"]);
+        mark(
+            &mut config.prices.sources_file,
+            overlay,
+            &["prices.sources_file"],
+        );
+        mark(
+            &mut config.llm.anthropic_api_key,
+            overlay,
+            &["llm.anthropic_api_key"],
+        );
+        mark(
+            &mut config.llm.openai_api_key,
+            overlay,
+            &["llm.openai_api_key"],
+        );
+        mark(&mut config.llm.provider, overlay, &["llm.provider"]);
+        mark(
+            &mut config.bank.fints_product_id,
+            overlay,
+            &["bank.fints_product_id"],
+        );
+        mark(
+            &mut config.bank.plaid.client_id,
+            overlay,
+            &["bank.plaid.client_id"],
+        );
+        mark(
+            &mut config.bank.plaid.secret,
+            overlay,
+            &["bank.plaid.secret"],
+        );
+        mark(
+            &mut config.bank.plaid.environment,
+            overlay,
+            &["bank.plaid.environment"],
+        );
+        if config.receipts.source == Source::File && overlay.has_below("receipts.") {
+            config.receipts.source = Source::App;
+        }
     }
 }

@@ -9,7 +9,7 @@
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, huge: 48 } as const;
 
 /** One radius set. `pill` is for badges and chips, `xl` for cards, `lg` for buttons. */
-export const radius = { sm: 8, md: 12, lg: 16, xl: 20, pill: 999 } as const;
+export const radius = { sm: 6, md: 8, lg: 12, xl: 16, pill: 999 } as const;
 
 type Weight = "400" | "500" | "600" | "700" | "800" | "900";
 type TypeStyle = { fontSize: number; lineHeight: number; fontWeight: Weight; letterSpacing?: number };
@@ -33,8 +33,8 @@ export const typography = {
   label: { fontSize: 14, lineHeight: 20, fontWeight: "600" },
   /** Secondary text. Never smaller than 12. */
   caption: { fontSize: 13, lineHeight: 18, fontWeight: "400" },
-  /** Small section label above a block (set in upper case by the caller). */
-  overline: { fontSize: 12, lineHeight: 16, fontWeight: "800", letterSpacing: 1 },
+  /** Small label above a block, in sentence case. */
+  overline: { fontSize: 13, lineHeight: 18, fontWeight: "600" },
 } as const satisfies Record<string, TypeStyle>;
 
 export type TypeName = keyof typeof typography;

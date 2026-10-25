@@ -7,7 +7,7 @@ import { Money } from "@/components/Money";
 import { Ring } from "@/components/Ring";
 import { StatusPill, type Tone } from "@/components/rows";
 import { useCountUp } from "@/components/motion";
-import { Card } from "@/components/ui";
+import { Card, LedgerRow } from "@/components/ui";
 import { formatMoney, spokenMoney, splitMoney } from "@/format";
 import { periodLabel } from "@/period";
 import { heroFontSize, periodLeft } from "@/ring";
@@ -44,55 +44,57 @@ export function SafeToSpendCard({ data }: { data: SafeToSpend | null }) {
   const left = periodLeft(data.days_left, data.days_total);
   const parts = splitMoney(shown);
   const numberColour = over ? p.bad : p.text;
-  const heroSize = heroFontSize(`${parts.sign}${parts.whole}`);
+  const heroSize = heroFontSize(`${parts.sign}${parts.whole}`, 176, 48, 28);
 
   return (
     <>
-      <Card style={{ alignItems: "center", paddingVertical: space.xl }}>
+      <Card>
         <Label>Safe to spend today</Label>
-        <View style={{ marginTop: space.md }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, marginTop: space.xs }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <RNText
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+              maxFontSizeMultiplier={1.2}
+              style={{ color: numberColour, ...tabular, fontWeight: "900", fontSize: 22 }}
+            >
+              <RNText style={{ fontSize: heroSize, lineHeight: Math.round(heroSize * 1.14) }}>
+                {parts.sign}
+                {parts.whole}
+              </RNText>
+              ,{parts.fraction}&nbsp;€
+            </RNText>
+            <RNText style={[typography.label, { color: p.muted }]}>a day</RNText>
+          </View>
           <Ring
-            size={216}
-            stroke={16}
+            size={84}
+            stroke={9}
             progress={left}
             color={ringColor}
             accessibilityLabel={`Safe to spend today: ${spokenMoney(data.daily_cents)} per day. ${data.days_left} of ${data.days_total} days left in this period.`}
           >
-            <View style={{ alignItems: "center", maxWidth: 168 }}>
-              <RNText
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.6}
-                maxFontSizeMultiplier={1.2}
-                style={[{ color: numberColour, ...tabular, fontWeight: "900", fontSize: 20 }]}
-              >
-                <RNText style={{ fontSize: heroSize, lineHeight: Math.round(heroSize * 1.14) }}>
-                  {parts.sign}
-                  {parts.whole}
-                </RNText>
-                ,{parts.fraction}&nbsp;€
-              </RNText>
-              <RNText style={[typography.label, { color: p.muted, marginTop: space.xs }]}>a day</RNText>
-            </View>
+            <RNText style={[typography.bodyStrong, { color: p.text }]}>{data.days_left}</RNText>
+            <RNText style={[typography.caption, { color: p.muted, fontSize: 12, lineHeight: 14 }]}>{data.days_left === 1 ? "day" : "days"}</RNText>
           </Ring>
         </View>
 
-        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", justifyContent: "center", gap: space.sm, marginTop: space.lg }}>
+        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm, marginTop: space.md }}>
           <StatusPill label={pace.title} tone={paceTone} icon={PACE_ICON[pace.tone]} accessibilityLabel={`Pace: ${pace.title}`} />
           <RNText style={[typography.caption, { color: p.muted }]}>{daysLeftText(data.days_left)}</RNText>
         </View>
-        {/* "free for N days" is already in the stats below; the hint only speaks up when something is off */}
+        {/* "free for N days" is already in the rows below; the hint only speaks up when something is off */}
         {!data.income_detected || data.available_cents < 0 ? (
-          <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm, textAlign: "center" }]}>{headlineHint(data)}</RNText>
+          <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>{headlineHint(data)}</RNText>
         ) : null}
 
-        <View style={{ alignSelf: "stretch", flexDirection: "row", marginTop: space.lg, paddingTop: space.lg, borderTopWidth: 1, borderTopColor: p.border }}>
-          <Stat label="Free this period" value={<Money cents={data.available_cents} variant="bodyStrong" tone={over ? "bad" : "plain"} />} />
-          <View style={{ width: 1, backgroundColor: p.border }} />
-          <Stat label="Still to pay (fixed)" value={<Money cents={data.fixed_costs_due_cents} variant="bodyStrong" tone="plain" />} />
+        <View style={{ marginTop: space.md, borderTopWidth: 1, borderTopColor: p.border }}>
+          <LedgerRow label="Free this period" value={<Money cents={data.available_cents} variant="bodyStrong" tone={over ? "bad" : "plain"} />} />
+          <View style={{ height: 1, backgroundColor: p.border }} />
+          <LedgerRow label="Still to pay (fixed)" value={<Money cents={data.fixed_costs_due_cents} variant="bodyStrong" tone="plain" />} />
         </View>
 
-        <View style={{ marginTop: space.md }}>
+        <View style={{ alignSelf: "flex-start", marginTop: space.xs, marginLeft: -space.sm }}>
           <ChunkyButton compact flat icon="help-circle-outline" label="How is this calculated?" onPress={() => setOpen(true)} />
         </View>
       </Card>
@@ -101,19 +103,9 @@ export function SafeToSpendCard({ data }: { data: SafeToSpend | null }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: React.ReactNode }) {
-  const p = usePalette();
-  return (
-    <View style={{ flex: 1, alignItems: "center", gap: space.xs, paddingHorizontal: space.sm }}>
-      {value}
-      <RNText style={[typography.caption, { color: p.muted, textAlign: "center" }]}>{label}</RNText>
-    </View>
-  );
-}
-
 function Label({ children }: { children: string }) {
   const p = usePalette();
-  return <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>{children}</RNText>;
+  return <RNText style={[typography.overline, { color: p.muted }]}>{children}</RNText>;
 }
 
 /** Bottom sheet with the numbers behind the daily amount. */
@@ -133,7 +125,7 @@ function ExplainSheet({ data, visible, onClose }: { data: SafeToSpend; visible: 
               backgroundColor: p.surface,
               borderTopLeftRadius: 28,
               borderTopRightRadius: 28,
-              borderWidth: 2,
+              borderWidth: 1,
               borderBottomWidth: 0,
               borderColor: p.border,
               maxHeight: "85%",

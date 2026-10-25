@@ -1,3 +1,4 @@
+import { SectionSwitch } from "@/components/SectionSwitch";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ScrollView, Text as RNText, View, type LayoutChangeEvent, type ScrollViewInstance } from "react-native";
@@ -158,7 +159,7 @@ export default function MealPlanScreen() {
   return (
     <Screen>
       <Title>Meal plan</Title>
-      {api ? <Subtitle>Plan the meals, get one shopping list.</Subtitle> : null}
+      <SectionSwitch />
       {!api ? (
         <NeedsSetup />
       ) : (
@@ -252,9 +253,9 @@ function WeekStrip({ days, plan, today, onPick }: { days: string[]; plan: WeekPl
               justifyContent: "center",
               gap: 2,
               borderRadius: 16,
-              borderWidth: 2,
+              borderWidth: 1,
               borderColor: isToday ? p.accent : p.border,
-              borderBottomWidth: isToday ? 5 : 2,
+              borderBottomWidth: isToday ? 2 : 1,
               borderBottomColor: isToday ? p.accentEdge : p.border,
               backgroundColor: isToday ? p.accent : p.surface,
             }}
@@ -295,10 +296,24 @@ function DayCard({
   const isToday = iso === today;
   return (
     <Panel padding={space.md} tone={isToday ? "accent" : undefined}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.sm }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: entry ? space.sm : 0 }}>
         <RNText style={{ color: isToday ? tones.accent.fg : p.text, fontSize: 14, fontWeight: "800" }}>{weekdayName(iso)}</RNText>
         <RNText style={{ color: p.muted, fontSize: 13, fontVariant: ["tabular-nums"] }}>{shortDate(iso)}</RNText>
-        {isToday ? <Badge tone="accent" label="Today" /> : null}
+        {isToday ? (
+          <View style={{ alignSelf: "center" }}>
+            <Badge tone="accent" label="Today" />
+          </View>
+        ) : null}
+        {entry ? null : (
+          <Tap
+            onPress={onPick}
+            accessibilityLabel={`Pick a recipe for ${weekdayName(iso)}`}
+            style={{ marginLeft: "auto", minHeight: 44, flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.sm }}
+          >
+            <RNText style={{ color: p.accent, fontSize: 18, fontWeight: "800" }}>+</RNText>
+            <RNText style={{ color: p.accent, fontSize: 15, fontWeight: "700" }}>Pick a recipe</RNText>
+          </Tap>
+        )}
       </View>
       {entry ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
@@ -319,26 +334,7 @@ function DayCard({
             <RoundIcon icon="close" onPress={onClear} label={`Clear the meal on ${weekdayName(iso)}`} />
           </View>
         </View>
-      ) : (
-        <Tap
-          onPress={onPick}
-          accessibilityLabel={`Pick a recipe for ${weekdayName(iso)}`}
-          style={{
-            minHeight: 52,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: space.sm,
-            borderRadius: 16,
-            borderWidth: 2,
-            borderStyle: "dashed",
-            borderColor: p.border,
-          }}
-        >
-          <RNText style={{ color: p.accent, fontSize: 20, fontWeight: "800" }}>+</RNText>
-          <RNText style={{ color: p.accent, fontSize: 15, fontWeight: "800" }}>Pick a recipe</RNText>
-        </Tap>
-      )}
+      ) : null}
       {children}
     </Panel>
   );

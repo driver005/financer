@@ -4,6 +4,7 @@ mod auth;
 mod backup;
 mod bank;
 mod bank_connections;
+mod bank_plaid;
 mod budget_period;
 mod categorization;
 mod dto;
@@ -14,6 +15,7 @@ mod mealplan;
 mod receipt_sources;
 mod routes;
 mod scan;
+mod server_config;
 mod stores;
 mod watchdog;
 
@@ -33,7 +35,8 @@ use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 
 pub use auth::TokenHash;
-pub use bank_connections::{BankConnection, ConnectionState};
+pub use bank_connections::{BankConnection, BankProvider, ConnectionState};
+pub use bank_plaid::PlaidSetup;
 pub use financer_fints::{BankClient as BankClientTrait, BankData, BankError, MockBank};
 pub use financer_llm::MockProvider;
 pub use financer_prices::{FakeHttp, SourceConfig as PriceSourceConfig};
@@ -77,6 +80,8 @@ pub struct AppState {
     pub(crate) pin_pause: std::time::Duration,
     pub(crate) bank_connections: Arc<bank_connections::Connections>,
     pub(crate) pin_lookup: PinLookup,
+    pub(crate) plaid: Option<Arc<PlaidSetup>>,
+    pub(crate) secret_box: Option<Arc<financer_receipt_sources::SecretBox>>,
     pub(crate) connection_poll: std::time::Duration,
     pub(crate) http: Arc<dyn Http>,
     pub(crate) price_sources: Arc<Vec<SourceConfig>>,
@@ -85,6 +90,7 @@ pub struct AppState {
     pub(crate) store_matcher: Arc<StoreMatcher>,
     pub(crate) llm: LlmFactory,
     pub(crate) receipt_syncer: Option<Arc<financer_receipt_sources::ReceiptSyncer>>,
+    pub(crate) config_control: Option<Arc<server_config::ConfigControl>>,
 }
 
 impl AppState {
@@ -99,6 +105,8 @@ impl AppState {
             pin_pause: bank::DEFAULT_PIN_PAUSE,
             bank_connections: Arc::new(bank_connections::Connections::new(Vec::new())),
             pin_lookup: Arc::new(|var| std::env::var(var).ok().filter(|v| !v.is_empty())),
+            plaid: None,
+            secret_box: None,
             connection_poll: bank_connections::DEFAULT_POLL,
             http: Arc::new(NoNetwork),
             price_sources: Arc::new(Vec::new()),
@@ -107,7 +115,38 @@ impl AppState {
             store_matcher: Arc::new(StoreMatcher::builtin()),
             llm: Arc::new(ProviderFactory::create),
             receipt_syncer: None,
+            config_control: None,
         }
+    }
+
+    /// The server's configuration as a settings screen (`/v1/server-config`). `restart` is called
+    /// a moment after a saved change, to apply it; the hosted server re-executes itself there.
+    /// Without this the endpoints answer 404 (the on-phone backend has no configuration file).
+    pub fn with_config_admin(
+        mut self,
+        admin: Arc<financer_config::Admin>,
+        restart: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
+        self.config_control = Some(Arc::new(server_config::ConfigControl {
+            admin,
+            restart: Arc::new(restart),
+            delay: server_config::DEFAULT_RESTART_DELAY,
+            restarting: std::sync::atomic::AtomicBool::new(false),
+        }));
+        self
+    }
+
+    /// How long to wait between answering a saved change and restarting (tests shorten it).
+    pub fn with_restart_delay(mut self, delay: std::time::Duration) -> Self {
+        if let Some(control) = self.config_control.take() {
+            self.config_control = Some(Arc::new(server_config::ConfigControl {
+                admin: control.admin.clone(),
+                restart: control.restart.clone(),
+                delay,
+                restarting: std::sync::atomic::AtomicBool::new(false),
+            }));
+        }
+        self
     }
 
     /// The bank client used for live sync (the server passes the real FinTS client).
@@ -127,6 +166,20 @@ impl AppState {
     /// client set by [`AppState::with_bank`].
     pub fn with_bank_connections(mut self, connections: Vec<BankConnection>) -> Self {
         self.bank_connections = Arc::new(bank_connections::Connections::new(connections));
+        self
+    }
+
+    /// Plaid, for the connections with `kind = "plaid"`. Needs [`AppState::with_secret_box`] as
+    /// well, because the access token is kept sealed.
+    pub fn with_plaid(mut self, plaid: PlaidSetup) -> Self {
+        self.plaid = Some(Arc::new(plaid));
+        self
+    }
+
+    /// Seals the secrets the server keeps (the Plaid access token) with a key derived from a
+    /// server secret that is not in the database.
+    pub fn with_secret_box(mut self, secrets: financer_receipt_sources::SecretBox) -> Self {
+        self.secret_box = Some(Arc::new(secrets));
         self
     }
 
@@ -223,6 +276,7 @@ impl AppState {
         bank_connections::list_connections,
         bank_connections::sync_connection,
         bank_connections::cancel_connection,
+        bank_connections::disconnect_connection,
         stores::store_spending,
         stores::store_transactions,
         grocery::refresh_prices,
@@ -247,6 +301,8 @@ impl AppState {
         grocery::recipe_ideas,
         grocery::get_settings,
         grocery::put_settings,
+        server_config::get_config,
+        server_config::put_config,
         categorization::list_rules,
         categorization::create_rule,
         categorization::update_rule,
@@ -299,6 +355,7 @@ impl AppState {
         bank_connections::SyncOutcomeDto,
         bank_connections::SyncNowRequest,
         bank_connections::ConnectionState,
+        bank_plaid::LinkedAccountDto,
         stores::StoresPeriod,
         stores::StoreSpendDto,
         stores::StoresDto,
@@ -336,6 +393,13 @@ impl AppState {
         dto::IdeaIngredientDto,
         dto::SettingsDto,
         dto::SettingsUpdate,
+        financer_config::ConfigView,
+        financer_config::GroupView,
+        financer_config::KeyView,
+        financer_config::FieldView,
+        financer_config::Change,
+        server_config::ConfigSaved,
+        server_config::ConfigProblems,
         categorization::RuleDto,
         categorization::RuleInput,
         categorization::RuleOrder,
@@ -428,6 +492,10 @@ impl Api {
                 "/bank/connections/{name}/cancel",
                 post(bank_connections::cancel_connection),
             )
+            .route(
+                "/bank/connections/{name}/disconnect",
+                post(bank_connections::disconnect_connection),
+            )
             .route("/spending/stores", get(stores::store_spending))
             .route(
                 "/spending/stores/{chain}/transactions",
@@ -460,6 +528,10 @@ impl Api {
             .route(
                 "/settings",
                 get(grocery::get_settings).put(grocery::put_settings),
+            )
+            .route(
+                "/server-config",
+                get(server_config::get_config).put(server_config::put_config),
             )
             .route(
                 "/rules",

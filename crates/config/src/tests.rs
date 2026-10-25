@@ -284,7 +284,7 @@ fn receipts_table_is_typed_and_rejects_unknown_keys() {
     assert!(r.folder.as_ref().unwrap().path.is_absolute());
     for text in [
         "[receipts]\nbogus = 1\n",
-        "[receipts.email]\nhost = \"h\"\nusername = \"u\"\npassword = \"x\"\n",
+        "[receipts.email]\nhost = \"h\"\nusername = \"u\"\npasswort = \"x\"\n",
         "[receipts.lidl_plus]\nenable = true\n",
     ] {
         assert!(Fixture::load(text, &[]).is_err(), "{text}");
@@ -713,6 +713,8 @@ fn every_option_in_the_example_file_is_real() {
         ("OPENAI_API_KEY", "sk-o"),
         ("FINTS_PRODUCT_ID", "PID"),
         ("SPARKASSE_PIN", "1234"),
+        ("PLAID_CLIENT_ID", "cid"),
+        ("PLAID_SECRET", "sec"),
         ("FINANCER_IMAP_PASSWORD", "x"),
     ];
     let l = Fixture::ok(&uncommented, &env);
@@ -721,19 +723,212 @@ fn every_option_in_the_example_file_is_real() {
     assert_eq!(c.server.refresh_hours.source, Source::File);
     assert!(c.auth.api_token.value.is_some());
     assert_eq!(c.llm.provider.value, Some(ProviderChoice::Claude));
-    assert_eq!(c.bank.accounts.len(), 1);
+    // the example shows one FinTS and one Plaid account
+    assert_eq!(c.bank.accounts.len(), 2);
     assert_eq!(c.bank.accounts[0].sync_every_hours, 12);
+    assert_eq!(c.bank.accounts[1].kind, "plaid");
+    assert_eq!(c.bank.accounts[1].account_ids, ["abc123"]);
+    assert!(c.bank.plaid.configured());
     assert_eq!(c.stores.len(), 2);
     let r = &c.receipts.value;
     assert_eq!(r.email.as_ref().unwrap().senders.len(), 1);
     assert_eq!(r.folder.as_ref().unwrap().poll_seconds, 60);
     assert!(!r.lidl_plus.enabled);
-    // the only thing left to say is that the example folder does not exist on this machine
+    // the only things left to say: the example folder does not exist on this machine, and the
+    // example uses Plaid's sandbox
     assert!(
         l.warnings
             .iter()
-            .all(|w| w.contains("receipts.folder.path")),
+            .all(|w| w.contains("receipts.folder.path") || w.contains("sandbox")),
         "{:?}",
         l.warnings
+    );
+}
+
+const PLAID_SECTION: &str = "[bank.plaid]\nclient_id = \"${PLAID_CLIENT_ID}\"\nsecret = \"${PLAID_SECRET}\"\nenvironment = \"production\"\ncountry_codes = [\"DE\", \"fr\"]\nlanguage = \"EN\"\n";
+const PLAID_ACCOUNT: &str = "[[bank.accounts]]\nname = \"Plaid Giro\"\nkind = \"plaid\"\nsync_every_hours = 12\nsince_days = 60\n";
+
+#[test]
+fn a_plaid_account_needs_no_bank_code_login_iban_or_pin() {
+    let text = format!("{PLAID_SECTION}\n{PLAID_ACCOUNT}");
+    let l = Fixture::ok(
+        &text,
+        &[("PLAID_CLIENT_ID", "cid"), ("PLAID_SECRET", "sec")],
+    );
+    let a = &l.config.bank.accounts[0];
+    assert_eq!(a.kind, "plaid");
+    assert_eq!(
+        (a.bank_code.as_str(), a.login.as_str(), a.iban.as_str()),
+        ("", "", "")
+    );
+    assert_eq!(a.sync_every_hours, 12);
+    let p = &l.config.bank.plaid;
+    assert!(p.configured());
+    assert_eq!(p.client_id.value.as_ref().unwrap().expose(), "cid");
+    assert_eq!(p.secret.value.as_ref().unwrap().expose(), "sec");
+    assert_eq!(p.environment.value, "production");
+    // codes and language are normalised
+    assert_eq!(p.country_codes, ["DE", "FR"]);
+    assert_eq!(p.language, "en");
+    // production keys and a Plaid account: nothing to warn about
+    assert!(l.warnings.is_empty(), "{:?}", l.warnings);
+}
+
+#[test]
+fn the_plaid_defaults_are_the_sandbox_in_germany() {
+    let l = Fixture::ok(PLAID_ACCOUNT, &[]);
+    let p = &l.config.bank.plaid;
+    assert!(!p.configured());
+    assert_eq!(p.environment.value, "sandbox");
+    assert_eq!(p.country_codes, ["DE"]);
+    assert_eq!(p.language, "de");
+    // a Plaid account without keys: syncing stays off, which the operator is told
+    assert!(
+        l.warnings
+            .iter()
+            .any(|w| w.contains("bank.plaid.client_id")),
+        "{:?}",
+        l.warnings
+    );
+    // and no FinTS warning, because there is no FinTS account
+    assert!(
+        !l.warnings.iter().any(|w| w.contains("FinTS")),
+        "{:?}",
+        l.warnings
+    );
+}
+
+#[test]
+fn the_plaid_keys_can_come_from_the_environment_and_the_sandbox_is_called_out() {
+    let l = Fixture::ok(
+        PLAID_ACCOUNT,
+        &[
+            ("FINANCER_PLAID_CLIENT_ID", "cid"),
+            ("FINANCER_PLAID_SECRET", "sec"),
+        ],
+    );
+    assert!(l.config.bank.plaid.configured());
+    assert!(
+        l.warnings
+            .iter()
+            .any(|w| w.contains("sandbox") && w.contains("user_good")),
+        "{:?}",
+        l.warnings
+    );
+    let l = Fixture::ok(
+        PLAID_ACCOUNT,
+        &[
+            ("FINANCER_PLAID_CLIENT_ID", "cid"),
+            ("FINANCER_PLAID_SECRET", "sec"),
+            ("FINANCER_PLAID_ENV", "Production"),
+        ],
+    );
+    assert_eq!(l.config.bank.plaid.environment.value, "production");
+}
+
+#[test]
+fn a_literal_plaid_secret_in_the_file_gets_a_warning() {
+    let l = Fixture::ok("[bank.plaid]\nsecret = \"abc123literal\"\n", &[]);
+    assert!(
+        l.warnings
+            .iter()
+            .any(|w| w.contains("bank.plaid.secret") && w.contains("plain text")),
+        "{:?}",
+        l.warnings
+    );
+    // a reference does not
+    let l = Fixture::ok(
+        "[bank.plaid]\nsecret = \"${PLAID_SECRET}\"\n",
+        &[("PLAID_SECRET", "sec")],
+    );
+    assert!(
+        !l.warnings.iter().any(|w| w.contains("plain text")),
+        "{:?}",
+        l.warnings
+    );
+}
+
+#[test]
+fn bad_plaid_settings_are_reported_with_their_key() {
+    for (section, needle) in [
+        ("environment = \"development\"", "bank.plaid.environment"),
+        ("country_codes = [\"DEU\"]", "bank.plaid.country_codes"),
+        ("language = \"deutsch\"", "bank.plaid.language"),
+        ("redirect_uri = \"http://x\"", "bank.plaid.redirect_uri"),
+    ] {
+        let e = Fixture::err(&format!("[bank.plaid]\n{section}\n"), &[]);
+        assert!(e.contains(needle), "{section}: {e}");
+    }
+    let e = Fixture::err(
+        &format!("{PLAID_ACCOUNT}account_ids = [\"ok-id\", \"bad id!\"]\n"),
+        &[],
+    );
+    assert!(e.contains("bank.accounts[0].account_ids[1]"), "{e}");
+}
+
+#[test]
+fn fints_fields_on_a_plaid_account_and_plaid_fields_on_a_fints_account_only_warn() {
+    let l = Fixture::ok(
+        &format!("{PLAID_ACCOUNT}login = \"me\"\niban = \"{IBAN}\"\n"),
+        &[],
+    );
+    assert!(
+        l.warnings
+            .iter()
+            .any(|w| w.contains("bank.accounts[0].login")),
+        "{:?}",
+        l.warnings
+    );
+    let l = Fixture::ok(&Fixture::account("account_ids = [\"x\"]"), &[]);
+    assert!(
+        l.warnings.iter().any(|w| w.contains("account_ids")),
+        "{:?}",
+        l.warnings
+    );
+}
+
+#[test]
+fn a_fints_account_still_needs_its_fields_now_that_they_have_defaults() {
+    let e = Fixture::err("[[bank.accounts]]\nname = \"Giro\"\n", &[]);
+    assert!(
+        e.contains("bank_code") && e.contains("login") && e.contains("iban"),
+        "{e}"
+    );
+}
+
+#[test]
+fn both_providers_can_be_configured_side_by_side() {
+    let text = format!(
+        "{}{PLAID_ACCOUNT}",
+        Fixture::account("pin_env = \"SPARKASSE_PIN\"")
+    );
+    let l = Fixture::ok(&text, &[]);
+    let kinds: Vec<_> = l
+        .config
+        .bank
+        .accounts
+        .iter()
+        .map(|a| a.kind.as_str())
+        .collect();
+    assert_eq!(kinds, ["fints", "plaid"]);
+}
+
+#[test]
+fn the_rendered_configuration_never_shows_the_plaid_secret() {
+    let text = format!("{PLAID_SECTION}\n{PLAID_ACCOUNT}account_ids = [\"acc-1\"]\n");
+    let l = Fixture::ok(
+        &text,
+        &[
+            ("PLAID_CLIENT_ID", "client-id-visible?"),
+            ("PLAID_SECRET", "very-secret-value"),
+        ],
+    );
+    let shown = Renderer::render(&l);
+    assert!(!shown.contains("very-secret-value"), "{shown}");
+    assert!(!shown.contains("client-id-visible?"), "{shown}");
+    assert!(!shown.contains("acc-1"), "{shown}");
+    assert!(
+        shown.contains("[bank.plaid]") && shown.contains("production"),
+        "{shown}"
     );
 }

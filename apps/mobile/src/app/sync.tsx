@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { ActivityIndicator, Text, TextInput } from "@/components/kit";
@@ -8,7 +9,8 @@ import { ApiError } from "@/api/client";
 import { liveSyncMissing } from "@/bankConnections";
 import { useApi } from "@/api/config";
 import { deleteSecret, getSecret, setSecret } from "@/api/storage";
-import { Body, Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
+import { EmptyState } from "@/components/EmptyState";
+import { Button, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
 import { useScreenData } from "@/hooks";
 
@@ -22,6 +24,7 @@ export default function Sync() {
   const { api, loaded, mode } = useApi();
   const missing = liveSyncMissing(mode === "embedded");
   const c = useColors();
+  const router = useRouter();
   const { data: status, reload } = useScreenData((a) => a.bankStatus());
   const [blz, setBlz] = useState("");
   const [userId, setUserId] = useState("");
@@ -95,14 +98,16 @@ export default function Sync() {
       ) : (
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
           {status && !status.configured ? (
-            <Card>
-              <Body bold>{missing.title}</Body>
-              <Text variant="bodyMedium" style={{ color: c.muted, marginTop: 4 }}>
-                {missing.body}
-              </Text>
-            </Card>
-          ) : null}
-
+            // the form cannot work without the FinTS setup, so say so and offer what does work
+            <EmptyState
+              title={missing.title}
+              message={missing.body}
+              actionLabel="Import a CSV instead"
+              actionIcon="file-delimited-outline"
+              onAction={() => router.push("/spending")}
+            />
+          ) : (
+            <>
           {status?.balance_cents != null ? (
             <Card>
               <Text variant="titleMedium">Last known balance</Text>
@@ -153,6 +158,8 @@ export default function Sync() {
           ) : null}
           {phase.kind === "done" ? <FieldMessage tone="ok">{phase.text}</FieldMessage> : null}
           {phase.kind === "error" ? <FieldMessage tone="error">{phase.text}</FieldMessage> : null}
+            </>
+          )}
         </ScrollView>
       )}
     </Screen>

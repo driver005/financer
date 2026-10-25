@@ -122,14 +122,14 @@ export function ListSummaryBar({ list, ticks }: { list: MealShoppingList; ticks:
       style={{
         backgroundColor: p.surface,
         borderColor: colours.border,
-        borderWidth: 2,
+        borderWidth: 1,
         borderRadius: radius.md,
         paddingVertical: space.md,
         paddingHorizontal: space.lg,
         marginTop: space.sm,
         marginBottom: space.sm,
         // lifts the bar off the list scrolling underneath it
-        shadowColor: "#000",
+        shadowColor: p.text,
         shadowOpacity: 0.12,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: -2 },
@@ -196,7 +196,7 @@ export function ShoppingListView({
           >
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md }}>
               <View style={{ flex: 1 }}>
-                <RNText style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" }}>
+                <RNText style={{ color: p.muted, fontSize: 12, fontWeight: "800" }}>
                   {plan.split ? `Best split over ${plan.stops.length} shops` : "Cheapest shop"}
                 </RNText>
                 {!plan.split && plan.stops[0] ? (

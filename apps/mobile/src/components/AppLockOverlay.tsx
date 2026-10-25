@@ -37,7 +37,7 @@ export function AppLockOverlay() {
       {locked ? (
         <>
           <View
-            style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: c.card, borderWidth: 2, borderColor: c.border, alignItems: "center", justifyContent: "center" }}
+            style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: "center", justifyContent: "center" }}
           >
             <MaterialCommunityIcons name="lock-outline" size={44} color={c.accent} />
           </View>

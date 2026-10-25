@@ -45,7 +45,7 @@ export function SkeletonList({ rows = 4, label = "Loading" }: { rows?: number; l
       accessible
       accessibilityRole="progressbar"
       accessibilityLabel={label}
-      style={{ borderWidth: 2, borderColor: p.border, borderRadius: 20, backgroundColor: p.surface, overflow: "hidden" }}
+      style={{ borderWidth: 1, borderColor: p.border, borderRadius: 12, backgroundColor: p.surface, overflow: "hidden" }}
     >
       {Array.from({ length: rows }, (_, i) => (
         <View
@@ -79,7 +79,7 @@ export function SkeletonHero({ label = "Loading" }: { label?: string }) {
       accessible
       accessibilityRole="progressbar"
       accessibilityLabel={label}
-      style={{ borderWidth: 2, borderColor: p.border, borderRadius: 20, backgroundColor: p.surface, padding: space.xl, alignItems: "center", gap: space.md }}
+      style={{ borderWidth: 1, borderColor: p.border, borderRadius: 12, backgroundColor: p.surface, padding: space.xl, alignItems: "center", gap: space.md }}
     >
       <Skeleton width={180} height={180} radius={90} />
       <Skeleton width="50%" height={14} />

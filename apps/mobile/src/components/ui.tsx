@@ -1,14 +1,16 @@
-import { useRouter } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { usePathname, useRouter } from "expo-router";
 import { useEffect, type ReactNode } from "react";
-import { Text as RNText, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, Text as RNText, View, useColorScheme, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
 import { EmptyState } from "@/components/EmptyState";
+import { areaFor } from "@/navigation";
 import { ActivityIndicator, ChunkyButton, Text } from "@/components/kit";
 import { useReduceMotion } from "@/components/motion";
 import { SkeletonList } from "@/components/Skeleton";
-import { elevation, motion, radius, space, typography, usePalette } from "@/theme";
+import { motion, space, typography, usePalette } from "@/theme";
 
 /** Colours used by the screens, taken from the active (light or dark) palette. */
 export function useColors() {
@@ -32,8 +34,11 @@ export function useColors() {
  */
 export function Page({ edges = ["top", "left", "right"], children }: { edges?: Edge[]; children: ReactNode }) {
   const p = usePalette();
+  const dark = useColorScheme() === "dark";
+  // the settings area has a faintly grey page (light theme), so it reads as a place of its own
+  const grey = areaFor(usePathname()) === "settings" && !dark;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: p.background }} edges={edges}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: grey ? p.surfaceAlt : p.background }} edges={edges}>
       {children}
     </SafeAreaView>
   );
@@ -48,8 +53,9 @@ export function Screen({ children }: { children: ReactNode }) {
 }
 
 /**
- * The standard surface: a rounded card with a hairline border and a barely visible shadow
- * (`elevation.card`). Pass `flush` to drop the padding, e.g. for a list that runs to the edges.
+ * The standard section: a flat strip on the page background, closed by a hairline. No box, no
+ * shadow, so figures and lists line up on the page margin. Pass `flush` to drop the bottom
+ * padding, e.g. for a list that runs to the edge.
  */
 export function Card({ children, style, flush }: { children: ReactNode; style?: StyleProp<ViewStyle>; flush?: boolean }) {
   const p = usePalette();
@@ -57,14 +63,11 @@ export function Card({ children, style, flush }: { children: ReactNode; style?: 
     <View
       style={[
         {
-          marginBottom: space.md,
-          borderRadius: radius.xl,
-          borderWidth: 2,
-          borderColor: p.border,
-          backgroundColor: p.surface,
-          padding: flush ? 0 : space.lg,
+          marginBottom: space.lg,
+          paddingBottom: flush ? 0 : space.lg,
+          borderBottomWidth: 1,
+          borderBottomColor: p.border,
         },
-        elevation.card,
         style,
       ]}
     >
@@ -73,11 +76,19 @@ export function Card({ children, style, flush }: { children: ReactNode; style?: 
   );
 }
 
-/** Screen title. `subtitle` is a quiet line under it; `right` sits at the end of the row. */
+/**
+ * Screen title. `subtitle` is a quiet line under it; `right` sits at the end of the row. On the
+ * everyday screens a Settings button ends the row; in the settings area a back button starts it.
+ */
 export function Title({ children, subtitle, right }: { children: ReactNode; subtitle?: string; right?: ReactNode }) {
   const p = usePalette();
+  const router = useRouter();
+  const area = areaFor(usePathname());
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, marginTop: space.md, marginBottom: space.md }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.xs, marginBottom: space.md }}>
+      {area === "settings" ? (
+        <HeaderAction icon="arrow-left" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} />
+      ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text variant="headlineMedium" style={{ fontWeight: "800" }} accessibilityRole="header">
           {children}
@@ -85,6 +96,46 @@ export function Title({ children, subtitle, right }: { children: ReactNode; subt
         {subtitle ? <RNText style={[typography.caption, { color: p.muted }]}>{subtitle}</RNText> : null}
       </View>
       {right}
+      {area === "tab" ? <HeaderAction icon="cog-outline" label="Settings" onPress={() => router.push("/settings")} /> : null}
+    </View>
+  );
+}
+
+/**
+ * A round icon button for the title bar (`Title`'s `right`): the screen's tools live here instead
+ * of as full-width buttons above the content. Always give it a `label`, it is the accessible name.
+ */
+export function HeaderAction({ icon, label, onPress, disabled }: { icon: string; label: string; onPress: () => void; disabled?: boolean }) {
+  const p = usePalette();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={4}
+      style={({ pressed }) => ({
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: pressed ? p.accentSoft : p.surfaceAlt,
+        opacity: disabled ? 0.5 : 1,
+      })}
+    >
+      <MaterialCommunityIcons name={icon as React.ComponentProps<typeof MaterialCommunityIcons>["name"]} size={22} color={p.accent} />
+    </Pressable>
+  );
+}
+
+/** One line of a summary card: label on the left, amount on the right, at least 44 high. */
+export function LedgerRow({ label, value }: { label: string; value: ReactNode }) {
+  const p = usePalette();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, minHeight: 44 }}>
+      <RNText style={[typography.body, { color: p.muted, flexShrink: 1 }]}>{label}</RNText>
+      {value}
     </View>
   );
 }

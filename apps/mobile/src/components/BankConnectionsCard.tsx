@@ -1,6 +1,6 @@
 import { Link, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Text as RNText, View } from "react-native";
+import { Linking, Text as RNText, View } from "react-native";
 
 import type { BankConnection } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -10,12 +10,18 @@ import {
   approvalLeftText,
   canSync,
   connectionKey,
+  connectionSubtitle,
   isBusy,
+  isPlaid,
+  isSafeLinkUrl,
   lastResultText,
+  linkedAccountsText,
+  needsLinking,
   needsTypedPin,
   nextSyncText,
   stateLabel,
   stateTone,
+  syncButtonLabel,
 } from "@/bankConnections";
 import { ActivityIndicator, HelperText, Text, TextInput } from "@/components/kit";
 import { Badge } from "@/components/Watchdog";
@@ -24,10 +30,11 @@ import { Body, Button, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
 
 /**
- * Settings card: the bank connections that are set up in the server's financer.toml. Shows the
- * state of each, starts a sync ("Sync now") and, while the bank waits for the approval in the
- * banking app, says so. The server polls the bank itself and imports as soon as you approve, so
- * this screen does not have to stay open. The old manual flow (Spending > Sync with Sparkasse) is
+ * Settings card: the bank connections that are set up in the server's financer.toml, from either
+ * provider. Shows the state of each, starts a sync ("Sync now") and, while the bank waits for the
+ * approval in the banking app (FinTS) or for you to sign in on Plaid's page (Plaid), says so. The
+ * server polls by itself and imports as soon as you are done, so this screen does not have to stay
+ * open. The old manual flow (Spending > Sync with Sparkasse) is
  * offered here only when no connection is configured.
  */
 export function BankConnectionsCard() {
@@ -38,6 +45,7 @@ export function BankConnectionsCard() {
   const [pins, setPins] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [starting, setStarting] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
 
   const load = useCallback(async () => {
@@ -87,14 +95,44 @@ export function BankConnectionsCard() {
     setError(key, null);
     setStarting(key);
     try {
-      replace(await api.syncConnection(conn.name, pins[key] || undefined));
+      const updated = await api.syncConnection(conn.name, pins[key] || undefined);
+      replace(updated);
       setPins((cur) => ({ ...cur, [key]: "" })); // the PIN is not kept
+      // Plaid: its page is where you sign in to your bank; open it right away
+      if (updated.state === "needs_link") await openLink(updated, key);
     } catch (e) {
       setError(key, e instanceof Error ? e.message : "Could not start the sync");
       await load();
     } finally {
       setStarting(null);
     }
+  }
+
+  async function openLink(conn: BankConnection, key: string) {
+    if (!isSafeLinkUrl(conn.link_url)) {
+      setError(key, "The sign-in address from the server does not look like a Plaid page, so it was not opened.");
+      return;
+    }
+    try {
+      await Linking.openURL(conn.link_url);
+    } catch {
+      setError(key, "Could not open the browser. Copy the address from the server log, or try again.");
+    }
+  }
+
+  /** A second press confirms (an inline question works on the web build too, where Alert does nothing). */
+  function disconnect(conn: BankConnection) {
+    if (!api) return;
+    const key = connectionKey(conn);
+    setConfirming(null);
+    setError(key, null);
+    api
+      .disconnectConnection(conn.name)
+      .then(replace)
+      .catch(async (e: unknown) => {
+        setError(key, e instanceof Error ? e.message : "Could not disconnect");
+        await load();
+      });
   }
 
   async function cancel(conn: BankConnection) {
@@ -141,13 +179,16 @@ export function BankConnectionsCard() {
       ) : (
         <>
           <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
-            These connections are configured in financer.toml on the server; change them there. Your PIN is never stored: it
-            comes from the server's environment or you type it here. Every login still needs your approval in the banking app.
+            These connections are set up under Server settings, Bank accounts (or in financer.toml on the server). A bank (FinTS) connection never
+            stores your PIN: it comes from the server's environment or you type it here, and every login needs your approval in
+            the banking app. A Plaid connection needs neither: you sign in to your bank once on Plaid's page.
           </Text>
           {list.map((conn) => {
             const key = connectionKey(conn);
             const pin = pins[key] ?? "";
             const waiting = conn.state === "needs_approval";
+            const signingIn = conn.state === "needs_link";
+            const accounts = linkedAccountsText(conn);
             const last = lastResultText(conn);
             const next = nextSyncText(conn, now);
             const left = approvalLeftText(conn, now);
@@ -156,9 +197,7 @@ export function BankConnectionsCard() {
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <View style={{ flex: 1 }}>
                     <Body bold>{conn.name}</Body>
-                    <RNText style={{ color: c.muted, fontSize: 13 }}>
-                      Bank code {conn.bank_code} · login {conn.login_masked} · {conn.iban_masked}
-                    </RNText>
+                    <RNText style={{ color: c.muted, fontSize: 13 }}>{connectionSubtitle(conn)}</RNText>
                   </View>
                   <Badge text={stateLabel(conn)} tone={stateTone(conn)} />
                 </View>
@@ -166,7 +205,7 @@ export function BankConnectionsCard() {
                 {waiting ? (
                   <View
                     accessibilityLiveRegion="polite"
-                    style={{ marginTop: 10, padding: 12, borderRadius: 16, borderWidth: 2, borderColor: c.accent }}
+                    style={{ marginTop: 10, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: c.accent }}
                   >
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                       <ActivityIndicator />
@@ -181,10 +220,31 @@ export function BankConnectionsCard() {
                     <Button mode="text" label="Cancel" onPress={() => void cancel(conn)} />
                   </View>
                 ) : null}
+                {signingIn ? (
+                  <View
+                    accessibilityLiveRegion="polite"
+                    style={{ marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: c.accent }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                      <ActivityIndicator />
+                      <RNText style={{ color: c.text, fontSize: 15, fontWeight: "700", flex: 1 }}>
+                        Sign in to your bank on Plaid's page
+                      </RNText>
+                    </View>
+                    <RNText style={{ color: c.text, marginTop: 6 }}>
+                      Your bank login goes to Plaid, not to this app. When you are done, this screen updates and the first
+                      sync starts by itself. {left ?? ""}
+                    </RNText>
+                    <Button label="Open the sign-in page" icon="open-in-new" mode="outlined" onPress={() => void openLink(conn, key)} />
+                    <Button mode="text" label="Cancel" onPress={() => void cancel(conn)} />
+                  </View>
+                ) : null}
                 {conn.state === "syncing" ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
                     <ActivityIndicator />
-                    <RNText style={{ color: c.text, flex: 1 }}>Logging in or fetching transactions…</RNText>
+                    <RNText style={{ color: c.text, flex: 1 }}>
+                      {isPlaid(conn) ? "Reading transactions from Plaid…" : "Logging in or fetching transactions…"}
+                    </RNText>
                   </View>
                 ) : null}
                 {conn.state === "error" && conn.message ? <HelperText type="error" visible>{conn.message}</HelperText> : null}
@@ -196,6 +256,7 @@ export function BankConnectionsCard() {
                     {conn.balance_date ? ` (${formatDate(conn.balance_date)})` : ""}
                   </RNText>
                 ) : null}
+                {accounts ? <RNText style={{ color: c.muted, fontSize: 13, marginTop: 4 }}>Accounts: {accounts}</RNText> : null}
                 {last ? <RNText style={{ color: c.muted, fontSize: 13, marginTop: 4 }}>{last}</RNText> : null}
                 {next ? <RNText style={{ color: c.muted, fontSize: 13, marginTop: 4 }}>{next}</RNText> : null}
 
@@ -215,11 +276,24 @@ export function BankConnectionsCard() {
                       />
                     ) : null}
                     <Button
-                      label={starting === key ? "Starting…" : "Sync now"}
-                      icon="bank-transfer"
+                      label={syncButtonLabel(conn, starting === key)}
+                      icon={needsLinking(conn) ? "link-variant" : "bank-transfer"}
                       onPress={() => void sync(conn)}
                       disabled={starting !== null || !canSync(conn, pin)}
                     />
+                    {isPlaid(conn) && conn.linked && confirming !== key ? (
+                      <Button mode="text" label="Disconnect" icon="link-variant-off" onPress={() => setConfirming(key)} />
+                    ) : null}
+                    {confirming === key ? (
+                      <View accessibilityLiveRegion="polite" style={{ marginTop: 8 }}>
+                        <RNText style={{ color: c.text }}>
+                          Plaid is told to forget this connection and its access is deleted here. The transactions you already have
+                          stay. You sign in again to reconnect.
+                        </RNText>
+                        <Button label="Disconnect" icon="link-variant-off" mode="outlined" onPress={() => disconnect(conn)} />
+                        <Button mode="text" label="Keep it" onPress={() => setConfirming(null)} />
+                      </View>
+                    ) : null}
                   </View>
                 ) : null}
               </View>

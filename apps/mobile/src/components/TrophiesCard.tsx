@@ -40,7 +40,7 @@ export function BadgeIcon({ badge, size = 44 }: { badge: Badge; size?: number })
         borderRadius: size / 2,
         alignItems: "center",
         justifyContent: "center",
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: badge.earned ? p.gold : p.border,
         backgroundColor: badge.earned ? p.goldSoft : "transparent",
         opacity: badge.earned ? 1 : 0.4,

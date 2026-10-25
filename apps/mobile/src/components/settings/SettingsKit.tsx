@@ -39,12 +39,12 @@ export function useInk() {
 
 // ---------------------------------------------------------------- sections and groups
 
-/** Small uppercase heading above a group of rows. */
+/** Small heading above a group of rows (sentence case). */
 export function SectionHeader({ title, hint }: { title: string; hint?: string }) {
   const p = usePalette();
   return (
     <View style={{ marginTop: 24, marginBottom: 8, paddingHorizontal: 4 }}>
-      <RNText accessibilityRole="header" style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" }}>
+      <RNText accessibilityRole="header" style={{ color: p.muted, fontSize: 12, fontWeight: "800" }}>
         {title}
       </RNText>
       {hint ? <RNText style={{ color: p.muted, fontSize: 13, marginTop: 2 }}>{hint}</RNText> : null}
@@ -59,14 +59,14 @@ export function SectionFootnote({ children }: { children: ReactNode }) {
 }
 
 /**
- * A rounded box whose rows are separated by hairlines. Each row draws its own bottom line; the
+ * A flat strip between two hairlines whose rows are separated by hairlines. Each row draws its own bottom line; the
  * box pulls its content 1px down so the last line is clipped, which also works when some of the
  * children render nothing (the app lock row on the web, say).
  */
 export function SettingsGroup({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const p = usePalette();
   return (
-    <View style={[{ borderRadius: 20, borderWidth: 2, borderColor: p.border, backgroundColor: p.surface, overflow: "hidden" }, style]}>
+    <View style={[{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: p.border, backgroundColor: p.surface, overflow: "hidden" }, style]}>
       <View style={{ marginBottom: -1 }}>{children}</View>
     </View>
   );
@@ -311,43 +311,9 @@ export function RowNotes({ children }: { children: ReactNode }) {
   return <View style={{ paddingHorizontal: 16, paddingTop: 0, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: p.border }}>{children}</View>;
 }
 
-// ---------------------------------------------------------------- jump chips
-
-/** Table of contents: a row of chips that jump to a section. */
-export function SectionChips({ sections, onSelect }: { sections: readonly { id: string; title: string }[]; onSelect: (id: string) => void }) {
-  const p = usePalette();
-  return (
-    <View accessibilityRole="menu" accessibilityLabel="Jump to a section" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-      {sections.map((s) => (
-        <Pressable
-          key={s.id}
-          onPress={() => {
-            tap();
-            onSelect(s.id);
-          }}
-          accessibilityRole="menuitem"
-          accessibilityLabel={`Jump to ${s.title}`}
-          style={({ pressed }) => ({
-            minHeight: 44,
-            paddingHorizontal: 16,
-            borderRadius: 22,
-            borderWidth: 2,
-            borderColor: p.border,
-            backgroundColor: pressed ? p.surfaceAlt : p.surface,
-            alignItems: "center",
-            justifyContent: "center",
-          })}
-        >
-          <RNText style={{ color: p.accent, fontSize: 14, fontWeight: "800" }}>{s.title}</RNText>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
 // ---------------------------------------------------------------- destructive actions
 
-/** Solid or outlined red button with the 3D lip of the other buttons; contrast checked in both themes. */
+/** Solid or outlined red button, flat like the other buttons; contrast checked in both themes. */
 export function DangerButton({
   label,
   onPress,
@@ -383,16 +349,15 @@ export function DangerButton({
         paddingHorizontal: 18,
         borderRadius: 16,
         backgroundColor: solid ? ink.dangerFace : p.surface,
-        borderWidth: solid ? 0 : 2,
+        borderWidth: solid ? 0 : 1,
         borderColor: ink.danger,
-        borderBottomWidth: 4 - (pressed ? 4 : 0),
+        borderBottomWidth: 0,
         borderBottomColor: solid ? ink.dangerEdge : ink.danger,
-        marginTop: pressed ? 4 : 0,
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
       })}
     >
       {icon ? <MaterialCommunityIcons name={icon as IconName} size={20} color={solid ? ink.onDanger : ink.danger} /> : null}
-      <RNText style={{ color: solid ? ink.onDanger : ink.danger, fontWeight: "800", fontSize: 15, letterSpacing: 0.8, textTransform: "uppercase" }}>
+      <RNText style={{ color: solid ? ink.onDanger : ink.danger, fontWeight: "700", fontSize: 15 }}>
         {label}
       </RNText>
     </Pressable>
@@ -427,7 +392,7 @@ export function ConfirmAction({
   return (
     <View
       accessibilityRole="alert"
-      style={{ borderRadius: 16, borderWidth: 2, borderColor: ink.danger, padding: 16, backgroundColor: p.surface, gap: 8 }}
+      style={{ borderRadius: 16, borderWidth: 1, borderColor: ink.danger, padding: 16, backgroundColor: p.surface, gap: 8 }}
     >
       <RNText style={{ color: p.text, fontSize: 16, fontWeight: "800" }}>{question}</RNText>
       <RNText style={{ color: p.muted, fontSize: 14 }}>{consequence}</RNText>
@@ -553,7 +518,7 @@ export function ChoiceChips({
               minHeight: 44,
               paddingHorizontal: 14,
               borderRadius: 22,
-              borderWidth: 2,
+              borderWidth: 1,
               borderColor: on ? p.accent : p.border,
               backgroundColor: on ? p.accent : p.surface,
               alignItems: "center",

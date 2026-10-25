@@ -166,12 +166,11 @@ export default function Receipts() {
                     <ChunkyButton label={busy ? "Adding…" : "Add receipt"} icon="receipt-text-plus-outline" onPress={add} disabled={busy || !text.trim()} />
                   </View>
                 </Panel>
-              ) : (
-                <ChunkyButton label="Paste receipt text" icon="text-box-plus-outline" outline onPress={() => setPasteOpen(true)} />
-              )}
+              ) : null}
 
-              <View style={{ marginTop: space.sm }}>
-                <ChunkyButton label="Receipt sources" icon="email-sync-outline" outline onPress={() => router.push("/receipt-sources")} accessibilityLabel="Open receipt sources: mailbox, Lidl Plus and a watched folder" />
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs, marginLeft: -space.sm }}>
+                {pasteVisible ? null : <ChunkyButton compact flat label="Paste receipt text" icon="text-box-plus-outline" onPress={() => setPasteOpen(true)} />}
+                <ChunkyButton compact flat label="Receipt sources" icon="email-sync-outline" onPress={() => router.push("/receipt-sources")} accessibilityLabel="Open receipt sources: mailbox, Lidl Plus and a watched folder" />
               </View>
 
               {message || error ? (
@@ -258,17 +257,17 @@ function CaptureTile({
         justifyContent: "center",
         gap: 2,
         paddingHorizontal: space.sm,
-        borderRadius: 20,
+        borderRadius: 12,
         backgroundColor: primary ? p.accent : p.surface,
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: primary ? p.accent : p.border,
-        borderBottomWidth: 5,
+        borderBottomWidth: 1,
         borderBottomColor: primary ? p.accentEdge : p.border,
       }}
     >
       <MaterialCommunityIcons name={icon as never} size={28} color={fg} />
-      <RNText style={{ color: primary ? p.onAccent : p.text, fontSize: 14, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase" }}>{label}</RNText>
-      <RNText style={{ color: primary ? p.onAccent : p.muted, fontSize: 11 }} numberOfLines={1}>
+      <RNText style={{ color: primary ? p.onAccent : p.text, fontSize: 14, fontWeight: "700" }}>{label}</RNText>
+      <RNText style={{ color: primary ? p.onAccent : p.muted, fontSize: 12 }} numberOfLines={1}>
         {hint}
       </RNText>
     </Tap>

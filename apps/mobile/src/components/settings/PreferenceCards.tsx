@@ -76,8 +76,8 @@ export function AiCard({ settings, onSave }: { settings: Settings; onSave: SaveS
         {keyConfigured
           ? "An API key is configured on the server."
           : settings.llm_provider === "claude"
-            ? "No key yet: set FINANCER_ANTHROPIC_API_KEY on the server."
-            : "No key yet: set FINANCER_OPENAI_API_KEY on the server."}
+            ? "No key yet: add it under Server settings > AI (or set FINANCER_ANTHROPIC_API_KEY on the server)."
+            : "No key yet: add it under Server settings > AI (or set FINANCER_OPENAI_API_KEY on the server)."}
       </FieldMessage>
       {error ? <FieldMessage tone="error">{error}</FieldMessage> : null}
       <PanelText>Only item names, offers, diet and budget are sent, never bank data.</PanelText>

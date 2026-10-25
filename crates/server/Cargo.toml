@@ -16,6 +16,7 @@ financer-config = { path = "../config" }
 financer-core = { path = "../core" }
 financer-fints = { path = "../fints" }
 financer-llm = { path = "../llm" }
+financer-plaid = { path = "../plaid" }
 financer-prices = { path = "../prices" }
 financer-receipt-sources = { path = "../receipt-sources" }
 financer-store = { path = "../store" }
@@ -26,3 +27,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
 tower-http = { version = "0.7", features = ["cors"] }
+
+[dev-dependencies]
+tempfile = "3"

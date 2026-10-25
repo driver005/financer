@@ -378,12 +378,17 @@ impl ReceiptSyncer {
                     .email
                     .as_ref()
                     .ok_or_else(|| SyncError::other("the mailbox is not configured"))?;
-                let password = (self.deps.env)(&cfg.password_env).ok_or_else(|| {
-                    SyncError::other(format!(
-                        "the environment variable {} (the mailbox password) is not set",
-                        cfg.password_env
-                    ))
-                })?;
+                // a password typed into the app wins; else the variable named by password_env
+                let typed = cfg.password.clone().filter(|p| !p.trim().is_empty());
+                let password = match typed {
+                    Some(p) => p,
+                    None => (self.deps.env)(&cfg.password_env).ok_or_else(|| {
+                        SyncError::other(format!(
+                            "the mailbox password is not set: enter it in the app (Settings > Server), or set the environment variable {}",
+                            cfg.password_env
+                        ))
+                    })?,
+                };
                 let cursor: EmailCursor = self
                     .store
                     .source_state(kind.key())
@@ -542,6 +547,7 @@ mod tests {
                 port: 993,
                 username: "me@example.org".into(),
                 password_env: "TEST_IMAP_PASSWORD".into(),
+                password: None,
                 folder: "INBOX".into(),
                 poll_minutes: 30,
                 mark_seen: false,

@@ -23,7 +23,12 @@ page is reachable, allowed by its robots.txt and read well is something only
 
 ## Configure
 
-Create a JSON file and point `FINANCER_PRICE_SOURCES` at it:
+**From the app:** Settings > Server settings > Prices > *Price sources* adds, edits and removes
+sources (the kind, the shop, the pages, the items as `item=barcode`) without any file; save and the
+server restarts with them. They are kept in the server's settings file and used together with the
+ones from a JSON file or `[[prices.sources]]` in `financer.toml`.
+
+Or create a JSON file and point `FINANCER_PRICE_SOURCES` at it:
 
 ```json
 [

@@ -1,3 +1,4 @@
+import { SectionSwitch } from "@/components/SectionSwitch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text as RNText, View } from "react-native";
 import { HelperText, SegmentedButtons, TextInput } from "@/components/kit";
@@ -8,9 +9,9 @@ import { Afford } from "@/components/Afford";
 import { CompareBars } from "@/components/Charts";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
-import { IconBadge, ListGroup, ListRow } from "@/components/rows";
+import { IconBadge } from "@/components/rows";
 import { SkeletonList } from "@/components/Skeleton";
-import { Bar, Button, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { Bar, Button, Card, LedgerRow, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
 import { categoryIcon, categoryLabel } from "@/categoryIcons";
 import { compareSummary, topCategories } from "@/charts";
 import { parseEuroInput, spokenMoney } from "@/format";
@@ -100,6 +101,7 @@ export default function Budget() {
   return (
     <Screen>
       <Title subtitle={currentPeriod ? periodLabel(currentPeriod) : undefined}>Budget</Title>
+      <SectionSwitch />
       {!api ? (
         <NeedsSetup />
       ) : (
@@ -112,24 +114,17 @@ export default function Budget() {
           {data ? (
             <>
               <Card>
-                <RNText style={[typography.overline, { color: p.muted, textTransform: "uppercase" }]}>Left to budget per month</RNText>
+                <RNText style={[typography.overline, { color: p.muted }]}>Left to budget per month</RNText>
                 <View style={{ marginTop: space.xs }}>
                   <Money cents={left} variant="display" tone={left < 0 ? "bad" : "plain"} label={`Left to budget per month: ${spokenMoney(left)}`} />
                 </View>
                 <RNText style={[typography.caption, { color: p.muted, marginTop: space.xs }]}>From your recurring payments: income minus fixed costs.</RNText>
+                <View style={{ marginTop: space.md, borderTopWidth: 1, borderTopColor: p.border }}>
+                  <LedgerRow label="Income" value={<Money cents={data.disposable.monthly_income_cents} variant="bodyStrong" signed />} />
+                  <View style={{ height: 1, backgroundColor: p.border }} />
+                  <LedgerRow label="Fixed costs" value={<Money cents={-data.disposable.monthly_fixed_costs_cents} variant="bodyStrong" tone="plain" />} />
+                </View>
               </Card>
-              <ListGroup>
-                <ListRow icon="cash-plus" iconTone="good" title="Income" value={<Money cents={data.disposable.monthly_income_cents} variant="bodyStrong" signed />} />
-                <ListRow icon="home-clock-outline" iconTone="accent" title="Fixed costs" value={<Money cents={-data.disposable.monthly_fixed_costs_cents} variant="bodyStrong" tone="plain" />} />
-              </ListGroup>
-
-              {compare.length > 0 ? (
-                <Card>
-                  <RNText accessibilityRole="header" style={[typography.heading, { color: p.text }]}>This period against last</RNText>
-                  <RNText style={[typography.caption, { color: p.muted, marginTop: 2, marginBottom: space.lg }]}>Your biggest categories with a limit.</RNText>
-                  <CompareBars rows={compare} summary={compareSummary(compare)} />
-                </Card>
-              ) : null}
             </>
           ) : error ? (
             <EmptyState title="Could not load your budget" message={error} mood="worried" actionLabel="Try again" actionIcon="refresh" onAction={() => void reload()} />
@@ -138,8 +133,6 @@ export default function Budget() {
               <SkeletonList rows={2} />
             </View>
           )}
-
-          <Afford />
 
           <Card>
             <RNText accessibilityRole="header" style={[typography.heading, { color: p.text }]}>Limits per budget period</RNText>
@@ -213,6 +206,16 @@ export default function Budget() {
               {message ?? error}
             </HelperText>
           </Card>
+
+          {compare.length > 0 ? (
+            <Card>
+              <RNText accessibilityRole="header" style={[typography.heading, { color: p.text }]}>This period against last</RNText>
+              <RNText style={[typography.caption, { color: p.muted, marginTop: 2, marginBottom: space.lg }]}>Your biggest categories with a limit.</RNText>
+              <CompareBars rows={compare} summary={compareSummary(compare)} />
+            </Card>
+          ) : null}
+
+          <Afford />
         </ScrollView>
       )}
     </Screen>

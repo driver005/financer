@@ -50,7 +50,7 @@ function CompactMascot({ message, mood }: MascotLine) {
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
         style={[
-          { width: 52, height: 52, borderRadius: 26, backgroundColor: p.fill, borderBottomWidth: 3, borderBottomColor: p.accentEdge, alignItems: "center", justifyContent: "center" },
+          { width: 52, height: 52, borderRadius: 26, backgroundColor: p.fill, alignItems: "center", justifyContent: "center" },
           bob,
         ]}
       >
@@ -60,7 +60,7 @@ function CompactMascot({ message, mood }: MascotLine) {
       <View
         accessibilityRole="text"
         accessibilityLiveRegion="polite"
-        style={{ flex: 1, borderWidth: 2, borderColor: p.border, borderRadius: 16, backgroundColor: p.surface, paddingVertical: 8, paddingHorizontal: 12 }}
+        style={{ flex: 1, borderWidth: 1, borderColor: p.border, borderRadius: 16, backgroundColor: p.surface, paddingVertical: 8, paddingHorizontal: 12 }}
       >
         <RNText style={{ color: p.text, fontSize: 14, fontWeight: "700" }}>{message}</RNText>
       </View>
@@ -228,9 +228,9 @@ export function ChoiceCard({
         gap: 12,
         padding: 14,
         marginBottom: 10,
-        borderRadius: 20,
-        borderWidth: 2,
-        borderBottomWidth: 4,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderBottomWidth: 1,
         borderColor: selected ? p.accent : p.border,
         backgroundColor: selected ? p.surfaceAlt : p.surface,
         opacity: disabled ? 0.55 : 1,
@@ -296,8 +296,8 @@ export function NumberTiles({
               borderRadius: 14,
               alignItems: "center",
               justifyContent: "center",
-              borderWidth: 2,
-              borderBottomWidth: 4,
+              borderWidth: 1,
+              borderBottomWidth: 1,
               borderColor: on ? p.accent : p.border,
               backgroundColor: on ? p.accent : p.surface,
             }}
@@ -329,8 +329,8 @@ export function ToggleChip({ label, selected, onPress }: { label: string; select
         gap: 6,
         paddingHorizontal: 16,
         borderRadius: 22,
-        borderWidth: 2,
-        borderBottomWidth: 4,
+        borderWidth: 1,
+        borderBottomWidth: 1,
         borderColor: selected ? p.accent : p.border,
         backgroundColor: selected ? p.accent : p.surface,
       }}
@@ -345,7 +345,7 @@ export function ToggleChip({ label, selected, onPress }: { label: string; select
 export function FieldLabel({ children }: { children: ReactNode }) {
   const p = usePalette();
   return (
-    <RNText accessibilityRole="header" style={{ color: p.muted, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", marginTop: 16, marginBottom: 8 }}>
+    <RNText accessibilityRole="header" style={{ color: p.muted, fontSize: 12, fontWeight: "800", marginTop: 16, marginBottom: 8 }}>
       {children}
     </RNText>
   );
@@ -355,7 +355,7 @@ export function FieldLabel({ children }: { children: ReactNode }) {
 export function Note({ icon, children }: { icon: string; children: ReactNode }) {
   const p = usePalette();
   return (
-    <View style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: 16, backgroundColor: p.surfaceAlt, borderWidth: 2, borderColor: p.border, marginTop: 8 }}>
+    <View style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: 16, backgroundColor: p.surfaceAlt, borderWidth: 1, borderColor: p.border, marginTop: 8 }}>
       <MaterialCommunityIcons name={icon as IconName} size={20} color={p.accent} style={{ marginTop: 1 }} />
       <RNText style={{ flex: 1, color: p.muted, fontSize: 13 }}>{children}</RNText>
     </View>

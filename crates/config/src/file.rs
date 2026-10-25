@@ -44,6 +44,9 @@ pub struct FileDatabase {
 #[serde(deny_unknown_fields, default)]
 pub struct FilePrices {
     pub sources_file: Option<String>,
+    /// `[[prices.sources]]`: price sources written in place (the same entries as in the JSON
+    /// file). They are used together with the ones from `sources_file`.
+    pub sources: Vec<financer_prices::SourceConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -58,7 +61,27 @@ pub struct FileLlm {
 #[serde(deny_unknown_fields, default)]
 pub struct FileBank {
     pub fints_product_id: Option<String>,
+    /// `[bank.plaid]`: the Plaid account the server uses for every `kind = "plaid"` connection.
+    pub plaid: FilePlaid,
     pub accounts: Vec<BankAccount>,
+}
+
+/// `[bank.plaid]`. The client id and the secret come from your Plaid dashboard; write them as
+/// `${PLAID_CLIENT_ID}` / `${PLAID_SECRET}` so they stay out of the file.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct FilePlaid {
+    pub client_id: Option<String>,
+    pub secret: Option<String>,
+    /// `sandbox` (Plaid's test bank, the default) or `production`.
+    pub environment: Option<String>,
+    /// Countries whose banks you can pick in Plaid's window, e.g. `["DE"]` (the default).
+    pub country_codes: Vec<String>,
+    /// Language of Plaid's window, e.g. `de` (the default) or `en`.
+    pub language: Option<String>,
+    /// Where Plaid's page sends the browser when you are done. Optional; without it the page
+    /// just says you can close it.
+    pub redirect_uri: Option<String>,
 }
 
 /// One `[[bank.accounts]]` entry. The PIN is never part of it: it comes from the environment
@@ -67,14 +90,23 @@ pub struct FileBank {
 #[serde(deny_unknown_fields)]
 pub struct BankAccount {
     pub name: String,
-    /// Only `fints` exists today.
+    /// The provider: `fints` (the default; your bank directly, with a PIN and an approval in the
+    /// banking app) or `plaid` (you sign in once on Plaid's page, no PIN, no approval per sync).
     #[serde(default = "BankAccount::default_kind")]
     pub kind: String,
+    /// FinTS only: the 8-digit bank code.
+    #[serde(default)]
     pub bank_code: String,
-    /// The online banking login name.
+    /// FinTS only: the online banking login name.
+    #[serde(default)]
     pub login: String,
-    /// The account to read (FinTS needs it to pick the account).
+    /// FinTS only: the account to read (FinTS needs it to pick the account).
+    #[serde(default)]
     pub iban: String,
+    /// Plaid only: read only these accounts (the ids the app shows after linking). Leave out to
+    /// read every account you linked.
+    #[serde(default)]
+    pub account_ids: Vec<String>,
     /// Only needed together with `fints_url`.
     #[serde(default)]
     pub bic: Option<String>,

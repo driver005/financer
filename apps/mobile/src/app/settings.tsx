@@ -1,7 +1,6 @@
 import { useRouter } from "expo-router";
-import { useCallback, useRef, type ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, View, type ScrollViewInstance } from "react-native";
-import { useReducedMotion } from "react-native-reanimated";
+import { useCallback, type ReactNode } from "react";
+import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 
 import { useApi } from "@/api/config";
 import { AboutCard } from "@/components/AboutCard";
@@ -14,7 +13,6 @@ import { DataCard } from "@/components/settings/DataCard";
 import { AiCard, HabitsCard, PaydayCard, type SaveSetting } from "@/components/settings/PreferenceCards";
 import {
   FieldMessage,
-  SectionChips,
   SectionFootnote,
   SectionHeader,
   SettingsGroup,
@@ -23,7 +21,7 @@ import {
 import { Screen, Title } from "@/components/ui";
 import { useScreenData } from "@/hooks";
 import { startReplay } from "@/native/onboardingStore";
-import { priceSourcesLabel, SETTINGS_SECTIONS, type SectionId } from "@/settingsPlan";
+import { priceSourcesLabel, type SectionId } from "@/settingsPlan";
 
 /**
  * Settings, in five sections (Account & data, Money, Groceries, Privacy & security, About). Each
@@ -34,10 +32,7 @@ import { priceSourcesLabel, SETTINGS_SECTIONS, type SectionId } from "@/settings
 export default function SettingsScreen() {
   const { api, mode } = useApi();
   const router = useRouter();
-  const reduceMotion = useReducedMotion();
   const { data: settings, setData: setSettings, error } = useScreenData((a) => a.settings());
-  const scroll = useRef<ScrollViewInstance>(null);
-  const tops = useRef<Partial<Record<SectionId, number>>>({});
 
   const save: SaveSetting = useCallback(
     async (patch) => {
@@ -52,13 +47,8 @@ export default function SettingsScreen() {
     [api, setSettings],
   );
 
-  const jump = (id: string) => {
-    const y = tops.current[id as SectionId];
-    if (y !== undefined) scroll.current?.scrollTo({ y: Math.max(0, y - 8), animated: !reduceMotion });
-  };
-
   const section = (id: SectionId, title: string, body: ReactNode) => (
-    <View key={id} onLayout={(e) => void (tops.current[id] = e.nativeEvent.layout.y)}>
+    <View key={id}>
       <SectionHeader title={title} />
       {body}
     </View>
@@ -68,15 +58,21 @@ export default function SettingsScreen() {
     <Screen>
       <Title>Settings</Title>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ paddingBottom: 32 }}>
-          <SectionChips sections={SETTINGS_SECTIONS} onSelect={jump} />
-
+        <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ paddingBottom: 32 }}>
           {section(
             "data",
             "Account & data",
             <>
               <SettingsGroup>
                 <BackendCard settingsLoaded={settings !== null} settingsError={error} />
+                {api && mode === "remote" ? (
+                  <SettingsRow
+                    icon="server-network"
+                    title="Server settings"
+                    subtitle="Keys, bank providers, receipts: everything in financer.toml"
+                    onPress={() => router.push("/server-config")}
+                  />
+                ) : null}
                 <DataCard />
                 <BackupCard />
               </SettingsGroup>
@@ -115,7 +111,8 @@ export default function SettingsScreen() {
                   icon="tag-multiple-outline"
                   title="Price sources"
                   value={priceSourcesLabel(settings.price_sources)}
-                  subtitle={mode === "embedded" ? "Set in the on-phone settings" : "Configured on the server, not in the app"}
+                  subtitle={mode === "embedded" ? "Set in the on-phone settings" : "Add and change them under Server settings"}
+                  onPress={mode === "embedded" ? undefined : () => router.push("/server-config")}
                 />
               ) : null}
             </SettingsGroup>,

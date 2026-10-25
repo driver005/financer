@@ -36,7 +36,7 @@ export function PaydayPicker({ value, onChange }: { value: number; onChange: (da
                 borderRadius: 12,
                 alignItems: "center",
                 justifyContent: "center",
-                borderWidth: 2,
+                borderWidth: 1,
                 borderColor: on ? p.accent : p.border,
                 backgroundColor: on ? p.accent : p.surface,
               }}

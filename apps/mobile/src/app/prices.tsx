@@ -1,3 +1,4 @@
+import { SectionSwitch } from "@/components/SectionSwitch";
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { FlatList, RefreshControl, Text as RNText, View } from "react-native";
@@ -14,7 +15,7 @@ import { chainLabel, useScreenData } from "@/hooks";
 import { usePalette } from "@/theme";
 
 export default function Prices() {
-  const { api, loaded } = useApi();
+  const { api, loaded, mode } = useApi();
   const c = useColors();
   const { data, error, busy, reload } = useScreenData((a) => a.prices());
   const [query, setQuery] = useState("");
@@ -67,7 +68,7 @@ export default function Prices() {
   return (
     <Screen>
       <Title>Prices</Title>
-      {api ? <Subtitle>Which chain is cheapest, item by item.</Subtitle> : null}
+      <SectionSwitch />
       {!api ? (
         <NeedsSetup />
       ) : (
@@ -115,7 +116,11 @@ export default function Prices() {
               <EmptyState
                 mood="worried"
                 title="No prices yet"
-                body="Set up price sources on the server (see docs/PRICES.md), then fetch the first prices."
+                body={
+                  mode === "embedded"
+                    ? "Choose your price sources in Settings > On-phone settings (see docs/PRICES.md), then fetch the first prices."
+                    : "Set up price sources on the server (see docs/PRICES.md), then fetch the first prices."
+                }
                 actionLabel={refreshing ? "Refreshing…" : "Refresh prices"}
                 actionIcon="refresh"
                 onAction={refresh}
@@ -151,13 +156,13 @@ function Hero({ summary }: { summary: ReturnType<typeof summarizePrices> }) {
     <View
       accessible
       accessibilityLabel={`${leader ? `${headline} is cheapest, ${sub}` : `${headline}, ${sub}`}. Choosing the cheapest chain per item saves up to ${formatCents(summary.savingCents)}.`}
-      style={{ backgroundColor: p.accent, borderRadius: 24, borderBottomWidth: 6, borderBottomColor: p.accentEdge, padding: space.lg, marginBottom: space.lg }}
+      style={{ backgroundColor: p.accent, borderRadius: 16, padding: space.lg, marginBottom: space.lg }}
     >
-      <RNText style={{ color: p.onAccent, fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" }}>Best chain right now</RNText>
+      <RNText style={{ color: p.onAccent, fontSize: 12, fontWeight: "800" }}>Best chain right now</RNText>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.sm }}>
         <View style={{ flexDirection: "row" }}>
           {summary.top.slice(0, 3).map((chain, i) => (
-            <View key={chain} style={{ marginLeft: i === 0 ? 0 : -12, borderRadius: 28, borderWidth: 3, borderColor: p.accent }}>
+            <View key={chain} style={{ marginLeft: i === 0 ? 0 : -12, borderRadius: 28, borderWidth: 1, borderColor: p.accent }}>
               <Avatar tint={chainTint(chain)} label={initials(chainLabel(chain))} size={48} />
             </View>
           ))}

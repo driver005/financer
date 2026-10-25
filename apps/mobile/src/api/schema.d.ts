@@ -152,6 +152,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/bank/connections/{name}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plaid: forget the connection. Tells Plaid to drop it and deletes the stored access token, so
+         *     the next sync starts with signing in again. The imported transactions stay.
+         */
+        post: operations["disconnect_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/bank/connections/{name}/sync": {
         parameters: {
             query?: never;
@@ -843,6 +863,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/server-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every setting of the server with its value (secrets only as "set"), the place it comes from
+         *     and what the app may change.
+         */
+        get: operations["get_config"];
+        /**
+         * Save new values (`set`; `null` clears one) and drop values set earlier from the app (`reset`).
+         *     Everything is checked the way the server checks its configuration at start; one mistake and
+         *     nothing is saved. The server restarts to apply the change; if the changed settings do not
+         *     start, the previous ones come back by themselves.
+         */
+        put: operations["put_config"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/settings": {
         parameters: {
             query?: never;
@@ -1151,9 +1197,11 @@ export interface components {
         };
         /** @description A configured connection. The login is masked; the PIN is never part of it. */
         BankConnectionDto: {
+            /** @description Plaid: the accounts that were linked (put their ids in `account_ids` to read only some). */
+            accounts: components["schemas"]["LinkedAccountDto"][];
             /**
              * Format: int64
-             * @description Unix seconds after which a sync waiting for approval is given up.
+             * @description Unix seconds after which a sync waiting for approval, or Plaid's sign-in page, is given up.
              */
             approval_expires_at?: number | null;
             /** Format: int64 */
@@ -1162,7 +1210,7 @@ export interface components {
             balance_date?: string | null;
             bank_code: string;
             iban_masked: string;
-            /** @description Always `fints` today. */
+            /** @description `fints` or `plaid`. */
             kind: string;
             last_result?: components["schemas"]["SyncOutcomeDto"] | null;
             /**
@@ -1170,6 +1218,13 @@ export interface components {
              * @description Unix seconds of the last successful sync.
              */
             last_sync_at?: number | null;
+            /** @description Plaid, in `needs_link`: the page to open in the browser to sign in to your bank. */
+            link_url?: string | null;
+            /**
+             * @description Plaid: false until you have signed in to your bank once (press Sync now to start that);
+             *     always true for FinTS.
+             */
+            linked: boolean;
             login_masked: string;
             /** @description The bank's approval text in `needs_approval`, the reason in `error`. */
             message?: string | null;
@@ -1318,10 +1373,55 @@ export interface components {
             total_cents: number;
         };
         /**
+         * @description What to change: `set` writes values (`null` clears one), `reset` removes the app's value so the
+         *     file's, or the default, applies again.
+         */
+        Change: {
+            reset?: string[];
+            set?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description A change was refused; nothing was saved. */
+        ConfigProblems: {
+            /** @description The problems as one text. */
+            error: string;
+            /** @description One entry per problem, naming the key. */
+            problems: string[];
+        };
+        /** @description A change was saved. */
+        ConfigSaved: {
+            /** @description The keys whose value is different now. */
+            changed: string[];
+            /** @description The server is restarting to apply the change (a few seconds). False when nothing changed. */
+            restarting: boolean;
+            /** @description Things that are legal but probably not what you want. */
+            warnings: string[];
+        };
+        /** @description The whole settings screen. */
+        ConfigView: {
+            /**
+             * @description A change is saved but the server has not yet started with it. The app waits for this to
+             *     turn false (or `state` to turn `rolled_back`) after it saved something.
+             */
+            applying: boolean;
+            groups: components["schemas"]["GroupView"][];
+            message?: string | null;
+            /** @description Problems with the configuration as it is now. */
+            problems: string[];
+            /** @description Where the app's edits are kept. */
+            settings_file: string;
+            /** @description `ok`, or `rolled_back` when the last change did not start and was undone. */
+            state: string;
+            warnings: string[];
+            /** @description The server may write that file; without it nothing can be saved. */
+            writable: boolean;
+        };
+        /**
          * @description Where a connection is in a sync.
          * @enum {string}
          */
-        ConnectionState: "idle" | "syncing" | "needs_approval" | "error";
+        ConnectionState: "idle" | "syncing" | "needs_approval" | "needs_link" | "error";
         DisposableDto: {
             /** Format: int64 */
             disposable_cents: number;
@@ -1440,6 +1540,28 @@ export interface components {
             counterparty_iban?: string | null;
             purpose: string;
         };
+        /** @description One column of a table key. */
+        FieldView: {
+            default?: string | null;
+            help: string;
+            key: string;
+            /** @description `text`, `path`, `secret`, `number`, `toggle`, `choice` or `list`. */
+            kind: string;
+            label: string;
+            /** Format: int64 */
+            max?: number | null;
+            /** Format: int64 */
+            min?: number | null;
+            options: string[];
+            placeholder?: string | null;
+            required: boolean;
+            /**
+             * @description Shown only while this other field of the row has `when_value` (one value, or several
+             *     separated by commas).
+             */
+            when_field?: string | null;
+            when_value?: string | null;
+        };
         /** @description The end-of-period projection. Amounts are integer cents. */
         ForecastDto: {
             /**
@@ -1523,6 +1645,13 @@ export interface components {
             /** Format: date */
             today: string;
         };
+        GroupView: {
+            hint: string;
+            icon: string;
+            id: string;
+            keys: components["schemas"]["KeyView"][];
+            title: string;
+        };
         IdeaDto: {
             ingredients: components["schemas"]["IdeaIngredientDto"][];
             /** Format: int32 */
@@ -1558,6 +1687,37 @@ export interface components {
             receipts_known: number;
             transactions_added: number;
             transactions_known: number;
+        };
+        /** @description One key with what it is now. */
+        KeyView: {
+            default?: string | null;
+            /** @description The environment variable that overrides this key. */
+            env?: string | null;
+            fields: components["schemas"]["FieldView"][];
+            help: string;
+            /** @description Has a value (not blank). */
+            is_set: boolean;
+            /** @description `text`, `path`, `secret`, `number`, `toggle`, `choice`, `list` or `table`. */
+            kind: string;
+            label: string;
+            /** @description The environment variable is set, so the app cannot change it. */
+            locked: boolean;
+            /** Format: int64 */
+            max?: number | null;
+            /** Format: int64 */
+            min?: number | null;
+            options: string[];
+            /** @description Dotted path, as in the file. */
+            path: string;
+            placeholder?: string | null;
+            /** @description A secret that is safe to show in part (a database address without its password). */
+            preview?: string | null;
+            /** @description Where the value in force comes from: `default`, `file`, `app` or `env`. */
+            source: string;
+            /** @description The value in force; never present for a secret. */
+            value?: unknown;
+            /** @description Said before saving. */
+            warning?: string | null;
         };
         LidlFinishRequest: {
             /** @description The address the sign-in ended on, `com.lidlplus.app://callback?code=...`. */
@@ -1599,6 +1759,16 @@ export interface components {
             receipts: number;
             /** @description `disabled`, `never`, `connected` or `needs_signin`. */
             state: string;
+        };
+        /** @description An account Plaid reported for a linked connection. */
+        LinkedAccountDto: {
+            /** @description Put this in `account_ids` of the connection to read only some accounts. */
+            id: string;
+            /** @description For example `depository` or `credit`. */
+            kind: string;
+            /** @description The last digits of the account number, when Plaid has them. */
+            mask?: string | null;
+            name: string;
         };
         MealBudgetDto: {
             /**
@@ -2739,6 +2909,46 @@ export interface operations {
             };
             /** @description Logging in right now */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    disconnect_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description connection name */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankConnectionDto"];
+                };
+            };
+            /** @description Not a Plaid connection */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such connection */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4112,6 +4322,93 @@ export interface operations {
             };
             /** @description No such rule */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_config: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigView"];
+                };
+            };
+            /** @description This backend has no server configuration (the on-phone one) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_config: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Change"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigSaved"];
+                };
+            };
+            /** @description This backend has no server configuration */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description A key is decided by an environment variable, or a restart is under way */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigProblems"];
+                };
+            };
+            /** @description The change was refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigProblems"];
+                };
+            };
+            /** @description The settings file cannot be written */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -9,11 +9,30 @@ mkdir -p "$out"
 
 routes="today spending budget prices recipes settings stores mealplan scan receipts receipt-sources basket rules alerts subscriptions sync trophies onboarding"
 
+# A slow emulator makes the system launcher show "isn't responding" over the app, which dims the
+# screenshots and hides the layout they are meant to show. Ask Android not to show such dialogs, and
+# press "Wait" on any that still appear (see dismiss_dialogs).
+adb shell settings put global hide_error_dialogs 1 >/dev/null 2>&1 || true
+
 # Start fresh so the app reads the mode and the data the smoke run saved.
 adb shell am force-stop "$pkg"
 sleep 2
 
+dismiss_dialogs() {
+  local i xml b
+  for i in 1 2 3; do
+    xml=$(adb exec-out uiautomator dump /dev/tty 2>/dev/null || true)
+    echo "$xml" | grep -q "isn't responding" || return 0
+    b=$(echo "$xml" | grep -o 'text="Wait"[^>]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' | head -1 | grep -o '\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]' || true)
+    [ -n "$b" ] || return 0
+    adb shell input tap $(echo "$b" | tr -d '[]' | tr ',' ' ' | awk '{print int(($1+$3)/2), int(($2+$4)/2)}')
+    echo "dismissed an \"isn't responding\" dialog"
+    sleep 2
+  done
+}
+
 shot() { # shot <name>
+  dismiss_dialogs
   adb exec-out screencap -p > "$out/$1.png"
   if command -v convert >/dev/null 2>&1; then convert "$out/$1.png" -resize 600x "$out/$1.png"; fi
 }
