@@ -1649,7 +1649,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.1.8+spec-1.1.0",
  "utoipa",
 ]
 
@@ -1769,7 +1769,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-rustls",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.1.8+spec-1.1.0",
  "tracing",
  "url",
  "webpki-roots",
@@ -5305,6 +5305,21 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "winnow 0.7.15",
+]
+
+[[package]]
+name = "toml"
+version = "1.1.8+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20489e00e4d8741d6be680764cc12e270655e375a20d1011e844a9c3379e678d"
+dependencies = [
+ "indexmap 2.14.2",
+ "serde_core",
+ "serde_spanned",
+ "toml_datetime 1.1.2+spec-1.1.0",
+ "toml_parser",
+ "toml_writer",
+ "winnow 1.0.4",
 ]
 
 [[package]]
