@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { ShopApiError } from "../../api/client";
 import type { AttrValue, ProductDetail } from "../../api/types";
 import { ago, dealLine, formatPrice, planTerms, verdictText } from "../../logic/format";
 import { Banner, Body, Button, Card, Chip, Empty, Field, H2, Row, Screen, Title } from "../kit";
+import { openLink } from "../links";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
 import { space, usePalette, type } from "../theme";
@@ -93,7 +94,7 @@ export function ProductScreen({ id }: { id: string }) {
       <H2>{monthly ? "Plans and prices" : "Where to buy"}</H2>
       {offers.length === 0 ? <Empty title="No price yet" message="Build the index for a search that finds this product." /> : null}
       {offers.map((o) => (
-        <Card key={`${o.shop}${o.url}${o.condition}`} onPress={() => void Linking.openURL(o.url)}>
+        <Card key={`${o.shop}${o.url}${o.condition}`} onPress={() => void openLink(o.url)}>
           <Row between>
             <Body>{o.shop}</Body>
             <Text style={[type.heading, { color: p.accent }]}>

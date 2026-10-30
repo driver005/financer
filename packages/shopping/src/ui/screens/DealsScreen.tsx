@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Text } from "react-native";
+import { Text } from "react-native";
 
 import { ShopApiError } from "../../api/client";
 import type { DealItem, Notification } from "../../api/types";
 import { dealLine, formatPrice, verdictText } from "../../logic/format";
 import { Banner, Body, Button, Card, Chip, Empty, H2, Row, Screen, Title } from "../kit";
+import { openLink } from "../links";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
 import { usePalette, type } from "../theme";
@@ -57,7 +58,7 @@ export function DealsScreen() {
               {!m.read ? <Chip label="New" tone="good" /> : null}
             </Row>
             <Body small muted>{`${m.event.watch_name} · ${verdictText(m.event.verdict)}`}</Body>
-            {m.event.url ? <Button label="Open in shop" kind="ghost" onPress={() => void Linking.openURL(m.event.url)} /> : null}
+            {m.event.url ? <Button label="Open in shop" kind="ghost" onPress={() => void openLink(m.event.url)} /> : null}
           </Card>
         ))
       )}

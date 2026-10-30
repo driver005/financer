@@ -230,6 +230,18 @@ mod tests {
     }
 
     #[test]
+    fn the_example_sources_file_of_the_deploy_folder_is_valid() {
+        let sources = parse_sources(include_str!(
+            "../../../deploy/config/shop-sources.example.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            sources.iter().map(|s| s.kind).collect::<Vec<_>>(),
+            [Kind::Search, Kind::Feed, Kind::Sitemap]
+        );
+    }
+
+    #[test]
     fn mistakes_are_all_reported() {
         let err = parse_sources(
             r#"[{"name": "", "kind": "feed"},

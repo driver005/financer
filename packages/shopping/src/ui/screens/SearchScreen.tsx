@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Linking, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import type { Profile, SearchItem, SearchResponse } from "../../api/types";
 import { ShopApiError } from "../../api/client";
 import { dealLine, formatPrice, savingText, verdictText } from "../../logic/format";
 import { chipsFor, indexRequestFor, nextStep, suggestionText } from "../../logic/searchPlan";
+import { openLink } from "../links";
 import { useNav } from "../nav";
 import { Banner, Body, Button, Card, Chip, Empty, Field, H2, Meter, Problems, Row, Screen, Title } from "../kit";
 import { useShop } from "../runtime";
@@ -277,7 +278,7 @@ export function ResultCard({ item, rank, monthly, horizon, selected, onSelect, o
       {item.deal && item.deal.verdict !== "none" ? <Text style={[type.small, { color: p.muted }]}>{dealLine(item.deal)}</Text> : null}
       {item.saving ? <Text style={[type.small, { color: item.saving.per_month_cents > 0 ? p.good : p.muted }]}>{savingText(item.saving.per_month_cents, item.saving.over_horizon_cents, horizon, item.saving.current)}</Text> : null}
       {offer?.url ? (
-        <Button label="Open in shop" kind="ghost" onPress={() => void Linking.openURL(offer.url)} />
+        <Button label="Open in shop" kind="ghost" onPress={() => void openLink(offer.url)} />
       ) : null}
     </Card>
   );

@@ -36,7 +36,12 @@ NPM_STAMP := $(MOBILE)/node_modules/.package-lock.json
 API_HOST := $(firstword $(subst :, ,$(BIND)))
 API_PORT := $(lastword $(subst :, ,$(BIND)))
 
-.PHONY: help doctor setup token info check-port stop dev dev-postgres server server-watch web app android ios \
+SHOP_APP  := apps/shopping
+SHOP_MOD  := packages/shopping
+SHOP_BIND ?= 127.0.0.1:8090
+SHOP_STAMP := $(SHOP_APP)/node_modules/.package-lock.json
+
+.PHONY: shop-setup shop-server shop-app shop-web shop-test help doctor setup token info check-port stop dev dev-postgres server server-watch web app android ios \
         web-build serve db-up db-down db-reset dev-reset gen-api test lint fmt check clean
 
 help: ## Show this list
@@ -95,6 +100,34 @@ $(DEV_DIR)/financer.toml:
 	@cp financer.example.toml $@
 	@chmod 600 $@
 	@echo "created $@ from financer.example.toml (everything in it is commented out)"
+
+# ---- the shopping assistant (docs/SHOP.md) -----------------------------------------------------------
+
+shop-setup: $(SHOP_STAMP) ## Install the shopping app's and module's npm packages
+
+$(SHOP_STAMP): $(SHOP_APP)/package-lock.json $(SHOP_MOD)/package-lock.json
+	cd $(SHOP_MOD) && npm ci
+	cd $(SHOP_APP) && npm ci
+
+shop-server: $(DEV_DIR)/token ## Run the standalone shopping server (sources: .dev/shop-sources.json, see deploy/config/shop-sources.example.json)
+	@set -a; [ -f $(DEV_DIR)/env ] && . ./$(DEV_DIR)/env; set +a; \
+	export FINANCER_SHOP_API_TOKEN="$$(cat $(DEV_DIR)/token)" FINANCER_SHOP_BIND="$(SHOP_BIND)" \
+	  FINANCER_SHOP_DATABASE_URL="$${FINANCER_SHOP_DATABASE_URL:-sqlite://$(CURDIR)/$(DEV_DIR)/shop.db?mode=rwc}" RUST_LOG="$(RUST_LOG)"; \
+	if [ -f $(DEV_DIR)/shop-sources.json ]; then export FINANCER_SHOP_SOURCES="$(CURDIR)/$(DEV_DIR)/shop-sources.json"; fi; \
+	echo "shopping server on http://$(SHOP_BIND) (token in $(DEV_DIR)/token)"; \
+	cargo run -p financer-shop-server
+
+shop-app: $(SHOP_STAMP) ## Expo for the shopping app on a phone or emulator
+	cd $(SHOP_APP) && npx expo start
+
+shop-web: $(SHOP_STAMP) ## The shopping app in the browser (needs: make shop-server)
+	cd $(SHOP_APP) && npx expo start --web
+
+shop-test: $(SHOP_STAMP) ## Everything of the shopping assistant: Rust crates, module tests, type check
+	cargo test -p financer-shop-core -p financer-shop-sources -p financer-shop-store -p financer-shop-api -p financer-shop-server
+	cargo test -p financer-server --features shop
+	cd $(SHOP_MOD) && npm test
+	cd $(SHOP_APP) && npm run typecheck
 
 dev: check-port $(DEV_DIR)/token $(DEV_DIR)/financer.toml $(NPM_STAMP) ## Server (restarts on changes) + web app together; Ctrl-C stops both
 	@$(MAKE) --no-print-directory info

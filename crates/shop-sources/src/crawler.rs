@@ -26,6 +26,9 @@ const HOUR: i64 = 3600;
 /// Most products taken from one feed per on-demand run.
 const FEED_LIMIT: usize = 500;
 const MAX_BACKOFF_SECS: i64 = 7 * 24 * HOUR;
+/// Links taken from one sitemap or one page, so a huge or hostile one cannot flood the frontier.
+const MAX_SITEMAP_LINKS: usize = 5_000;
+const MAX_PAGE_LINKS: usize = 200;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceReport {
@@ -209,6 +212,8 @@ impl Crawler {
                 let links = html::sitemap_locs(&body)
                     .into_iter()
                     .filter(|l| source.follow.iter().any(|f| l.contains(f.as_str())))
+                    .filter_map(|l| crate::extract::web_url(&l))
+                    .take(MAX_SITEMAP_LINKS)
                     .collect();
                 Ok(Visit {
                     found: Vec::new(),
@@ -228,6 +233,7 @@ impl Crawler {
                         .filter(|l| Self::same_site(source, l))
                         .map(|l| l.to_string())
                         .filter(|l| source.follow.iter().any(|f| l.contains(f.as_str())))
+                        .take(MAX_PAGE_LINKS)
                         .collect(),
                     _ => Vec::new(),
                 };

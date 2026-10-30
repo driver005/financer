@@ -3,10 +3,11 @@ import { describe, it } from "node:test";
 
 import type { CategorySchema, CriterionDef, JobView, Notification, ProgressState, SearchResponse } from "../src/api/types";
 import { planDealNotices } from "../src/logic/dealNotifications";
-import { ago, dealLine, formatCents, planTerms, savingText } from "../src/logic/format";
+import { ago, dealLine, formatCents, planTerms, safeUrl, savingText } from "../src/logic/format";
 import { followJob, progressModel, textBar, worthShowing, type ProgressModel, type ProgressSurface } from "../src/logic/progress";
 import { addAlias, addAttribute, addCriterion, formulaProblem, newCategory, removeCriterion, slugKey, uniqueKey } from "../src/logic/schemaEdit";
 import { chipsFor, indexRequestFor, nextStep } from "../src/logic/searchPlan";
+import { SOURCES_EXAMPLE, checkSources } from "../src/logic/sources";
 import { currentLevel, groups, levelOf, presetsFor, setLevel, weightFor } from "../src/logic/weights";
 
 const camera: CriterionDef = { key: "camera", label: "Camera", kind: "formula", expr: "x", weight: 2, group: "camera" };
@@ -33,6 +34,14 @@ describe("format", () => {
     assert.equal(dealLine({ ...base, all_time_low: true }), "22 % below its usual price, lowest we have seen");
     assert.equal(dealLine({ ...base, verdict: "none", samples: 1 }), "Not enough price history yet");
     assert.equal(dealLine({ ...base, verdict: "none" }), "Priced as usual");
+  });
+
+  it("opens only web links", () => {
+    assert.equal(safeUrl("https://shop.example/p?a=1"), "https://shop.example/p?a=1");
+    assert.equal(safeUrl("javascript:alert(1)"), null);
+    assert.equal(safeUrl("intent://x#Intent;end"), null);
+    assert.equal(safeUrl("not a url"), null);
+    assert.equal(safeUrl(null), null);
   });
 
   it("describes a contract", () => {
@@ -242,5 +251,26 @@ describe("search planning", () => {
     assert.deepEqual(indexRequestFor({ query: " pixel 9 " }, response({})), { query: "pixel 9", category: "smartphone" });
     assert.deepEqual(indexRequestFor({ query: "x", category: "laptop" }), { query: "x", category: "laptop" });
     assert.deepEqual(chipsFor(response({})), ["under 500 €", "ram gb ≥ 8"]);
+  });
+});
+
+describe("sources editor", () => {
+  it("accepts the bundled example and nothing at all", () => {
+    assert.deepEqual(checkSources(SOURCES_EXAMPLE), { ok: true, count: 2 });
+    assert.deepEqual(checkSources("  "), { ok: true, count: 0 });
+  });
+
+  it("explains every mistake in plain words", () => {
+    const r = checkSources(JSON.stringify([{ kind: "search", search_url: "https://x.test/" }, { name: "f", kind: "feed" }, { name: "p" }, { name: "s", kind: "sitemap" }, { name: "z", kind: "scrape" }]));
+    assert.equal(r.ok, false);
+    const problems = r.ok ? [] : r.problems;
+    assert.ok(problems.some((m) => /needs a name/.test(m)));
+    assert.ok(problems.some((m) => /\{query\}/.test(m)));
+    assert.ok(problems.some((m) => /feed needs feed_url/.test(m)));
+    assert.ok(problems.some((m) => /pages need a list of urls/.test(m)));
+    assert.ok(problems.some((m) => /sitemap needs/.test(m)));
+    assert.ok(problems.some((m) => /kind must be/.test(m)));
+    assert.deepEqual(checkSources("{nope"), { ok: false, problems: [`Not valid JSON: ${(() => { try { JSON.parse("{nope"); return ""; } catch (e) { return (e as Error).message; } })()}`] });
+    assert.deepEqual(checkSources("{}"), { ok: false, problems: ["The sources must be a list: [ { ... }, { ... } ]"] });
   });
 });

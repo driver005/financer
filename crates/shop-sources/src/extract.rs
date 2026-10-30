@@ -29,6 +29,13 @@ pub struct Extracted {
     pub specs: Vec<(String, String)>,
 }
 
+/// Only web addresses are kept as links: a page cannot make the app open `javascript:` or an
+/// app-specific scheme by calling it its URL.
+pub fn web_url(url: &str) -> Option<String> {
+    let u = url::Url::parse(url.trim()).ok()?;
+    matches!(u.scheme(), "http" | "https").then(|| u.to_string())
+}
+
 /// Dollars-and-cents text to cents without going through float arithmetic on the result.
 pub fn price_to_cents(text: &str) -> Option<i64> {
     let n = leading_number(text)?;
@@ -172,12 +179,11 @@ fn collect(node: &Value, url: &str, out: &mut Vec<Extracted>) {
 
 fn product(p: &Value, page_url: &str) -> Option<Extracted> {
     let title = p.get("name").and_then(text)?;
-    let own_url = p.get("url").and_then(text).and_then(|u| {
-        url::Url::parse(page_url)
-            .ok()
-            .and_then(|b| b.join(&u).ok())
-            .map(|u| u.to_string())
-    });
+    let own_url = p
+        .get("url")
+        .and_then(text)
+        .and_then(|u| url::Url::parse(page_url).ok().and_then(|b| b.join(&u).ok()))
+        .and_then(|u| web_url(u.as_str()));
     let mut e = Extracted {
         url: own_url.unwrap_or_else(|| page_url.to_string()),
         title,
@@ -424,6 +430,20 @@ mod tests {
         .is_empty());
         let no_price = r#"<script type="application/ld+json">{"@type": "Product", "name": "x", "offers": {"@type": "Offer"}}</script>"#;
         assert_eq!(json_ld_products(no_price, "u")[0].price_cents, None);
+    }
+
+    #[test]
+    fn a_product_url_that_is_not_a_web_address_falls_back_to_the_page() {
+        let page = r#"<script type="application/ld+json">{"@type": "Product", "name": "x", "url": "javascript:alert(1)", "offers": {"@type": "Offer", "price": "1"}}</script>"#;
+        assert_eq!(
+            json_ld_products(page, "https://s.test/p")[0].url,
+            "https://s.test/p"
+        );
+        assert_eq!(web_url("intent://x#Intent;end"), None);
+        assert_eq!(
+            web_url("https://a.test/x").as_deref(),
+            Some("https://a.test/x")
+        );
     }
 
     #[test]

@@ -22,6 +22,15 @@ and iOS, and an Android APK that contains it builds on a GitHub runner and answe
 emulator; the iOS app builds for the simulator. What is left is a physical Android phone, and running
 anything on iOS (which you will have to try and debug).
 
+## The shopping backend (`ShopBackend`)
+
+The same library also exports `ShopBackend`, the shopping assistant's backend (feature `shop`, on by
+default so that one native library serves both apps; see [SHOP.md](SHOP.md)). It has its own SQLite file,
+takes its shop sources as JSON from the app, and serves `/v1/shop/...` in-process without a token. It
+never reads the web by itself: the app starts an index run when the person presses Search and follows its
+progress, which is what the progress notification shows. The Kotlin bindings generate with it (checked
+locally); it has not been built into an APK or run on a phone.
+
 ## Limits you cannot code around
 
 - **iOS suspends apps.** The backend runs only while the app is open, plus whatever short

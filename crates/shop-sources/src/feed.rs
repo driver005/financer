@@ -7,7 +7,7 @@ use financer_shop_core::{Condition, Recurring};
 use serde_json::Value;
 
 use crate::config::{FeedFormat, FeedMapping};
-use crate::extract::{price_to_cents, Extracted};
+use crate::extract::{price_to_cents, web_url, Extracted};
 
 fn rows(body: &str, format: FeedFormat) -> Result<Vec<BTreeMap<String, String>>, String> {
     match format {
@@ -155,7 +155,7 @@ pub fn parse_feed(
             .collect();
         out.push(Extracted {
             url: get(&m.url)
-                .cloned()
+                .and_then(|u| web_url(u))
                 .unwrap_or_else(|| fallback_url.to_string()),
             title: title.clone(),
             brand: get(&m.brand).cloned(),
@@ -257,6 +257,20 @@ mod tests {
             [("data".to_string(), "unbegrenzt".to_string())]
         );
         assert_eq!(items[0].url, "https://t.test/feed");
+    }
+
+    #[test]
+    fn a_feed_link_that_is_not_a_web_address_is_replaced_by_the_feed_address() {
+        let csv = "name,price,link\nA,1.00,javascript:alert(1)\nB,2.00,https://x.test/b\n";
+        let m = FeedMapping {
+            title: "name".into(),
+            price: "price".into(),
+            url: Some("link".into()),
+            ..FeedMapping::default()
+        };
+        let items = parse_feed(csv, FeedFormat::Csv, &m, "https://x.test/feed").unwrap();
+        assert_eq!(items[0].url, "https://x.test/feed");
+        assert_eq!(items[1].url, "https://x.test/b");
     }
 
     #[test]

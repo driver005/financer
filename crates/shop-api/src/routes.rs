@@ -291,10 +291,14 @@ async fn base_profile(
     }
 }
 
+/// Longest search text taken: more is never a search, and tokenising it costs time.
+const MAX_QUERY_CHARS: usize = 300;
+
 pub async fn search(
     State(s): State<ShopState>,
-    Json(req): Json<SearchRequest>,
+    Json(mut req): Json<SearchRequest>,
 ) -> Res<SearchResponse> {
+    req.query = req.query.chars().take(MAX_QUERY_CHARS).collect();
     let registry = s.registry_snapshot();
     let parsed = ParsedQuery::parse(&req.query, &registry, req.category.as_deref());
     let snap = s.snapshot().await?;
@@ -650,6 +654,11 @@ pub async fn add_product(
         if o.price_cents < 0 || o.recurring.as_ref().is_some_and(|r| r.monthly_cents < 0) {
             return Err(ShopError::BadRequest("prices cannot be negative".into()));
         }
+        if !o.url.is_empty() && financer_shop_sources::extract::web_url(&o.url).is_none() {
+            return Err(ShopError::BadRequest(
+                "an offer link must be a web address (http or https)".into(),
+            ));
+        }
         if o.seen_at == 0 {
             o.seen_at = now;
         }
@@ -768,8 +777,9 @@ pub async fn put_my_plan(
 
 pub async fn start_index(
     State(s): State<ShopState>,
-    Json(req): Json<IndexRequest>,
+    Json(mut req): Json<IndexRequest>,
 ) -> Result<(StatusCode, Json<JobView>), ShopError> {
+    req.query = req.query.chars().take(MAX_QUERY_CHARS).collect();
     if req.query.trim().is_empty() {
         return Err(ShopError::BadRequest("what should be searched for?".into()));
     }

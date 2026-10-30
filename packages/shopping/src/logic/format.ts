@@ -89,3 +89,14 @@ export function planTerms(o: Offer): string {
   if (r.cashback_cents) parts.push(`${formatCents(r.cashback_cents)} cash back`);
   return parts.join(", ");
 }
+
+/** A link from a shop page is opened only when it is a web address. */
+export function safeUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}

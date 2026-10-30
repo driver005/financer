@@ -4,6 +4,10 @@ Personal finance and grocery planner for one person with a Sparkasse account. It
 spending, keeps a budget, shows what the budget can buy, compares Lidl / Aldi / Kaufland / Rewe
 prices, and suggests recipes from what you normally buy.
 
+A second app lives in the same repository: a **shopping assistant** that reads prices and specs
+from the web and ranks phones, laptops, plans and anything you define by criteria you can extend
+([docs/SHOP.md](docs/SHOP.md)). Each app installs on its own, or both in one.
+
 **Stack:** Expo (TypeScript, HeroUI Native) app + Rust backend (Axum) on PostgreSQL or
 SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](docs/EMBEDDED.md)).
 
@@ -31,6 +35,7 @@ SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](d
 | Weekly meal plan with shopping list | plan, merged ingredients, pantry, per-chain totals and best split, budget check; tested on the in-memory store, **Postgres not run**, not part of the JSON export ([docs/MEALPLAN.md](docs/MEALPLAN.md)) |
 | Forecast and trophies | end-of-period forecast and derived streak freezes, badges and weekly bests; unit-tested, screens not run on a device ([docs/FORECAST_AND_TROPHIES.md](docs/FORECAST_AND_TROPHIES.md)) |
 | Notifications, version stamping, dependency and nightly checks | notification planning logic tested, **scheduling and permissions never run**; release builds carry the tag's version; Android release signing is **untested** |
+| Shopping assistant (second app: search engine and comparison for products and subscriptions) | Rust crates for ranking, extensible categories and criteria, formulas, deal detection, plan costs, search, page/feed/sitemap reading, an on-demand and a continuous crawler, deal notifications (ntfy, Expo push, webhook), a standalone server and a bundled build; the app module with a progress notification for index runs. Tested with fake shops and, for the crawler, a local web server over real HTTP; the screens were driven in a real browser against the real server. **No real shop was read, the notifiers never sent anything, the on-phone backend and the screens were never run on a phone, and the progress notification (Notifee on Android, a text bar elsewhere) never ran on a device** ([docs/SHOP.md](docs/SHOP.md)) |
 | Release builds (GitHub workflow: every release has two variants, **compact** (Android APK / iOS Simulator app with the backend inside) and **server + client** (desktop bundles, Docker image, web zip, client APK / iOS Simulator app; iPhone builds via EAS)) | [docs/RELEASE.md](docs/RELEASE.md); the web and desktop bundles built on GitHub's runners for Linux, macOS (both) and Windows, the Linux bundle was run locally, and an **installable Android APK builds on a runner without an Expo account** (never installed on a device); the Docker, release-attach and phone jobs have **not run** (the phone jobs need your Expo account) |
 | Deployment (Docker, Caddy HTTPS, Postgres profile) | the image **was built and run** (161 MB, non-root user, health and auth work, data survives a restart, runs against a PostgreSQL container). The real `deploy/docker-compose.yml` **was brought up with Caddy**: HTTPS on a local certificate, HTTP redirects to HTTPS, no token gives 401, the API port is not reachable from outside Caddy, and imported data survives `down`/`up`. Caveats: in this sandbox the server image was assembled from a host-built binary on Ubuntu instead of the Dockerfile's own Rust build stage (the sandbox proxy blocks that), and Caddy used `localhost` with its own CA, so **a real domain with Let's Encrypt was not tried**. Trying it exposed that the SQLite setup failed without a `POSTGRES_PASSWORD`; fixed |
 | Server config file (`financer.toml`) | optional TOML next to the environment variables (environment wins); `${NAME}` references for secrets, unknown keys are errors, `--check-config` and `--print-config` (secrets hidden). Unit-tested (precedence, interpolation, redaction, defaults equal to the old behavior) and the real binary was started with it; the compose, desktop-script and `make dev` changes were checked by reading/dry-run only, **docker compose was not re-run** ([docs/CONFIG.md](docs/CONFIG.md)) |
@@ -79,6 +84,10 @@ npm start          # Expo; open in Expo Go (the on-phone backend needs a custom 
 In the app: **Settings** → server address and token → **Spending** → import a CSV (or
 **Sync with Sparkasse**).
 
+The shopping assistant: `make shop-server` and `make shop-web` (or `cargo run -p financer-shop-server`
+and `cd apps/shopping && npm start`); the finance server serves it too when built with
+`--features shop` ([docs/SHOP.md](docs/SHOP.md)).
+
 Deploy to a small VPS with HTTPS: `deploy/docker-compose.yml` (about 3–6 EUR a month).
 
 ## Develop
@@ -106,10 +115,13 @@ crates/llm        Claude and OpenAI behind one trait (genai)
 crates/api        Axum router, auth, OpenAPI
 crates/config     financer.toml and environment configuration of the server
 crates/server     hosted binary
-crates/embedded   the same backend as a library for the phone (UniFFI)
-apps/mobile       Expo app (routes in src/app)
+crates/embedded   the same backend as a library for the phone (UniFFI), including the shopping backend
+crates/shop-*     the shopping assistant: core (ranking, schemas), sources (crawler), store, api, server
+apps/mobile       Expo app (routes in src/app); carries the shopping assistant when built with EXPO_PUBLIC_SHOPPING=1
+apps/shopping     the shopping assistant as an app of its own
+packages/shopping the shopping assistant as a module (client, logic, screens), used by both apps
 deploy/           Dockerfile, compose, Caddyfile
-docs/             CONFIG.md, RECEIPT_SOURCES.md, STORES.md, CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
+docs/             SHOP.md, CONFIG.md, RECEIPT_SOURCES.md, STORES.md, CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
 ```
 
 ## Security notes

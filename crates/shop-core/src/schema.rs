@@ -649,6 +649,37 @@ mod tests {
         );
     }
 
+    /// The example of docs/SHOP.md: a new category in a few lines of data.
+    #[test]
+    fn the_documented_example_category_works() {
+        let mut reg = Registry::builtin();
+        let example: CategorySchema = serde_json::from_str(
+            r#"{
+              "id": "gaming_phone", "name": "Gaming phone", "extends": "smartphone",
+              "keywords": ["gaming phone"],
+              "attributes": [
+                { "key": "shoulder_triggers", "label": "Shoulder triggers", "kind": "bool", "aliases": ["Schultertasten"] }
+              ],
+              "criteria": [
+                { "key": "triggers", "label": "Shoulder triggers", "kind": "flag", "attribute": "shoulder_triggers", "weight": 3 },
+                { "key": "battery", "label": "Battery", "kind": "number", "attribute": "battery_mah", "weight": 4,
+                  "scale": { "type": "fixed", "min": 4000, "max": 8000 } },
+                { "key": "grip", "label": "Battery per gram", "kind": "formula", "expr": "battery_mah / weight_g",
+                  "weight": 1, "scale": { "type": "fixed", "min": 20, "max": 40 } }
+              ]
+            }"#,
+        )
+        .unwrap();
+        reg.put(example).unwrap();
+        let s = reg.resolved("gaming_phone").unwrap();
+        assert!(s.criterion("grip").is_some() && s.criterion("camera").is_some());
+        assert_eq!(
+            reg.detect(&crate::text::tokenize("best gaming phone"))
+                .as_deref(),
+            Some("gaming_phone")
+        );
+    }
+
     #[test]
     fn invalid_definitions_are_rejected_and_leave_the_registry_unchanged() {
         let mut reg = Registry::builtin();

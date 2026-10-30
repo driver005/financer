@@ -215,6 +215,9 @@ cd apps/shopping && npm install && npm start            # the shopping app
 cd apps/mobile && EXPO_PUBLIC_SHOPPING=1 npm start      # the finance app with the shop inside
 ```
 
+A Docker image of the finance server with the shop inside: `docker build -f deploy/Dockerfile --build-arg FEATURES=shop .`
+(written, not built here). There is no image of the standalone shop server yet.
+
 The on-phone backend: `crates/embedded` builds `ShopBackend` by default, so
 `apps/mobile/scripts/enable-embedded.sh` (see [EMBEDDED.md](EMBEDDED.md)) makes it available to both
 apps. For `apps/shopping` run the same script (`apps/shopping/scripts/enable-embedded.sh`), which
