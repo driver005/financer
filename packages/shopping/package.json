@@ -1,0 +1,15 @@
+{
+  "name": "@financer/shopping",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The shopping assistant as a module: API client, scoring helpers, progress notifications and screens. Source-only; the apps in apps/ bundle it.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "tsc -p tests/tsconfig.json && node --test \".test-build/tests/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "~7.0.2"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "headphones",
+  "name": "Headphones",
+  "extends": "generic",
+  "keywords": ["headphones", "kopfhörer", "earbuds", "airpods", "in-ear"],
+  "name_words": ["airpods"],
+  "attributes": [
+    {"key": "kind", "label": "Type", "kind": "text", "aliases": ["Bauform", "Typ"]},
+    {"key": "anc", "label": "Noise cancelling", "kind": "bool", "aliases": ["Noise Cancelling", "ANC", "Geräuschunterdrückung"]},
+    {"key": "battery_hours", "label": "Battery life", "unit": "h", "aliases": ["Akkulaufzeit", "Laufzeit", "Playtime"]},
+    {"key": "multipoint", "label": "Multipoint", "kind": "bool", "aliases": ["Multipoint-Verbindung"]},
+    {"key": "review_score", "label": "Sound review score", "aliases": ["Klangbewertung", "Testnote", "Sound score"]},
+    {"key": "weight_g", "label": "Weight", "unit": "g", "aliases": ["Gewicht"]},
+    {"key": "ecosystem", "label": "Ecosystem", "kind": "list"}
+  ],
+  "derive": [
+    {"attribute": "ecosystem", "from": "brand", "contains": "apple", "add": ["apple"]},
+    {"attribute": "ecosystem", "from": "brand", "contains": "samsung", "add": ["samsung"]},
+    {"attribute": "ecosystem", "from": "brand", "contains": "google", "add": ["google"]}
+  ],
+  "criteria": [
+    {"key": "sound", "label": "Sound quality", "kind": "number", "attribute": "review_score", "weight": 3, "scale": {"type": "fixed", "min": 50, "max": 100}},
+    {"key": "anc", "label": "Noise cancelling", "kind": "flag", "attribute": "anc", "weight": 1.5},
+    {"key": "battery", "label": "Battery life", "kind": "number", "attribute": "battery_hours", "weight": 1.5, "scale": {"type": "fixed", "min": 4, "max": 60}},
+    {"key": "multipoint", "label": "Multipoint", "kind": "flag", "attribute": "multipoint", "weight": 0.5},
+    {"key": "weight", "label": "Light weight", "kind": "number", "attribute": "weight_g", "higher_is_better": false, "weight": 0.5, "scale": {"type": "fixed", "min": 4, "max": 350}},
+    {"key": "ecosystem", "label": "Fits my ecosystem", "kind": "match", "attribute": "ecosystem", "preference": "ecosystem", "weight": 1.5}
+  ]
+}

@@ -42,6 +42,9 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The bundled build: the shopping assistant inside the finance server (feature "shop")
+      - run: cargo clippy -p financer-server --features shop --all-targets -- -D warnings
+      - run: cargo test -p financer-server --features shop
       # The two mock bank servers are built from source (several minutes); keep the binaries.
       - name: Cache the FinTS mock banks
         id: fints-mock
@@ -86,3 +89,37 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  # The shopping assistant: its module (logic tests), the standalone app (type check, web bundle)
+  # and the finance app bundled with it (docs/SHOP.md).
+  shopping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/shopping/package-lock.json
+            apps/shopping/package-lock.json
+            apps/mobile/package-lock.json
+      - name: Module tests
+        run: |
+          npm ci --prefix packages/shopping
+          npm test --prefix packages/shopping
+      - name: Standalone app type check and web bundle
+        working-directory: apps/shopping
+        run: |
+          npm ci
+          npm run typecheck
+          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/shop-web"
+      - name: Finance app bundles with the shop inside, and without it
+        working-directory: apps/mobile
+        run: |
+          npm ci
+          EXPO_PUBLIC_SHOPPING=1 CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/mobile-with-shop"
+          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/mobile-without-shop"
+          # without the flag the shop's code must not be in the bundle at all
+          ! grep -rl "Nothing is read from the web" "$RUNNER_TEMP/mobile-without-shop/_expo"
+          grep -rl "Nothing is read from the web" "$RUNNER_TEMP/mobile-with-shop/_expo"

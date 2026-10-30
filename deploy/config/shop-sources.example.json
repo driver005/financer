@@ -1,0 +1,41 @@
+[
+  {
+    "name": "example-shop-search",
+    "shop": "Example Shop",
+    "kind": "search",
+    "category": "smartphone",
+    "search_url": "https://shop.example.com/search?q={query}",
+    "follow": ["/product/"],
+    "max_depth": 1,
+    "max_pages": 30,
+    "queries": ["smartphone", "iphone", "pixel", "galaxy"],
+    "recrawl_hours": 24
+  },
+  {
+    "name": "example-tariff-feed",
+    "shop": "Tariff Portal",
+    "kind": "feed",
+    "category": "mobile_plan",
+    "feed_url": "https://tariffs.example.com/feed.csv",
+    "mapping": {
+      "title": "name",
+      "price": "setup_fee",
+      "url": "link",
+      "monthly": "monthly_price",
+      "min_term_months": "term_months",
+      "promo_months": "promo_months",
+      "promo_monthly": "promo_price",
+      "setup": "setup_fee",
+      "cashback": "bonus"
+    }
+  },
+  {
+    "name": "example-sitemap",
+    "shop": "Big Shop",
+    "kind": "sitemap",
+    "category": "laptop",
+    "sitemap_url": "https://bigshop.example.com/sitemap-products.xml",
+    "follow": ["/laptops/"],
+    "max_depth": 0
+  }
+]

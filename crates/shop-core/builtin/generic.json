@@ -1,0 +1,12 @@
+{
+  "id": "generic",
+  "name": "Anything",
+  "keywords": [],
+  "attributes": [
+    {"key": "released", "label": "Release date", "kind": "text", "aliases": ["Erscheinungsdatum", "Marktstart", "Release", "Veröffentlicht"]}
+  ],
+  "criteria": [
+    {"key": "price", "label": "Price", "description": "Cheapest usable offer including shipping", "kind": "price", "weight": 3, "group": "cost"},
+    {"key": "deal", "label": "Deal", "description": "How far below its usual price it is now", "kind": "deal", "weight": 1, "scale": {"type": "fixed", "min": 0, "max": 40}, "group": "cost"}
+  ]
+}

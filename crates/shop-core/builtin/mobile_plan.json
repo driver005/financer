@@ -1,0 +1,30 @@
+{
+  "id": "mobile_plan",
+  "name": "Mobile plan",
+  "kind": "subscription",
+  "extends": "generic",
+  "remove": ["deal"],
+  "keywords": ["mobile plan", "phone plan", "handytarif", "mobilfunktarif", "mobilfunk", "sim only", "simkarte", "tarif", "tariff"],
+  "tiers": ["cheap", "standard", "generous", "premium"],
+  "attributes": [
+    {"key": "data_gb", "label": "Data", "unit": "GB", "aliases": ["Datenvolumen", "Highspeed-Volumen", "Daten", "Inklusivdaten"], "units": {"gb": 1, "mb": 0.001, "tb": 1000}, "words": {"unlimited": 1000, "unbegrenzt": 1000, "flat": 1000}},
+    {"key": "network", "label": "Network", "kind": "text", "aliases": ["Netz", "Netzbetreiber", "Mobilfunknetz"]},
+    {"key": "network_score", "label": "Network test score", "aliases": ["Netztest", "Netzqualität"]},
+    {"key": "speed_mbps", "label": "Max speed", "unit": "Mbit/s", "aliases": ["Geschwindigkeit", "Max. Download", "Download", "Speed"]},
+    {"key": "five_g", "label": "5G", "kind": "bool", "aliases": ["5G-Zugang", "5G Netz"]},
+    {"key": "eu_roaming", "label": "EU roaming", "kind": "bool", "aliases": ["EU-Roaming", "Roaming EU"]},
+    {"key": "esim", "label": "eSIM", "kind": "bool", "aliases": ["eSIM-fähig"]},
+    {"key": "wifi_calling", "label": "WiFi calling", "kind": "bool", "aliases": ["WLAN-Calling", "VoWiFi"]}
+  ],
+  "criteria": [
+    {"key": "price", "label": "Cost per month", "description": "Fees, promo months and cash back spread over the term", "kind": "price", "weight": 4, "group": "cost"},
+    {"key": "data", "label": "Data volume", "kind": "number", "attribute": "data_gb", "log": true, "weight": 2, "scale": {"type": "fixed", "min": 1, "max": 200}},
+    {"key": "network_quality", "label": "Network quality", "kind": "number", "attribute": "network_score", "weight": 2, "scale": {"type": "fixed", "min": 40, "max": 100}},
+    {"key": "network", "label": "Preferred network", "kind": "match", "attribute": "network", "preference": "network", "weight": 1.5},
+    {"key": "speed", "label": "Speed", "kind": "number", "attribute": "speed_mbps", "weight": 1, "scale": {"type": "fixed", "min": 25, "max": 1000}, "log": true},
+    {"key": "five_g", "label": "5G", "kind": "flag", "attribute": "five_g", "weight": 1},
+    {"key": "roaming", "label": "EU roaming", "kind": "flag", "attribute": "eu_roaming", "weight": 0.5},
+    {"key": "esim", "label": "eSIM", "kind": "flag", "attribute": "esim", "weight": 0.3},
+    {"key": "flexibility", "label": "Short commitment", "kind": "formula", "expr": "term_months", "higher_is_better": false, "weight": 1.5, "scale": {"type": "fixed", "min": 0, "max": 24}}
+  ]
+}

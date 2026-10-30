@@ -463,7 +463,13 @@ pub struct Api;
 impl Api {
     /// Build the router. `/health` is open; everything under `/v1` needs the bearer token.
     pub fn router(state: AppState, token: TokenHash) -> Router {
-        let v1 = Router::new()
+        Self::router_with(state, token, Vec::new())
+    }
+
+    /// Like [`Api::router`], with more apps mounted under `/v1/<name>` (the shopping assistant in
+    /// the bundled build). They sit behind the same bearer token, so one token opens everything.
+    pub fn router_with(state: AppState, token: TokenHash, apps: Vec<(&str, Router)>) -> Router {
+        let mut v1 = Router::new()
             .route("/transactions", get(routes::list_transactions))
             .route("/transactions/import", post(routes::import_transactions))
             .route("/recurring", get(routes::recurring))
@@ -571,7 +577,11 @@ impl Api {
             .route(
                 "/meal-plan/pantry",
                 get(mealplan::get_pantry).put(mealplan::put_pantry),
-            )
+            );
+        for (name, app) in apps {
+            v1 = v1.nest_service(&format!("/{name}"), app);
+        }
+        let v1 = v1
             // An unknown API path is an API error, never a web page (see `Api::with_web_app`).
             .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
             .layer(middleware::from_fn_with_state(

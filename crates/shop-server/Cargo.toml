@@ -1,0 +1,22 @@
+[package]
+name = "financer-shop-server"
+description = "Standalone shopping assistant server: searches all the time like a search engine and notifies about deals"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "financer-shop-server"
+path = "src/main.rs"
+
+[dependencies]
+financer-shop-api = { path = "../shop-api" }
+financer-shop-sources = { path = "../shop-sources" }
+financer-shop-store = { path = "../shop-store" }
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
+serde_json.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tower-http = { version = "0.7", features = ["fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

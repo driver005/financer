@@ -1708,6 +1708,7 @@ dependencies = [
  "financer-fints",
  "financer-prices",
  "financer-receipt-sources",
+ "financer-shop-api",
  "financer-store",
  "http-body-util",
  "serde_json",
@@ -1846,14 +1847,100 @@ dependencies = [
  "financer-plaid",
  "financer-prices",
  "financer-receipt-sources",
+ "financer-shop-api",
  "financer-store",
+ "http-body-util",
  "serde_json",
  "tempfile",
  "time",
  "tokio",
+ "tower",
  "tower-http 0.7.1",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "financer-shop-api"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "financer-llm",
+ "financer-prices",
+ "financer-shop-core",
+ "financer-shop-sources",
+ "financer-shop-store",
+ "http-body-util",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "subtle",
+ "thiserror 2.0.21",
+ "tokio",
+ "tower",
+ "tower-http 0.7.1",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "financer-shop-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "financer-shop-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "financer-shop-api",
+ "financer-shop-sources",
+ "financer-shop-store",
+ "serde_json",
+ "tokio",
+ "tower-http 0.7.1",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "financer-shop-sources"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "csv",
+ "financer-llm",
+ "financer-prices",
+ "financer-shop-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "financer-shop-store"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "financer-shop-core",
+ "financer-shop-sources",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]

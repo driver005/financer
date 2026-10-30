@@ -1,0 +1,37 @@
+{
+  "id": "laptop",
+  "name": "Laptop",
+  "extends": "generic",
+  "keywords": ["laptop", "notebook", "macbook", "ultrabook"],
+  "name_words": ["macbook"],
+  "tiers": ["budget", "mid-range", "upper mid-range", "premium"],
+  "attributes": [
+    {"key": "os", "label": "Operating system", "kind": "text", "aliases": ["Betriebssystem", "OS"]},
+    {"key": "ecosystem", "label": "Ecosystem", "kind": "list"},
+    {"key": "cpu", "label": "Processor", "kind": "text", "aliases": ["Prozessor", "CPU"]},
+    {"key": "geekbench_multi", "label": "Geekbench multi-core", "aliases": ["Geekbench", "Benchmark", "CPU-Benchmark"]},
+    {"key": "ram_gb", "label": "RAM", "unit": "GB", "aliases": ["Arbeitsspeicher", "Memory"]},
+    {"key": "storage_gb", "label": "Storage", "unit": "GB", "aliases": ["SSD", "Speicher", "Festplatte"], "units": {"tb": 1000, "gb": 1}},
+    {"key": "screen_inches", "label": "Screen size", "unit": "in", "aliases": ["Bildschirmdiagonale", "Display size"]},
+    {"key": "display_nits", "label": "Brightness", "unit": "nits", "aliases": ["Helligkeit", "Display brightness"]},
+    {"key": "battery_wh", "label": "Battery", "unit": "Wh", "aliases": ["Akkukapazität", "Akku"]},
+    {"key": "weight_kg", "label": "Weight", "unit": "kg", "aliases": ["Gewicht"]},
+    {"key": "gpu_score", "label": "Graphics score", "aliases": ["Grafik-Benchmark", "GPU score"]}
+  ],
+  "derive": [
+    {"attribute": "ecosystem", "from": "brand", "contains": "apple", "add": ["apple"]},
+    {"attribute": "ecosystem", "from": "os", "contains": "windows", "add": ["windows"]},
+    {"attribute": "ecosystem", "from": "os", "contains": "macos", "add": ["apple"]}
+  ],
+  "criteria": [
+    {"key": "performance", "label": "Performance", "kind": "number", "attribute": "geekbench_multi", "weight": 3, "scale": {"type": "fixed", "min": 3000, "max": 16000}},
+    {"key": "graphics", "label": "Graphics", "kind": "number", "attribute": "gpu_score", "weight": 0.5, "scale": {"type": "minmax"}},
+    {"key": "ram", "label": "RAM", "kind": "number", "attribute": "ram_gb", "weight": 1.5, "scale": {"type": "fixed", "min": 8, "max": 64}, "log": true},
+    {"key": "storage", "label": "Storage", "kind": "number", "attribute": "storage_gb", "weight": 1, "scale": {"type": "fixed", "min": 256, "max": 2000}, "log": true},
+    {"key": "battery", "label": "Battery", "kind": "number", "attribute": "battery_wh", "weight": 1.5, "scale": {"type": "fixed", "min": 40, "max": 100}},
+    {"key": "display", "label": "Display brightness", "kind": "number", "attribute": "display_nits", "weight": 1, "scale": {"type": "fixed", "min": 250, "max": 600}},
+    {"key": "weight", "label": "Light weight", "kind": "number", "attribute": "weight_kg", "higher_is_better": false, "weight": 1, "scale": {"type": "fixed", "min": 1.0, "max": 2.5}},
+    {"key": "recency", "label": "Newness", "kind": "age", "attribute": "released", "half_life_months": 30, "weight": 0.5},
+    {"key": "ecosystem", "label": "Fits my ecosystem", "kind": "match", "attribute": "ecosystem", "preference": "ecosystem", "weight": 1.5}
+  ]
+}
