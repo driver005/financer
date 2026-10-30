@@ -57,7 +57,7 @@ impl SecretBox {
         let mut key = Zeroizing::new([0u8; 32]);
         hk.expand(format!("{INFO_PREFIX}{purpose}").as_bytes(), key.as_mut())
             .expect("32 bytes is a valid HKDF output length");
-        XChaCha20Poly1305::new(key.as_ref().into())
+        XChaCha20Poly1305::new((&*key).into())
     }
 
     /// `v1.<salt>.<nonce>.<ciphertext>`, URL-safe base64, safe to store as text.

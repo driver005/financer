@@ -13,7 +13,7 @@ financer-store = { path = "../store" }
 async-imap = { version = "0.12", default-features = false, features = ["runtime-tokio"] }
 async-trait = "0.1"
 base64 = "0.23"
-chacha20poly1305 = "0.10"
+chacha20poly1305 = "0.11"
 futures-util = "0.3"
 getrandom = "0.4"
 hkdf = "0.13"
