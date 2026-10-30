@@ -10,6 +10,9 @@ rust-version.workspace = true
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [features]
+# The shopping assistant's on-phone backend (`ShopBackend`). Off by default: the finance-only app
+# does not carry it. See docs/SHOP.md.
+shop = ["dep:financer-shop-api"]
 # Builds the `uniffi-bindgen` helper binary used to generate Kotlin/Swift/TypeScript bindings.
 bindgen-cli = ["uniffi/cli"]
 
@@ -21,6 +24,7 @@ required-features = ["bindgen-cli"]
 [dependencies]
 financer-api = { path = "../api" }
 financer-fints = { path = "../fints" }
+financer-shop-api = { path = "../shop-api", optional = true }
 financer-prices = { path = "../prices" }
 financer-receipt-sources = { path = "../receipt-sources" }
 financer-store = { path = "../store" }

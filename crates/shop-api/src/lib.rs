@@ -15,6 +15,8 @@ use axum::Router;
 use tower_http::trace::TraceLayer;
 
 pub use auth::ShopToken;
+pub use financer_llm as llm;
+pub use financer_prices as prices;
 pub use financer_shop_core as core;
 pub use financer_shop_sources as sources;
 pub use financer_shop_store as store;
