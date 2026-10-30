@@ -616,9 +616,15 @@ impl Ranker {
                 }
             })
             .collect();
+        // "no deal right now" is the normal state, not a weakness of the product
+        let deal_keys: Vec<&str> = columns
+            .iter()
+            .filter(|c| matches!(c.def.source, CriterionKind::Deal))
+            .map(|c| c.def.key.as_str())
+            .collect();
         let mut by_strength: Vec<&CriterionScore> = breakdown
             .iter()
-            .filter(|b| b.weight > 0.0 && b.score.is_some())
+            .filter(|b| b.weight > 0.0 && b.score.is_some() && !deal_keys.contains(&b.key.as_str()))
             .collect();
         by_strength.sort_by(|a, b| {
             (b.weight * b.score.unwrap_or(0.0)).total_cmp(&(a.weight * a.score.unwrap_or(0.0)))

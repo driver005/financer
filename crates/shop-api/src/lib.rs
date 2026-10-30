@@ -5,6 +5,7 @@ mod auth;
 pub mod jobs;
 pub mod notify;
 mod routes;
+pub mod setup;
 pub mod state;
 
 use axum::extract::DefaultBodyLimit;
@@ -14,7 +15,11 @@ use axum::Router;
 use tower_http::trace::TraceLayer;
 
 pub use auth::ShopToken;
+pub use financer_shop_core as core;
+pub use financer_shop_sources as sources;
+pub use financer_shop_store as store;
 pub use routes::{MyPlan, SearchRequest, SearchResponse};
+pub use setup::{NotifierSetup, ShopSetup};
 pub use state::{IndexRefusal, ShopConfig, ShopState, Snapshot};
 
 const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;

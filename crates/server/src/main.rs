@@ -455,7 +455,11 @@ impl Server {
             });
         }
 
-        let mut app = Api::router(state, TokenHash::new(&token));
+        let mut app = Api::router_with(
+            state,
+            TokenHash::new(&token),
+            Self::shop_apps(&db_url).await?,
+        );
         if let Some(dir) = &config.server.web_dir.value {
             tracing::info!("serving the web app from {dir}");
             app = Api::with_web_app(app, dir);
@@ -492,6 +496,51 @@ impl Server {
             })
             .await
             .map_err(|e| e.to_string())
+    }
+
+    /// The shopping assistant, mounted under `/v1/shop` behind the same token. Only in builds
+    /// with the `shop` feature, and switched off by `FINANCER_SHOP_ENABLED=false`. It keeps its own
+    /// tables (in the same PostgreSQL database, or in a SQLite file next to the finance one) and,
+    /// unlike the finance side, searches all the time.
+    #[cfg(feature = "shop")]
+    async fn shop_apps(finance_db_url: &str) -> Result<Vec<(&'static str, axum::Router)>, String> {
+        use financer_shop_api::{ShopApi, ShopSetup};
+        let enabled = std::env::var("FINANCER_SHOP_ENABLED")
+            .map(|v| {
+                !matches!(
+                    v.trim().to_lowercase().as_str(),
+                    "0" | "false" | "no" | "off"
+                )
+            })
+            .unwrap_or(true);
+        if !enabled {
+            tracing::info!("the shopping assistant is switched off (FINANCER_SHOP_ENABLED)");
+            return Ok(Vec::new());
+        }
+        // PostgreSQL is shared; a SQLite file gets a sibling "-shop" file
+        let default_db = match finance_db_url.split_once('?') {
+            None if finance_db_url.starts_with("postgres") => finance_db_url.to_string(),
+            Some((url, _)) if url.starts_with("postgres") => finance_db_url.to_string(),
+            Some((path, query)) if path.ends_with(".db") => {
+                format!("{}-shop.db?{}", path.trim_end_matches(".db"), query)
+            }
+            _ => "sqlite://financer-shop.db?mode=rwc".to_string(),
+        };
+        let setup = ShopSetup::from_lookup(&|k| std::env::var(k).ok(), &default_db)?;
+        let store = setup.open_store().await?;
+        let state = setup.start(store, None).await?;
+        let crawling = setup.spawn_background(&state);
+        tracing::info!(
+            sources = setup.sources.len(),
+            crawling,
+            "shopping assistant enabled at /v1/shop"
+        );
+        Ok(vec![("shop", ShopApi::router(state))])
+    }
+
+    #[cfg(not(feature = "shop"))]
+    async fn shop_apps(_finance_db_url: &str) -> Result<Vec<(&'static str, axum::Router)>, String> {
+        Ok(Vec::new())
     }
 
     /// Fetch every configured source once and print what came back. This is how to check, from

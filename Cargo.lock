@@ -1846,11 +1846,14 @@ dependencies = [
  "financer-plaid",
  "financer-prices",
  "financer-receipt-sources",
+ "financer-shop-api",
  "financer-store",
+ "http-body-util",
  "serde_json",
  "tempfile",
  "time",
  "tokio",
+ "tower",
  "tower-http 0.7.1",
  "tracing",
  "tracing-subscriber",
@@ -1862,6 +1865,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
+ "financer-llm",
  "financer-prices",
  "financer-shop-core",
  "financer-shop-sources",
@@ -1887,6 +1891,21 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "financer-shop-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "financer-shop-api",
+ "financer-shop-sources",
+ "financer-shop-store",
+ "serde_json",
+ "tokio",
+ "tower-http 0.7.1",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -19,6 +19,7 @@ financer-llm = { path = "../llm" }
 financer-plaid = { path = "../plaid" }
 financer-prices = { path = "../prices" }
 financer-receipt-sources = { path = "../receipt-sources" }
+financer-shop-api = { path = "../shop-api", optional = true }
 financer-store = { path = "../store" }
 serde_json.workspace = true
 time.workspace = true
@@ -28,5 +29,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
 tower-http = { version = "0.7", features = ["cors"] }
 
+[features]
+# The shopping assistant inside this server, under /v1/shop (the "bundled" build). Off by default:
+# the plain build is the finance app alone. See docs/SHOP.md.
+shop = ["dep:financer-shop-api"]
+
 [dev-dependencies]
 tempfile = "3"
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

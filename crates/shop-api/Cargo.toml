@@ -7,6 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+financer-llm = { path = "../llm" }
 financer-prices = { path = "../prices" }
 financer-shop-core = { path = "../shop-core" }
 financer-shop-sources = { path = "../shop-sources" }
