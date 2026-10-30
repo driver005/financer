@@ -204,6 +204,19 @@ impl Ranker {
         profile: &Profile,
         ctx: &Context<'_>,
     ) -> Ranking {
+        Self::rank_in(schema, products, products, profile, ctx)
+    }
+
+    /// Rank `products`, but place them in price tiers and judge value against the whole
+    /// `universe` (everything known in the category), so a search for "pixel" still says which
+    /// price class a Pixel is in.
+    pub fn rank_in(
+        schema: &CategorySchema,
+        products: &[Product],
+        universe: &[Product],
+        profile: &Profile,
+        ctx: &Context<'_>,
+    ) -> Ranking {
         let criteria = Self::criteria(schema, profile);
         let offers: Vec<Option<BestOffer>> = products
             .iter()
@@ -230,8 +243,12 @@ impl Ranker {
             }
         }
 
-        let tiers = Self::tiers(schema, products, &offers);
-        let median_price = Self::median_price(&offers);
+        let universe_offers: Vec<Option<BestOffer>> = universe
+            .iter()
+            .map(|p| Self::best_offer(p, profile))
+            .collect();
+        let tiers = Self::tiers(schema, universe, &universe_offers);
+        let median_price = Self::median_price(&universe_offers);
 
         let mut items = Vec::new();
         let mut excluded = Vec::new();

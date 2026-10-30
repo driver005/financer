@@ -1857,6 +1857,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "financer-shop-api"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "financer-prices",
+ "financer-shop-core",
+ "financer-shop-sources",
+ "financer-shop-store",
+ "http-body-util",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "subtle",
+ "thiserror 2.0.21",
+ "tokio",
+ "tower",
+ "tower-http 0.7.1",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "financer-shop-core"
 version = "0.1.0"
 dependencies = [

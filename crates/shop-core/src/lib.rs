@@ -2,6 +2,7 @@
 //! schemas with criteria, ranking with explanations, deal detection, subscription costs and a
 //! search index. Everything that fetches pages or stores data lives in other crates.
 
+pub mod compare;
 pub mod deals;
 pub mod formula;
 pub mod product;
@@ -11,6 +12,7 @@ pub mod search;
 pub mod text;
 pub mod value;
 
+pub use compare::{compare, CompareCell, CompareColumn, CompareRow, Comparison, RowKind};
 pub use deals::{
     assess, worth_repeating, DealEvent, DealInfo, EventKind, PricePoint, Verdict, Watch,
 };

@@ -546,8 +546,9 @@ impl Registry {
     pub fn detect(&self, query_tokens: &[String]) -> Option<String> {
         let mut best: Option<(usize, &str)> = None;
         for (id, s) in &self.raw {
-            let Ok(r) = self.resolved(id) else { continue };
-            let hits = r
+            // a category answers to its own keywords, not those it inherits, so a child of
+            // `smartphone` does not steal every "handy" query from its parent
+            let hits = s
                 .keywords
                 .iter()
                 .chain(std::iter::once(&s.name))

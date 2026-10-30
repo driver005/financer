@@ -6,6 +6,8 @@ pub mod entity;
 pub mod migration;
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use financer_shop_core::{
@@ -51,6 +53,9 @@ fn unjson<T: DeserializeOwned>(s: &str) -> Result<T> {
 #[derive(Clone)]
 pub struct ShopStore {
     db: DatabaseConnection,
+    /// Bumped by every write through this store, so a cached view can tell it is out of date even
+    /// when two writes land in the same second.
+    generation: Arc<AtomicU64>,
 }
 
 /// A deal message as stored, with its place in the feed.
@@ -77,7 +82,10 @@ impl ShopStore {
     /// Use a connection that already exists (the shopping tables are added to it).
     pub async fn from_connection(db: DatabaseConnection) -> Result<ShopStore> {
         migration::Migrator::up(&db, None).await?;
-        Ok(ShopStore { db })
+        Ok(ShopStore {
+            db,
+            generation: Arc::new(AtomicU64::new(0)),
+        })
     }
 
     // ---- products ---------------------------------------------------------------------------
@@ -145,6 +153,22 @@ impl ShopStore {
         self.assemble(rows).await
     }
 
+    fn changed(&self) {
+        self.generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// Write counter, product count and latest change: if all are unchanged, nothing in the
+    /// catalogue moved, so an index built from it is still good.
+    pub async fn fingerprint(&self) -> Result<(u64, u64, i64)> {
+        let count = product::Entity::find().count(&self.db).await?;
+        let latest = product::Entity::find()
+            .order_by_desc(product::Column::UpdatedAt)
+            .one(&self.db)
+            .await?
+            .map_or(0, |r| r.updated_at);
+        Ok((self.generation.load(Ordering::SeqCst), count, latest))
+    }
+
     pub async fn count_products(&self, category: Option<&str>) -> Result<u64> {
         let mut q = product::Entity::find();
         if let Some(c) = category {
@@ -169,6 +193,7 @@ impl ShopStore {
             .rows_affected
             > 0;
         txn.commit().await?;
+        self.changed();
         Ok(gone)
     }
 
@@ -194,6 +219,7 @@ impl ShopStore {
         })
         .exec(&self.db)
         .await?;
+        self.changed();
         Ok(true)
     }
 
@@ -321,6 +347,7 @@ impl ShopStore {
             }
         }
         txn.commit().await?;
+        self.changed();
         Ok(match (existing.is_some(), before == after) {
             (false, _) => SaveOutcome::New,
             (true, false) => SaveOutcome::Changed,
@@ -370,11 +397,15 @@ impl ShopStore {
     /// Forget offers not seen since `before`; a shop that no longer lists a product stops
     /// counting as a place to buy it. Returns how many were removed.
     pub async fn prune_offers(&self, before: i64) -> Result<u64> {
-        Ok(offer::Entity::delete_many()
+        let removed = offer::Entity::delete_many()
             .filter(offer::Column::SeenAt.lt(before))
             .exec(&self.db)
             .await?
-            .rows_affected)
+            .rows_affected;
+        if removed > 0 {
+            self.changed();
+        }
+        Ok(removed)
     }
 
     // ---- schemas, profiles, settings ----------------------------------------------------------
