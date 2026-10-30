@@ -1,0 +1,31 @@
+[package]
+name = "financer-shop-api"
+description = "Shopping assistant API: search, compare, extensible categories, index jobs with progress, watches and deal notifications"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+financer-llm = { path = "../llm" }
+financer-prices = { path = "../prices" }
+financer-shop-core = { path = "../shop-core" }
+financer-shop-sources = { path = "../shop-sources" }
+financer-shop-store = { path = "../shop-store" }
+async-trait = "0.1"
+axum = { version = "0.8", default-features = false, features = ["json", "query", "tokio", "http1"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11"
+subtle = "2"
+thiserror.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tower-http = { version = "0.7", features = ["trace", "limit"] }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "test-util"] }

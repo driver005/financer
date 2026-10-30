@@ -1,12 +1,14 @@
 # Build: docker build -f deploy/Dockerfile -t financer-server .
 # Behind Docker Hub rate limits: --build-arg REGISTRY=mirror.gcr.io/library/
+# With the shopping assistant inside (docs/SHOP.md): --build-arg FEATURES=shop
 ARG REGISTRY=docker.io/library/
 
 FROM ${REGISTRY}rust:1-bookworm AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
-RUN cargo build --release -p financer-server
+ARG FEATURES=""
+RUN cargo build --release -p financer-server ${FEATURES:+--features "$FEATURES"}
 
 ARG REGISTRY
 FROM ${REGISTRY}debian:bookworm-slim

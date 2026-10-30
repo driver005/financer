@@ -21,6 +21,7 @@ import {
 import { Screen, Title } from "@/components/ui";
 import { useScreenData } from "@/hooks";
 import { startReplay } from "@/native/onboardingStore";
+import { SHOPPING_ENABLED } from "@/modules";
 import { priceSourcesLabel, type SectionId } from "@/settingsPlan";
 
 /**
@@ -105,6 +106,9 @@ export default function SettingsScreen() {
               <SettingsRow icon="receipt-text-outline" title="Receipts" subtitle="Add and read receipts" onPress={() => router.push("/receipts")} />
               <SettingsRow icon="email-sync-outline" title="Receipt sources" subtitle="Mailbox, Lidl Plus and a watched folder" onPress={() => router.push("/receipt-sources")} />
               <SettingsRow icon="silverware-fork-knife" title="Meal plan" subtitle="Plan the week and shop for it" onPress={() => router.push("/mealplan")} />
+              {SHOPPING_ENABLED ? (
+                <SettingsRow icon="shopping-search-outline" title="Shopping assistant" subtitle="Compare phones, plans and prices" onPress={() => router.push("/shop")} />
+              ) : null}
               {settings ? <AiCard settings={settings} onSave={save} /> : null}
               {settings ? (
                 <SettingsRow

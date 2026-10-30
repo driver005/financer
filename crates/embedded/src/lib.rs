@@ -19,6 +19,9 @@ use http_body_util::BodyExt;
 use time::OffsetDateTime;
 use tower::ServiceExt;
 
+#[cfg(feature = "shop")]
+pub mod shop;
+
 uniffi::setup_scaffolding!();
 
 const USER_AGENT: &str =
@@ -187,50 +190,7 @@ impl Backend {
 
     /// Serve one request. Never panics: malformed input becomes a 4xx response.
     pub async fn handle_request(&self, req: HttpRequest) -> HttpResponse {
-        let Ok(method) = Method::from_bytes(req.method.trim().to_uppercase().as_bytes()) else {
-            return HttpResponse::error(StatusCode::BAD_REQUEST, "invalid HTTP method");
-        };
-        let Ok(uri) = req.path_and_query.parse::<Uri>() else {
-            return HttpResponse::error(StatusCode::BAD_REQUEST, "invalid path");
-        };
-        if uri.scheme().is_some()
-            || uri.authority().is_some()
-            || !req.path_and_query.starts_with('/')
-        {
-            return HttpResponse::error(StatusCode::BAD_REQUEST, "path must start with /");
-        }
-        let mut builder = Request::builder()
-            .method(method)
-            .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {}", self.token));
-        if let Some(ct) = req.content_type.as_deref() {
-            builder = builder.header(header::CONTENT_TYPE, ct);
-        }
-        let Ok(request) = builder.body(Body::from(req.body)) else {
-            return HttpResponse::error(StatusCode::BAD_REQUEST, "invalid request");
-        };
-        match self.router.clone().oneshot(request).await {
-            Ok(res) => {
-                let status = res.status().as_u16();
-                let content_type = res
-                    .headers()
-                    .get(header::CONTENT_TYPE)
-                    .and_then(|v| v.to_str().ok())
-                    .map(str::to_string);
-                match res.into_body().collect().await.map(|b| b.to_bytes()) {
-                    Ok(bytes) if bytes.len() <= MAX_RESPONSE_BYTES => HttpResponse {
-                        status,
-                        content_type,
-                        body: bytes.to_vec(),
-                    },
-                    _ => HttpResponse::error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "response could not be read",
-                    ),
-                }
-            }
-            Err(never) => match never {},
-        }
+        dispatch(&self.router, Some(&self.token), req).await
     }
 
     /// Import new receipts from the switched-on sources whose turn it is (call on app open and
@@ -266,6 +226,56 @@ impl Backend {
         Api::refresh_prices_summary(&self.state)
             .await
             .map_err(|message| EmbeddedError::Failed { message })
+    }
+}
+
+/// Hand one request to a router in-process. `token` is added as the bearer token when the router
+/// wants one (the finance router does; the shopping router has no authentication in-process).
+pub(crate) async fn dispatch(
+    router: &Router,
+    token: Option<&str>,
+    req: HttpRequest,
+) -> HttpResponse {
+    let Ok(method) = Method::from_bytes(req.method.trim().to_uppercase().as_bytes()) else {
+        return HttpResponse::error(StatusCode::BAD_REQUEST, "invalid HTTP method");
+    };
+    let Ok(uri) = req.path_and_query.parse::<Uri>() else {
+        return HttpResponse::error(StatusCode::BAD_REQUEST, "invalid path");
+    };
+    if uri.scheme().is_some() || uri.authority().is_some() || !req.path_and_query.starts_with('/') {
+        return HttpResponse::error(StatusCode::BAD_REQUEST, "path must start with /");
+    }
+    let mut builder = Request::builder().method(method).uri(uri);
+    if let Some(token) = token {
+        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    if let Some(ct) = req.content_type.as_deref() {
+        builder = builder.header(header::CONTENT_TYPE, ct);
+    }
+    let Ok(request) = builder.body(Body::from(req.body)) else {
+        return HttpResponse::error(StatusCode::BAD_REQUEST, "invalid request");
+    };
+    match router.clone().oneshot(request).await {
+        Ok(res) => {
+            let status = res.status().as_u16();
+            let content_type = res
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string);
+            match res.into_body().collect().await.map(|b| b.to_bytes()) {
+                Ok(bytes) if bytes.len() <= MAX_RESPONSE_BYTES => HttpResponse {
+                    status,
+                    content_type,
+                    body: bytes.to_vec(),
+                },
+                _ => HttpResponse::error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "response could not be read",
+                ),
+            }
+        }
+        Err(never) => match never {},
     }
 }
 

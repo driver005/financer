@@ -1,0 +1,21 @@
+[package]
+name = "financer-shop-store"
+description = "Shopping assistant persistence: products, offers, price history, schemas, watches and deal events, with its own migrations (SQLite and PostgreSQL)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+financer-shop-core = { path = "../shop-core" }
+financer-shop-sources = { path = "../shop-sources" }
+async-trait = "0.1"
+sea-orm = { version = "2", default-features = false, features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-rustls", "macros"] }
+sea-orm-migration = { version = "2", default-features = false, features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-rustls"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[dev-dependencies]
+tempfile = "3"

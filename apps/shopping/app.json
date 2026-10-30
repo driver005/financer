@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Financer Shop",
+    "slug": "financer-shop",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.financer.shop"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "app.financer.shop"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "financer-shop",
+    "plugins": [
+      "./plugins/withAndroidRelease",
+      "../../packages/shopping/plugins/withIndexService",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#4f46e5"
+        }
+      ]
+    ],
+    "experiments": {
+      "tsconfigPaths": false
+    }
+  }
+}

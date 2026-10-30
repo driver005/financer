@@ -32,3 +32,16 @@ export const Backend: { start(config: StartConfig): Promise<BackendHandle> } | n
 
 /** A new random secret for `StartConfig.deviceSecret` (the generated module provides the real one). */
 export const generateDeviceSecret: (() => string) | null = null;
+
+/**
+ * The shopping assistant's on-phone backend, from the same native library. `null` here for the
+ * same reason as `Backend`; scripts/enable-embedded.sh replaces this file with the generated one.
+ */
+export type ShopStartConfig = {
+  dbPath: string;
+  sourcesJson: string | undefined;
+  claudeApiKey: string | undefined;
+  openaiApiKey: string | undefined;
+};
+
+export const ShopBackend: { start(config: ShopStartConfig): Promise<Pick<BackendHandle, "handle">> } | null = null;

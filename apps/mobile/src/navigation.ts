@@ -22,8 +22,8 @@ export const TABS: readonly TabDef[] = [
  */
 export const SETTINGS_SCREENS: readonly string[] = ["/settings", "/sync", "/rules", "/subscriptions", "/alerts", "/receipts", "/receipt-sources", "/scan", "/server-config"];
 
-/** Routes with no chrome at all (first-run setup). */
-export const BARE_SCREENS: readonly string[] = ["/onboarding"];
+/** Routes with no chrome at all (first-run setup, and the shopping assistant, which brings its own). */
+export const BARE_SCREENS: readonly string[] = ["/onboarding", "/shop"];
 
 export type SwitchItem = { label: string; href: string };
 

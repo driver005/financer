@@ -1,0 +1,24 @@
+[package]
+name = "financer-shop-sources"
+description = "Shopping assistant sources: product pages, listings, feeds and sitemaps read politely into products with specs and prices"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+financer-llm = { path = "../llm" }
+financer-prices = { path = "../prices" }
+financer-shop-core = { path = "../shop-core" }
+async-trait = "0.1"
+csv = "1"
+regex = "1"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tracing = "0.1"
+url = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "test-util"] }
