@@ -9,12 +9,13 @@ import { Afford } from "@/components/Afford";
 import { CompareBars } from "@/components/Charts";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
+import { HeroPanel, PanelCaption, PanelChip, PanelFigure, PanelStats } from "@/components/panel";
 import { IconBadge } from "@/components/rows";
 import { SkeletonList } from "@/components/Skeleton";
-import { Bar, Button, Card, LedgerRow, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { Bar, Button, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
 import { categoryIcon, categoryLabel } from "@/categoryIcons";
 import { compareSummary, topCategories } from "@/charts";
-import { parseEuroInput, spokenMoney } from "@/format";
+import { formatMoney, parseEuroInput, spokenMoney } from "@/format";
 import { useScreenData } from "@/hooks";
 import { localIsoDate, periodLabel } from "@/period";
 import { space, typography, usePalette } from "@/theme";
@@ -113,18 +114,16 @@ export default function Budget() {
         >
           {data ? (
             <>
-              <Card>
-                <RNText style={[typography.overline, { color: p.muted }]}>Left to budget per month</RNText>
-                <View style={{ marginTop: space.xs }}>
-                  <Money cents={left} variant="display" tone={left < 0 ? "bad" : "plain"} label={`Left to budget per month: ${spokenMoney(left)}`} />
-                </View>
-                <RNText style={[typography.caption, { color: p.muted, marginTop: space.xs }]}>From your recurring payments: income minus fixed costs.</RNText>
-                <View style={{ marginTop: space.md, borderTopWidth: 1, borderTopColor: p.border }}>
-                  <LedgerRow label="Income" value={<Money cents={data.disposable.monthly_income_cents} variant="bodyStrong" signed />} />
-                  <View style={{ height: 1, backgroundColor: p.border }} />
-                  <LedgerRow label="Fixed costs" value={<Money cents={-data.disposable.monthly_fixed_costs_cents} variant="bodyStrong" tone="plain" />} />
-                </View>
-              </Card>
+              <HeroPanel label="Left to budget per month" chip={left < 0 ? <PanelChip icon="alert-outline" text="Over" /> : null}>
+                <PanelFigure cents={left} label={`Left to budget per month: ${spokenMoney(left)}`} />
+                <PanelCaption>From your recurring payments: income minus fixed costs.</PanelCaption>
+                <PanelStats
+                  items={[
+                    { label: "Income", value: formatMoney(data.disposable.monthly_income_cents), spoken: spokenMoney(data.disposable.monthly_income_cents) },
+                    { label: "Fixed costs", value: formatMoney(data.disposable.monthly_fixed_costs_cents), spoken: spokenMoney(data.disposable.monthly_fixed_costs_cents) },
+                  ]}
+                />
+              </HeroPanel>
             </>
           ) : error ? (
             <EmptyState title="Could not load your budget" message={error} mood="worried" actionLabel="Try again" actionIcon="refresh" onAction={() => void reload()} />

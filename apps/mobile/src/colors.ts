@@ -10,6 +10,7 @@
  * - `fill`, `orange`, `gold`: decorative fills (progress, rings, medals), never text.
  * - `onAccent`, `onBlue`, `onBad`: text on a button face of that colour.
  * - `*Soft`: a pale tint of the colour, for badge and icon backgrounds.
+ * - `chart1`..`chart5`: categorical colours for charts, in the order slices and bars use them.
  */
 const light = {
   background: "#ffffff",
@@ -39,6 +40,13 @@ const light = {
   warnSoft: "#fef5e7",
   blueSoft: "#e1f1f9",
   goldSoft: "#fff4cc",
+  // Categorical chart colours (donut slices, store bars): lavender, cyan, butterscotch, orange,
+  // green. Decorative only, but each reaches 3:1 on the page so a slice or bar is always visible.
+  chart1: "#7c5ce6",
+  chart2: "#0e95c9",
+  chart3: "#b87c00",
+  chart4: "#e8590c",
+  chart5: "#1f9d6b",
 };
 
 const dark: typeof light = {
@@ -69,7 +77,17 @@ const dark: typeof light = {
   warnSoft: "#3a2a12",
   blueSoft: "#122d3c",
   goldSoft: "#3a3112",
+  chart1: "#a893f4",
+  chart2: "#67cefd",
+  chart3: "#f5be3d",
+  chart4: "#ff8845",
+  chart5: "#4ade80",
 };
 
 export type Palette = typeof light;
 export const palette = { light, dark };
+
+/** The five chart colours of a palette, in order. */
+export function chartColors(p: Palette): string[] {
+  return [p.chart1, p.chart2, p.chart3, p.chart4, p.chart5];
+}

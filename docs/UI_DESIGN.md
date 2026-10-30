@@ -92,6 +92,21 @@ spending trend and the sentences for it), `format.ts` (`formatMoney`, `spokenMon
   budget period began, continued as a dotted line to where the forecast says it ends, then the
   three figures behind the daily amount. Spending: spent in the last 14 days. Budget: left to
   budget per month. Trophies: badges earned. Everything else is a secondary row or card.
+- **Every screen opens the same way.** Title, then (on tabbed screens) the underlined tab strip
+  (`SectionSwitch`), then one `HeroPanel` (`components/panel.tsx`) with the number the screen is
+  about: Spending (spent in 14 days, with bars), Budget (left per month, income and fixed costs),
+  Stores (spent in stores), Subscriptions (monthly total), Trophies (badges earned), Recipes (how
+  many match), Meal plan (days planned), Usual items (how many), Prices (best chain). Today's
+  panel adds the spending curve. Settings screens are plain lists and have no panel. A new screen
+  uses `HeroPanel` with `PanelFigure` or `PanelNumber`, never its own filled block; the design
+  guard fails on a hand-made accent block with the panel's radius.
+- **Tabs and choices are quiet.** Screens that share a tab are switched with text tabs, the open
+  one in the accent colour with a line under it. Choices between a few options (period, horizon,
+  segment) use `SegmentedButtons`: a hairline outline with the chosen segment in the soft tint.
+  Filters are small chips. Nothing here is a big filled pill any more.
+- **Chart colours** are `chart1`..`chart5` in `colors.ts` (lavender, cyan, butterscotch, orange,
+  green), used in that order for donut slices and store bars; each reaches 3:1 on the page in both
+  themes (`tests/theme.test.ts`). The accent stays indigo for text, buttons and the panel.
 - **Filled tiles are allowed in one place.** The "This period" block on Today (Spent, Income, Still
   to pay, Left to spend) uses four tiles in the palette's soft tints, each with a small figure, a
   mini chart or bar and a round arrow to the screen behind it. Everything else stays a flat section

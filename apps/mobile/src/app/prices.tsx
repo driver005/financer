@@ -8,6 +8,7 @@ import { useApi } from "@/api/config";
 import { ChainPriceRow } from "@/components/grocery/ChainPriceRow";
 import { Avatar, Badge, EmptyState, Money, Panel, SkeletonCards, Subtitle, space, useTones } from "@/components/grocery/primitives";
 import { ChunkyButton, Searchbar, Snackbar, Text } from "@/components/kit";
+import { HeroPanel } from "@/components/panel";
 import { Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
 import { chainTint, extraText, initials, itemSaving, rankPrices, summarizePrices, type PriceGroup } from "@/groceryView";
@@ -153,32 +154,32 @@ function Hero({ summary }: { summary: ReturnType<typeof summarizePrices> }) {
     ? `cheapest for ${leader.count} of ${summary.compared} compared items`
     : `level: each cheapest for ${topCount} of ${summary.compared} compared items`;
   return (
-    <View
-      accessible
-      accessibilityLabel={`${leader ? `${headline} is cheapest, ${sub}` : `${headline}, ${sub}`}. Choosing the cheapest chain per item saves up to ${formatCents(summary.savingCents)}.`}
-      style={{ backgroundColor: p.accent, borderRadius: 16, padding: space.lg, marginBottom: space.lg }}
-    >
-      <RNText style={{ color: p.onAccent, fontSize: 12, fontWeight: "800" }}>Best chain right now</RNText>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.sm }}>
-        <View style={{ flexDirection: "row" }}>
-          {summary.top.slice(0, 3).map((chain, i) => (
-            <View key={chain} style={{ marginLeft: i === 0 ? 0 : -12, borderRadius: 28, borderWidth: 1, borderColor: p.accent }}>
-              <Avatar tint={chainTint(chain)} label={initials(chainLabel(chain))} size={48} />
-            </View>
-          ))}
+    <HeroPanel label="Best chain right now">
+      <View
+        accessible
+        accessibilityLabel={`${leader ? `${headline} is cheapest, ${sub}` : `${headline}, ${sub}`}. Choosing the cheapest chain per item saves up to ${formatCents(summary.savingCents)}.`}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.sm }}>
+          <View style={{ flexDirection: "row" }}>
+            {summary.top.slice(0, 3).map((chain, i) => (
+              <View key={chain} style={{ marginLeft: i === 0 ? 0 : -12, borderRadius: 28, borderWidth: 1, borderColor: p.accent }}>
+                <Avatar tint={chainTint(chain)} label={initials(chainLabel(chain))} size={48} />
+              </View>
+            ))}
+          </View>
+          <View style={{ flex: 1 }}>
+            <RNText style={{ color: p.onAccent, fontSize: 26, fontWeight: "800" }}>{headline}</RNText>
+            <RNText style={{ color: p.onAccent, fontSize: 14 }}>{sub}</RNText>
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <RNText style={{ color: p.onAccent, fontSize: 26, fontWeight: "800" }}>{headline}</RNText>
-          <RNText style={{ color: p.onAccent, fontSize: 14 }}>{sub}</RNText>
-        </View>
+        {summary.savingCents > 0 ? (
+          <View style={{ marginTop: space.lg, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md }}>
+            <RNText style={{ color: p.onAccent, fontSize: 14, flex: 1 }}>Cheapest chain per item saves up to</RNText>
+            <Money text={formatCents(summary.savingCents)} size="xl" color={p.onAccent} />
+          </View>
+        ) : null}
       </View>
-      {summary.savingCents > 0 ? (
-        <View style={{ marginTop: space.lg, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md }}>
-          <RNText style={{ color: p.onAccent, fontSize: 14, flex: 1 }}>Cheapest chain per item saves up to</RNText>
-          <Money text={formatCents(summary.savingCents)} size="xl" color={p.onAccent} />
-        </View>
-      ) : null}
-    </View>
+    </HeroPanel>
   );
 }
 

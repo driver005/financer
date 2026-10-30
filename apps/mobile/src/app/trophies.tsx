@@ -9,7 +9,7 @@ import { BadgeIcon, FreezeRow } from "@/components/TrophiesCard";
 import { EmptyState } from "@/components/EmptyState";
 import { ChunkyButton, HelperText, TextInput } from "@/components/kit";
 import { Money } from "@/components/Money";
-import { Ring } from "@/components/Ring";
+import { HeroPanel, PanelChip, PanelNumber, PanelProgress } from "@/components/panel";
 import { ListGroup, ListRow, SectionHeader, StatusPill } from "@/components/rows";
 import { SkeletonHero, SkeletonList } from "@/components/Skeleton";
 import { Bar, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
@@ -112,26 +112,13 @@ export default function Trophies() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void reload()} tintColor={p.accent} />}
         >
-          <Card style={{ alignItems: "center", paddingVertical: space.xl }}>
-            <Label>Badges earned</Label>
-            <View style={{ marginTop: space.md }}>
-              <Ring
-                size={168}
-                stroke={14}
-                progress={r.badges.length > 0 ? earned / r.badges.length : 0}
-                color={p.gold}
-                track={p.goldSoft}
-                accessibilityLabel={`${earned} of ${r.badges.length} badges earned`}
-              >
-                <View style={{ alignItems: "center" }}>
-                  <RNText style={[typography.display, { color: p.text, fontVariant: ["tabular-nums"] }]}>{earned}</RNText>
-                  <RNText style={[typography.label, { color: p.muted }]}>of {r.badges.length}</RNText>
-                </View>
-              </Ring>
-            </View>
-            <View style={{ alignSelf: "stretch", marginTop: space.lg }}>
-              <Mascot mood={trophyMood(r, false)} message={trophyMessage(r)} />
-            </View>
+          <HeroPanel label="Badges earned" chip={<PanelChip icon="trophy-outline" text={`${earned} / ${r.badges.length}`} />}>
+            <PanelNumber value={`${earned}`} suffix={`of ${r.badges.length}`} label={`${earned} of ${r.badges.length} badges earned`} />
+            <PanelProgress progress={r.badges.length > 0 ? earned / r.badges.length : 0} label={`${earned} of ${r.badges.length} badges earned`} />
+          </HeroPanel>
+
+          <Card>
+            <Mascot mood={trophyMood(r, false)} message={trophyMessage(r)} />
           </Card>
 
           <Card>

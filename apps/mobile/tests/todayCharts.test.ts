@@ -163,3 +163,23 @@ describe("spendComparison", () => {
     assert.equal(spendComparison([tx("2026-09-30", -100)], period, sep, "2026-10-31").previous, 100);
   });
 });
+
+import { dayTotal, emptyFilterText, filterTx } from "../src/spendingView";
+
+describe("spending view", () => {
+  const items = [{ amount_cents: -500 }, { amount_cents: 200000 }, { amount_cents: -250 }, { amount_cents: 0 }];
+  it("filters by direction and keeps the order", () => {
+    assert.deepEqual(filterTx(items, "all"), items);
+    assert.deepEqual(filterTx(items, "spending"), [{ amount_cents: -500 }, { amount_cents: -250 }]);
+    assert.deepEqual(filterTx(items, "income"), [{ amount_cents: 200000 }]);
+  });
+  it("sums a day net", () => {
+    assert.equal(dayTotal(items), 199250);
+    assert.equal(dayTotal([]), 0);
+  });
+  it("words an empty list", () => {
+    assert.match(emptyFilterText("spending"), /spending/);
+    assert.match(emptyFilterText("income"), /income/);
+    assert.equal(emptyFilterText("all"), "Nothing to show.");
+  });
+});

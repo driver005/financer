@@ -12,6 +12,7 @@ import { ChunkyButton, HelperText, Text } from "@/components/kit";
 import { MealPicker } from "@/components/MealPicker";
 import { ListSummaryBar, PantryEditor, ShoppingListView, hasShoppingContent } from "@/components/ShoppingListView";
 import { Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { HeroPanel, PanelChip, PanelNumber, PanelProgress } from "@/components/panel";
 import { initials, mealTint } from "@/groceryView";
 import { usePalette } from "@/theme";
 import {
@@ -174,6 +175,11 @@ export default function MealPlanScreen() {
               <RoundIcon icon="chevron-right" onPress={() => setWeek(shiftWeek(week, 1))} label="Next week" />
             </View>
 
+            <HeroPanel label="Meals planned" chip={relation ? <PanelChip icon="calendar-week" text={relation} /> : null}>
+              <PanelNumber value={`${plannedCount(plan)}`} suffix="of 7 days" label={`${plannedCount(plan)} of 7 days planned`} />
+              <PanelProgress progress={plannedCount(plan) / 7} label={`${plannedCount(plan)} of 7 days planned`} />
+            </HeroPanel>
+
             <WeekStrip days={weekDays(week)} plan={plan} today={today} onPick={jumpTo} />
 
             {relation !== "This week" ? (
@@ -183,7 +189,7 @@ export default function MealPlanScreen() {
             ) : null}
             {error ? <HelperText type="error" visible>{error}</HelperText> : null}
 
-            <SectionLabel right={<Text variant="bodySmall" className="text-muted">{plannedCount(plan)} of 7 planned</Text>}>Meals</SectionLabel>
+            <SectionLabel>Meals</SectionLabel>
             {weekDays(week).map((iso) => (
               <View
                 key={iso}

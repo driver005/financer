@@ -79,4 +79,17 @@ describe("design guard", () => {
       .map((s) => s.path);
     assert.deepEqual(missing, []);
   });
+
+  it("an accent-filled rounded block is the shared HeroPanel, not a copy", () => {
+    // hand-made copies are how the screens drifted apart; the panel lives in components/panel.tsx
+    const found = hits(/backgroundColor:\s*p\.accent\b.*borderRadius:\s*(16|radius\.xl)|borderRadius:\s*(16|radius\.xl).*backgroundColor:\s*p\.accent\b/, {
+      except: ["components/panel.tsx", "components/today/TodayHero.tsx"],
+    });
+    assert.deepEqual(found, []);
+  });
+
+  it("filled tiles live in the Today overview only", () => {
+    const found = hits(/backgroundColor:\s*tint,/, { except: ["components/today/OverviewTiles.tsx"] });
+    assert.deepEqual(found, []);
+  });
 });

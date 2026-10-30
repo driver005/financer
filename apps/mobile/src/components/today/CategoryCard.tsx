@@ -7,7 +7,7 @@ import { Card } from "@/components/ui";
 import { formatMoney, spokenMoney } from "@/format";
 import { periodLabel } from "@/period";
 import { categoryShares, donutArcs, sharesSummary } from "@/todayCharts";
-import { space, tabular, typography, usePalette } from "@/theme";
+import { chartColors, space, tabular, typography, usePalette } from "@/theme";
 
 const SIZE = 132;
 const STROKE = 18;
@@ -29,8 +29,8 @@ export function CategoryCard({
   const { total, shares } = categoryShares(txs, period, 5);
   if (shares.length === 0) return null;
 
-  // distinct hues from the palette; the folded "other" slice is grey
-  const hues = [p.fill, p.blue, p.good, p.orange, p.gold];
+  // the chart colours in order; the folded "other" slice is grey
+  const hues = chartColors(p);
   const colourOf = (category: string, i: number) => (category === "other" ? p.muted : hues[i % hues.length]);
   const r = (SIZE - STROKE) / 2;
   const arcs = donutArcs(shares.map((s) => s.share), r, 4);

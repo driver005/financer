@@ -356,7 +356,10 @@ export function ChunkyButton({
   );
 }
 
-/** Row of mutually exclusive options. */
+/**
+ * Row of mutually exclusive options, as a quiet segmented control: a hairline outline, the chosen
+ * segment in the soft accent tint. Each segment is at least 44 high.
+ */
 export function SegmentedButtons<T extends string>({
   value,
   onValueChange,
@@ -368,22 +371,27 @@ export function SegmentedButtons<T extends string>({
   buttons: { value: T; label: string; icon?: string }[];
   style?: StyleProp<ViewStyle>;
 }) {
+  const p = usePalette();
   return (
-    <View style={[{ flexDirection: "row", gap: 8 }, style]} className="flex-row gap-2" accessibilityRole="radiogroup">
+    <View
+      accessibilityRole="radiogroup"
+      style={[{ flexDirection: "row", gap: 4, padding: 3, borderRadius: 12, borderWidth: 1, borderColor: p.border }, style]}
+    >
       {buttons.map((b) => {
         const on = b.value === value;
         return (
-          <ChunkyButton
+          <Pressable
             key={b.value}
-            compact
-            outline={!on}
-            icon={b.icon}
-            label={b.label}
-            style={{ flex: 1 }}
-            onPress={() => onValueChange(b.value)}
             accessibilityRole="radio"
             accessibilityState={{ checked: on }}
-          />
+            accessibilityLabel={b.label}
+            onPress={() => onValueChange(b.value)}
+            style={{ flex: 1, minHeight: 44, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: on ? p.accentSoft : "transparent" }}
+          >
+            <RNText style={{ color: on ? p.accent : p.muted, fontSize: 14, fontWeight: on ? "800" : "600" }} numberOfLines={1}>
+              {b.label}
+            </RNText>
+          </Pressable>
         );
       })}
     </View>

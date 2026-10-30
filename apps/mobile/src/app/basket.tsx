@@ -8,6 +8,7 @@ import { useApi } from "@/api/config";
 import { Avatar, EmptyState, Group, Panel, SectionLabel, SkeletonCards, Stepper, Subtitle, Tap, space } from "@/components/grocery/primitives";
 import { ChunkyButton, HelperText, Searchbar, Text } from "@/components/kit";
 import { Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { HeroPanel, PanelCaption, PanelChip, PanelNumber } from "@/components/panel";
 import { initials, mealTint } from "@/groceryView";
 import { useScreenData } from "@/hooks";
 import { usePalette } from "@/theme";
@@ -85,12 +86,10 @@ export default function BasketScreen() {
             ListHeaderComponent={
               <View>
                 {data ? (
-                  <View style={{ flexDirection: "row", gap: space.sm, marginBottom: space.md }}>
-                    <MaterialCommunityIcons name="information-outline" size={18} color={p.muted} style={{ marginTop: 2 }} />
-                    <Text variant="bodyMedium" style={{ color: p.muted, flex: 1 }}>
-                      {SOURCE_NOTE[data.basket.source]} Quantities are packs of the size shown.
-                    </Text>
-                  </View>
+                  <HeroPanel label="Usual items" chip={<PanelChip icon="cart-outline" text="Compared across chains" />}>
+                    <PanelNumber value={`${items.length}`} suffix={items.length === 1 ? "item" : "items"} />
+                    <PanelCaption>{`${SOURCE_NOTE[data.basket.source]} Quantities are packs of the size shown.`}</PanelCaption>
+                  </HeroPanel>
                 ) : null}
                 <Searchbar placeholder="Add an item" accessibilityLabel="Search items to add" value={query} onChangeText={setQuery} />
                 {matches.length > 0 ? (
@@ -118,7 +117,7 @@ export default function BasketScreen() {
                 ) : null}
                 {error ? <HelperText type="error" visible>{error}</HelperText> : null}
                 {loading ? <SkeletonCards count={3} label="Loading your usual items" /> : null}
-                {items.length > 0 ? <SectionLabel>{`${items.length} item${items.length === 1 ? "" : "s"}`}</SectionLabel> : <View style={{ height: space.md }} />}
+                <View style={{ height: space.md }} />
               </View>
             }
             ListEmptyComponent={

@@ -13,7 +13,7 @@ import { useState, type ComponentProps, type ReactNode } from "react";
 import { Pressable, Text as RNText, View, useColorScheme, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 
 import { Mascot } from "@/components/Mascot";
-import { ChunkyButton, Switch } from "@/components/kit";
+import { ChunkyButton, SegmentedButtons, Switch } from "@/components/kit";
 import type { Mood } from "@/game";
 import { tap } from "@/native/haptics";
 import { usePalette } from "@/theme";
@@ -455,7 +455,7 @@ export function IconAction({
   );
 }
 
-/** Mutually exclusive options, like the shared `SegmentedButtons` but at least 48 high. */
+/** Mutually exclusive options: the shared segmented control (at least 44 high). */
 export function Segmented<T extends string>({
   value,
   onValueChange,
@@ -467,23 +467,7 @@ export function Segmented<T extends string>({
   buttons: { value: T; label: string; icon?: string }[];
   style?: StyleProp<ViewStyle>;
 }) {
-  return (
-    <View style={[{ flexDirection: "row", gap: 8 }, style]} accessibilityRole="radiogroup">
-      {buttons.map((b) => (
-        <ChunkyButton
-          key={b.value}
-          compact
-          outline={b.value !== value}
-          label={b.label}
-          icon={b.icon}
-          style={{ flex: 1, minHeight: 48 }}
-          onPress={() => onValueChange(b.value)}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: b.value === value }}
-        />
-      ))}
-    </View>
-  );
+  return <SegmentedButtons value={value} onValueChange={onValueChange} buttons={buttons} style={style} />;
 }
 
 /** Pick one of several short options as wrapping pills, each at least 44 high. */

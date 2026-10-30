@@ -1,11 +1,12 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text as RNText, View, type LayoutChangeEvent } from "react-native";
+import { Pressable, Text as RNText, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from "react-native-svg";
 
 import type { Forecast, SafeToSpend } from "@/api/client";
 import { areaPath, linePath } from "@/charts";
 import { useCountUp } from "@/components/motion";
+import { PanelChip } from "@/components/panel";
 import { ExplainSheet } from "@/components/today/ExplainSheet";
 import { formatMoney, spokenMoney, splitMoney } from "@/format";
 import { MONTH_NAMES } from "@/period";
@@ -71,12 +72,7 @@ export function TodayHero({
       <View style={{ backgroundColor: p.accent, borderRadius: radius.xl, paddingTop: space.lg, paddingHorizontal: space.lg, paddingBottom: space.md, marginBottom: space.lg, overflow: "hidden" }}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md }}>
           <RNText style={[typography.label, { color: ink, opacity: 0.85 }]}>Safe to spend today</RNText>
-          <Chip>
-            <MaterialCommunityIcons name={over ? "alert-outline" : pace.tone === "good" ? "check-circle-outline" : "speedometer"} size={14} color={ink} />
-            <RNText style={[typography.caption, { color: ink, fontWeight: "700" }]} numberOfLines={1}>
-              {pace.title}
-            </RNText>
-          </Chip>
+          <PanelChip icon={over ? "alert-outline" : pace.tone === "good" ? "check-circle-outline" : "speedometer"} text={pace.title} />
         </View>
 
         <RNText
@@ -145,17 +141,6 @@ export function TodayHero({
       </View>
       <ExplainSheet data={safe} visible={open} onClose={() => setOpen(false)} />
     </>
-  );
-}
-
-/** A small translucent pill on the panel. */
-function Chip({ children }: { children: React.ReactNode }) {
-  const p = usePalette();
-  return (
-    <View style={{ borderRadius: radius.pill, overflow: "hidden", flexShrink: 1 }}>
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: p.onAccent, opacity: 0.2 }]} />
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.md, minHeight: 28 }}>{children}</View>
-    </View>
   );
 }
 
