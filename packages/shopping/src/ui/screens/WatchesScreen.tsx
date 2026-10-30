@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ShopApiError } from "../../api/client";
 import type { Watch } from "../../api/types";
 import { formatCents } from "../../logic/format";
-import { Banner, Body, Button, Card, Empty, Field, H2, Row, Screen, Title } from "../kit";
+import { Banner, Body, Button, Card, Empty, Field, H2, HeroPanel, PanelCaption, PanelChip, PanelValue, Row, Screen, Title } from "../kit";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
 
@@ -31,6 +31,12 @@ export function WatchesScreen() {
         <Banner tone="warn">
           This phone only looks when you search. A watch notices a price change the next time you search for it. For alerts while you are away, connect a server.
         </Banner>
+      ) : null}
+      {watches.length > 0 ? (
+        <HeroPanel label="Price alerts" chip={<PanelChip text={`${watches.filter((w) => w.enabled !== false).length} on`} />}>
+          <PanelValue value={`${watches.length}`} suffix={watches.length === 1 ? "watch" : "watches"} />
+          <PanelCaption>You are told when a price drops to your target.</PanelCaption>
+        </HeroPanel>
       ) : null}
       {watches.length === 0 ? (
         <Empty title="Nothing watched" message="Say what you want a price alert for, and at what price." action={<Button label="Add a watch" onPress={() => nav.push({ name: "watch" })} />} />

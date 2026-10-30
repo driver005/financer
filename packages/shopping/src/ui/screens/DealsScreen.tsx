@@ -4,7 +4,7 @@ import { Text } from "react-native";
 import { ShopApiError } from "../../api/client";
 import type { DealItem, Notification } from "../../api/types";
 import { dealLine, formatPrice, verdictText } from "../../logic/format";
-import { Banner, Body, Button, Card, Chip, Empty, H2, Row, Screen, Title } from "../kit";
+import { Banner, Body, Button, Card, Chip, Empty, H2, HeroPanel, PanelCaption, PanelChip, PanelValue, Row, Screen, Title } from "../kit";
 import { openLink } from "../links";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
@@ -44,6 +44,10 @@ export function DealsScreen() {
     <Screen>
       <Title>Deals</Title>
       {error ? <Banner tone="bad">{error}</Banner> : null}
+      <HeroPanel label="Cheap right now" chip={unread > 0 ? <PanelChip text={`${unread} new`} /> : null}>
+        <PanelValue value={`${deals.length}`} suffix={deals.length === 1 ? "deal" : "deals"} />
+        <PanelCaption>Products clearly below their usual price.</PanelCaption>
+      </HeroPanel>
       <Row between>
         <H2>{unread > 0 ? `Messages (${unread} new)` : "Messages"}</H2>
         {unread > 0 ? <Button label="Mark read" kind="ghost" onPress={markRead} /> : null}

@@ -107,6 +107,12 @@ spending trend and the sentences for it), `format.ts` (`formatMoney`, `spokenMon
 - **Chart colours** are `chart1`..`chart5` in `colors.ts` (lavender, cyan, butterscotch, orange,
   green), used in that order for donut slices and store bars; each reaches 3:1 on the page in both
   themes (`tests/theme.test.ts`). The accent stays indigo for text, buttons and the panel.
+- **The shopping assistant follows the same language.** `packages/shopping` cannot import from the
+  finance app (it can be built on its own), so `src/ui/theme.ts` and `src/ui/kit.tsx` repeat the
+  palette, the chart colours, the `HeroPanel`, the flat `Card`, the quiet `Segmented` control and
+  the soft-pill tab bar. When you change a token or one of these pieces in the finance app, change
+  its twin there. Deals, Watching, Product and Compare open with a panel; Search, Plans and
+  Settings stay forms and lists.
 - **Filled tiles are allowed in one place.** The "This period" block on Today (Spent, Income, Still
   to pay, Left to spend) uses four tiles in the palette's soft tints, each with a small figure, a
   mini chart or bar and a round arrow to the screen behind it. Everything else stays a flat section

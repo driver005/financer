@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View, type TextInputProps, type ViewStyle } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { radius, scoreTone, space, type, usePalette } from "./theme";
@@ -51,16 +51,16 @@ export function Body({ children, muted, small }: { children: ReactNode; muted?: 
   return <Text style={[small ? type.small : type.body, { color: muted ? p.muted : p.text }]}>{children}</Text>;
 }
 
+/**
+ * The standard section: a flat strip closed by a hairline, like the finance app. `tone="accent"`
+ * is the one boxed variant, a soft tinted block for something to act on.
+ */
 export function Card({ children, onPress, tone, style }: { children: ReactNode; onPress?: () => void; tone?: "accent"; style?: ViewStyle }) {
   const p = usePalette();
-  const base: ViewStyle = {
-    backgroundColor: tone === "accent" ? p.tint : p.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: p.border,
-    padding: space.md,
-    gap: space.sm,
-  };
+  const base: ViewStyle =
+    tone === "accent"
+      ? { backgroundColor: p.accentSoft, borderRadius: radius.xl, padding: space.md, gap: space.sm }
+      : { borderBottomWidth: 1, borderBottomColor: p.border, paddingBottom: space.md, gap: space.sm };
   return onPress ? (
     <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [base, style, pressed && { opacity: 0.85 }]}>
       {children}
@@ -68,6 +68,53 @@ export function Card({ children, onPress, tone, style }: { children: ReactNode; 
   ) : (
     <View style={[base, style]}>{children}</View>
   );
+}
+
+/**
+ * The filled panel at the top of a screen: a label, one big figure and an optional chip. Everything
+ * on it is drawn in `onAccent`, so it reads in both themes. One per screen, like the finance app.
+ */
+export function HeroPanel({ label, chip, children }: { label: string; chip?: ReactNode; children?: ReactNode }) {
+  const p = usePalette();
+  return (
+    <View style={{ backgroundColor: p.accent, borderRadius: radius.xl, padding: space.lg, gap: space.xs }}>
+      <Row between>
+        <Text style={[type.small, { color: p.onAccent, opacity: 0.85, fontWeight: "600", flexShrink: 1 }]}>{label}</Text>
+        {chip}
+      </Row>
+      {children}
+    </View>
+  );
+}
+
+/** A small translucent pill on the panel. */
+export function PanelChip({ text }: { text: string }) {
+  const p = usePalette();
+  return (
+    <View style={{ borderRadius: radius.pill, overflow: "hidden", flexShrink: 1 }}>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: p.onAccent, opacity: 0.2 }]} />
+      <Text style={[type.small, { color: p.onAccent, fontWeight: "700", paddingHorizontal: space.md, paddingVertical: 4 }]} numberOfLines={1}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+/** The big figure of a panel (a price, a count, a name); `suffix` is the small word after it. */
+export function PanelValue({ value, suffix, size = 40 }: { value: string; suffix?: string; size?: number }) {
+  const p = usePalette();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.sm, flexWrap: "wrap" }} accessible accessibilityLabel={suffix ? `${value} ${suffix}` : value}>
+      <Text style={{ color: p.onAccent, fontSize: size, lineHeight: Math.round(size * 1.14), fontWeight: "900", fontVariant: ["tabular-nums"], flexShrink: 1 }}>{value}</Text>
+      {suffix ? <Text style={[type.body, { color: p.onAccent, opacity: 0.85, fontWeight: "700" }]}>{suffix}</Text> : null}
+    </View>
+  );
+}
+
+/** Secondary text on the panel. */
+export function PanelCaption({ children }: { children: ReactNode }) {
+  const p = usePalette();
+  return <Text style={[type.small, { color: p.onAccent, opacity: 0.85 }]}>{children}</Text>;
 }
 
 export function Button({
@@ -118,11 +165,11 @@ export function Chip({ label, selected, onPress, tone }: { label: string; select
   const content = (
     <View
       style={{
-        backgroundColor: selected ? p.accent : p.surfaceAlt,
+        backgroundColor: selected ? p.accent : "transparent",
         borderRadius: radius.pill,
         borderWidth: 1,
         borderColor: selected ? p.accent : p.border,
-        paddingVertical: 6,
+        paddingVertical: 7,
         paddingHorizontal: space.md,
       }}
     >
@@ -222,21 +269,26 @@ export function Empty({ title, message, action }: { title: string; message?: str
   );
 }
 
+/** Mutually exclusive options: a hairline outline, the chosen segment in the soft accent tint. */
 export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   const p = usePalette();
   return (
-    <View style={{ flexDirection: "row", backgroundColor: p.surfaceAlt, borderRadius: radius.md, borderWidth: 1, borderColor: p.border, padding: 2 }}>
-      {options.map((o) => (
-        <Pressable
-          key={o.value}
-          accessibilityRole="button"
-          accessibilityState={{ selected: o.value === value }}
-          onPress={() => onChange(o.value)}
-          style={{ flex: 1, paddingVertical: space.sm, alignItems: "center", borderRadius: radius.sm, backgroundColor: o.value === value ? p.accent : "transparent" }}
-        >
-          <Text style={{ color: o.value === value ? p.onAccent : p.text, fontSize: 13, fontWeight: "600" }}>{o.label}</Text>
-        </Pressable>
-      ))}
+    <View accessibilityRole="radiogroup" style={{ flexDirection: "row", gap: 4, borderRadius: radius.md, borderWidth: 1, borderColor: p.border, padding: 3 }}>
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <Pressable
+            key={o.value}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on }}
+            accessibilityLabel={o.label}
+            onPress={() => onChange(o.value)}
+            style={{ flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, backgroundColor: on ? p.accentSoft : "transparent" }}
+          >
+            <Text style={{ color: on ? p.accent : p.muted, fontSize: 14, fontWeight: on ? "800" : "600" }}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

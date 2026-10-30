@@ -5,7 +5,7 @@ import { ShopApiError } from "../../api/client";
 import type { Comparison } from "../../api/types";
 import { formatPrice } from "../../logic/format";
 import { groupLabel } from "../../logic/weights";
-import { Banner, Body, Button, Card, H2, Meter, Screen, Title } from "../kit";
+import { Banner, Body, Button, H2, HeroPanel, Meter, PanelCaption, PanelChip, PanelValue, Screen, Title } from "../kit";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
 import { scoreTone, usePalette, type } from "../theme";
@@ -51,13 +51,10 @@ export function CompareScreen({ ids }: { ids: string[] }) {
     <Screen>
       <Title onBack={nav.pop}>Compare</Title>
       {winner ? (
-        <Card tone="accent">
-          <Body small muted>
-            Best fit for your weights
-          </Body>
-          <Text style={[type.heading, { color: p.text }]}>{winner.title}</Text>
-          <Body small muted>{`score ${Math.round(winner.score)} · ${formatPrice(winner.price_cents)}`}</Body>
-        </Card>
+        <HeroPanel label="Best fit for your weights" chip={<PanelChip text={`score ${Math.round(winner.score)}`} />}>
+          <PanelValue value={winner.title} size={24} />
+          <PanelCaption>{formatPrice(winner.price_cents)}</PanelCaption>
+        </HeroPanel>
       ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View>
