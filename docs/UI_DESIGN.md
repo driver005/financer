@@ -92,7 +92,13 @@ spending trend and the sentences for it), `format.ts` (`formatMoney`, `spokenMon
   budget period began, continued as a dotted line to where the forecast says it ends, then the
   three figures behind the daily amount. Spending: spent in the last 14 days. Budget: left to
   budget per month. Trophies: badges earned. Everything else is a secondary row or card.
-- **Today in order:** the panel, the last seven days as bars (today strong, the average as a dotted
+- **Filled tiles are allowed in one place.** The "This period" block on Today (Spent, Income, Still
+  to pay, Left to spend) uses four tiles in the palette's soft tints, each with a small figure, a
+  mini chart or bar and a round arrow to the screen behind it. Everything else stays a flat section
+  with a hairline, because a page of tiles loses its order. Do not add tiles elsewhere without
+  changing this rule. The tile idea comes from a mobile finance reference ("Smarter Insights");
+  the tints are our own tokens, not its gradients.
+- **Today in order:** the panel, the four tiles, the last seven days as bars (today strong, the average as a dotted
   line, the change against the week before), where the period's money went (donut with a legend
   that names every category and its share), the grocery goal, the forecast, the watchdog, the
   stores link, then level and quests (only the next open quest until "All quests" is tapped) and

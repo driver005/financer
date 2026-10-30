@@ -132,19 +132,12 @@ export function TodayHero({
           {curve.projectedEnd !== null ? <LegendItem label="Expected by the end" value={formatMoney(curve.projectedEnd)} /> : null}
         </View>
 
-        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: ink, opacity: 0.3, marginTop: space.lg }} />
-        <View style={{ flexDirection: "row", paddingTop: space.md }}>
-          <Stat label="Free this period" cents={safe.available_cents} />
-          <Stat label="Still to pay" cents={safe.fixed_costs_due_cents} />
-          <Stat label="Income" cents={safe.income_cents} />
-        </View>
-
         <Pressable
           onPress={() => setOpen(true)}
           accessibilityRole="button"
           accessibilityLabel="How is this calculated?"
           hitSlop={8}
-          style={{ flexDirection: "row", alignItems: "center", gap: space.xs, minHeight: 44, alignSelf: "flex-start" }}
+          style={{ flexDirection: "row", alignItems: "center", gap: space.xs, minHeight: 44, alignSelf: "flex-start", marginTop: space.xs }}
         >
           <MaterialCommunityIcons name="help-circle-outline" size={16} color={ink} />
           <RNText style={[typography.label, { color: ink, textDecorationLine: "underline" }]}>How is this calculated?</RNText>
@@ -182,20 +175,6 @@ function LegendItem({ label, value, solid }: { label: string; value: string; sol
       />
       <RNText style={[typography.caption, { color: p.onAccent, flexShrink: 1 }]}>
         {label} <RNText style={[tabular, { fontWeight: "800" }]}>{value}</RNText>
-      </RNText>
-    </View>
-  );
-}
-
-function Stat({ label, cents }: { label: string; cents: number }) {
-  const p = usePalette();
-  return (
-    <View style={{ flex: 1, minWidth: 0 }} accessible accessibilityLabel={`${label}: ${spokenMoney(cents)}`}>
-      <RNText style={[typography.caption, { color: p.onAccent, opacity: 0.8 }]} numberOfLines={1}>
-        {label}
-      </RNText>
-      <RNText style={[typography.bodyStrong, tabular, { color: p.onAccent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-        {formatMoney(cents)}
       </RNText>
     </View>
   );

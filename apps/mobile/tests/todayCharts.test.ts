@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { categoryShares, curveGeometry, curveSummary, donutArcs, isSpend, lastWeek, periodCurve, sharesSummary, weekSummary } from "../src/todayCharts";
+import { categoryShares, curveGeometry, curveSummary, donutArcs, isSpend, lastWeek, periodCurve, sharesSummary, spendComparison, weekSummary } from "../src/todayCharts";
 
 const tx = (booking_date: string, amount_cents: number, category: string | null = "groceries") => ({ booking_date, amount_cents, category });
 const period = { start: "2026-10-01", end: "2026-10-31" };
@@ -137,5 +137,29 @@ describe("donutArcs", () => {
   });
   it("never goes negative for a sliver", () => {
     assert.ok(donutArcs([0.0001, 0.9999], r, 6).every((a) => Number(a.dash.split(" ")[0]) >= 0));
+  });
+});
+
+describe("spendComparison", () => {
+  const sep = { start: "2026-09-01", end: "2026-09-30" };
+  const txs = [tx("2026-10-02", -3000), tx("2026-10-09", -9999), tx("2026-09-02", -2000), tx("2026-09-04", -1000), tx("2026-09-20", -50000), tx("2026-10-01", 100000, "income")];
+  it("compares the first days of this period with the same days of the last", () => {
+    const c = spendComparison(txs, period, sep, "2026-10-05");
+    assert.equal(c.days, 5);
+    assert.equal(c.current, 3000);
+    assert.equal(c.previous, 3000); // Sep 1-5 only; the 20th is later than day 5
+    assert.equal(c.deltaPercent, 0);
+  });
+  it("reports the change in percent", () => {
+    const c = spendComparison(txs, period, sep, "2026-10-03");
+    assert.equal(c.previous, 2000);
+    assert.equal(c.deltaPercent, 50);
+  });
+  it("has no percent when the last period had nothing to compare", () => {
+    assert.equal(spendComparison(txs, period, { start: "2025-01-01", end: "2025-01-31" }, "2026-10-05").deltaPercent, null);
+  });
+  it("clamps today into the period and handles a shorter previous period", () => {
+    assert.equal(spendComparison([], period, sep, "2026-12-01").days, 31);
+    assert.equal(spendComparison([tx("2026-09-30", -100)], period, sep, "2026-10-31").previous, 100);
   });
 });

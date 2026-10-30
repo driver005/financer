@@ -93,6 +93,39 @@ export function curveSummary(curve: PeriodCurve): string {
   return curve.projectedEnd === null ? `${so}.` : `${so}; at this pace about ${formatMoney(curve.projectedEnd)} by the end.`;
 }
 
+export type SpendComparison = {
+  /** Spent in the first `days` days of the period. */
+  current: number;
+  /** Spent in the first `days` days of the period before. */
+  previous: number;
+  /** Whole percent against the period before at the same point; `null` when it had nothing to compare. */
+  deltaPercent: number | null;
+  days: number;
+};
+
+/**
+ * Spending so far against the same number of days of the previous period, so a half-finished month
+ * is not compared with a whole one. `previous` is the period right before `period`.
+ */
+export function spendComparison(txs: Tx[], period: Span, previous: Span, today: string): SpendComparison {
+  const start = toUtc(period.start);
+  const days = Math.max(1, Math.min(Math.round((toUtc(today) - start) / DAY_MS) + 1, Math.round((toUtc(period.end) - start) / DAY_MS) + 1));
+  const sumFirst = (span: Span) => {
+    const from = toUtc(span.start);
+    const to = Math.min(from + (days - 1) * DAY_MS, toUtc(span.end));
+    let total = 0;
+    for (const t of txs) {
+      if (!isSpend(t)) continue;
+      const ms = toUtc(t.booking_date);
+      if (ms >= from && ms <= to) total += -t.amount_cents;
+    }
+    return total;
+  };
+  const current = sumFirst(period);
+  const prev = sumFirst(previous);
+  return { current, previous: prev, deltaPercent: prev > 0 ? Math.round(((current - prev) / prev) * 100) : null, days };
+}
+
 export type WeekBar = { iso: string; letter: string; cents: number; today: boolean };
 export type Week = {
   bars: WeekBar[];

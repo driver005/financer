@@ -8,6 +8,7 @@ import { ForecastCard } from "@/components/ForecastCard";
 import { Mascot } from "@/components/Mascot";
 import { StoresLink } from "@/components/StoresLink";
 import { CategoryCard } from "@/components/today/CategoryCard";
+import { OverviewTiles } from "@/components/today/OverviewTiles";
 import { TodayHero } from "@/components/today/TodayHero";
 import { WeekCard } from "@/components/today/WeekCard";
 import { TrophiesCard } from "@/components/TrophiesCard";
@@ -251,6 +252,8 @@ export default function Today() {
           refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void reload()} tintColor={p.accent} />}
         >
           <TodayHero safe={data.safe} forecast={data.forecast} txs={data.txs} today={today} />
+
+          <OverviewTiles safe={data.safe} txs={data.txs} today={today} />
 
           <WeekCard txs={data.txs} today={today} />
 
