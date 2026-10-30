@@ -41,6 +41,8 @@ export default function RootLayout() {
           <Tabs.Screen name="trophies" options={{ title: "Trophies" }} />
           <Tabs.Screen name="scan" options={{ title: "Scan a product" }} />
           <Tabs.Screen name="stores" options={{ title: "Stores" }} />
+          {/* the shopping assistant, a second app of this project (see modules.ts): draws its own chrome */}
+          <Tabs.Screen name="shop" options={{ title: "Shopping assistant" }} />
           {/* first-run setup: full screen, no tab bar */}
           <Tabs.Screen name="onboarding" options={{ title: "Setup" }} />
         </Tabs>

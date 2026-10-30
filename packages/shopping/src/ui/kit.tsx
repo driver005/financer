@@ -177,7 +177,7 @@ export function Meter({ value, tone, height = 8, label }: { value: number; tone?
       accessibilityRole="progressbar"
       accessibilityLabel={label}
       accessibilityValue={{ min: 0, max: 100, now: Math.round(v * 100) }}
-      style={{ height, borderRadius: height, backgroundColor: p.tint, overflow: "hidden" }}
+      style={{ height, borderRadius: height, backgroundColor: p.border, overflow: "hidden" }}
     >
       <View style={{ width: `${v * 100}%`, height, backgroundColor: color, borderRadius: height }} />
     </View>

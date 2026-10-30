@@ -42,6 +42,7 @@ export function ShoppingModule({ host }: { host: ModuleHost }) {
 function Shell() {
   const shop = useShop();
   const nav = useNav();
+  const p = usePalette();
   useDealNotices();
 
   if (shop.status === "loading") {
@@ -52,13 +53,26 @@ function Shell() {
       </Screen>
     );
   }
-  if (shop.status !== "ready") {
-    return nav.stack.length > 0 || nav.tab === "more" ? <Body2 /> : <Connect />;
-  }
-  return <Body2 />;
+  const top = nav.stack[nav.stack.length - 1];
+  // Not connected: everything but the settings (reached from More or from the setup screen) waits
+  const needsSetup = shop.status !== "ready" && !top && nav.tab !== "more";
+  return (
+    <View style={{ flex: 1, backgroundColor: p.background }}>
+      <View style={{ flex: 1 }}>{needsSetup ? <Setup /> : top ? <Routed route={top} /> : <TabScreen tab={nav.tab} />}</View>
+      {top ? null : (
+        <View accessibilityRole="tablist" style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: p.border, backgroundColor: p.surface }}>
+          {TABS.map((t) => (
+            <Pressable key={t.id} accessibilityRole="tab" accessibilityState={{ selected: nav.tab === t.id }} onPress={() => nav.setTab(t.id)} style={{ flex: 1, paddingVertical: 12, alignItems: "center" }}>
+              <Text style={{ color: nav.tab === t.id ? p.accent : p.muted, fontSize: 13, fontWeight: nav.tab === t.id ? "700" : "500" }}>{t.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
 }
 
-function Connect() {
+function Setup() {
   const shop = useShop();
   const nav = useNav();
   return (
@@ -71,28 +85,6 @@ function Connect() {
         action={<Button label="Open settings" onPress={() => nav.push({ name: "settings" })} />}
       />
     </Screen>
-  );
-}
-
-function Body2() {
-  const nav = useNav();
-  const shop = useShop();
-  const p = usePalette();
-  const top = nav.stack[nav.stack.length - 1];
-  const screen = top ? <Routed route={top} /> : <TabScreen tab={nav.tab} />;
-  return (
-    <View style={{ flex: 1, backgroundColor: p.background }}>
-      <View style={{ flex: 1 }}>{shop.status !== "ready" && !top && nav.tab !== "more" ? <Connect /> : screen}</View>
-      {top ? null : (
-        <View accessibilityRole="tablist" style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: p.border, backgroundColor: p.surface }}>
-          {TABS.map((t) => (
-            <Pressable key={t.id} accessibilityRole="tab" accessibilityState={{ selected: nav.tab === t.id }} onPress={() => nav.setTab(t.id)} style={{ flex: 1, paddingVertical: 12, alignItems: "center" }}>
-              <Text style={{ color: nav.tab === t.id ? p.accent : p.muted, fontSize: 13, fontWeight: nav.tab === t.id ? "700" : "500" }}>{t.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-    </View>
   );
 }
 

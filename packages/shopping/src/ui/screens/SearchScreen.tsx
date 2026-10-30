@@ -130,7 +130,7 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
             </Row>
           ) : null}
 
-          {step?.kind === "suggest-index" && shop.info && shop.info.sources.length > 0 ? (
+          {step?.kind === "suggest-index" && !shop.indexing && shop.info && shop.info.sources.length > 0 ? (
             <Banner
               action={
                 <Button
@@ -210,17 +210,19 @@ function Picks({ response }: { response: SearchResponse }) {
     ["Cheapest good one", response.picks.cheapest_good],
     ["Premium pick", response.picks.premium],
   ];
-  const shown = entries.filter(([, id]) => id && by.has(id));
-  if (shown.length === 0) return null;
+  // one card per product, with every title it won
+  const cards = new Map<string, string[]>();
+  for (const [label, id] of entries) if (id && by.has(id)) cards.set(id, [...(cards.get(id) ?? []), label]);
+  if (cards.size === 0) return null;
   return (
     <View style={{ gap: space.sm }}>
       <H2>Our picks</H2>
-      {shown.map(([label, id]) => {
-        const item = by.get(id as string) as SearchItem;
+      {[...cards.entries()].map(([id, labels]) => {
+        const item = by.get(id) as SearchItem;
         return (
-          <Card key={label} tone="accent" onPress={() => nav.push({ name: "product", id: item.product.id })}>
+          <Card key={id} tone="accent" onPress={() => nav.push({ name: "product", id })}>
             <Body small muted>
-              {label}
+              {labels.join(" · ")}
             </Body>
             <Body>{item.product.title}</Body>
             <Body small muted>

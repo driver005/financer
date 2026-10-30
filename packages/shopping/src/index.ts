@@ -8,3 +8,6 @@ export type { ShopTransport, ShopBackendHandle, ShopServerConfig } from "./api/t
 export { progressModel, followJob, textBar } from "./logic/progress";
 export type { ProgressSurface, ProgressModel } from "./logic/progress";
 export type { LocalNotice } from "./logic/dealNotifications";
+export { createHost } from "./native/hostDefaults";
+export type { HostOptions } from "./native/hostDefaults";
+export { registerIndexService, hasNativeProgress } from "./native/progressSurface";

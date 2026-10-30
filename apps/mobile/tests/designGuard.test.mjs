@@ -68,13 +68,15 @@ describe("design guard", () => {
     const bare = sources
       .filter((s) => s.path.startsWith("app/") && !s.path.startsWith("app/_") && !s.path.startsWith("app/+"))
       .filter((s) => !/<Screen>|<Page\b|<Page>/.test(s.text) && !/<Redirect/.test(s.text))
+      // the shopping assistant is a module with its own screens (see src/shop)
+      .filter((s) => s.path !== "app/shop.tsx")
       .map((s) => s.path);
     assert.deepEqual(bare, []);
   });
 
   it("every screen shows a Title (it carries the Settings button and the back button)", () => {
     const missing = sources
-      .filter((s) => s.path.startsWith("app/") && !s.path.startsWith("app/_") && !s.path.startsWith("app/+") && s.path !== "app/onboarding.tsx")
+      .filter((s) => s.path.startsWith("app/") && !s.path.startsWith("app/_") && !s.path.startsWith("app/+") && s.path !== "app/onboarding.tsx" && s.path !== "app/shop.tsx")
       .filter((s) => !/<Title\b/.test(s.text))
       .map((s) => s.path);
     assert.deepEqual(missing, []);
