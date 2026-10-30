@@ -146,7 +146,14 @@ impl ParsedQuery {
         let category_words: Vec<String> = category
             .as_deref()
             .and_then(|c| registry.resolved(c).ok())
-            .map(|s| s.keywords.iter().flat_map(|k| tokenize(k)).collect())
+            .map(|s| {
+                let keep: Vec<String> = s.name_words.iter().flat_map(|k| tokenize(k)).collect();
+                s.keywords
+                    .iter()
+                    .flat_map(|k| tokenize(k))
+                    .filter(|w| !keep.contains(w))
+                    .collect()
+            })
             .unwrap_or_default();
         q.terms = words
             .into_iter()
@@ -456,6 +463,10 @@ mod tests {
         assert_eq!(p.category.as_deref(), Some("smartphone"));
         assert_eq!(p.max_price_cents, Some(50_000));
         assert_eq!(p.terms, ["google"]);
+
+        // model lines stay in the terms: they are words in product names
+        assert_eq!(q("pixel 9").terms, ["pixel", "9"]);
+        assert_eq!(q("pixel 9").category.as_deref(), Some("smartphone"));
 
         let p = q("best phone under 1.200 eur");
         assert_eq!(p.max_price_cents, Some(120_000));

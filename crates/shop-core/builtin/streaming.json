@@ -5,6 +5,7 @@
   "extends": "generic",
   "remove": ["deal"],
   "keywords": ["streaming", "netflix", "disney", "abo", "subscription", "spotify", "musik streaming"],
+  "name_words": ["netflix", "disney", "spotify"],
   "tiers": ["cheap", "standard", "extended", "premium"],
   "attributes": [
     {"key": "resolution", "label": "Resolution", "kind": "text", "aliases": ["Auflösung", "Bildqualität", "Video quality"]},

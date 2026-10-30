@@ -3,6 +3,7 @@
   "name": "Headphones",
   "extends": "generic",
   "keywords": ["headphones", "kopfhörer", "earbuds", "airpods", "in-ear"],
+  "name_words": ["airpods"],
   "attributes": [
     {"key": "kind", "label": "Type", "kind": "text", "aliases": ["Bauform", "Typ"]},
     {"key": "anc", "label": "Noise cancelling", "kind": "bool", "aliases": ["Noise Cancelling", "ANC", "Geräuschunterdrückung"]},

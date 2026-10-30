@@ -1866,6 +1866,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "financer-shop-sources"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "csv",
+ "financer-llm",
+ "financer-prices",
+ "financer-shop-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "financer-store"
 version = "0.1.0"
 dependencies = [

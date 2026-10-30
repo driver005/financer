@@ -3,6 +3,7 @@
   "name": "Laptop",
   "extends": "generic",
   "keywords": ["laptop", "notebook", "macbook", "ultrabook"],
+  "name_words": ["macbook"],
   "tiers": ["budget", "mid-range", "upper mid-range", "premium"],
   "attributes": [
     {"key": "os", "label": "Operating system", "kind": "text", "aliases": ["Betriebssystem", "OS"]},

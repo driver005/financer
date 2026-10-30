@@ -3,6 +3,7 @@
   "name": "Smartphone",
   "extends": "generic",
   "keywords": ["smartphone", "handy", "phone", "mobiltelefon", "iphone", "galaxy", "pixel"],
+  "name_words": ["iphone", "galaxy", "pixel"],
   "tiers": ["budget", "mid-range", "upper mid-range", "flagship"],
   "attributes": [
     {"key": "os", "label": "Operating system", "kind": "text", "aliases": ["Betriebssystem", "OS"]},

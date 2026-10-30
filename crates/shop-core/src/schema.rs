@@ -308,6 +308,10 @@ pub struct CategorySchema {
     /// Words in a query that point to this category ("handy", "smartphone").
     #[serde(default)]
     pub keywords: Vec<String>,
+    /// Keywords that are also words in product names (`pixel`, `macbook`): a search keeps them as
+    /// terms to match. The other keywords only name the category and are dropped from the terms.
+    #[serde(default)]
+    pub name_words: Vec<String>,
     #[serde(default)]
     pub attributes: Vec<AttributeDef>,
     #[serde(default)]
@@ -520,6 +524,7 @@ impl Registry {
             merged.tiers = own.tiers.clone();
         }
         merged.keywords.extend(own.keywords.iter().cloned());
+        merged.name_words.extend(own.name_words.iter().cloned());
         merged.criteria.retain(|c| !own.remove.contains(&c.key));
         for a in &own.attributes {
             match merged.attributes.iter_mut().find(|x| x.key == a.key) {

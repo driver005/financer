@@ -176,11 +176,11 @@ impl Product {
     }
 
     /// A stable id from category, brand and title, so the same product found on two shops (or in
-    /// two crawls) is one product. A GTIN, when known, is a better identity and replaces it.
+    /// two crawls) is one product. Colours and filler words are ignored.
     pub fn make_id(category: &str, brand: Option<&str>, title: &str) -> String {
-        let mut words = crate::text::tokenize(title);
+        let mut words = crate::text::canonical_tokens(title);
         if let Some(b) = brand {
-            let b = crate::text::tokenize(b);
+            let b = crate::text::canonical_tokens(b);
             if let Some(first) = b.first() {
                 if words.first() != Some(first) {
                     words.insert(0, first.clone());
@@ -188,6 +188,12 @@ impl Product {
             }
         }
         format!("{}:{}", category, words.join("-"))
+    }
+
+    /// The id for a product with a known GTIN/EAN: the same everywhere, whatever the shop calls it.
+    pub fn id_for_gtin(category: &str, gtin: &str) -> String {
+        let digits: String = gtin.chars().filter(char::is_ascii_digit).collect();
+        format!("{category}:gtin-{}", digits.trim_start_matches('0'))
     }
 
     pub fn with(mut self, key: &str, value: impl Into<AttrValue>) -> Product {
@@ -356,6 +362,26 @@ mod tests {
         assert_eq!(
             Product::make_id("smartphone", Some("Google"), "Google Pixel 9 (128 GB)"),
             Product::make_id("smartphone", None, "google pixel 9 128 gb")
+        );
+    }
+
+    #[test]
+    fn colours_and_filler_do_not_split_products() {
+        assert_eq!(
+            Product::make_id(
+                "smartphone",
+                Some("Google"),
+                "Google Pixel 9 Smartphone 128GB Obsidian"
+            ),
+            Product::make_id("smartphone", None, "Google Pixel 9 128 GB schwarz")
+        );
+        assert_ne!(
+            Product::make_id("smartphone", None, "Pixel 9 128GB"),
+            Product::make_id("smartphone", None, "Pixel 9 256GB")
+        );
+        assert_eq!(
+            Product::id_for_gtin("smartphone", "0840-1234"),
+            "smartphone:gtin-8401234"
         );
     }
 

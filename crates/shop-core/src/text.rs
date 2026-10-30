@@ -49,6 +49,76 @@ fn fold(c: char) -> Vec<char> {
         .collect()
 }
 
+/// Words that name a colour or are filler in a shop title: they do not tell products apart
+/// ("Pixel 9 Obsidian" and "Pixel 9 schwarz" are one product). Sizes such as `128 gb` stay, because
+/// the variants differ in price and specs.
+const NOISE: &[&str] = &[
+    "black",
+    "white",
+    "blue",
+    "green",
+    "red",
+    "pink",
+    "purple",
+    "gold",
+    "silver",
+    "gray",
+    "grey",
+    "yellow",
+    "orange",
+    "beige",
+    "brown",
+    "schwarz",
+    "weiss",
+    "blau",
+    "gruen",
+    "rot",
+    "rosa",
+    "lila",
+    "grau",
+    "silber",
+    "gelb",
+    "braun",
+    "obsidian",
+    "midnight",
+    "starlight",
+    "graphite",
+    "smartphone",
+    "handy",
+    "mobiltelefon",
+    "dual",
+    "sim",
+    "ohne",
+    "vertrag",
+    "neu",
+    "new",
+    "original",
+    "versandkostenfrei",
+    "inkl",
+    "with",
+    "mit",
+    "und",
+    "and",
+    "the",
+    "cell",
+    "phone",
+];
+
+/// The words of a title that identify the product.
+pub fn canonical_tokens(title: &str) -> Vec<String> {
+    let all = tokenize(title);
+    let kept: Vec<String> = all
+        .iter()
+        .filter(|t| !NOISE.contains(&t.as_str()))
+        .cloned()
+        .collect();
+    if kept.is_empty() {
+        all
+    } else {
+        kept
+    }
+}
+
 /// A key for comparing names: tokens joined by a single space.
 pub fn fold_key(text: &str) -> String {
     tokenize(text).join(" ")
