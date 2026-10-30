@@ -10,8 +10,10 @@ rust-version.workspace = true
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [features]
-# The shopping assistant's on-phone backend (`ShopBackend`). Off by default: the finance-only app
-# does not carry it. See docs/SHOP.md.
+# The shopping assistant's on-phone backend (`ShopBackend`). On by default, because the bindings
+# generator builds the crate with its default features and one native library then serves both
+# apps (the finance-only app simply never starts it). See docs/SHOP.md.
+default = ["shop"]
 shop = ["dep:financer-shop-api"]
 # Builds the `uniffi-bindgen` helper binary used to generate Kotlin/Swift/TypeScript bindings.
 bindgen-cli = ["uniffi/cli"]
