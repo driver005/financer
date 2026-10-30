@@ -87,10 +87,20 @@ spending trend and the sentences for it), `format.ts` (`formatMoney`, `spokenMon
 
 ## Patterns
 
-- **One hero number per screen.** Today: the daily "safe to spend" in a ring (the ring shows how
-  much of the budget period is still ahead; it drains day by day, it is not a spending bar).
-  Spending: spent in the last 14 days. Budget: left to budget per month. Trophies: badges earned.
-  Everything else is a secondary row or card.
+- **One hero number per screen.** Today: the daily "safe to spend", on the one filled panel of the
+  app (`components/today/TodayHero`). Under the number a curve shows what has been spent since the
+  budget period began, continued as a dotted line to where the forecast says it ends, then the
+  three figures behind the daily amount. Spending: spent in the last 14 days. Budget: left to
+  budget per month. Trophies: badges earned. Everything else is a secondary row or card.
+- **Today in order:** the panel, the last seven days as bars (today strong, the average as a dotted
+  line, the change against the week before), where the period's money went (donut with a legend
+  that names every category and its share), the grocery goal, the forecast, the watchdog, the
+  stores link, then level and quests (only the next open quest until "All quests" is tapped) and
+  trophies. The numbers behind the three pictures are in `src/todayCharts.ts` (pure, tested); each
+  picture has a sentence for screen readers, built from the same data.
+- **Pictures never carry the information alone.** Donut slices differ by hue only to tell them
+  apart; every legend row names its category. Savings transfers and income are not spending and are
+  left out of all three pictures.
 - **Lists are grouped.** A `ListGroup` per block (and per day in Spending), `ListRow` for each row.
   Amounts in the trailing slot with `Money`; they keep their width and the title shrinks.
 - **Money.** Always through `Money` or `formatMoney` in new code. Sign and colour follow the amount.
