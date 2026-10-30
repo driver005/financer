@@ -1,0 +1,25 @@
+{
+  "id": "streaming",
+  "name": "Streaming subscription",
+  "kind": "subscription",
+  "extends": "generic",
+  "remove": ["deal"],
+  "keywords": ["streaming", "netflix", "disney", "abo", "subscription", "spotify", "musik streaming"],
+  "tiers": ["cheap", "standard", "extended", "premium"],
+  "attributes": [
+    {"key": "resolution", "label": "Resolution", "kind": "text", "aliases": ["Auflösung", "Bildqualität", "Video quality"]},
+    {"key": "streams", "label": "Simultaneous streams", "aliases": ["Gleichzeitige Streams", "Geräte gleichzeitig", "Screens"]},
+    {"key": "ad_free", "label": "Ad-free", "kind": "bool", "aliases": ["Werbefrei", "Ohne Werbung"]},
+    {"key": "offline", "label": "Offline downloads", "kind": "bool", "aliases": ["Offline-Modus", "Downloads"]},
+    {"key": "catalog_score", "label": "Catalogue rating", "aliases": ["Katalog", "Inhalte"]}
+  ],
+  "criteria": [
+    {"key": "price", "label": "Cost per month", "kind": "price", "weight": 4, "group": "cost"},
+    {"key": "quality", "label": "Picture quality", "kind": "choice", "attribute": "resolution", "scores": {"4k": 1.0, "uhd": 1.0, "full hd": 0.6, "1080p": 0.6, "hd": 0.4, "720p": 0.4, "sd": 0.1}, "default": 0.3, "weight": 1},
+    {"key": "streams", "label": "Simultaneous streams", "kind": "number", "attribute": "streams", "weight": 1, "scale": {"type": "fixed", "min": 1, "max": 6}},
+    {"key": "ad_free", "label": "Ad-free", "kind": "flag", "attribute": "ad_free", "weight": 1.5},
+    {"key": "offline", "label": "Offline downloads", "kind": "flag", "attribute": "offline", "weight": 0.5},
+    {"key": "catalog", "label": "Catalogue", "kind": "number", "attribute": "catalog_score", "weight": 2, "scale": {"type": "fixed", "min": 40, "max": 100}},
+    {"key": "flexibility", "label": "Cancel any time", "kind": "formula", "expr": "term_months", "higher_is_better": false, "weight": 1, "scale": {"type": "fixed", "min": 0, "max": 12}}
+  ]
+}

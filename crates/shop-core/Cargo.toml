@@ -1,0 +1,12 @@
+[package]
+name = "financer-shop-core"
+description = "Shopping assistant domain: extensible product schemas and criteria, ranking, deals, subscription costs and a search index"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,25 @@
+{
+  "id": "internet_plan",
+  "name": "Home internet",
+  "kind": "subscription",
+  "extends": "generic",
+  "remove": ["deal"],
+  "keywords": ["internet", "dsl", "glasfaser", "fiber", "internettarif", "home internet", "wlan tarif"],
+  "tiers": ["cheap", "standard", "fast", "premium"],
+  "attributes": [
+    {"key": "download_mbps", "label": "Download", "unit": "Mbit/s", "aliases": ["Downloadgeschwindigkeit", "Geschwindigkeit", "Max. Download", "Speed"], "units": {"gbit": 1000, "mbit": 1}},
+    {"key": "upload_mbps", "label": "Upload", "unit": "Mbit/s", "aliases": ["Uploadgeschwindigkeit", "Max. Upload"]},
+    {"key": "connection", "label": "Connection type", "kind": "text", "aliases": ["Anschlussart", "Technologie", "Anschluss"]},
+    {"key": "router_included", "label": "Router included", "kind": "bool", "aliases": ["Router inklusive", "Router inkl."]},
+    {"key": "provider_score", "label": "Provider test score", "aliases": ["Anbieter-Test", "Kundenzufriedenheit"]}
+  ],
+  "criteria": [
+    {"key": "price", "label": "Cost per month", "kind": "price", "weight": 4, "group": "cost"},
+    {"key": "download", "label": "Download speed", "kind": "number", "attribute": "download_mbps", "log": true, "weight": 2, "scale": {"type": "fixed", "min": 16, "max": 1000}},
+    {"key": "upload", "label": "Upload speed", "kind": "number", "attribute": "upload_mbps", "log": true, "weight": 1, "scale": {"type": "fixed", "min": 2, "max": 500}},
+    {"key": "technology", "label": "Technology", "kind": "choice", "attribute": "connection", "scores": {"glasfaser": 1.0, "fiber": 1.0, "ftth": 1.0, "kabel": 0.7, "cable": 0.7, "vdsl": 0.4, "dsl": 0.3, "5g": 0.5, "lte": 0.3}, "default": 0.3, "weight": 1},
+    {"key": "router", "label": "Router included", "kind": "flag", "attribute": "router_included", "weight": 0.5},
+    {"key": "provider", "label": "Provider quality", "kind": "number", "attribute": "provider_score", "weight": 1, "scale": {"type": "fixed", "min": 40, "max": 100}},
+    {"key": "flexibility", "label": "Short commitment", "kind": "formula", "expr": "term_months", "higher_is_better": false, "weight": 1, "scale": {"type": "fixed", "min": 0, "max": 24}}
+  ]
+}
