@@ -9,6 +9,7 @@ import { useApi } from "@/api/config";
 import { Avatar, Badge, EmptyState, FilterChip, MatchRing, Money, Panel, SkeletonCards, Subtitle, space } from "@/components/grocery/primitives";
 import { HelperText, List, Text, TextInput } from "@/components/kit";
 import { HeaderAction, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
+import { HeroPanel, PanelCaption, PanelChip, PanelNumber } from "@/components/panel";
 import { formatCents, parseEuroInput, servingsText } from "@/format";
 import { costPerServing, initials, mealTint, shortList } from "@/groceryView";
 import { useScreenData } from "@/hooks";
@@ -72,6 +73,12 @@ export default function Recipes() {
           contentContainerStyle={{ paddingBottom: space.xl }}
           ListHeaderComponent={
             <View style={{ marginBottom: space.sm }}>
+              {data && data.length > 0 ? (
+                <HeroPanel label="Recipes for you" chip={tag ? <PanelChip icon="filter-variant" text={tag} /> : null}>
+                  <PanelNumber value={`${data.length}`} suffix={data.length === 1 ? "recipe" : "recipes"} />
+                  <PanelCaption>Matched against your usual items and today's prices.</PanelCaption>
+                </HeroPanel>
+              ) : null}
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingVertical: space.xs }}>
                 <FilterChip label="All" selected={!tag} onPress={() => setTag(undefined)} />
                 {TAGS.map((t) => (
@@ -103,14 +110,6 @@ export default function Recipes() {
                 <View style={{ marginTop: space.lg }}>
                   <SkeletonCards count={3} label="Loading recipes" />
                 </View>
-              ) : null}
-              {data && data.length > 0 ? (
-                <RNText
-                  accessibilityRole="header"
-                  style={{ color: c.muted, fontSize: 12, fontWeight: "800", marginTop: space.lg }}
-                >
-                  {`${data.length} recipe${data.length === 1 ? "" : "s"}`}
-                </RNText>
               ) : null}
             </View>
           }

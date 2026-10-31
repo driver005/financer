@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 import { ShopApiError } from "../../api/client";
 import type { AttrValue, ProductDetail } from "../../api/types";
 import { ago, dealLine, formatPrice, planTerms, verdictText } from "../../logic/format";
-import { Banner, Body, Button, Card, Chip, Empty, Field, H2, Row, Screen, Title } from "../kit";
+import { Banner, Body, Button, Card, Chip, Empty, Field, H2, HeroPanel, PanelCaption, PanelChip, PanelValue, Row, Screen, Title } from "../kit";
 import { openLink } from "../links";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
@@ -76,15 +76,11 @@ export function ProductScreen({ id }: { id: string }) {
       {product.brand ? <Body muted>{product.brand}</Body> : null}
       {error ? <Banner tone="bad">{error}</Banner> : null}
 
-      {deal && deal.verdict !== "none" ? (
-        <Banner>
-          <View style={{ gap: 4 }}>
-            <Text style={[type.heading, { color: p.text }]}>{verdictText(deal.verdict)}</Text>
-            <Body small muted>
-              {dealLine(deal)}
-            </Body>
-          </View>
-        </Banner>
+      {offers.length > 0 ? (
+        <HeroPanel label={monthly ? "Best monthly price" : "Best price"} chip={deal && deal.verdict !== "none" ? <PanelChip text={verdictText(deal.verdict)} /> : null}>
+          <PanelValue value={offers[0].recurring ? formatPrice(offers[0].recurring.monthly_cents, true) : formatPrice(offers[0].price_cents)} suffix={`at ${offers[0].shop}`} />
+          {deal ? <PanelCaption>{dealLine(deal)}</PanelCaption> : null}
+        </HeroPanel>
       ) : deal ? (
         <Body small muted>
           {dealLine(deal)}

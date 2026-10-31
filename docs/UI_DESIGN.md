@@ -87,10 +87,47 @@ spending trend and the sentences for it), `format.ts` (`formatMoney`, `spokenMon
 
 ## Patterns
 
-- **One hero number per screen.** Today: the daily "safe to spend" in a ring (the ring shows how
-  much of the budget period is still ahead; it drains day by day, it is not a spending bar).
-  Spending: spent in the last 14 days. Budget: left to budget per month. Trophies: badges earned.
-  Everything else is a secondary row or card.
+- **One hero number per screen.** Today: the daily "safe to spend", on the one filled panel of the
+  app (`components/today/TodayHero`). Under the number a curve shows what has been spent since the
+  budget period began, continued as a dotted line to where the forecast says it ends, then the
+  three figures behind the daily amount. Spending: spent in the last 14 days. Budget: left to
+  budget per month. Trophies: badges earned. Everything else is a secondary row or card.
+- **Every screen opens the same way.** Title, then (on tabbed screens) the underlined tab strip
+  (`SectionSwitch`), then one `HeroPanel` (`components/panel.tsx`) with the number the screen is
+  about: Spending (spent in 14 days, with bars), Budget (left per month, income and fixed costs),
+  Stores (spent in stores), Subscriptions (monthly total), Trophies (badges earned), Recipes (how
+  many match), Meal plan (days planned), Usual items (how many), Prices (best chain). Today's
+  panel adds the spending curve. Settings screens are plain lists and have no panel. A new screen
+  uses `HeroPanel` with `PanelFigure` or `PanelNumber`, never its own filled block; the design
+  guard fails on a hand-made accent block with the panel's radius.
+- **Tabs and choices are quiet.** Screens that share a tab are switched with text tabs, the open
+  one in the accent colour with a line under it. Choices between a few options (period, horizon,
+  segment) use `SegmentedButtons`: a hairline outline with the chosen segment in the soft tint.
+  Filters are small chips. Nothing here is a big filled pill any more.
+- **Chart colours** are `chart1`..`chart5` in `colors.ts` (lavender, cyan, butterscotch, orange,
+  green), used in that order for donut slices and store bars; each reaches 3:1 on the page in both
+  themes (`tests/theme.test.ts`). The accent stays indigo for text, buttons and the panel.
+- **The shopping assistant follows the same language.** `packages/shopping` cannot import from the
+  finance app (it can be built on its own), so `src/ui/theme.ts` and `src/ui/kit.tsx` repeat the
+  palette, the chart colours, the `HeroPanel`, the flat `Card`, the quiet `Segmented` control and
+  the soft-pill tab bar. When you change a token or one of these pieces in the finance app, change
+  its twin there. Deals, Watching, Product and Compare open with a panel; Search, Plans and
+  Settings stay forms and lists.
+- **Filled tiles are allowed in one place.** The "This period" block on Today (Spent, Income, Still
+  to pay, Left to spend) uses four tiles in the palette's soft tints, each with a small figure, a
+  mini chart or bar and a round arrow to the screen behind it. Everything else stays a flat section
+  with a hairline, because a page of tiles loses its order. Do not add tiles elsewhere without
+  changing this rule. The tile idea comes from a mobile finance reference ("Smarter Insights");
+  the tints are our own tokens, not its gradients.
+- **Today in order:** the panel, the four tiles, the last seven days as bars (today strong, the average as a dotted
+  line, the change against the week before), where the period's money went (donut with a legend
+  that names every category and its share), the grocery goal, the forecast, the watchdog, the
+  stores link, then level and quests (only the next open quest until "All quests" is tapped) and
+  trophies. The numbers behind the three pictures are in `src/todayCharts.ts` (pure, tested); each
+  picture has a sentence for screen readers, built from the same data.
+- **Pictures never carry the information alone.** Donut slices differ by hue only to tell them
+  apart; every legend row names its category. Savings transfers and income are not spending and are
+  left out of all three pictures.
 - **Lists are grouped.** A `ListGroup` per block (and per day in Spending), `ListRow` for each row.
   Amounts in the trailing slot with `Money`; they keep their width and the title shrinks.
 - **Money.** Always through `Money` or `formatMoney` in new code. Sign and colour follow the amount.

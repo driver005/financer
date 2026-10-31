@@ -62,8 +62,10 @@ function Shell() {
       {top ? null : (
         <View accessibilityRole="tablist" style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: p.border, backgroundColor: p.surface }}>
           {TABS.map((t) => (
-            <Pressable key={t.id} accessibilityRole="tab" accessibilityState={{ selected: nav.tab === t.id }} onPress={() => nav.setTab(t.id)} style={{ flex: 1, paddingVertical: 12, alignItems: "center" }}>
-              <Text style={{ color: nav.tab === t.id ? p.accent : p.muted, fontSize: 13, fontWeight: nav.tab === t.id ? "700" : "500" }}>{t.label}</Text>
+            <Pressable key={t.id} accessibilityRole="tab" accessibilityState={{ selected: nav.tab === t.id }} onPress={() => nav.setTab(t.id)} style={{ flex: 1, minHeight: 56, alignItems: "center", justifyContent: "center" }}>
+              <View style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, backgroundColor: nav.tab === t.id ? p.accentSoft : "transparent" }}>
+                <Text style={{ color: nav.tab === t.id ? p.accent : p.muted, fontSize: 13, fontWeight: nav.tab === t.id ? "800" : "600" }}>{t.label}</Text>
+              </View>
             </Pressable>
           ))}
         </View>
