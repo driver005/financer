@@ -26,7 +26,7 @@ jobs:
     env:
       FINANCER_TEST_POSTGRES_URL: postgres://financer:financer@127.0.0.1:5432/financer_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The release version rules (.github/scripts/next-version.sh); no build needed, runs in seconds.
       - name: Version script tests
         run: bash .github/scripts/test-next-version.sh
@@ -82,7 +82,7 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -97,7 +97,7 @@ jobs:
   shopping:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
