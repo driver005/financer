@@ -50,7 +50,7 @@ jobs:
       # The two mock bank servers are built from source (several minutes); keep the binaries.
       - name: Cache the FinTS mock banks
         id: fints-mock
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ runner.temp }}/fints
