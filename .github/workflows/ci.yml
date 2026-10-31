@@ -30,6 +30,8 @@ jobs:
       # The release version rules (.github/scripts/next-version.sh); no build needed, runs in seconds.
       - name: Version script tests
         run: bash .github/scripts/test-next-version.sh
+      - name: Desktop bundle assembly tests (the shopping assistant's bundles)
+        run: bash .github/scripts/test-assemble-shop-desktop.sh
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

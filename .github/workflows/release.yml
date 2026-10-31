@@ -6,6 +6,10 @@ name: Release builds
 #   - the web app on its own (a zip)
 #   - a Docker image on ghcr.io (for your own server)
 #   - the Android app (APK) and iOS app through EAS Build (needs the EXPO_TOKEN secret)
+#   - the shopping assistant (docs/SHOP.md), as a second app of the project: a standalone shop
+#     (desktop bundles, Docker image, Android APK, iOS Simulator app) and a bundled build where the
+#     finance app contains it (same kinds of files, "bundle"). These jobs are extra: the release is
+#     attached even when one of them fails, so the finance files never wait for them.
 # Run it by pushing a version tag (git tag v1.0.0 && git push --tags), or by hand from the
 # Actions tab ("Run workflow"). Details and one-time setup: docs/RELEASE.md.
 
@@ -18,7 +22,7 @@ on:
         description: What to build
         type: choice
         default: all
-        options: [all, desktop-and-web, docker, mobile, android-apk, ios-simulator]
+        options: [all, desktop-and-web, docker, mobile, android-apk, ios-simulator, shop]
       eas_profile:
         description: EAS build profile for the phone apps (see apps/mobile/eas.json)
         type: choice
@@ -381,12 +385,321 @@ jobs:
           name: app-ios-simulator-${{ matrix.variant }}
           path: apps/mobile/out/financer-${{ matrix.variant }}-ios-simulator.zip
 
+  # ---- the shopping assistant ---------------------------------------------------------------------
+  # Two flavours besides the finance-only files above (docs/SHOP.md):
+  #   shop   - the shopping assistant on its own (apps/shopping, financer-shop-server)
+  #   bundle - the finance app with the shopping assistant inside (apps/mobile built with
+  #            EXPO_PUBLIC_SHOPPING=1, financer-server built with --features shop)
+
+  shop-web:
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'shop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/shopping/package-lock.json
+            apps/mobile/package-lock.json
+      - name: The shopping app in the browser
+        working-directory: apps/shopping
+        run: |
+          npm ci
+          if [ "$GITHUB_REF_TYPE" = tag ]; then node ../mobile/scripts/set-version.mjs "$GITHUB_REF_NAME" --dir .; fi
+          npx expo export --platform web --output-dir dist
+          cd dist && zip -qr ../financer-shop-web.zip .
+        env:
+          CI: "1"
+      - name: The finance app with the shopping assistant inside, in the browser
+        working-directory: apps/mobile
+        run: |
+          npm ci
+          if [ "$GITHUB_REF_TYPE" = tag ]; then node scripts/set-version.mjs "$GITHUB_REF_NAME"; fi
+          npx expo export --platform web --output-dir dist-bundle
+        env:
+          CI: "1"
+          EXPO_PUBLIC_SHOPPING: "1"
+      - name: The shop code is in the bundled build
+        run: grep -rl "Nothing is read from the web" apps/mobile/dist-bundle/_expo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shop-web
+          path: apps/shopping/financer-shop-web.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shop-web-files
+          path: apps/shopping/dist
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-web-files
+          path: apps/mobile/dist-bundle
+          retention-days: 1
+
+  desktop-shop:
+    # The same four platforms as `desktop`, for both flavours (8 bundles).
+    needs: shop-web
+    name: desktop-shop (${{ matrix.variant }}, ${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [shop, bundle]
+        target: [linux-x64, macos-arm64, macos-x64, windows-x64]
+        include:
+          - { target: linux-x64, os: ubuntu-latest, exe: "", start: start.sh }
+          - { target: macos-arm64, os: macos-latest, exe: "", start: start.sh }
+          - { target: macos-x64, os: macos-15-intel, exe: "", start: start.sh }
+          - { target: windows-x64, os: windows-latest, exe: ".exe", start: start.bat }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stamp the tag's version
+        if: github.ref_type == 'tag'
+        run: bash .github/scripts/set-rust-version.sh "$GITHUB_REF_NAME"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release
+          cache-on-failure: true
+      - name: Build the standalone shopping server
+        if: matrix.variant == 'shop'
+        run: cargo build --release --locked -p financer-shop-server
+      - name: Build the finance server with the shopping assistant
+        if: matrix.variant == 'bundle'
+        run: cargo build --release --locked -p financer-server --features shop
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.variant == 'shop' && 'shop-web-files' || 'bundle-web-files' }}
+          path: web-files
+      - name: Assemble the bundle
+        run: bash .github/scripts/assemble-shop-desktop.sh "${{ matrix.variant }}" "${{ matrix.target }}" "${{ matrix.exe }}" "${{ matrix.start }}" web-files
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.variant }}-${{ matrix.target }}
+          path: |
+            financer-*-desktop-*.zip
+            financer-*-desktop-*.tar.gz
+          if-no-files-found: error
+
+  docker-shop:
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'shop'
+    name: docker-shop (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # the shopping assistant on its own
+          - { image: financer-shop-server, file: deploy/Dockerfile.shop, args: "" }
+          # the finance server with the shopping assistant inside
+          - { image: financer-bundle-server, file: deploy/Dockerfile, args: "FEATURES=shop" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stamp the tag's version
+        if: github.ref_type == 'tag'
+        run: bash .github/scripts/set-rust-version.sh "$GITHUB_REF_NAME"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.args }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  android-apk-shop:
+    # Android apps for both flavours, each in the two ways to run (see android-apk):
+    #   client  - talks to a server (the shop server, or the bundled finance server)
+    #   compact - the Rust backend inside the phone; searches only when you press Search
+    # Files: financer-<shopping|bundle>-<client|compact>-android.apk. Signed like android-apk.
+    # The standalone shopping app carries Notifee (a real progress bar in the notification); the
+    # bundled finance app does not, and shows a text bar (docs/SHOP.md).
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'shop'
+    name: android-apk-shop (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: shopping-client, dir: apps/shopping, compact: false, flag: "" }
+          - { name: shopping-compact, dir: apps/shopping, compact: true, flag: "" }
+          - { name: bundle-client, dir: apps/mobile, compact: false, flag: "1" }
+          - { name: bundle-compact, dir: apps/mobile, compact: true, flag: "1" }
+    runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_SHOPPING: ${{ matrix.flag }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.compact
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        if: matrix.compact
+      - uses: taiki-e/install-action@v2
+        if: matrix.compact
+        with:
+          tool: cargo-ndk
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Stamp the tag's version
+        if: github.ref_type == 'tag'
+        run: node "$GITHUB_WORKSPACE/apps/mobile/scripts/set-version.mjs" "$GITHUB_REF_NAME" --dir .
+      - name: Build the Rust backend into the app (compact)
+        if: matrix.compact
+        run: scripts/enable-embedded.sh android
+      - name: Generate the native Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: "1"
+      - name: Prepare release signing (only if the keystore secrets are set)
+        id: signing
+        working-directory: .
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set=0
+          for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -n "${!v}" ]; then set=$((set + 1)); fi
+          done
+          if [ "$set" -eq 4 ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "keystore=$RUNNER_TEMP/release.keystore" >> "$GITHUB_OUTPUT"
+          elif [ "$set" -gt 0 ]; then
+            echo "::warning title=APK stays debug-signed::Only $set of the 4 Android signing secrets are set (docs/RELEASE.md)."
+          fi
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build the release APK
+        working-directory: ${{ matrix.dir }}/android
+        env:
+          SIGNING: ${{ steps.signing.outputs.enabled }}
+          FINANCER_KEYSTORE_FILE: ${{ steps.signing.outputs.keystore }}
+          FINANCER_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FINANCER_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FINANCER_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ "$SIGNING" = "true" ]; then
+            ./gradlew assembleRelease --no-daemon -I "$GITHUB_WORKSPACE/.github/scripts/android-signing.init.gradle"
+          else
+            ./gradlew assembleRelease --no-daemon
+          fi
+      - name: Collect the APK
+        run: |
+          mkdir out
+          cp android/app/build/outputs/apk/release/*.apk "out/financer-${{ matrix.name }}-android.apk"
+          ls -lh out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-android-${{ matrix.name }}-apk
+          path: ${{ matrix.dir }}/out/financer-${{ matrix.name }}-android.apk
+
+  ios-simulator-shop:
+    # iOS Simulator apps for both flavours and both ways to run, unsigned and best effort, like
+    # ios-simulator.
+    if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'shop'
+    name: ios-simulator-shop (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: shopping-client, dir: apps/shopping, compact: false, flag: "" }
+          - { name: shopping-compact, dir: apps/shopping, compact: true, flag: "" }
+          - { name: bundle-client, dir: apps/mobile, compact: false, flag: "1" }
+          - { name: bundle-compact, dir: apps/mobile, compact: true, flag: "1" }
+    runs-on: macos-latest
+    env:
+      IPHONEOS_DEPLOYMENT_TARGET: "15.1"
+      EXPO_PUBLIC_SHOPPING: ${{ matrix.flag }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.compact
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        if: matrix.compact
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+      - run: npm ci
+      - name: Stamp the tag's version
+        if: github.ref_type == 'tag'
+        run: node "$GITHUB_WORKSPACE/apps/mobile/scripts/set-version.mjs" "$GITHUB_REF_NAME" --dir .
+      - name: Build the Rust backend into the app (compact)
+        if: matrix.compact
+        run: scripts/enable-embedded.sh ios
+      - name: Generate the native iOS project and install the pods
+        run: npx expo prebuild --platform ios
+        env:
+          CI: "1"
+      - name: Build for the Simulator
+        working-directory: ${{ matrix.dir }}/ios
+        run: |
+          xcodebuild -workspace *.xcworkspace -scheme "$(basename *.xcworkspace .xcworkspace)" \
+            -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO ARCHS=arm64 build | tail -40
+          exit ${PIPESTATUS[0]}
+      - name: Zip the app
+        run: |
+          mkdir out
+          app=$(ls -d ios/build/Build/Products/Release-iphonesimulator/*.app | head -n1)
+          ditto -c -k --sequesterRsrc --keepParent "$app" "out/financer-${{ matrix.name }}-ios-simulator.zip"
+          ls -lh out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-ios-simulator-${{ matrix.name }}
+          path: ${{ matrix.dir }}/out/financer-${{ matrix.name }}-ios-simulator.zip
+
   release:
     # Only for version tags: attach everything that was built to a GitHub release.
     # Both variants must be there: the server side (desktop bundles + web) and both Android apps.
-    # The iOS Simulator builds are added when they succeeded.
+    # The iOS Simulator builds and everything of the shopping assistant (shop-web, desktop-shop,
+    # android-apk-shop, ios-simulator-shop) are added when they succeeded: they never hold it back.
     if: startsWith(github.ref, 'refs/tags/') && !cancelled() && needs.desktop.result == 'success' && needs.web.result == 'success' && needs.android-apk.result == 'success'
-    needs: [web, desktop, docker, mobile, android-apk, ios-simulator]
+    needs: [web, desktop, docker, mobile, android-apk, ios-simulator, shop-web, desktop-shop, docker-shop, android-apk-shop, ios-simulator-shop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -397,7 +710,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
-          pattern: "{desktop-*,web,app-*}"
+          pattern: "{desktop-*,web,shop-web,app-*}"
           merge-multiple: true
       - run: ls -lh dist
       - uses: softprops/action-gh-release@v3
