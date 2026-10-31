@@ -115,6 +115,23 @@ describe("the command line", () => {
   const run = (dir, ...args) => spawnSync(process.execPath, [join(dir, "scripts", "set-version.mjs"), ...args], { encoding: "utf8" });
   const read = (dir, f) => JSON.parse(readFileSync(join(dir, f), "utf8"));
 
+  it("stamps another app's folder with --dir (apps/shopping uses this script)", () => {
+    const script = scratch();
+    const other = mkdtempSync(join(tmpdir(), "set-version-other-"));
+    try {
+      for (const f of ["app.json", "package.json", "package-lock.json"]) copyFileSync(new URL(`../../shopping/${f}`, import.meta.url), join(other, f));
+      const r = run(script, "v7.8.9", "--dir", other);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(read(other, "app.json").expo.version, "7.8.9");
+      assert.equal(read(other, "app.json").expo.slug, "financer-shop");
+      assert.equal(read(other, "package.json").version, "7.8.9");
+      assert.notEqual(read(script, "app.json").expo.version, "7.8.9");
+    } finally {
+      rmSync(script, { recursive: true, force: true });
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
   it("stamps the three files from a tag", () => {
     const dir = scratch();
     try {

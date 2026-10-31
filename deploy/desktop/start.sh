@@ -48,6 +48,8 @@ export FINANCER_API_TOKEN="$TOKEN"
 export FINANCER_DATABASE_URL="sqlite://financer.db?mode=rwc"
 export FINANCER_WEB_DIR="./web"
 export FINANCER_BIND="127.0.0.1:8080"
+# the bundled build (with the shopping assistant) reads the shops listed here; other builds ignore it
+if [ -f shop-sources.json ]; then export FINANCER_SHOP_SOURCES="./shop-sources.json"; fi
 
 echo "Financer is starting at http://127.0.0.1:8080"
 echo "Your token (paste it under Settings the first time): $TOKEN"

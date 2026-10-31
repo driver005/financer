@@ -14,3 +14,14 @@ Every release contains both. Pick one.
 
 The APKs are signed with the debug key unless the repository has release-signing secrets. The compact variant has run on an Android emulator in CI but not yet on a physical phone. Installing on an iPhone needs your own signing (EAS build).
 
+## The shopping assistant
+
+A second app that compares products and subscriptions from the web and tells you about deals (see `docs/SHOP.md`). It comes in two flavours; the files are only there when their build succeeded.
+
+| | **Shopping only** | **Inside the finance app** |
+|---|---|---|
+| Android | `financer-shopping-client-android.apk` (needs its server), `financer-shopping-compact-android.apk` (searches when you press Search) | `financer-bundle-client-android.apk`, `financer-bundle-compact-android.apk` |
+| iOS Simulator | `financer-shopping-*-ios-simulator.zip` | `financer-bundle-*-ios-simulator.zip` |
+| Server | `financer-shop-desktop-<platform>` bundles, Docker image `ghcr.io/driver005/financer-shop-server` | `financer-bundle-desktop-<platform>` bundles, Docker image `ghcr.io/driver005/financer-bundle-server` |
+
+The server searches all the time and notifies about new deals; the phone only searches when you press Search. You tell it which shops to read in `shop-sources.json` (an example is in each server bundle). None of these builds has been run on a phone yet.
