@@ -11,7 +11,7 @@ The research behind the shapes of the screens is in [UI_RESEARCH.md](UI_RESEARCH
 
 | Folder | What is in it |
 | --- | --- |
-| `src/constants/` | **The only place for raw numbers and colour values.** Tailwind's neutral, green, yellow, red and sky (v3.4 hex values) and Untitled UI's brand violet, spacing on a 4 px grid, radius, font sizes with line heights, shadows, breakpoints, touch and control sizes. |
+| `src/constants/` | **The only place for raw numbers and colour values.** HeroUI's palette (converted to hex) and Tailwind's sky, spacing on a 4 px grid, radius, font sizes with line heights, shadows, breakpoints, touch and control sizes. |
 | `src/theme/` | `ThemeProvider`, light and dark colour roles built from the palette, `useTheme()`. |
 | `src/responsive/` | `useLayout()` (layout class, columns, device), `Responsive<T>` values, `Viewport` (forces a width, used by the catalog). |
 | `src/primitives/` | `Box`, `Stack`, `Row`, `Spacer`, `Text`, `Icon`, `Touchable`: they turn token props into styles. |
