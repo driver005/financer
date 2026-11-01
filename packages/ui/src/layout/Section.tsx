@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { Badge } from "../components/Badge";
+import { Card } from "../components/Card";
 import { Button } from "../components/Button";
 import type { Tone } from "../constants/colors";
 import { Box, Row } from "../primitives/Box";
@@ -8,7 +9,7 @@ import { Text } from "../primitives/Text";
 
 /** A titled block of a page, with an optional link-style action on the right. */
 export function Section({
-  title, description, tag, aside, action, children,
+  title, description, tag, aside, action, card, children,
 }: {
   title?: string;
   description?: string;
@@ -17,6 +18,8 @@ export function Section({
   /** A quiet note on the right of the title ("2 recommendations"). */
   aside?: string;
   action?: { label: string; onPress: () => void };
+  /** Put the content in one white card (a form, a group of settings). */
+  card?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -36,7 +39,7 @@ export function Section({
           {action ? <Button label={action.label} onPress={action.onPress} variant="ghost" size="sm" /> : null}
         </Row>
       ) : null}
-      {children}
+      {card ? <Card gap="md">{children}</Card> : children}
     </Box>
   );
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Badge, Banner, Box, Button, Card, Chip, ChipRow, Divider, EmptyState, ListItem, ProductCard, Screen, Section, Stack, TopBar } from "@financer/ui";
+import { Badge, Banner, Box, Button, Card, Chip, ChipRow, Divider, EmptyState, Grid, ListItem, ProductCard, Screen, Section, TopBar } from "@financer/ui";
 
 import { ShopApiError } from "../../api/client";
 import type { DealItem, Notification } from "../../api/types";
@@ -45,10 +45,10 @@ export function DealsScreen() {
 
   return (
     <Screen header={<TopBar title="Deals" actions={<Button label="Refresh" variant="ghost" size="sm" icon="refresh" onPress={() => void load()} />} />}>
-      {error ? <Banner tone="danger">{error}</Banner> : null}
+      {error ? <Banner tone="danger" action={<Button label="Try again" variant="soft" tone="danger" size="sm" onPress={() => { setError(null); void load(); }} />}>{error}</Banner> : null}
       <Section title="Messages" aside={`${unread} new`} action={unread > 0 ? { label: "Mark read", onPress: () => void markRead() } : undefined}>
         {messages.length === 0 ? (
-          <EmptyState icon="bell-outline" title="No messages yet" message="Watch a search or a product and you are told here when its price drops." action={<Button label="Start watching" variant="soft" icon="bell-plus-outline" onPress={() => nav.push({ name: "watch" })} />} />
+          <EmptyState card icon="bell-outline" title="No messages yet" message="Watch a search or a product and you are told here when its price drops." action={<Button label="Start watching" variant="soft" icon="bell-plus-outline" onPress={() => nav.push({ name: "watch" })} />} />
         ) : (
           <Card padded={false}>
             <Box px="lg">
@@ -77,7 +77,7 @@ export function DealsScreen() {
         {deals.length === 0 ? (
           <EmptyState icon="tag-off-outline" title="No clear deals" message="No product is clearly below its usual price at the moment." />
         ) : (
-          <Stack gap="md">
+          <Grid columns={{ base: 1, md: 2 }}>
             {shown.map((d) => (
               <ProductCard
                 key={d.product.id}
@@ -93,7 +93,7 @@ export function DealsScreen() {
                 onOpen={d.product.offers[0]?.url ? () => void openLink(d.product.offers[0].url) : undefined}
               />
             ))}
-          </Stack>
+          </Grid>
         )}
       </Section>
     </Screen>

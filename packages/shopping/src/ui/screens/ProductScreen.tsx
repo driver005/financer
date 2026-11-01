@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  Badge, Banner, Box, Button, Chip, ChipRow, DealBadge, EmptyState, ListItem, OfferRow, PriceHistory, PriceTag, Row, Screen, Section, Stack, Text, TextField, Thumbnail, TopBar, Card, Divider,
+  Badge, Banner, Box, Button, Chip, ChipRow, DealBadge, EmptyState, ListItem, OfferRow, PriceHistory, PriceTag, ProductCardSkeletonList, Row, Screen, Section, Split, Stack, Text, TextField, Thumbnail, TopBar, Card, Divider, useLayout,
 } from "@financer/ui";
 
 import { ShopApiError } from "../../api/client";
@@ -20,6 +20,7 @@ function show(v: AttrValue, unit?: string | null): string {
 export function ProductScreen({ id }: { id: string }) {
   const { client } = useShop();
   const nav = useNav();
+  const { isExpanded } = useLayout();
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [key, setKey] = useState("");
@@ -56,7 +57,7 @@ export function ProductScreen({ id }: { id: string }) {
   if (!detail) {
     return (
       <Screen header={<TopBar title="Product" onBack={nav.pop} />}>
-        {error ? <Banner tone="danger">{error}</Banner> : <EmptyState icon="timer-sand" title="Loading…" />}
+        {error ? <Banner tone="danger" action={<Button label="Try again" variant="soft" tone="danger" size="sm" onPress={() => { setError(null); void load(); }} />}>{error}</Banner> : <ProductCardSkeletonList count={2} />}
       </Screen>
     );
   }
@@ -71,7 +72,7 @@ export function ProductScreen({ id }: { id: string }) {
     <Screen header={<TopBar title={product.title} subtitle={product.brand ?? undefined} onBack={nav.pop} />}>
       {error ? <Banner tone="danger">{error}</Banner> : null}
 
-      <Row gap="lg" align="start" wrap>
+      <Split>
         <Thumbnail uri={product.image} dim="thumb-lg" label={product.title} />
         <Box grow gap="md">
           <PriceTag
@@ -90,7 +91,7 @@ export function ProductScreen({ id }: { id: string }) {
             <Button label="Tell me about deals" variant="soft" icon="bell-plus-outline" onPress={() => nav.push({ name: "watch", query: product.title, category: product.category })} />
           </Row>
         </Box>
-      </Row>
+      </Split>
 
       <Section title={monthly ? "Plans and prices" : "Where to buy"}>
         {offers.length === 0 ? (
@@ -124,22 +125,26 @@ export function ProductScreen({ id }: { id: string }) {
 
       <Section title="Specifications">
         <Card padded={false}>
-          <Box px="lg">
-            {specKeys.length === 0 ? <Box py="lg"><Text variant="body" tone="muted">No specs known yet. Add the ones you know below.</Text></Box> : null}
-            {specKeys.map((k, i) => {
-              const def = defs.get(k);
-              return (
-                <Box key={k}>
-                  {i > 0 ? <Divider /> : null}
-                  <ListItem title={def?.label ?? k.replace(/_/g, " ")} trailing={<Text variant="number" align="right">{show(product.attributes[k], def?.unit)}</Text>} />
-                </Box>
-              );
-            })}
-          </Box>
+          {specKeys.length === 0 ? <Box p="lg"><Text variant="body" tone="muted">No specs known yet. Add the ones you know below.</Text></Box> : null}
+          <Row align="start">
+            {(isExpanded ? [specKeys.slice(0, Math.ceil(specKeys.length / 2)), specKeys.slice(Math.ceil(specKeys.length / 2))] : [specKeys]).map((keys, col) => (
+              <Box key={col} equal px="lg">
+                {keys.map((k, i) => {
+                  const def = defs.get(k);
+                  return (
+                    <Box key={k}>
+                      {i > 0 ? <Divider /> : null}
+                      <ListItem title={def?.label ?? k.replace(/_/g, " ")} trailing={<Text variant="number" align="right">{show(product.attributes[k], def?.unit)}</Text>} />
+                    </Box>
+                  );
+                })}
+              </Box>
+            ))}
+          </Row>
         </Card>
       </Section>
 
-      <Section title="Add or correct a spec" description="Your own facts count in the ranking and survive later crawls. Any name works; names the category knows are used by its criteria.">
+      <Section card title="Add or correct a spec" description="Your own facts count in the ranking and survive later crawls. Any name works; names the category knows are used by its criteria.">
         <Stack gap="md">
           <ChipRow>
             {(schema.attributes ?? []).filter((a) => !(a.key in product.attributes)).slice(0, 8).map((a) => (

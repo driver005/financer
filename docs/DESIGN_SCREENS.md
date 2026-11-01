@@ -120,3 +120,12 @@ Project `12266519070521644318`, design system `assets/945437121770425370`.
 | Notifications (progress, deal) (phone) | `4ae61f48babc42dc820f22607fe075c3` |
 | Loading states (phone) | `4b7c53bf8197406280dc5b653cb7b5ea` |
 | Error and offline states (phone) | `a8e9089da8c64a37849ee1fdc70b9d4c` |
+
+## Implemented
+
+The screens above are built in `packages/shopping/src/ui/screens` on `@financer/ui`. What the app does differently from
+the Stitch drawings, on purpose:
+
+- Notifications keep their wording (`Indexing "<query>"`, pages and products done) rather than Stitch's "Reading shops".
+- No offline state: it needs a saved copy of the last prices, which the app does not keep yet. Errors show a banner with Try again.
+- Phone mode (this phone searches itself) cannot run in a browser, so the JSON sources editor (now inside cards, like the server list) was checked in code and with the type check, not on screen.

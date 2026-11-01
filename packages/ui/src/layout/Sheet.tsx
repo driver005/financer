@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 
 import { layoutClassFor } from "../constants/breakpoints";
+import { radius } from "../constants/radius";
+import { size } from "../constants/sizes";
+import { space } from "../constants/spacing";
 import { IconButton } from "../components/Button";
 import { Box, Row } from "../primitives/Box";
 import { Text } from "../primitives/Text";
@@ -20,6 +23,7 @@ export function Sheet({ visible, onClose, title, children, footer }: SheetProps)
       <View style={{ flex: 1, justifyContent: compact ? "flex-end" : "center", backgroundColor: colors.scrim }}>
         <Pressable accessibilityLabel="Close" accessibilityRole="button" onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
         <Box bg="raised" radius="3xl" shadow="overlay" maxW="narrow" maxH="sheet" overflow="hidden">
+          {compact ? <View accessibilityElementsHidden style={{ alignSelf: "center", width: size.sheet.handleWidth, height: size.sheet.handle, borderRadius: radius.full, backgroundColor: colors.border.strong, marginTop: space.sm }} /> : null}
           <Row justify="between" gap="md" px="xl" pt="xl" pb="md">
             <Box grow>{title ? <Text variant="heading" level={2}>{title}</Text> : null}</Box>
             <IconButton icon="close" label="Close" onPress={onClose} />

@@ -43,6 +43,7 @@ export { AppShell, NavRail, Sidebar, TabBar, type NavItem } from "./layout/navig
 export { Screen } from "./layout/Screen";
 export { Section } from "./layout/Section";
 export { Sheet } from "./layout/Sheet";
+export { Split } from "./layout/Split";
 export { TopBar } from "./layout/TopBar";
 
 export { ComparisonTable, differingRows, type CompareCell, type CompareColumn, type CompareRow } from "./shop/ComparisonTable";
@@ -54,3 +55,4 @@ export { PriceTag, Stat } from "./shop/PriceTag";
 export { SavingsBar, type SavingsBarProps } from "./shop/SavingsBar";
 export { ProductCard, type ProductBadge, type ProductCardProps } from "./shop/ProductCard";
 export { ProductGrid } from "./shop/ProductGrid";
+export { ProductCardSkeleton, ProductCardSkeletonList } from "./shop/ProductCardSkeleton";

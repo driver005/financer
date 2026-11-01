@@ -10,7 +10,7 @@ import { Box } from "../primitives/Box";
 import { useTheme } from "../theme/ThemeProvider";
 
 /** A line through values over time (price history). Fills the width it is given. */
-export function Sparkline({ values, tone = "accent", height = "md", label }: { values: number[]; tone?: Tone; height?: keyof typeof size.chart; label?: string }) {
+export function Sparkline({ values, tone = "accent", height = "md", label, markLowest }: { values: number[]; tone?: Tone; height?: keyof typeof size.chart; label?: string; /** Ring the lowest value in green. */ markLowest?: boolean }) {
   const { colors } = useTheme();
   const [w, setW] = useState(0);
   const h = size.chart[height];
@@ -27,6 +27,7 @@ export function Sparkline({ values, tone = "accent", height = "md", label }: { v
         {w > 0 && values.length > 1 ? (
           <Svg width={w} height={h}>
             <Polyline points={points} fill="none" stroke={colors.tones[tone].solid} strokeWidth={borderWidth.thick} strokeLinejoin="round" strokeLinecap="round" />
+            {markLowest ? <Circle cx={x(values.indexOf(lo))} cy={y(lo)} r={space.sm} fill={colors.tones.success.soft} stroke={colors.tones.success.solid} strokeWidth={borderWidth.thick} /> : null}
             <Circle cx={x(last)} cy={y(values[last])} r={space.xs} fill={colors.tones[tone].solid} />
           </Svg>
         ) : null}

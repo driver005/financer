@@ -85,6 +85,7 @@ function Setup() {
   return (
     <Screen header={<TopBar title="Shopping assistant" onBack={nav.exit} />}>
       <EmptyState
+        card
         icon="cog-outline"
         title="Set it up"
         message={shop.status === "error" ? (shop.error ?? "Could not connect.") : "Connect to your server, or let this phone do the searching itself. Nothing is read from the web until you search."}

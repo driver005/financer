@@ -15,9 +15,9 @@ The research behind the shapes of the screens is in [UI_RESEARCH.md](UI_RESEARCH
 | `src/theme/` | `ThemeProvider`, light and dark colour roles built from the palette, `useTheme()`. |
 | `src/responsive/` | `useLayout()` (layout class, columns, device), `Responsive<T>` values, `Viewport` (forces a width, used by the catalog). |
 | `src/primitives/` | `Box`, `Stack`, `Row`, `Spacer`, `Text`, `Icon`, `Touchable`: they turn token props into styles. |
-| `src/components/` | Button (six variants), Chip, Badge, MatchBadge, Hint, Banner, Card, TextField, Switch, Checkbox, Segmented, OptionList, Meter, ScoreRing, Sparkline, Skeleton, Spinner, EmptyState, ListItem, Thumbnail, Divider. |
-| `src/layout/` | `Screen`, `Section`, `Sheet`, `TopBar`, `Grid`, and the adaptive navigation (`AppShell`). |
-| `src/shop/` | Shopping pieces built on the above: `ProductCard`, `ProductGrid`, `PriceTag`, `DealBadge`, `FilterBar`, `OfferRow`, `PriceHistory`, `ComparisonTable`, `SavingsBar`. |
+| `src/components/` | Button (six variants), Chip, Badge, MatchBadge, Hint, Banner (with a retry action), Card, TextField, Switch, Checkbox, Segmented, OptionList, Meter, ScoreRing, Sparkline, Skeleton, Spinner, EmptyState (also as a `card`), ListItem, Thumbnail, Divider. |
+| `src/layout/` | `Screen`, `Section` (title, tag, count, `card`), `Sheet` (a bottom sheet with a handle on a phone), `Split` (side by side from a tablet up), `TopBar`, `Grid`, and the adaptive navigation (`AppShell`). |
+| `src/shop/` | Shopping pieces built on the above: `ProductCard`, `ProductGrid`, `PriceTag`, `DealBadge`, `FilterBar`, `OfferRow`, `PriceHistory`, `ComparisonTable`, `SavingsBar`, `ProductCardSkeleton`. |
 
 ## Design language: HeroUI
 

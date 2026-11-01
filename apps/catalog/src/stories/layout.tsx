@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { AppShell, Box, Button, Card, Grid, Section, Sheet, Stack, Text, TopBar, IconButton, type NavItem } from "@financer/ui";
+import { AppShell, Box, Button, Card, EmptyState, Grid, ProductCardSkeletonList, Section, Sheet, Split, Stack, Text, TextField, TopBar, IconButton, type NavItem } from "@financer/ui";
 
 import type { StoryDef } from "../Story";
 
@@ -50,6 +50,31 @@ export const layoutStories: StoryDef[] = [
   { id: "shell", title: "App shell", note: "Bottom bar on compact, rail on medium, sidebar on expanded.", render: () => <Shell /> },
   { id: "grid", title: "Grid", render: () => <GridDemo /> },
   { id: "section", title: "Section", render: () => <Section title="Our picks" description="Best overall, best value and more" action={{ label: "See all", onPress: () => {} }}><Text variant="body" tone="muted">The content of the section.</Text></Section> },
+  {
+    id: "section-card",
+    title: "Section in a card",
+    note: "A form or a group of settings sits in one white card under its title.",
+    render: () => (
+      <Section title="Where it runs" card>
+        <TextField label="Server address" value="" onChangeText={() => {}} placeholder="https://shop.example.com" />
+        <TextField label="Token" value="" onChangeText={() => {}} secure />
+        <Button label="Connect" />
+      </Section>
+    ),
+  },
+  {
+    id: "split",
+    title: "Split",
+    note: "Side by side on a tablet and a laptop, one under the other on a phone.",
+    render: () => (
+      <Split>
+        <Card><Text variant="bodyStrong">Left</Text><Text variant="body" tone="muted">A picture, a form.</Text></Card>
+        <Card><Text variant="bodyStrong">Right</Text><Text variant="body" tone="muted">The price, the result.</Text></Card>
+      </Split>
+    ),
+  },
+  { id: "empty-card", title: "Empty state as a card", render: () => <EmptyState card icon="bell-outline" title="No messages yet" message="Watch a search or a product and you are told here when its price drops." action={<Button label="Start watching" variant="soft" icon="bell-plus-outline" />} /> },
+  { id: "skeleton-cards", title: "Product cards loading", render: () => <ProductCardSkeletonList count={2} /> },
   { id: "topbar", title: "Top bar", render: () => <TopBar title="Compare" subtitle="3 products" onBack={() => {}} actions={<IconButton icon="share-variant" label="Share" />} /> },
   { id: "sheet", title: "Sheet", render: () => <SheetDemo /> },
 ];

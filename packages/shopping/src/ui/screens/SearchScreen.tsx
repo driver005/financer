@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
-  Banner, Box, Button, Card, Chip, ChipRow, EmptyState, FilterBar, Hint, IconButton, Meter, ProductCard, ProductGrid, Row, SavingsBar, Screen, SearchBar, Section, Stack, Text,
+  Banner, Box, Button, Card, Chip, ChipRow, EmptyState, FilterBar, Hint, IconButton, Meter, ProductCard, ProductCardSkeletonList, ProductGrid, Row, SavingsBar, Screen, SearchBar, Section, Stack, Text,
   TopBar, formatCents, type ProductCardProps,
 } from "@financer/ui";
 
@@ -173,7 +173,7 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
           There is nothing to read prices from yet.
         </Banner>
       ) : null}
-      {error ? <Banner tone="danger">{error}</Banner> : null}
+      {error ? <Banner tone="danger" action={<Button label="Try again" variant="soft" tone="danger" size="sm" onPress={() => void search(lastQuery.current || query)} />}>{error}</Banner> : null}
 
       {response ? (
         <Stack gap="xl">
@@ -231,6 +231,8 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
             </Section>
           ) : null}
         </Stack>
+      ) : busy ? (
+        <ProductCardSkeletonList count={3} />
       ) : (
         <Stack gap="lg">
           <EmptyState icon="shopping-search-outline" title={shop.integrated ? "Search, compare, decide" : "Ask the server"} message="Describe what you want. Prices, specs, deals and your own weights decide the order." />

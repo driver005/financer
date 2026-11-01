@@ -60,7 +60,7 @@ export function CategoriesScreen() {
           ))}
         </Box>
       </Card>
-      <Section title="New category">
+      <Section title="New category" card>
         <Stack gap="md">
           <TextField label="Name" value={name} onChangeText={setName} placeholder="Gaming phone" capitalize />
           <Text variant="label" tone="muted">Start from</Text>
@@ -193,7 +193,7 @@ export function CategoryEditorScreen({ id }: { id: string }) {
         </Card>
       </Section>
 
-      <Section title="What is known" description="Tap one to give it another name that shops use.">
+      <Section title="What is known" description="Tap one to give it another name that shops use." card>
         <ChipRow>
           {allAttrs.map((a) => <Chip key={a.key} label={a.label} selected={aliasKey === a.key} onPress={() => setAliasKey(aliasKey === a.key ? null : a.key)} />)}
         </ChipRow>
@@ -217,7 +217,7 @@ export function CategoryEditorScreen({ id }: { id: string }) {
         ) : null}
       </Section>
 
-      <Section title="Add an attribute">
+      <Section title="Add an attribute" card>
         <Stack gap="md">
           <TextField label="Name" value={attrLabel} onChangeText={setAttrLabel} placeholder="Shoulder triggers" capitalize />
           <Segmented<AttrKind> value={attrKind} onChange={setAttrKind} options={[{ value: "number", label: "Number" }, { value: "bool", label: "Yes/no" }, { value: "text", label: "Text" }, { value: "list", label: "List" }]} />
@@ -237,7 +237,7 @@ export function CategoryEditorScreen({ id }: { id: string }) {
         </Stack>
       </Section>
 
-      <Section title="Add something to judge by">
+      <Section title="Add something to judge by" card>
         <Stack gap="md">
           <TextField label="Name" value={critLabel} onChangeText={setCritLabel} placeholder="Battery per gram" capitalize />
           <Segmented<CriterionKindChoice> value={critKind} onChange={setCritKind} options={[{ value: "number", label: "Number" }, { value: "flag", label: "Yes/no" }, { value: "formula", label: "Formula" }, { value: "match", label: "Wish" }]} />
@@ -272,7 +272,7 @@ export function CategoryEditorScreen({ id }: { id: string }) {
         </Stack>
       </Section>
 
-      <Section title="Advanced">
+      <Section title="Advanced" card>
         {json === null ? (
           <Row><Button label="Edit as JSON" variant="outline" tone="neutral" icon="code-json" onPress={() => setJson(JSON.stringify(draft, null, 2))} /></Row>
         ) : (

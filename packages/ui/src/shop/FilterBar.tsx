@@ -31,7 +31,7 @@ export function FilterBar<S extends string>({ applied, onRemove, onOpenFilters, 
         {applied.map((f) => <Chip key={f.key} label={f.label} onRemove={() => onRemove(f.key)} />)}
       </Row>
       {sort ? (
-        <Sheet visible={sortOpen} onClose={() => setSortOpen(false)} title="Sort by">
+        <Sheet visible={sortOpen} onClose={() => setSortOpen(false)} title="Sort">
           <OptionList options={sort.options} value={sort.value} onChange={(v) => { sort.onChange(v); setSortOpen(false); }} />
         </Sheet>
       ) : null}

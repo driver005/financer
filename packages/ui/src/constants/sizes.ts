@@ -23,7 +23,7 @@ export const size = {
   /** Height of a live preview in the catalog (an app shell, a table with a sticky header). */
   preview: spacing[96],
   /** A dialog or sheet on a wide screen stays this wide; on a phone it is full width. */
-  sheet: { maxWidth: content.narrow, handle: spacing[1] },
+  sheet: { maxWidth: content.narrow, handle: spacing[1], handleWidth: spacing[10] },
   content,
 } as const;
 

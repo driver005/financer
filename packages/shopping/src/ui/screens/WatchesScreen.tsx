@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Banner, Button, Card, EmptyState, Row, Screen, Section, Stack, Text, TextField, TopBar } from "@financer/ui";
+import { Banner, Button, Card, EmptyState, Grid, Row, Screen, Section, Stack, Text, TextField, TopBar } from "@financer/ui";
 
 import { ShopApiError } from "../../api/client";
 import type { Watch } from "../../api/types";
@@ -26,7 +26,7 @@ export function WatchesScreen() {
 
   return (
     <Screen header={<TopBar title="Watching" actions={watches.length > 0 ? <Button label="Add" variant="ghost" size="sm" icon="plus" onPress={() => nav.push({ name: "watch" })} /> : undefined} />}>
-      {error ? <Banner tone="danger">{error}</Banner> : null}
+      {error ? <Banner tone="danger" action={<Button label="Try again" variant="soft" tone="danger" size="sm" onPress={() => { setError(null); void load(); }} />}>{error}</Banner> : null}
       {info && !info.continuous ? (
         <Banner tone="warning" title="This phone only looks when you search">
           A watch notices a price change the next time you search for it. For alerts while you are away, connect a server.
@@ -35,7 +35,7 @@ export function WatchesScreen() {
       {watches.length === 0 ? (
         <EmptyState icon="bell-plus-outline" title="Nothing watched" message="Say what you want a price alert for, and at what price." action={<Button label="Add a watch" onPress={() => nav.push({ name: "watch" })} />} />
       ) : (
-        <Stack gap="md">
+        <Grid columns={{ base: 1, md: 2 }}>
           {watches.map((w) => (
             <Card key={w.id} gap="sm">
               <Text variant="subheading">{w.name}</Text>
@@ -68,7 +68,7 @@ export function WatchesScreen() {
               </Row>
             </Card>
           ))}
-        </Stack>
+        </Grid>
       )}
     </Screen>
   );
@@ -103,15 +103,15 @@ export function NewWatchScreen({ query: initial = "", category }: { query?: stri
   };
 
   return (
-    <Screen header={<TopBar title="New watch" onBack={nav.pop} />}>
+    <Screen header={<TopBar title="New watch" onBack={nav.pop} />} maxW="normal">
       {error ? <Banner tone="danger">{error}</Banner> : null}
-      <Section title="What to watch" description="A search: every product it finds is watched.">
+      <Section title="What to watch" description="A search: every product it finds is watched." card>
         <Stack gap="md">
           <TextField label="Name" value={name} onChangeText={setName} placeholder="Pixel under 500" capitalize />
           <TextField label="Search" value={query} onChangeText={setQuery} placeholder="pixel 9" />
         </Stack>
       </Section>
-      <Section title="When to tell me">
+      <Section title="When to tell me" card>
         <Stack gap="md">
           <TextField label="At or below (€)" value={target} onChangeText={setTarget} keyboardType="numeric" placeholder="500" />
           <TextField label="Or this many % below its usual price" value={discount} onChangeText={setDiscount} keyboardType="numeric" />
