@@ -4,6 +4,7 @@ import { Banner, Box, Button, Card, Chip, ChipRow, EmptyState, Row, Screen, Sect
 
 import { ShopApiError } from "../../api/client";
 import type { CategorySchema, Profile } from "../../api/types";
+import { budgetPresets } from "../../logic/view";
 import { LEVELS, LEVEL_LABEL, currentLevel, groups, presetsFor, ratable, resetWeights, setLevel } from "../../logic/weights";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
@@ -76,6 +77,12 @@ export function WeightsScreen({ category }: { category: string }) {
 
       <Section title="Budget">
         <TextField label={schema.kind === "subscription" ? "Most per month (€)" : "Most to spend (€)"} value={budget} onChangeText={setBudget} keyboardType="numeric" placeholder="no limit" />
+        <ChipRow>
+          {budgetPresets(schema.kind).map((euros) => (
+            <Chip key={euros} label={`${euros} €`} selected={Number(budget.replace(",", ".")) === euros} onPress={() => setBudget(String(euros))} />
+          ))}
+          <Chip label="No limit" selected={budget.trim() === ""} onPress={() => setBudget("")} />
+        </ChipRow>
       </Section>
 
       {wishes.length > 0 ? (

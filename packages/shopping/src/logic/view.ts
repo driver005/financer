@@ -1,6 +1,6 @@
 // Turning API answers into what the design system's components show. Pure, so it is tested.
 
-import type { Comparison, Offer, SearchItem, Verdict } from "../api/types";
+import type { Comparison, DealItem, Offer, SearchItem, Verdict } from "../api/types";
 import { formatCents, savingText } from "./format";
 
 // Shapes the design system's components take (see @financer/ui); kept here as plain types so this file
@@ -87,3 +87,54 @@ export const EXAMPLE_SEARCHES = [
   "5G plan 20 GB no contract",
   "ram_gb>=8 battery_mah>4500 brand:google",
 ] as const;
+
+/** "Understood 3 conditions · budget 700 €": one line about what the query was taken to mean. */
+export function understoodLine(parsed: { max_price_cents: number | null; constraints: unknown[] }): string | null {
+  const n = (parsed.max_price_cents ? 1 : 0) + parsed.constraints.length;
+  if (n === 0) return null;
+  const budget = parsed.max_price_cents ? ` · budget ${formatCents(parsed.max_price_cents).replace(",00", "")}` : "";
+  return `Understood ${n} ${n === 1 ? "condition" : "conditions"}${budget}`;
+}
+
+/** The result that saves the most a month against what the person pays now, if any saves anything. */
+export function bestSaving(items: readonly SearchItem[]): { perMonthCents: number; overHorizonCents: number; current: string | null; title: string } | null {
+  let best: SearchItem | null = null;
+  for (const it of items) {
+    if (it.saving && it.saving.per_month_cents > 0 && (!best || it.saving.per_month_cents > (best.saving?.per_month_cents ?? 0))) best = it;
+  }
+  if (!best?.saving) return null;
+  return { perMonthCents: best.saving.per_month_cents, overHorizonCents: best.saving.over_horizon_cents, current: best.saving.current, title: best.product.title };
+}
+
+/** The saving as a share (0..1) of what the person pays now, when that is known. */
+export function savingShare(perMonthCents: number, currentMonthlyCents: number | null | undefined): number | null {
+  if (!currentMonthlyCents || currentMonthlyCents <= 0) return null;
+  return Math.min(1, Math.max(0, perMonthCents / currentMonthlyCents));
+}
+
+/** Round budgets to offer as quick choices (euros). */
+export function budgetPresets(kind: string | undefined): number[] {
+  return kind === "subscription" ? [10, 20, 30, 50] : [300, 500, 700, 1000];
+}
+
+export type DealFilter = "all" | "big" | `category:${string}`;
+
+/** "All", "15 % off or more" and one entry per category that has deals (most deals first). */
+export function dealFilters(deals: readonly DealItem[]): { key: DealFilter; label: string }[] {
+  const counts = new Map<string, number>();
+  for (const d of deals) counts.set(d.product.category, (counts.get(d.product.category) ?? 0) + 1);
+  const cats = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const out: { key: DealFilter; label: string }[] = [{ key: "all", label: "All deals" }];
+  if (deals.some((d) => d.deal.discount_pct >= BIG_DEAL_PCT)) out.push({ key: "big", label: `${BIG_DEAL_PCT} % off or more` });
+  if (cats.length > 1) for (const [c] of cats) out.push({ key: `category:${c}`, label: c.replace(/_/g, " ") });
+  return out;
+}
+
+const BIG_DEAL_PCT = 15;
+
+export function filterDeals(deals: readonly DealItem[], filter: DealFilter): DealItem[] {
+  if (filter === "all") return [...deals];
+  if (filter === "big") return deals.filter((d) => d.deal.discount_pct >= BIG_DEAL_PCT);
+  const cat = filter.slice("category:".length);
+  return deals.filter((d) => d.product.category === cat);
+}

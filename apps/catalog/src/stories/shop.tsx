@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import {
-  Box, Card, ComparisonTable, DealBadge, FilterBar, OfferRow, PriceHistory, PriceTag, ProductCard, ProductGrid, Row, Stack, Text,
+  Box, Card, Chip, ChipRow, ComparisonTable, DealBadge, FilterBar, OfferRow, PriceHistory, PriceTag, ProductCard, ProductGrid, Row, Section, Stack, Text,
   type AppliedFilter,
 } from "@financer/ui";
 
@@ -41,7 +41,7 @@ function Rows() {
       {products.slice(0, 2).map((p) => (
         <ProductCard key={p.id} layout="row" title={p.title} brand={p.brand} priceCents={p.price} shop={p.shop} score={p.score} tier={p.tier} strengths={[...p.strengths]} weaknesses={[...p.weaknesses]} onPress={() => {}} />
       ))}
-      <ProductCard layout="row" title="Flex 20 GB 5G" brand="Telco" priceCents={1999} perMonth shop="Tariff portal" score={71} note="Save 12,00 € a month (288,00 € over 24 months)" onPress={() => {}} />
+      <ProductCard layout="row" title="Flex 20 GB 5G" brand="Telco" priceCents={1999} perMonth shop="Tariff portal" score={71} scoreAs="badge" note="Save 12,00 € a month (288,00 € over 24 months)" onPress={() => {}} />
     </Stack>
   );
 }
@@ -84,6 +84,16 @@ function Filters() {
 
 export const shopStories: StoryDef[] = [
   { id: "grid", title: "Product cards in a grid", note: "Two columns on a phone, three on a tablet, four and more on a large screen. Pick products to compare.", render: () => <Cards /> },
+  {
+    id: "section-tags",
+    title: "Section with a tag and a note",
+    note: "A small badge next to the title and a quiet count on the right.",
+    render: () => (
+      <Section title="Our picks" tag={{ label: "Top deals" }} aside="2 recommendations" description="The best choices for your weights">
+        <ChipRow><Chip label="All deals" selected /><Chip label="15 % off or more" /><Chip label="smartphone" /></ChipRow>
+      </Section>
+    ),
+  },
   { id: "rows", title: "Product cards as rows", note: "For lists and for subscriptions.", render: () => <Rows /> },
   { id: "price", title: "Prices, deals and offers", render: () => <Prices /> },
   { id: "filters", title: "Filter and sort bar", note: "Applied filters are chips you can remove.", render: () => <Filters /> },

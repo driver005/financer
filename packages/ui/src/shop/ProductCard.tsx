@@ -2,6 +2,7 @@ import type { Tone } from "../constants/colors";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Chip } from "../components/Chip";
+import { MatchBadge } from "../components/MatchBadge";
 import { ScoreRing } from "../components/ScoreRing";
 import { Thumbnail } from "../components/Thumbnail";
 import { Box, Row } from "../primitives/Box";
@@ -20,6 +21,8 @@ export type ProductCardProps = {
   shop?: string | null;
   /** 0 to 100. */
   score?: number | null;
+  /** The score as a ring (default) or as a "96 Match" pill. */
+  scoreAs?: "ring" | "badge";
   /** Price class: budget, mid-range, flagship. */
   tier?: string | null;
   badges?: ProductBadge[];
@@ -38,7 +41,7 @@ export type ProductCardProps = {
 
 /** One product in a list or grid: picture, name, price, score and the reason it ranks where it does. */
 export function ProductCard({
-  title, brand, imageUri, priceCents, perMonth, wasCents, shop, score, tier, badges = [], strengths = [], weaknesses = [], note, layout = "grid",
+  title, brand, imageUri, priceCents, perMonth, wasCents, shop, score, scoreAs = "ring", tier, badges = [], strengths = [], weaknesses = [], note, layout = "grid",
   selected, onToggleCompare, onPress, testID,
 }: ProductCardProps) {
   const text = (
@@ -48,8 +51,9 @@ export function ProductCard({
           {brand ? <Text variant="caption" tone="muted" numberOfLines={1}>{brand}</Text> : null}
           <Text variant="bodyStrong" numberOfLines={2}>{title}</Text>
         </Box>
-        {typeof score === "number" ? <ScoreRing score={score} size="sm" /> : null}
+        {typeof score === "number" && scoreAs === "ring" ? <ScoreRing score={score} size="sm" /> : null}
       </Row>
+      {typeof score === "number" && scoreAs === "badge" ? <Row><MatchBadge score={score} /></Row> : null}
       <Box gap="2xs">
         <PriceTag cents={priceCents} perMonth={perMonth} wasCents={wasCents} />
         {shop ? <Text variant="caption" tone="muted" numberOfLines={1}>{shop}</Text> : null}

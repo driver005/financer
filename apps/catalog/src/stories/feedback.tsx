@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import {
-  Badge, Banner, Box, Button, Card, EmptyState, ListItem, Meter, MeterRow, ScoreRing, Skeleton, Sparkline, Spinner, Stack, Row, Text, Thumbnail, tones,
+  Badge, Banner, Box, Button, Card, EmptyState, Hint, ListItem, MatchBadge, Meter, MeterRow, SavingsBar, ScoreRing, Skeleton, Sparkline, Spinner, Stack, Row, Text, Thumbnail, tones,
   type Tone,
 } from "@financer/ui";
 
@@ -86,6 +86,18 @@ function States() {
 export const feedback: StoryDef[] = [
   { id: "badges", title: "Badges", note: "Short status labels. The words carry the meaning, the colour supports it.", render: () => <Badges /> },
   { id: "banners", title: "Banners", render: () => <Banners /> },
+  {
+    id: "hint",
+    title: "Hint, match badge and savings",
+    note: "A quiet note about what was understood; the match score as a pill; what switching would save against what you pay now.",
+    render: () => (
+      <Stack gap="md">
+        <Hint>Understood 3 conditions · budget 700 €</Hint>
+        <Row gap="sm" wrap><MatchBadge score={96} /><MatchBadge score={55} /><MatchBadge score={20} /></Row>
+        <SavingsBar title="Switching from Telekom M saves" amount="8,00 € a month" detail="192,00 € over 24 months" share={0.27} caption="27 % of what you pay now, with Example Flat M" />
+      </Stack>
+    ),
+  },
   { id: "meters", title: "Progress, scores and history", note: "A missing value is shown as unknown, not as zero.", render: () => <Progress /> },
   { id: "cards", title: "Cards", render: () => <Cards /> },
   { id: "lists", title: "List items", render: () => <Lists /> },

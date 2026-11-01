@@ -1,25 +1,27 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
-  Banner, Box, Button, Card, Chip, ChipRow, EmptyState, FilterBar, IconButton, Meter, ProductCard, ProductGrid, Row, Screen, SearchBar, Section, Stack, Text,
-  TopBar, type ProductCardProps,
+  Banner, Box, Button, Card, Chip, ChipRow, EmptyState, FilterBar, Hint, IconButton, Meter, ProductCard, ProductGrid, Row, SavingsBar, Screen, SearchBar, Section, Stack, Text,
+  TopBar, formatCents, type ProductCardProps,
 } from "@financer/ui";
 
 import { ShopApiError } from "../../api/client";
 import type { Profile, SearchItem, SearchResponse } from "../../api/types";
 import { indexRequestFor, nextStep, suggestionText } from "../../logic/searchPlan";
-import { EXAMPLE_SEARCHES, SORT_OPTIONS, bestOffer, dealBadges, isMonthly, savingNote, sortItems, understood, type SortKey } from "../../logic/view";
+import { EXAMPLE_SEARCHES, SORT_OPTIONS, bestOffer, bestSaving, dealBadges, isMonthly, savingNote, savingShare, sortItems, understood, understoodLine, type SortKey } from "../../logic/view";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
 
 /** The search tab, and (with `category` fixed) the body of the subscriptions tab. */
-export function SearchScreen({ category, title = "Shopping assistant", placeholder = "best phone under 600 € with a good camera", onBack, header }: {
+export function SearchScreen({ category, title = "Shopping assistant", placeholder = "best phone under 600 € with a good camera", onBack, header, currentMonthlyCents }: {
   category?: string;
   title?: string;
   placeholder?: string;
   onBack?: () => void;
   /** Shown above the search box (the subscriptions tab puts the current plan there). */
   header?: ReactNode;
+  /** What the person pays now per month (subscriptions): the savings bar is measured against it. */
+  currentMonthlyCents?: number | null;
 }) {
   const shop = useShop();
   const nav = useNav();
@@ -97,6 +99,8 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
   const months = response?.profile.horizon_months ?? 24;
   const items = response ? sortItems(response.items, sort) : [];
   const monthly = items.length > 0 && isMonthly(items[0]);
+  const saving = bestSaving(items);
+  const share = saving ? savingShare(saving.perMonthCents, currentMonthlyCents) : null;
 
   const card = (item: SearchItem, layout: "grid" | "row"): ProductCardProps => {
     const offer = bestOffer(item);
@@ -178,6 +182,8 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
             </ChipRow>
           ) : null}
 
+          {understoodLine(response.parsed) ? <Hint>{understoodLine(response.parsed) as string}</Hint> : null}
+
           {step?.kind === "suggest-index" && !shop.indexing && shop.info && shop.info.sources.length > 0 ? (
             <Banner title={shop.integrated ? "Build the index" : "Refresh now"} action={<Button label={shop.integrated ? "Build the index" : "Refresh now"} onPress={() => void buildIndex(lastQuery.current, response)} loading={shop.indexing !== null} />}>
               {suggestionText(step.reason)}
@@ -186,6 +192,16 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
           {step?.kind === "none-found" ? <EmptyState icon="magnify-close" title="Nothing matches" message="Try fewer words or a higher price limit." /> : null}
 
           <Picks response={response} />
+
+          {saving ? (
+            <SavingsBar
+              title={saving.current ? `Switching from ${saving.current} saves` : "Switching saves"}
+              amount={`${formatCents(saving.perMonthCents)} a month`}
+              detail={`${formatCents(saving.overHorizonCents)} over ${months} months`}
+              share={share ?? 0}
+              caption={share === null ? `with ${saving.title}` : `${Math.round(share * 100)} % of what you pay now, with ${saving.title}`}
+            />
+          ) : null}
 
           {items.length > 0 ? (
             <Section title={`${items.length} ranked`}>
@@ -242,7 +258,7 @@ function Picks({ response }: { response: SearchResponse }) {
   for (const [label, id] of entries) if (id && by.has(id)) cards.set(id, [...(cards.get(id) ?? []), label]);
   if (cards.size === 0) return null;
   return (
-    <Section title="Our picks" description="The best choices for your weights">
+    <Section title="Our picks" tag={{ label: "Top deals" }} aside={`${cards.size} ${cards.size === 1 ? "recommendation" : "recommendations"}`} description="The best choices for your weights">
       <Stack gap="sm">
         {[...cards.entries()].map(([id, labels]) => {
           const item = by.get(id) as SearchItem;
@@ -257,6 +273,7 @@ function Picks({ response }: { response: SearchResponse }) {
               perMonth={isMonthly(item)}
               shop={item.ranked.shop}
               score={item.ranked.score}
+              scoreAs="badge"
               onPress={() => nav.push({ name: "product", id })}
             />
           );

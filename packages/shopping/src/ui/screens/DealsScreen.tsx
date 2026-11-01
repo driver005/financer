@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Badge, Banner, Box, Button, Card, Divider, EmptyState, ListItem, ProductCard, Screen, Section, Stack, TopBar } from "@financer/ui";
+import { Badge, Banner, Box, Button, Card, Chip, ChipRow, Divider, EmptyState, ListItem, ProductCard, Screen, Section, Stack, TopBar } from "@financer/ui";
 
 import { ShopApiError } from "../../api/client";
 import type { DealItem, Notification } from "../../api/types";
 import { dealLine } from "../../logic/format";
+import { dealFilters, filterDeals, type DealFilter } from "../../logic/view";
 import { openLink } from "../links";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
@@ -16,6 +17,7 @@ export function DealsScreen() {
   const [messages, setMessages] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<DealFilter>("all");
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -37,6 +39,9 @@ export function DealsScreen() {
       await load();
     }
   };
+
+  const filters = dealFilters(deals);
+  const shown = filterDeals(deals, filters.some((f) => f.key === filter) ? filter : "all");
 
   return (
     <Screen header={<TopBar title="Deals" actions={<Button label="Refresh" variant="ghost" size="sm" icon="refresh" onPress={() => void load()} />} />}>
@@ -63,12 +68,17 @@ export function DealsScreen() {
           </Card>
         )}
       </Section>
-      <Section title="Cheap right now" description="Clearly below the price we usually saw">
+      <Section title="Cheap right now" tag={deals.length > 0 ? { label: `${deals.length} live ${deals.length === 1 ? "deal" : "deals"}` } : undefined} description="Clearly below the price we usually saw">
+        {deals.length > 0 && filters.length > 1 ? (
+          <ChipRow>
+            {filters.map((f) => <Chip key={f.key} label={f.label} selected={filter === f.key} onPress={() => setFilter(f.key)} />)}
+          </ChipRow>
+        ) : null}
         {deals.length === 0 ? (
           <EmptyState icon="tag-off-outline" title="No clear deals" message="No product is clearly below its usual price at the moment." />
         ) : (
           <Stack gap="md">
-            {deals.map((d) => (
+            {shown.map((d) => (
               <ProductCard
                 key={d.product.id}
                 layout="row"

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { Comparison, SearchItem } from "../src/api/types";
-import { bestOffer, compareView, dealBadges, isMonthly, savingNote, sortItems, understood } from "../src/logic/view";
+import type { Comparison, DealItem, SearchItem } from "../src/api/types";
+import {
+  bestOffer, bestSaving, budgetPresets, compareView, dealBadges, dealFilters, filterDeals, isMonthly, savingNote, savingShare, sortItems, understood, understoodLine,
+} from "../src/logic/view";
 
 const item = (id: string, price: number | null, discount = 0, monthly = false): SearchItem =>
   ({
@@ -76,5 +78,55 @@ describe("the comparison table's input", () => {
     assert.deepEqual(v.columns.map((c) => c.priceText), ["500,00 €", null]);
     assert.deepEqual(v.rows.map((r) => r.key), ["battery"]);
     assert.deepEqual(v.rows[0].cells, [{ value: "5000 mAh", best: true }, { value: "4000 mAh", best: false }]);
+  });
+});
+
+describe("the line about what was understood", () => {
+  it("counts the price and the conditions", () => {
+    assert.equal(understoodLine({ max_price_cents: 70000, constraints: [{}, {}] }), "Understood 3 conditions · budget 700 €");
+    assert.equal(understoodLine({ max_price_cents: null, constraints: [{}] }), "Understood 1 condition");
+  });
+  it("says nothing when nothing was understood", () => assert.equal(understoodLine({ max_price_cents: null, constraints: [] }), null));
+});
+
+describe("savings against what you pay now", () => {
+  const withSaving = (id: string, perMonth: number | null): SearchItem =>
+    ({ ...item(id, 1000, 0, true), saving: perMonth === null ? null : { per_month_cents: perMonth, over_horizon_cents: perMonth * 24, current: "My plan" } }) as SearchItem;
+  it("finds the plan that saves the most a month", () => {
+    const best = bestSaving([withSaving("a", 500), withSaving("b", 1200), withSaving("c", null), withSaving("d", -300)]);
+    assert.equal(best?.perMonthCents, 1200);
+    assert.equal(best?.title, "b");
+    assert.equal(best?.overHorizonCents, 28800);
+  });
+  it("finds nothing when no plan is cheaper", () => assert.equal(bestSaving([withSaving("a", -100), withSaving("b", null)]), null));
+  it("is a share of the current price, between 0 and 1", () => {
+    assert.equal(savingShare(800, 2999)?.toFixed(2), "0.27");
+    assert.equal(savingShare(5000, 2999), 1);
+    assert.equal(savingShare(800, null), null);
+    assert.equal(savingShare(800, 0), null);
+  });
+});
+
+describe("quick budgets", () => {
+  it("are per month for plans and in total for devices", () => {
+    assert.deepEqual(budgetPresets("subscription"), [10, 20, 30, 50]);
+    assert.deepEqual(budgetPresets("product"), [300, 500, 700, 1000]);
+  });
+});
+
+describe("filtering deals", () => {
+  const deal = (id: string, category: string, pct: number): DealItem =>
+    ({ product: { id, category, title: id, attributes: {}, offers: [] }, deal: { discount_pct: pct, verdict: "good" } }) as unknown as DealItem;
+  const deals = [deal("a", "smartphone", 19), deal("b", "smartphone", 10), deal("c", "laptop", 17), deal("d", "smartphone", 5)];
+  it("offers all, big discounts and each category that has deals, the busiest first", () => {
+    assert.deepEqual(dealFilters(deals).map((f) => f.key), ["all", "big", "category:smartphone", "category:laptop"]);
+  });
+  it("offers no category chips when there is only one", () => {
+    assert.deepEqual(dealFilters([deal("a", "smartphone", 5)]).map((f) => f.key), ["all"]);
+  });
+  it("filters", () => {
+    assert.equal(filterDeals(deals, "all").length, 4);
+    assert.deepEqual(filterDeals(deals, "big").map((d) => d.product.id), ["a", "c"]);
+    assert.deepEqual(filterDeals(deals, "category:laptop").map((d) => d.product.id), ["c"]);
   });
 });

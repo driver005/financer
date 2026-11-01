@@ -73,5 +73,5 @@ export function PlansScreen() {
       </Card>
     </Stack>
   );
-  return <SearchScreen key={category.id + String(mine?.monthly_cents ?? "")} category={category.id} title="Subscriptions" placeholder="e.g. 20 GB 5G, no contract" header={header} />;
+  return <SearchScreen key={category.id + String(mine?.monthly_cents ?? "")} category={category.id} title="Subscriptions" placeholder="e.g. 20 GB 5G, no contract" header={header} currentMonthlyCents={mine?.monthly_cents ?? null} />;
 }
