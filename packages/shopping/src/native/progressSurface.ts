@@ -7,24 +7,10 @@
 
 import { Platform } from "react-native";
 
+import { CHANNEL_ID, DONE_ID, NOTIFICATION_ID, NotifeeSurface, STOP_ACTION, registerIndexService as registerOn, type NotifeeLike } from "../logic/notifeeSurface";
 import type { ProgressModel, ProgressSurface } from "../logic/progress";
 
-const NOTIFICATION_ID = "financer.shop.index";
-const CHANNEL_ID = "shop-index";
-const DONE_ID = "financer.shop.index.done";
-
-/** The part of Notifee's API used here; the package is optional, so no types are imported. */
-type NotifeeLike = {
-  createChannel(c: { id: string; name: string; importance: number }): Promise<string>;
-  displayNotification(n: { id: string; title: string; body: string; android: Record<string, unknown>; ios?: Record<string, unknown> }): Promise<string>;
-  registerForegroundService(runner: () => Promise<void>): void;
-  stopForegroundService(): Promise<void>;
-  cancelNotification(id: string): Promise<void>;
-  requestPermission(): Promise<unknown>;
-};
-
-const IMPORTANCE_LOW = 2;
-const FOREGROUND_SERVICE_TYPE_DATA_SYNC = 1;
+const EXPO_CATEGORY = "shop-index";
 
 let notifeeCache: NotifeeLike | null | undefined;
 
@@ -47,69 +33,13 @@ export function hasNativeProgress(): boolean {
   return notifee() !== null;
 }
 
-let stopService: (() => void) | null = null;
-let registered = false;
-
 /**
- * Android keeps an app process alive only while it runs a foreground service. Call this once at
- * app start (outside any component): the service's work is "wait until the index run ends".
+ * Call once at app start (outside any component). On Android with Notifee it registers the foreground
+ * service that keeps an index run alive and the Stop button of its notification.
  */
 export function registerIndexService(): void {
   const n = notifee();
-  if (!n || registered) return;
-  registered = true;
-  n.registerForegroundService(
-    () =>
-      new Promise<void>((resolve) => {
-        stopService = resolve;
-      }),
-  );
-}
-
-class NotifeeSurface implements ProgressSurface {
-  private channel: Promise<string> | null = null;
-  constructor(private n: NotifeeLike) {}
-
-  private ensureChannel(): Promise<string> {
-    this.channel ??= this.n.createChannel({ id: CHANNEL_ID, name: "Search index progress", importance: IMPORTANCE_LOW });
-    return this.channel;
-  }
-
-  async show(m: ProgressModel): Promise<void> {
-    const channelId = await this.ensureChannel();
-    await this.n.displayNotification({
-      id: NOTIFICATION_ID,
-      title: m.title,
-      body: m.body,
-      android: {
-        channelId,
-        ongoing: true,
-        onlyAlertOnce: true,
-        asForegroundService: registered,
-        foregroundServiceTypes: [FOREGROUND_SERVICE_TYPE_DATA_SYNC],
-        progress: { max: 100, current: m.percent, indeterminate: m.indeterminate },
-        pressAction: { id: "default" },
-      },
-    });
-  }
-
-  async finish(m: ProgressModel): Promise<void> {
-    const channelId = await this.ensureChannel();
-    stopService?.();
-    stopService = null;
-    try {
-      await this.n.stopForegroundService();
-    } catch {
-      // no service was running
-    }
-    await this.n.cancelNotification(NOTIFICATION_ID);
-    await this.n.displayNotification({
-      id: DONE_ID,
-      title: m.title,
-      body: m.body,
-      android: { channelId, ongoing: false, autoCancel: true, pressAction: { id: "default" } },
-    });
-  }
+  if (n) registerOn(n);
 }
 
 type ExpoNotifications = typeof import("expo-notifications");
@@ -133,12 +63,22 @@ function expo(): Promise<ExpoNotifications | null> {
 }
 
 class ExpoSurface implements ProgressSurface {
+  private listening: { remove(): void } | null = null;
+  constructor(private onStop?: () => void) {}
+
   async show(m: ProgressModel): Promise<void> {
     const n = await expo();
     if (!n) return;
+    if (this.onStop && !this.listening) {
+      // a Stop button under the notification (iOS and Android through expo-notifications)
+      await n.setNotificationCategoryAsync(EXPO_CATEGORY, [{ identifier: STOP_ACTION, buttonTitle: "Stop", options: { opensAppToForeground: false } }]).catch(() => {});
+      this.listening = n.addNotificationResponseReceivedListener((r) => {
+        if (r.actionIdentifier === STOP_ACTION) this.onStop?.();
+      });
+    }
     await n.scheduleNotificationAsync({
       identifier: NOTIFICATION_ID,
-      content: { title: m.title, body: `${m.bar}\n${m.body}`, sticky: true, autoDismiss: false, data: { kind: "shop-index" } },
+      content: { title: m.title, body: `${m.bar}\n${m.body}`, sticky: true, autoDismiss: false, data: { kind: "shop-index" }, ...(this.onStop ? { categoryIdentifier: EXPO_CATEGORY } : {}) },
       trigger: Platform.OS === "android" ? { channelId: CHANNEL_ID } : null,
     });
   }
@@ -146,6 +86,8 @@ class ExpoSurface implements ProgressSurface {
   async finish(m: ProgressModel): Promise<void> {
     const n = await expo();
     if (!n) return;
+    this.listening?.remove();
+    this.listening = null;
     await n.dismissNotificationAsync(NOTIFICATION_ID).catch(() => {});
     await n.scheduleNotificationAsync({
       identifier: DONE_ID,
@@ -156,9 +98,9 @@ class ExpoSurface implements ProgressSurface {
 }
 
 /** The best surface this build has. */
-export function createProgressSurface(): ProgressSurface {
+export function createProgressSurface(onStop?: () => void): ProgressSurface {
   const n = notifee();
-  return n ? new NotifeeSurface(n) : new ExpoSurface();
+  return n ? new NotifeeSurface(n, onStop) : new ExpoSurface(onStop);
 }
 
 /** Ask for the permission the notifications need (Android 13+, iOS). */

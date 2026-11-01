@@ -192,7 +192,7 @@ export function ShopRuntime({ host, children }: { host: ModuleHost; children: Re
       if (!client || running.current) return null;
       const job = await client.startIndex(req);
       running.current = job.id;
-      const surface = host.progress(req.query);
+      const surface = host.progress(req.query, () => void client.cancelIndex(job.id).catch(() => {}));
       const mirror: ProgressSurface = {
         show: async (m) => void (await surface.show(m)),
         finish: async (m) => void (await surface.finish(m)),
