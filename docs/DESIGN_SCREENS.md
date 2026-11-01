@@ -62510,5 +62510,9 @@ Android SDK and no virtualisation). What to look at, on Android with Notifee and
 3. Let a run finish: "Search index ready" appears and can be swiped away.
 4. With a server and a watch whose price is met: a deal notification appears; tapping it opens that product.
 
+In the app itself (browser, light and dark) the in-app progress card was checked with the index job held at 62 %: it shows
+"Reading shops", "Local Shop · page 14 of 22 · 62 %" and a bar, and pressing its Stop button sends the same cancel request
+(`DELETE /v1/shop/index/<job>`) that the notification's Stop button triggers.
+
 What is already tested without a device (`packages/shopping/tests/logic.test.ts`): what each notification says, the progress
 values, the Stop action, and that Stop only affects the run that is showing.
