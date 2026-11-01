@@ -100,10 +100,13 @@ describe("responsive values", () => {
 });
 
 describe("palette", () => {
-  it("is Tailwind's slate and indigo", () => {
-    assert.equal(palette.slate[900], "#0f172a");
-    assert.equal(palette.indigo[600], "#4f46e5");
-    assert.equal(palette.emerald[700], "#047857");
+  it("is Tailwind's neutral, green, yellow and red, and Untitled UI's brand violet", () => {
+    assert.equal(palette.neutral[900], "#171717");
+    assert.equal(palette.green[700], "#15803d");
+    assert.equal(palette.yellow[700], "#a16207");
+    // the two brand steps that were read from the Untitled UI kit's badge
+    assert.equal(palette.brand[50], "#f9f5ff");
+    assert.equal(palette.brand[700], "#6941c6");
   });
 
   it("has a role for every tone in both themes", () => {

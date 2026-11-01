@@ -37,7 +37,7 @@ export function Touchable({ children, onPress, onLongPress, disabled, busy, labe
       accessibilityLabel={label}
       accessibilityState={{ disabled: Boolean(disabled), busy: Boolean(busy), selected }}
       hitSlop={slop}
-      style={({ pressed }) => [base, pressed && !disabled && { opacity: state.pressed }, disabled && { opacity: state.disabled }]}
+      style={({ pressed }) => [base, pressed && !disabled && { opacity: state.pressed, transform: [{ scale: state.pressScale }] }, disabled && { opacity: state.disabled }]}
     >
       {typeof children === "function" ? (s) => children({ pressed: s.pressed, hovered: Boolean((s as { hovered?: boolean }).hovered) }) : children}
     </Pressable>

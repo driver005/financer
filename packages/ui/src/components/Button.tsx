@@ -5,7 +5,9 @@ import { Text, type TextTone } from "../primitives/Text";
 import { Touchable } from "../primitives/Touchable";
 import { Spinner } from "./Spinner";
 
-export type ButtonVariant = "solid" | "soft" | "outline" | "ghost";
+/** HeroUI's names in brackets: solid (primary), secondary (a neutral fill with brand text), tertiary (a neutral fill),
+ *  soft (a tinted fill, "danger-soft" for the danger tone), outline, ghost. */
+export type ButtonVariant = "solid" | "secondary" | "tertiary" | "soft" | "outline" | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
 
 export type ButtonProps = {
@@ -27,6 +29,10 @@ export function buttonLook(variant: ButtonVariant, tone: Tone): { bg?: BgToken; 
   switch (variant) {
     case "solid":
       return { bg: `${tone}-solid`, text: `on-${tone}-solid` };
+    case "secondary":
+      return { bg: "sunken", text: tone === "neutral" ? "default" : tone };
+    case "tertiary":
+      return { bg: "sunken", text: "default" };
     case "soft":
       return { bg: `${tone}-soft`, text: `on-${tone}-soft` };
     case "outline":
@@ -49,17 +55,18 @@ export function Button({ label, onPress, variant = "solid", tone = "accent", siz
       bg={look.bg}
       border={look.outline ? "hairline" : undefined}
       borderTone={tone === "neutral" ? "strong" : tone}
-      radius="lg"
-      px={s === "sm" ? "md" : "lg"}
+      radius={s === "lg" ? "4xl" : "3xl"}
+      px={s === "sm" ? "md" : s === "md" ? "lg" : "xl"}
+      shadow={look.outline ? "xs" : undefined}
       control={s}
       direction="row"
       align="center"
       justify="center"
-      gap="sm"
+      gap={s === "sm" ? "xs" : "sm"}
       hit={s === "sm"}
     >
       {loading ? <Spinner tone={look.text} /> : icon ? <Icon name={icon} size="md" tone={look.text} /> : null}
-      <Text variant={s === "lg" ? "bodyStrong" : "label"} tone={look.text} numberOfLines={1}>
+      <Text variant={s === "lg" ? "controlLarge" : s === "md" ? "control" : "label"} tone={look.text} numberOfLines={1}>
         {label}
       </Text>
       {iconRight ? <Icon name={iconRight} size="md" tone={look.text} /> : null}

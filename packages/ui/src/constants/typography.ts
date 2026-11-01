@@ -1,4 +1,4 @@
-// Type: Tailwind CSS 3.4.17 `fontSize` (with its line heights), `fontWeight` and `letterSpacing`.
+// Type: Inter (as Untitled UI and HeroUI both use), Tailwind CSS 3.4.17 `fontSize` (with its line heights), `fontWeight` and `letterSpacing`.
 // `textVariants` are the roles screens use (`<Text variant="heading">`); each is made only of
 // the tokens above it.
 
@@ -30,21 +30,26 @@ export type TextVariantSpec = {
 };
 
 export const textVariants = {
-  display: { size: "4xl", weight: "bold", tracking: "tight" },
-  title: { size: "2xl", weight: "bold", tracking: "tight" },
+  display: { size: "4xl", weight: "semibold", tracking: "tight" },
+  title: { size: "2xl", weight: "semibold", tracking: "tight" },
   heading: { size: "xl", weight: "semibold", tracking: "tight" },
   subheading: { size: "lg", weight: "semibold", tracking: "normal" },
   body: { size: "base", weight: "normal", tracking: "normal" },
   bodyStrong: { size: "base", weight: "semibold", tracking: "normal" },
   label: { size: "sm", weight: "medium", tracking: "normal" },
   caption: { size: "xs", weight: "normal", tracking: "wide" },
-  price: { size: "xl", weight: "bold", tracking: "tight", tabular: true },
-  priceLarge: { size: "3xl", weight: "extrabold", tracking: "tight", tabular: true },
+  /** Badges and tags (Untitled UI: medium weight). */
+  badge: { size: "xs", weight: "medium", tracking: "normal" },
+  /** The label of a medium and a large button (HeroUI: base and lg, medium weight). */
+  control: { size: "base", weight: "medium", tracking: "normal" },
+  controlLarge: { size: "lg", weight: "medium", tracking: "normal" },
+  price: { size: "xl", weight: "semibold", tracking: "tight", tabular: true },
+  priceLarge: { size: "3xl", weight: "bold", tracking: "tight", tabular: true },
   number: { size: "sm", weight: "semibold", tracking: "normal", tabular: true },
 } as const satisfies Record<string, TextVariantSpec>;
 
 export type TextVariant = keyof typeof textVariants;
 
-/** The system font stack, as Tailwind's `font-sans`. Used on the web; the phones use their own. */
+/** Inter when the machine has it, then Tailwind's `font-sans`. Used on the web; the phones use their own (no font is bundled). */
 export const fontFamilyWeb =
-  'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';

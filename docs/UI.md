@@ -11,13 +11,43 @@ The research behind the shapes of the screens is in [UI_RESEARCH.md](UI_RESEARCH
 
 | Folder | What is in it |
 | --- | --- |
-| `src/constants/` | **The only place for raw numbers and colour values.** Tailwind's palette (v3.4 hex values), spacing on a 4 px grid, radius, font sizes with line heights, shadows, breakpoints, touch and control sizes. |
+| `src/constants/` | **The only place for raw numbers and colour values.** Tailwind's neutral, green, yellow, red and sky (v3.4 hex values) and Untitled UI's brand violet, spacing on a 4 px grid, radius, font sizes with line heights, shadows, breakpoints, touch and control sizes. |
 | `src/theme/` | `ThemeProvider`, light and dark colour roles built from the palette, `useTheme()`. |
 | `src/responsive/` | `useLayout()` (layout class, columns, device), `Responsive<T>` values, `Viewport` (forces a width, used by the catalog). |
 | `src/primitives/` | `Box`, `Stack`, `Row`, `Spacer`, `Text`, `Icon`, `Touchable`: they turn token props into styles. |
-| `src/components/` | Button, Chip, Badge, Banner, Card, TextField, Switch, Checkbox, Segmented, OptionList, Meter, ScoreRing, Sparkline, Skeleton, Spinner, EmptyState, ListItem, Thumbnail, Divider. |
+| `src/components/` | Button (six variants), Chip, Badge, Banner, Card, TextField, Switch, Checkbox, Segmented, OptionList, Meter, ScoreRing, Sparkline, Skeleton, Spinner, EmptyState, ListItem, Thumbnail, Divider. |
 | `src/layout/` | `Screen`, `Section`, `Sheet`, `TopBar`, `Grid`, and the adaptive navigation (`AppShell`). |
 | `src/shop/` | Shopping pieces built on the above: `ProductCard`, `ProductGrid`, `PriceTag`, `DealBadge`, `FilterBar`, `OfferRow`, `PriceHistory`, `ComparisonTable`. |
+
+## Design language: Untitled UI and HeroUI
+
+The look combines two sources. What was actually read from each is listed so nothing is claimed
+that was not checked.
+
+**From the Untitled UI community kit** (Figma file, read through the Figma tools):
+- Colours: the kit uses Tailwind's **neutral, green, yellow and red** for its badges (neutral 100/700,
+  green 50/700, yellow 50/700, red 50/700; read from the file) and a custom **violet brand** (brand 50
+  `#f9f5ff` and 700 `#6941c6` read from the file). Our palette uses exactly these; the other brand steps
+  are the kit's published ramp, **not read from the file**.
+- Badges: a pill, 10 x 2 padding, 14/20 Inter medium, soft fill with the dark step as text (read).
+- Toggles 44 x 24 (36 x 20 small), the 4 px spacing grid, containers of 640/768/1024/1280, 16 px phone
+  margins and 32 px tablet and desktop margins (read from the file's metadata).
+- Inputs and the focus halo (a 4 px brand-100 ring, a faint `xs` shadow) follow the kit's style from
+  memory: the input and button nodes could not be read (the Figma tool timed out on them).
+
+**From HeroUI** (read from its `heroui-native` style sheets in `apps/mobile/node_modules`):
+- Shapes: buttons are pills (radius 3xl = 24, 4xl = 32 for large) at heights 40, 48 and 56; fields have
+  a 14 px radius; cards are 24 px; a switch is 48 x 24 with an oval 28 x 20 knob.
+- Variants: button primary, secondary, tertiary, outline, ghost, danger, danger-soft; chips are soft
+  fills without an outline; fields are filled.
+- Layering: page, white surface, a neutral secondary fill; soft layered shadows in the light theme and
+  none in the dark one (overlays get a faint inner rim instead). Labels are medium weight.
+
+**Ours on top:** a selected chip also shows a check (never colour alone), text colours are tuned so
+every pair passes WCAG AA (`tests/contrast.test.ts`), and every size and radius is a token.
+
+**Not done:** Inter is used where the machine has it (the web stack lists it first). No font file is
+bundled, because loading one on the phones needs a font package; ask if you want it.
 
 ## Tokens
 
@@ -28,7 +58,7 @@ The research behind the shapes of the screens is in [UI_RESEARCH.md](UI_RESEARCH
   `solid / onSolid / soft / onSoft / text / line`. Light and dark are two sets of the same roles; contrast
   of every pair is tested against WCAG AA (`tests/contrast.test.ts`).
 - **Type** is a variant: `display, title, heading, subheading, body, bodyStrong, label, caption, price, priceLarge, number`.
-- **Radius, shadow, sizes**: `radius="md"`, `shadow="sm"`, `control="md"`, `touch` (minimum 44 px target).
+- **Radius, shadow, sizes**: `radius="3xl"`, `shadow="surface"` (also `field`, `overlay`, `xs`), `control="md"` (xs 32, sm 40, md 48, lg 56), `touch` (minimum 44 px target), `ring="focus"`.
 
 ```tsx
 <Card p="lg" gap="md" tone="accent">

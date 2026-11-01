@@ -28,7 +28,7 @@ export function TabBar<K extends string>({ items, active, onChange }: Props<K>) 
           const on = it.key === active;
           return (
             <Box key={it.key} equal>
-              <Touchable onPress={() => onChange(it.key)} label={it.label} role="tab" selected={on} align="center" gap="2xs" py="xs" hit={false} control="lg">
+              <Touchable onPress={() => onChange(it.key)} label={it.label} role="tab" selected={on} align="center" gap="2xs" py="xs" hit={false} control="md">
                 <Box px="lg" py="2xs" radius="full" bg={on ? "accent-soft" : undefined} align="center">
                   <Icon name={on && it.activeIcon ? it.activeIcon : it.icon} size="lg" tone={on ? "on-accent-soft" : "muted"} />
                 </Box>

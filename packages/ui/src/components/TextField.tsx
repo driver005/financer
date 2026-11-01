@@ -45,12 +45,14 @@ export function TextField({
       <Row
         gap="sm"
         px="md"
-        bg="sunken"
-        radius={pill ? "full" : "lg"}
+        bg="field"
+        radius={pill ? "full" : "field"}
         align={multiline ? "start" : "center"}
-        control={pill ? "lg" : "md"}
-        border={error || focused ? "thick" : "hairline"}
-        borderTone={error ? "danger" : focused ? "accent" : "default"}
+        control="md"
+        border="hairline"
+        borderTone={error ? "danger" : focused ? "accent" : "strong"}
+        shadow="xs"
+        ring={error ? "danger" : focused ? "focus" : undefined}
       >
         {icon ? <Icon name={icon} size="md" tone="muted" /> : null}
         <Box grow>

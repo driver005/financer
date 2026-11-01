@@ -8,7 +8,10 @@ export const size = {
   /** Minimum touch target: 44 pt (Apple HIG); Material asks 48 dp, so `touchComfortable` for primary actions. */
   touch: spacing[11],
   touchComfortable: spacing[12],
-  control: { sm: spacing[9], md: spacing[11], lg: spacing[12] },
+  /** Heights of buttons, inputs and segments: HeroUI's 40, 48 and 56, and a 32 for small pills (chips) that get a larger hit area. */
+  control: { xs: spacing[8], sm: spacing[10], md: spacing[12], lg: spacing[14] },
+  /** The switch: HeroUI's 48 x 24 track and 28 x 20 thumb, inset 2. */
+  switch: { width: spacing[12], height: spacing[6], thumbWidth: spacing[7], thumbHeight: spacing[5], inset: spacing[0.5], travel: spacing[12] - spacing[7] - spacing[0.5] - spacing[0.5] },
   icon: { xs: spacing[3.5], sm: spacing[4], md: spacing[5], lg: spacing[6], xl: spacing[8] },
   avatar: { sm: spacing[8], md: spacing[10], lg: spacing[14] },
   thumb: { sm: spacing[16], md: spacing[24], lg: spacing[40] },

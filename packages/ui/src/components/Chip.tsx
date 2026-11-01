@@ -15,25 +15,24 @@ export type ChipProps = {
   testID?: string;
 };
 
-/** A pill: a filter you can switch, an applied filter you can remove, or a plain label. */
+/** A pill (HeroUI chip: a soft fill and no outline; a selected one also shows a check, so it never relies on colour alone): a filter you can switch, an applied filter you can remove, or a plain label. */
 export function Chip({ label, selected, onPress, onRemove, icon, tone = "accent", testID }: ChipProps) {
   const active = selected || Boolean(onRemove);
+  const lead = icon ?? (selected ? "check" : undefined);
   const content = (
     <>
-      {icon ? <Icon name={icon} size="sm" tone={active ? `on-${tone}-soft` : "muted"} /> : null}
-      <Text variant="label" tone={active ? `on-${tone}-soft` : "default"} numberOfLines={1}>
+      {lead ? <Icon name={lead} size="sm" tone={active ? `on-${tone}-soft` : "muted"} /> : null}
+      <Text variant="label" tone={active ? `on-${tone}-soft` : "on-neutral-soft"} numberOfLines={1}>
         {label}
       </Text>
       {onRemove ? <Icon name="close" size="sm" tone={`on-${tone}-soft`} /> : null}
     </>
   );
   const look = {
-    bg: active ? (`${tone}-soft` as const) : ("surface" as const),
-    border: "hairline" as const,
-    borderTone: active ? tone : ("default" as const),
+    bg: active ? (`${tone}-soft` as const) : ("sunken" as const),
     radius: "full" as const,
     px: "md" as const,
-    control: "sm" as const,
+    control: "xs" as const,
     direction: "row" as const,
     align: "center" as const,
     gap: "xs" as const,

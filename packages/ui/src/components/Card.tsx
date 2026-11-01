@@ -7,7 +7,7 @@ import { Touchable } from "../primitives/Touchable";
 
 export type CardProps = {
   children: ReactNode;
-  /** `raised` floats with a shadow, `outline` has only a border, `flat` is a quiet fill. */
+  /** `raised` (HeroUI surface) sits on a soft shadow, and in the dark theme on a lighter fill, `outline` has only a border, `flat` is a quiet fill. */
   variant?: "raised" | "outline" | "flat";
   /** Tint the card with a tone's soft colour. */
   tone?: Tone;
@@ -19,13 +19,13 @@ export type CardProps = {
   testID?: string;
 };
 
-export function Card({ children, variant = "outline", tone, selected, onPress, label, padded = true, gap = "md", testID }: CardProps) {
+export function Card({ children, variant = "raised", tone, selected, onPress, label, padded = true, gap = "md", testID }: CardProps) {
   const look: BoxProps = {
     bg: tone ? `${tone}-soft` : variant === "flat" ? "sunken" : "surface",
-    radius: "xl",
-    border: selected ? "thick" : variant === "raised" ? undefined : "hairline",
+    radius: "3xl",
+    border: selected ? "thick" : variant === "outline" ? "hairline" : undefined,
     borderTone: selected ? "accent" : "default",
-    shadow: variant === "raised" ? "md" : undefined,
+    shadow: variant === "raised" ? "surface" : undefined,
     p: padded ? "lg" : "none",
     gap,
     overflow: "hidden",

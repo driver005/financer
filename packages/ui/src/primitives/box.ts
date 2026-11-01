@@ -3,13 +3,13 @@ import type { DimensionValue, ViewStyle } from "react-native";
 
 import type { Tone } from "../constants/colors";
 import { type BorderWidth, type Radius, borderWidth, radius } from "../constants/radius";
-import { type Shadow, shadows } from "../constants/shadows";
+import type { Shadow } from "../constants/shadows";
 import { type ControlSize, size } from "../constants/sizes";
 import { type Space, space } from "../constants/spacing";
 import { type Responsive, resolve } from "../responsive/resolve";
 import type { Theme } from "../theme/ThemeProvider";
 
-export type BgToken = "background" | "surface" | "raised" | "sunken" | "scrim" | `${Tone}-soft` | `${Tone}-solid`;
+export type BgToken = "background" | "surface" | "raised" | "field" | "sunken" | "scrim" | `${Tone}-soft` | `${Tone}-solid`;
 export type Align = "start" | "center" | "end" | "stretch" | "baseline";
 export type Justify = "start" | "center" | "end" | "between" | "around";
 export type Dim = `icon-${keyof typeof size.icon}` | `avatar-${keyof typeof size.avatar}` | `thumb-${keyof typeof size.thumb}` | `ring-${keyof typeof size.ring}`;
@@ -61,6 +61,8 @@ export type BoxProps = {
   border?: BorderWidth;
   borderTone?: Tone | "default" | "strong";
   shadow?: Shadow;
+  /** The focus halo (Untitled UI): brand coloured, or red for a field in error. */
+  ring?: "focus" | "danger";
   overflow?: "hidden" | "visible";
   /** A fixed height for previews that need a bounded box. */
   h?: "preview";
@@ -76,7 +78,7 @@ export type BoxProps = {
   touch?: boolean;
   /** A fixed square of a token size: `icon-md`, `avatar-lg`, `thumb-sm`, `ring-md`. */
   dim?: Dim;
-  /** Height of a control (button, input, chip row): sm 36, md 44, lg 48. */
+  /** Height of a control (button, input, segment): xs 32, sm 40, md 48, lg 56. */
   control?: ControlSize;
 };
 
@@ -89,7 +91,7 @@ const BASIS: Record<Basis, DimensionValue> = { auto: "auto", full: "100%", half:
 
 export function bgColor(bg: BgToken, theme: Theme): string {
   const c = theme.colors;
-  if (bg === "background" || bg === "surface" || bg === "raised" || bg === "sunken") return c[bg];
+  if (bg === "background" || bg === "surface" || bg === "raised" || bg === "field" || bg === "sunken") return c[bg];
   if (bg === "scrim") return c.scrim;
   const [tone, kind] = bg.split("-") as [Tone, "soft" | "solid"];
   return c.tones[tone][kind];
@@ -156,7 +158,8 @@ export function boxStyle(p: BoxProps, theme: Theme, width: number): ViewStyle {
     const t = p.borderTone ?? "default";
     style.borderColor = t === "default" ? theme.colors.border.default : t === "strong" ? theme.colors.border.strong : theme.colors.tones[t].line;
   }
-  if (p.shadow && p.shadow !== "none") style.boxShadow = shadows[p.shadow];
+  if (p.ring) style.boxShadow = p.ring === "danger" ? theme.colors.dangerRing : theme.colors.focusRing;
+  else if (p.shadow && p.shadow !== "none" && theme.shadows[p.shadow] !== "none") style.boxShadow = theme.shadows[p.shadow];
   if (p.overflow) style.overflow = p.overflow;
   return style;
 }

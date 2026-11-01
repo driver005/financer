@@ -63,6 +63,6 @@ check("dark", darkColors);
 describe("the contrast helper", () => {
   it("knows black on white and a colour on itself", () => {
     assert.ok(Math.abs(contrast("#000000", "#ffffff") - 21) < 0.01);
-    assert.equal(contrast("#4f46e5", "#4f46e5"), 1);
+    assert.equal(contrast("#7f56d9", "#7f56d9"), 1);
   });
 });
