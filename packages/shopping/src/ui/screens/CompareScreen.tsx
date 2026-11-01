@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { Banner, Card, ComparisonTable, EmptyState, Screen, Stack, Text, TopBar } from "@financer/ui";
+import { Badge, Banner, Card, ComparisonTable, EmptyState, Row, Screen, Stack, Text, TopBar } from "@financer/ui";
 
 import { ShopApiError } from "../../api/client";
 import type { Comparison, Profile } from "../../api/types";
@@ -37,9 +37,9 @@ export function CompareScreen({ ids }: { ids: string[] }) {
   return (
     <Screen header={header} fixed>
       {winner ? (
-        <Card tone="accent" gap="xs">
-          <Text variant="caption" tone="on-accent-soft">Best fit for your weights</Text>
-          <Text variant="heading" tone="on-accent-soft">{winner.title}</Text>
+        <Card gap="sm">
+          <Row><Badge label="Best fit for your weights" tone="accent" icon="check-decagram-outline" /></Row>
+          <Text variant="heading">{winner.title}</Text>
         </Card>
       ) : null}
       <Stack grow gap="md">

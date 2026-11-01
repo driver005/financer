@@ -46,9 +46,9 @@ export function DealsScreen() {
   return (
     <Screen header={<TopBar title="Deals" actions={<Button label="Refresh" variant="ghost" size="sm" icon="refresh" onPress={() => void load()} />} />}>
       {error ? <Banner tone="danger">{error}</Banner> : null}
-      <Section title={unread > 0 ? `Messages (${unread} new)` : "Messages"} action={unread > 0 ? { label: "Mark read", onPress: () => void markRead() } : undefined}>
+      <Section title="Messages" aside={`${unread} new`} action={unread > 0 ? { label: "Mark read", onPress: () => void markRead() } : undefined}>
         {messages.length === 0 ? (
-          <EmptyState icon="bell-outline" title="No messages yet" message="Watch a search or a product and you are told here when its price drops." />
+          <EmptyState icon="bell-outline" title="No messages yet" message="Watch a search or a product and you are told here when its price drops." action={<Button label="Start watching" variant="soft" icon="bell-plus-outline" onPress={() => nav.push({ name: "watch" })} />} />
         ) : (
           <Card padded={false}>
             <Box px="lg">
@@ -90,6 +90,7 @@ export function DealsScreen() {
                 shop={dealLine(d.deal)}
                 badges={d.deal.verdict === "great" ? [{ label: "Great deal", tone: "success" }] : [{ label: "Good deal", tone: "success" }]}
                 onPress={() => nav.push({ name: "product", id: d.product.id })}
+                onOpen={d.product.offers[0]?.url ? () => void openLink(d.product.offers[0].url) : undefined}
               />
             ))}
           </Stack>

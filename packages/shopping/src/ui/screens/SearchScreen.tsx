@@ -9,6 +9,7 @@ import { ShopApiError } from "../../api/client";
 import type { Profile, SearchItem, SearchResponse } from "../../api/types";
 import { indexRequestFor, nextStep, suggestionText } from "../../logic/searchPlan";
 import { EXAMPLE_SEARCHES, SORT_OPTIONS, bestOffer, bestSaving, dealBadges, isMonthly, savingNote, savingShare, sortItems, understood, understoodLine, type SortKey } from "../../logic/view";
+import { openLink } from "../links";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
 
@@ -121,6 +122,8 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
       layout,
       selected: selected.includes(item.product.id),
       onToggleCompare: () => toggle(item.product.id),
+      onWatch: layout === "grid" ? () => nav.push({ name: "watch", query: item.product.title, category: item.product.category }) : undefined,
+      onOpen: layout === "row" && offer?.url ? () => void openLink(offer.url) : undefined,
       onPress: () => nav.push({ name: "product", id: item.product.id }),
     };
   };
@@ -175,14 +178,15 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
       {response ? (
         <Stack gap="xl">
           {response.category ? (
-            <ChipRow>
-              <Chip label={response.category.replace(/_/g, " ")} icon="shape-outline" tone={response.category_guessed ? "warning" : "accent"} selected />
-              {understood(response.parsed).map((f) => <Chip key={f.key} label={f.label} />)}
-              {response.excluded.length > 0 ? <Chip label={`${response.excluded.length} left out`} icon="filter-off-outline" /> : null}
-            </ChipRow>
+            <Card gap="sm">
+              <ChipRow>
+                <Chip label={response.category.replace(/_/g, " ")} icon="shape-outline" tone={response.category_guessed ? "warning" : "accent"} selected />
+                {understood(response.parsed).map((f) => <Chip key={f.key} label={f.label} />)}
+                {response.excluded.length > 0 ? <Chip label={`${response.excluded.length} left out`} icon="filter-off-outline" /> : null}
+              </ChipRow>
+              {understoodLine(response.parsed) ? <Hint>{understoodLine(response.parsed) as string}</Hint> : null}
+            </Card>
           ) : null}
-
-          {understoodLine(response.parsed) ? <Hint>{understoodLine(response.parsed) as string}</Hint> : null}
 
           {step?.kind === "suggest-index" && !shop.indexing && shop.info && shop.info.sources.length > 0 ? (
             <Banner title={shop.integrated ? "Build the index" : "Refresh now"} action={<Button label={shop.integrated ? "Build the index" : "Refresh now"} onPress={() => void buildIndex(lastQuery.current, response)} loading={shop.indexing !== null} />}>
@@ -267,7 +271,11 @@ function Picks({ response }: { response: SearchResponse }) {
               key={id}
               layout="row"
               title={item.product.title}
-              brand={labels.join(" · ")}
+              brand={item.product.brand}
+              heading={labels.join(" · ")}
+              strengths={item.ranked.strengths}
+              strengthsAs="chips"
+              onOpen={bestOffer(item)?.url ? () => void openLink(bestOffer(item)?.url as string) : undefined}
               imageUri={item.product.image}
               priceCents={item.ranked.price_cents}
               perMonth={isMonthly(item)}

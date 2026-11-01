@@ -42,6 +42,12 @@ are a little darker (`#0485f7` to `#0072e2`, `#ff383c` to `#e71226`), and muted 
 tone are mixed towards the foreground until they pass (`tests/contrast.test.ts`). HeroUI's green and amber
 fills are light by design and carry dark text (8:1); they are only 2:1 against white as shapes.
 
+**Stitch.** The Stitch project "Shopping Assistant" holds the HeroUI design system and the screens (search,
+product, compare, weights, deals, plans, web and tablet) that the app was compared against. The app takes
+their structure (the pick card with a label row, a Match pill and a View deal button; the grouped
+"understood" strip; the savings bar; quick budgets; deal filters) but not their invented copy, and it keeps
+its own comparison table and level chips where Stitch drew grouped cards and sliders.
+
 **Earlier looks.** A violet, Untitled-UI-flavoured version, a Duolingo-style chunky version (thick edges,
 bold capitals, Nunito) and several Stitch explorations were tried and set aside. The Stitch project
 "Shopping Assistant" still holds the explorations.

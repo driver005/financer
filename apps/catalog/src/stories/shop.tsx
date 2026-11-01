@@ -41,6 +41,7 @@ function Rows() {
       {products.slice(0, 2).map((p) => (
         <ProductCard key={p.id} layout="row" title={p.title} brand={p.brand} priceCents={p.price} shop={p.shop} score={p.score} tier={p.tier} strengths={[...p.strengths]} weaknesses={[...p.weaknesses]} onPress={() => {}} />
       ))}
+      <ProductCard layout="row" title={products[0].title} brand={products[0].brand} heading="Best overall · Best value" priceCents={products[0].price} shop={products[0].shop} score={products[0].score} scoreAs="badge" strengths={[...products[0].strengths]} strengthsAs="chips" onOpen={() => {}} onPress={() => {}} />
       <ProductCard layout="row" title="Flex 20 GB 5G" brand="Telco" priceCents={1999} perMonth shop="Tariff portal" score={71} scoreAs="badge" note="Save 12,00 € a month (288,00 € over 24 months)" onPress={() => {}} />
     </Stack>
   );
@@ -94,7 +95,7 @@ export const shopStories: StoryDef[] = [
       </Section>
     ),
   },
-  { id: "rows", title: "Product cards as rows", note: "For lists and for subscriptions.", render: () => <Rows /> },
+  { id: "rows", title: "Product cards as rows", note: "For lists and for subscriptions. The first is a pick: what it won, the match pill, strengths as chips and a View deal button.", render: () => <Rows /> },
   { id: "price", title: "Prices, deals and offers", render: () => <Prices /> },
   { id: "filters", title: "Filter and sort bar", note: "Applied filters are chips you can remove.", render: () => <Filters /> },
   { id: "compare", title: "Comparison table", note: "Sticky product headers; only what differs is shown by default; the best of a row is marked.", render: () => <Box h="preview"><ComparisonTable columns={compareColumns} rows={compareRows} /></Box> },
