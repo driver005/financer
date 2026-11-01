@@ -1,18 +1,16 @@
-// Semantic colours: roles, not shades. Playful and chunky in the manner of Duolingo: bright faces with a
-// darker edge, soft tinted fills with a 2 px line, a blue-green night for the dark theme. A component asks for `text.muted` or `tones.accent.solid`;
-// which palette step that is, in light and in dark, is decided here and only here.
+// Semantic colours: roles, not shades. HeroUI's layering (page, white surface, grey fill, soft status
+// fills) so the shopping app matches the finance app. A component asks for `text.muted` or
+// `tones.accent.solid`; which colour that is, in light and in dark, is decided here and only here.
 // Tests (tests/contrast.test.ts) check these pairs against WCAG 2.2 AA (4.5:1 for text, 3:1 for
 // parts of the interface).
-import { alpha, duo, palette as p } from "./palette";
+import { alpha, palette as p } from "./palette";
 
 export type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
 export const tones: readonly Tone[] = ["neutral", "accent", "success", "warning", "danger", "info"];
 
 export type ToneColors = {
-  /** Solid fill (buttons, badges): the bright face. */
+  /** Solid fill (buttons, badges). */
   solid: string;
-  /** The darker colour of the thick lower edge under a solid face. */
-  edge: string;
   /** Text and icons on the solid fill. */
   onSolid: string;
   /** Soft tinted fill (chips, banners, selected rows). */
@@ -44,47 +42,46 @@ export type ThemeColors = {
   tones: Record<Tone, ToneColors>;
 };
 
-const n = p.neutral;
-const d = duo.night;
-const ink = n[900];
+const L = p.hero.light;
+const D = p.hero.dark;
 
 export const lightColors: ThemeColors = {
-  background: n[100],
-  surface: p.white,
-  raised: p.white,
-  field: n[50],
+  background: L.background,
+  surface: L.surface,
+  raised: L.surface,
+  field: L.surface,
   thumb: p.white,
-  sunken: n[200],
+  sunken: L.fill,
   scrim: alpha.scrimLight,
-  text: { default: n[800], muted: n[700], subtle: n[600], inverse: p.white },
-  border: { default: n[200], strong: n[300], focus: duo.blue.text },
+  text: { default: L.text, muted: L.muted, subtle: L.subtle, inverse: p.snow },
+  border: { default: L.border, strong: L.separator, focus: L.accent.text },
   tones: {
-    neutral: { solid: n[600], onSolid: p.white, edge: n[800], soft: n[100], onSoft: n[700], text: n[700], line: n[200] },
-    accent: { solid: duo.green.face, onSolid: ink, edge: duo.green.edge, soft: duo.green.soft, onSoft: duo.green.onSoft, text: duo.green.text, line: duo.green.line },
-    success: { solid: duo.green.face, onSolid: ink, edge: duo.green.edge, soft: duo.green.soft, onSoft: duo.green.onSoft, text: duo.green.text, line: duo.green.line },
-    warning: { solid: duo.yellow.face, onSolid: ink, edge: duo.yellow.edge, soft: duo.yellow.soft, onSoft: duo.yellow.onSoft, text: duo.yellow.text, line: duo.yellow.line },
-    danger: { solid: duo.red.face, onSolid: ink, edge: duo.red.edge, soft: duo.red.soft, onSoft: duo.red.onSoft, text: duo.red.text, line: duo.red.line },
-    info: { solid: duo.blue.face, onSolid: ink, edge: duo.blue.edge, soft: duo.blue.soft, onSoft: duo.blue.onSoft, text: duo.blue.text, line: duo.blue.line },
+    neutral: { solid: p.eclipse, onSolid: p.snow, soft: L.fill, onSoft: L.text, text: L.text, line: L.border },
+    accent: { solid: L.accent.face, onSolid: p.snow, soft: L.accent.soft, onSoft: L.accent.onSoft, text: L.accent.text, line: L.accent.line },
+    success: { solid: L.success.face, onSolid: p.eclipse, soft: L.success.soft, onSoft: L.success.onSoft, text: L.success.text, line: L.success.line },
+    warning: { solid: L.warning.face, onSolid: p.eclipse, soft: L.warning.soft, onSoft: L.warning.onSoft, text: L.warning.text, line: L.warning.line },
+    danger: { solid: L.danger.face, onSolid: p.snow, soft: L.danger.soft, onSoft: L.danger.onSoft, text: L.danger.text, line: L.danger.line },
+    info: { solid: p.sky[700], onSolid: p.white, soft: p.sky[50], onSoft: p.sky[800], text: p.sky[700], line: p.sky[200] },
   },
 };
 
 export const darkColors: ThemeColors = {
-  background: d.background,
-  surface: d.surface,
-  raised: d.raised,
-  field: d.background,
-  thumb: d.text,
-  sunken: d.raised,
+  background: D.background,
+  surface: D.surface,
+  raised: D.surfaceSecondary,
+  field: D.surface,
+  thumb: p.snow,
+  sunken: D.fill,
   scrim: alpha.scrimDark,
-  text: { default: d.text, muted: d.muted, subtle: d.subtle, inverse: ink },
-  border: { default: d.border, strong: d.borderStrong, focus: duo.blue.face },
+  text: { default: D.text, muted: D.muted, subtle: D.subtle, inverse: p.eclipse },
+  border: { default: D.border, strong: D.separator, focus: D.accent.text },
   tones: {
-    neutral: { solid: d.text, onSolid: ink, edge: d.edgeNeutral, soft: d.raised, onSoft: d.muted, text: d.muted, line: d.border },
-    accent: { solid: duo.green.face, onSolid: ink, edge: duo.green.edge, soft: d.green.soft, onSoft: d.green.onSoft, text: duo.green.face, line: d.green.line },
-    success: { solid: duo.green.face, onSolid: ink, edge: duo.green.edge, soft: d.green.soft, onSoft: d.green.onSoft, text: duo.green.face, line: d.green.line },
-    warning: { solid: duo.yellow.face, onSolid: ink, edge: duo.yellow.edge, soft: d.yellow.soft, onSoft: d.yellow.onSoft, text: duo.yellow.face, line: d.yellow.line },
-    danger: { solid: duo.red.face, onSolid: ink, edge: duo.red.edge, soft: d.red.soft, onSoft: d.red.onSoft, text: d.red.text, line: d.red.line },
-    info: { solid: duo.blue.face, onSolid: ink, edge: duo.blue.edge, soft: d.blue.soft, onSoft: d.blue.onSoft, text: duo.blue.face, line: d.blue.line },
+    neutral: { solid: p.snow, onSolid: p.eclipse, soft: D.fill, onSoft: D.muted, text: D.muted, line: D.border },
+    accent: { solid: D.accent.face, onSolid: p.snow, soft: D.accent.soft, onSoft: D.accent.onSoft, text: D.accent.text, line: D.accent.line },
+    success: { solid: D.success.face, onSolid: p.eclipse, soft: D.success.soft, onSoft: D.success.onSoft, text: D.success.text, line: D.success.line },
+    warning: { solid: D.warning.face, onSolid: p.eclipse, soft: D.warning.soft, onSoft: D.warning.onSoft, text: D.warning.text, line: D.warning.line },
+    danger: { solid: D.danger.face, onSolid: p.snow, soft: D.danger.soft, onSoft: D.danger.onSoft, text: D.danger.text, line: D.danger.line },
+    info: { solid: p.sky[400], onSolid: p.eclipse, soft: p.sky[950], onSoft: p.sky[300], text: p.sky[400], line: p.sky[800] },
   },
 };
 

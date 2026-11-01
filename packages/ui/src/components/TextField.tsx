@@ -3,7 +3,7 @@ import { Platform, TextInput, type TextInputProps } from "react-native";
 
 import { size } from "../constants/sizes";
 import { space } from "../constants/spacing";
-import { fontFamilyByWeight, fontFamilyWeb, fontSize, lineHeight } from "../constants/typography";
+import { fontFamilyWeb, fontSize, lineHeight } from "../constants/typography";
 import { Box, Row } from "../primitives/Box";
 import { Icon, type IconName } from "../primitives/Icon";
 import { Text } from "../primitives/Text";
@@ -26,8 +26,8 @@ export type TextFieldProps = {
   onSubmit?: () => void;
   /** Show a clear button while there is text. */
   clearable?: boolean;
-  /** The search box (same rounded field, with a magnifier). */
-  pill?: boolean;
+  /** `primary` is white with a soft shadow (on the page), `secondary` a grey fill (inside cards). */
+  variant?: "primary" | "secondary";
   autoFocus?: boolean;
   capitalize?: boolean;
   testID?: string;
@@ -35,7 +35,7 @@ export type TextFieldProps = {
 
 export function TextField({
   label, value, onChangeText, placeholder, helper, error, icon, multiline, secure, keyboardType, returnKeyType, onSubmit,
-  clearable, pill, autoFocus, capitalize, testID,
+  clearable, variant = "secondary", autoFocus, capitalize, testID,
 }: TextFieldProps) {
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
@@ -45,12 +45,15 @@ export function TextField({
       <Row
         gap="sm"
         px="md"
-        bg={error ? "danger-soft" : focused ? "info-soft" : "field"}
+        bg={variant === "primary" ? "field" : "sunken"}
         radius="field"
         align={multiline ? "start" : "center"}
         control="md"
+        // HeroUI: no outline at rest; the accent colour on focus, red on error (the border is always
+        // there, transparent, so the field does not jump when it appears)
         border="thick"
-        borderTone={error ? "danger" : focused ? "focus" : "default"}
+        borderTone={error ? "danger" : focused ? "focus" : "clear"}
+        shadow={variant === "primary" ? "field" : undefined}
       >
         {icon ? <Icon name={icon} size="md" tone="muted" /> : null}
         <Box grow>
@@ -74,7 +77,6 @@ export function TextField({
             style={[
               {
                 color: colors.text.default,
-                fontFamily: Platform.OS === "web" ? `${fontFamilyByWeight.medium}, ${fontFamilyWeb}` : fontFamilyByWeight.medium,
                 fontSize: fontSize.base,
                 lineHeight: lineHeight.base,
                 paddingVertical: multiline ? space.md : space.none,
@@ -82,7 +84,7 @@ export function TextField({
                 textAlignVertical: multiline ? "top" : "center",
               },
               // the border of the row shows the focus; the browser's own outline would double it
-              Platform.OS === "web" ? { outlineStyle: "none" as never } : null,
+              Platform.OS === "web" ? { fontFamily: fontFamilyWeb, outlineStyle: "none" as never } : null,
             ]}
           />
         </Box>
@@ -95,5 +97,5 @@ export function TextField({
 
 /** The search box: a pill with a magnifier, a clear button and the keyboard's search key. */
 export function SearchBar({ value, onChangeText, onSubmit, placeholder = "Search", testID }: { value: string; onChangeText: (t: string) => void; onSubmit?: () => void; placeholder?: string; testID?: string }) {
-  return <TextField value={value} onChangeText={onChangeText} onSubmit={onSubmit} placeholder={placeholder} icon="magnify" clearable pill returnKeyType="search" testID={testID} />;
+  return <TextField value={value} onChangeText={onChangeText} onSubmit={onSubmit} placeholder={placeholder} icon="magnify" clearable variant="primary" returnKeyType="search" testID={testID} />;
 }

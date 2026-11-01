@@ -1,4 +1,4 @@
-// Type: Nunito, a round bold sans (the chunky, friendly look), Tailwind CSS 3.4.17 `fontSize` (with its line heights), `fontWeight` and `letterSpacing`.
+// Type: Inter (as Untitled UI and HeroUI both use), Tailwind CSS 3.4.17 `fontSize` (with its line heights), `fontWeight` and `letterSpacing`.
 // `textVariants` are the roles screens use (`<Text variant="heading">`); each is made only of
 // the tokens above it.
 
@@ -15,18 +15,6 @@ export const fontWeight = {
   normal: "400", medium: "500", semibold: "600", bold: "700", extrabold: "800",
 } as const;
 
-/**
- * The font file for each weight. Custom fonts have one file per weight, and every step is one heavier
- * than its name (normal reads as SemiBold, medium as Bold, ...), which is what makes the type chunky.
- */
-export const fontFamilyByWeight = {
-  normal: "Nunito_600SemiBold",
-  medium: "Nunito_700Bold",
-  semibold: "Nunito_800ExtraBold",
-  bold: "Nunito_800ExtraBold",
-  extrabold: "Nunito_900Black",
-} as const;
-
 /** Tailwind's tracking, in em. */
 export const letterSpacing = { tighter: -0.05, tight: -0.025, normal: 0, wide: 0.025, wider: 0.05 } as const;
 
@@ -39,32 +27,29 @@ export type TextVariantSpec = {
   tracking: keyof typeof letterSpacing;
   /** Numbers line up in columns (prices, scores). */
   tabular?: boolean;
-  /** ALL CAPS (button labels, badges). */
-  caps?: boolean;
 };
 
 export const textVariants = {
-  display: { size: "4xl", weight: "extrabold", tracking: "tight" },
-  title: { size: "2xl", weight: "extrabold", tracking: "tight" },
-  heading: { size: "xl", weight: "bold", tracking: "tight" },
-  subheading: { size: "lg", weight: "bold", tracking: "normal" },
+  display: { size: "4xl", weight: "semibold", tracking: "tight" },
+  title: { size: "2xl", weight: "semibold", tracking: "tight" },
+  heading: { size: "xl", weight: "semibold", tracking: "tight" },
+  subheading: { size: "lg", weight: "semibold", tracking: "normal" },
   body: { size: "base", weight: "normal", tracking: "normal" },
-  bodyStrong: { size: "base", weight: "bold", tracking: "normal" },
+  bodyStrong: { size: "base", weight: "semibold", tracking: "normal" },
   label: { size: "sm", weight: "medium", tracking: "normal" },
   caption: { size: "xs", weight: "normal", tracking: "wide" },
-  /** Badges and tags: small caps-lock labels. */
-  badge: { size: "xs", weight: "bold", tracking: "wider", caps: true },
-  /** Button labels: bold, capitals, spaced out. */
-  controlSmall: { size: "sm", weight: "bold", tracking: "wider", caps: true },
-  control: { size: "base", weight: "bold", tracking: "wider", caps: true },
-  controlLarge: { size: "lg", weight: "bold", tracking: "wider", caps: true },
-  price: { size: "xl", weight: "bold", tracking: "tight", tabular: true },
-  priceLarge: { size: "3xl", weight: "extrabold", tracking: "tight", tabular: true },
-  number: { size: "sm", weight: "bold", tracking: "normal", tabular: true },
+  /** Badges and tags (Untitled UI: medium weight). */
+  badge: { size: "xs", weight: "medium", tracking: "normal" },
+  /** The label of a medium and a large button (HeroUI: base and lg, medium weight). */
+  control: { size: "base", weight: "medium", tracking: "normal" },
+  controlLarge: { size: "lg", weight: "medium", tracking: "normal" },
+  price: { size: "xl", weight: "semibold", tracking: "tight", tabular: true },
+  priceLarge: { size: "3xl", weight: "bold", tracking: "tight", tabular: true },
+  number: { size: "sm", weight: "semibold", tracking: "normal", tabular: true },
 } as const satisfies Record<string, TextVariantSpec>;
 
 export type TextVariant = keyof typeof textVariants;
 
-/** The web fallback chain behind the Nunito files (also used while they load). */
+/** Inter when the machine has it, then Tailwind's `font-sans`. Used on the web; the phones use their own (no font is bundled). */
 export const fontFamilyWeb =
-  'Nunito, ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';

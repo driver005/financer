@@ -20,7 +20,7 @@ export type BannerProps = { children: ReactNode; title?: string; tone?: Tone; ac
 export function Banner({ children, title, tone = "info", action }: BannerProps) {
   const text = `on-${tone}-soft` as const;
   return (
-    <Row bg={`${tone}-soft`} radius="2xl" p="lg" gap="md" border="thick" borderTone={tone} align="start" accessibilityRole="alert">
+    <Row bg={`${tone}-soft`} radius="2xl" p="lg" gap="md" align="start" accessibilityRole="alert">
       <Icon name={ICON[tone]} size="lg" tone={text} />
       <Box grow gap="sm">
         {title ? <Text variant="bodyStrong" tone={text}>{title}</Text> : null}

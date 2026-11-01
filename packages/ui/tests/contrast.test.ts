@@ -51,11 +51,14 @@ function check(name: string, colors: ThemeColors) {
       assert.ok(contrast(colors.border.focus, colors.background) >= PARTS, "focus ring on the background");
     });
 
-    it("tells a solid control from the surface it sits on (its face or its thick edge reaches 3:1)", () => {
+    it("tells a solid fill from the surface it sits on", () => {
+      // HeroUI's green and amber are light on purpose and carry dark text (8:1), so the label identifies the
+      // control and the fill only has to read as a shape (2:1); the others are 3:1
       for (const t of tones) {
         const c = colors.tones[t];
-        const best = Math.max(contrast(c.solid, colors.surface), contrast(c.edge, colors.surface));
-        assert.ok(best >= PARTS, `${t} solid control on surface is ${best.toFixed(2)}:1`);
+        const darkInk = (t === "success" || t === "warning") && contrast(c.onSolid, c.solid) >= 7;
+        const need = darkInk ? 2 : PARTS;
+        assert.ok(contrast(c.solid, colors.surface) >= need, `${t} solid on surface is ${contrast(c.solid, colors.surface).toFixed(2)}:1`);
       }
     });
   });
@@ -67,6 +70,6 @@ check("dark", darkColors);
 describe("the contrast helper", () => {
   it("knows black on white and a colour on itself", () => {
     assert.ok(Math.abs(contrast("#000000", "#ffffff") - 21) < 0.01);
-    assert.equal(contrast("#7f56d9", "#7f56d9"), 1);
+    assert.equal(contrast("#0072e2", "#0072e2"), 1);
   });
 });

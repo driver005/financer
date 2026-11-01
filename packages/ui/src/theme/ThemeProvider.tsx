@@ -3,7 +3,6 @@ import { useColorScheme } from "react-native";
 
 import { colorsByScheme, type Scheme, type ThemeColors } from "../constants/colors";
 import { type Shadow, shadowsByScheme } from "../constants/shadows";
-import { useUiFonts } from "./fonts";
 
 export type SchemeSetting = Scheme | "system";
 
@@ -16,9 +15,7 @@ export function ThemeProvider({ scheme = "system", children }: { scheme?: Scheme
   const system = useColorScheme();
   const active: Scheme = scheme === "system" ? (system === "dark" ? "dark" : "light") : scheme;
   const value = useMemo<Theme>(() => ({ scheme: active, colors: colorsByScheme[active], shadows: shadowsByScheme[active] }), [active]);
-  const fontsReady = useUiFonts();
-  // wait for the fonts rather than flash the system font and then jump
-  return <Ctx.Provider value={value}>{fontsReady ? children : null}</Ctx.Provider>;
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useTheme(): Theme {

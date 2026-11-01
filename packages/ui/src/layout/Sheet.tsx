@@ -19,7 +19,7 @@ export function Sheet({ visible, onClose, title, children, footer }: SheetProps)
     <Modal visible={visible} transparent animationType={compact ? "slide" : "fade"} onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, justifyContent: compact ? "flex-end" : "center", backgroundColor: colors.scrim }}>
         <Pressable accessibilityLabel="Close" accessibilityRole="button" onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-        <Box bg="raised" radius="3xl" shadow="overlay" border="thick" borderTone="default" maxW="narrow" maxH="sheet" overflow="hidden">
+        <Box bg="raised" radius="3xl" shadow="overlay" maxW="narrow" maxH="sheet" overflow="hidden">
           <Row justify="between" gap="md" px="xl" pt="xl" pb="md">
             <Box grow>{title ? <Text variant="heading" level={2}>{title}</Text> : null}</Box>
             <IconButton icon="close" label="Close" onPress={onClose} />

@@ -6,6 +6,7 @@ import { Box } from "../primitives/Box";
 import { Text } from "../primitives/Text";
 import { useTheme } from "../theme/ThemeProvider";
 import { toneForScore } from "./Meter";
+import { borderWidth } from "../constants/radius";
 
 export type ScoreRingProps = {
   /** 0 to 100. */
@@ -20,7 +21,7 @@ export type ScoreRingProps = {
 export function ScoreRing({ score, size: s = "md", tone, caption }: ScoreRingProps) {
   const { colors } = useTheme();
   const d = size.ring[s];
-  const stroke = size.ringStroke[s];
+  const stroke = s === "sm" ? borderWidth.thick : size.bar.md;
   const r = (d - stroke) / 2;
   const c = 2 * Math.PI * r;
   const v = Math.min(1, Math.max(0, score / 100));

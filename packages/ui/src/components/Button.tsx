@@ -1,12 +1,12 @@
 import type { Tone } from "../constants/colors";
 import { Icon, type IconName } from "../primitives/Icon";
-import type { BgToken, BoxProps } from "../primitives/box";
+import type { BgToken } from "../primitives/box";
 import { Text, type TextTone } from "../primitives/Text";
 import { Touchable } from "../primitives/Touchable";
 import { Spinner } from "./Spinner";
 
-/** solid: a bright face on a thick edge (the primary action). soft: a tinted face with a line. outline, secondary and
- *  tertiary: a white face with a grey line and edge (the text is the tone, the accent, or plain). ghost: just the text. */
+/** HeroUI's names in brackets: solid (primary), secondary (a neutral fill with brand text), tertiary (a neutral fill),
+ *  soft (a tinted fill, "danger-soft" for the danger tone), outline, ghost. */
 export type ButtonVariant = "solid" | "secondary" | "tertiary" | "soft" | "outline" | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
 
@@ -25,23 +25,20 @@ export type ButtonProps = {
   testID?: string;
 };
 
-type Look = { bg?: BgToken; text: TextTone; border?: boolean; borderTone?: BoxProps["borderTone"]; edge?: BoxProps["edge"] };
-
-export function buttonLook(variant: ButtonVariant, tone: Tone): Look {
-  const plain: TextTone = tone === "neutral" ? "default" : `${tone}`;
+export function buttonLook(variant: ButtonVariant, tone: Tone): { bg?: BgToken; text: TextTone; outline?: boolean } {
   switch (variant) {
     case "solid":
-      return { bg: `${tone}-solid`, text: `on-${tone}-solid`, edge: tone };
-    case "soft":
-      return { bg: `${tone}-soft`, text: `on-${tone}-soft`, border: true, borderTone: tone, edge: `${tone}-line` };
-    case "outline":
-      return { bg: "surface", text: plain, border: true, borderTone: "default", edge: "border" };
+      return { bg: `${tone}-solid`, text: `on-${tone}-solid` };
     case "secondary":
-      return { bg: "surface", text: tone === "neutral" ? "accent" : plain, border: true, borderTone: "default", edge: "border" };
+      return { bg: "sunken", text: tone === "neutral" ? "default" : tone };
     case "tertiary":
-      return { bg: "surface", text: "default", border: true, borderTone: "default", edge: "border" };
+      return { bg: "sunken", text: "default" };
+    case "soft":
+      return { bg: `${tone}-soft`, text: `on-${tone}-soft` };
+    case "outline":
+      return { text: tone === "neutral" ? "default" : tone, outline: true };
     case "ghost":
-      return { text: plain };
+      return { text: tone === "neutral" ? "default" : tone };
   }
 }
 
@@ -56,20 +53,19 @@ export function Button({ label, onPress, variant = "solid", tone = "accent", siz
       testID={testID}
       full={full}
       bg={look.bg}
-      border={look.border ? "thick" : undefined}
-      borderTone={look.borderTone}
-      edge={look.edge}
-      radius="2xl"
-      px={s === "sm" ? "lg" : "xl"}
+      border={look.outline ? "hairline" : undefined}
+      borderTone={tone === "neutral" ? "strong" : tone}
+      radius={s === "lg" ? "4xl" : "3xl"}
+      px={s === "sm" ? "md" : s === "md" ? "lg" : "xl"}
       control={s}
       direction="row"
       align="center"
       justify="center"
-      gap="sm"
+      gap={s === "sm" ? "xs" : "sm"}
       hit={s === "sm"}
     >
       {loading ? <Spinner tone={look.text} /> : icon ? <Icon name={icon} size="md" tone={look.text} /> : null}
-      <Text variant={s === "lg" ? "controlLarge" : s === "md" ? "control" : "controlSmall"} tone={look.text} numberOfLines={1}>
+      <Text variant={s === "lg" ? "controlLarge" : s === "md" ? "control" : "label"} tone={look.text} numberOfLines={1}>
         {label}
       </Text>
       {iconRight ? <Icon name={iconRight} size="md" tone={look.text} /> : null}
@@ -101,11 +97,9 @@ export function IconButton({ icon, label, onPress, variant = "ghost", tone = "ne
       selected={selected}
       testID={testID}
       bg={look.bg}
-      border={look.border ? "thick" : undefined}
-      borderTone={look.borderTone}
-      edge={look.edge}
-      edgeSize="sm"
-      radius="2xl"
+      border={look.outline ? "hairline" : undefined}
+      borderTone={tone === "neutral" ? "strong" : tone}
+      radius="full"
       control={s}
       square
       align="center"

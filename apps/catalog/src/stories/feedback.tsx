@@ -52,8 +52,8 @@ function Progress() {
 function Cards() {
   return (
     <Stack gap="md">
-      <Card variant="raised"><Text variant="bodyStrong">Raised</Text><Text variant="body" tone="muted">A 2 px line and a thick edge below, like a key.</Text></Card>
-      <Card variant="outline"><Text variant="bodyStrong">Outline</Text><Text variant="body" tone="muted">A line and nothing else.</Text></Card>
+      <Card variant="raised"><Text variant="bodyStrong">Raised</Text><Text variant="body" tone="muted">Floats above the page with a shadow.</Text></Card>
+      <Card variant="outline"><Text variant="bodyStrong">Outline</Text><Text variant="body" tone="muted">A border and nothing else.</Text></Card>
       <Card variant="flat"><Text variant="bodyStrong">Flat</Text><Text variant="body" tone="muted">A quiet fill.</Text></Card>
       <Card tone="accent"><Text variant="bodyStrong" tone="on-accent-soft">Tinted</Text></Card>
       <Card selected onPress={() => {}} label="Selected"><Text variant="bodyStrong">Selected and pressable</Text></Card>

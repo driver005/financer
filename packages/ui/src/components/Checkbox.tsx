@@ -8,17 +8,15 @@ export function Checkbox({ label, checked, onChange }: { label: string; checked:
   return (
     <Touchable onPress={() => onChange(!checked)} label={label} role="checkbox" selected={checked} direction="row" align="center" gap="md" touch hit={false}>
       <Box
-        dim="icon-lg"
-        radius="lg"
+        dim="icon-md"
+        radius="md"
         border="thick"
-        borderTone={checked ? "accent" : "default"}
+        borderTone={checked ? "accent" : "strong"}
         bg={checked ? "accent-solid" : "surface"}
-        edge={checked ? "accent" : "border"}
-        edgeSize="sm"
         align="center"
         justify="center"
       >
-        {checked ? <Icon name="check" size="sm" tone="on-accent-solid" /> : null}
+        {checked ? <Icon name="check" size="xs" tone="on-accent-solid" /> : null}
       </Box>
       <Text variant="body">{label}</Text>
     </Touchable>
