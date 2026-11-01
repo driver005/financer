@@ -92,6 +92,31 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # The UI package: token and contrast tests, and the guard that keeps raw spacing, sizes and
+  # colours out of the screens (CLAUDE.md); the catalog must type check and bundle (docs/UI.md).
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/ui/package-lock.json
+            packages/shopping/package-lock.json
+            apps/catalog/package-lock.json
+      - name: Tokens, contrast and the no-raw-values guard
+        run: |
+          npm ci --prefix packages/ui
+          npm test --prefix packages/ui
+      - name: Catalog type check and web bundle
+        working-directory: apps/catalog
+        run: |
+          npm ci
+          npm run typecheck
+          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/catalog-web"
+
   # The shopping assistant: its module (logic tests), the standalone app (type check, web bundle)
   # and the finance app bundled with it (docs/SHOP.md).
   shopping:

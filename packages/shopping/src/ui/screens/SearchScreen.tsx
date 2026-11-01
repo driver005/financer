@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Text, View } from "react-native";
 
-import type { Profile, SearchItem, SearchResponse } from "../../api/types";
+import {
+  Banner, Box, Button, Card, Chip, ChipRow, EmptyState, FilterBar, IconButton, Meter, ProductCard, ProductGrid, Row, Screen, SearchBar, Section, Stack, Text,
+  TopBar, type ProductCardProps,
+} from "@financer/ui";
+
 import { ShopApiError } from "../../api/client";
-import { dealLine, formatPrice, savingText, verdictText } from "../../logic/format";
-import { chipsFor, indexRequestFor, nextStep, suggestionText } from "../../logic/searchPlan";
-import { openLink } from "../links";
+import type { Profile, SearchItem, SearchResponse } from "../../api/types";
+import { indexRequestFor, nextStep, suggestionText } from "../../logic/searchPlan";
+import { EXAMPLE_SEARCHES, SORT_OPTIONS, bestOffer, dealBadges, isMonthly, savingNote, sortItems, understood, type SortKey } from "../../logic/view";
 import { useNav } from "../nav";
-import { Banner, Body, Button, Card, Chip, Empty, Field, H2, Meter, Problems, Row, Screen, Title } from "../kit";
 import { useShop } from "../runtime";
-import { space, usePalette, type } from "../theme";
 
 /** The search tab, and (with `category` fixed) the body of the subscriptions tab. */
 export function SearchScreen({ category, title = "Shopping assistant", placeholder = "best phone under 600 € with a good camera", onBack, header }: {
@@ -17,12 +18,11 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
   title?: string;
   placeholder?: string;
   onBack?: () => void;
-  /** Shown between the title and the search box (the subscriptions tab puts the current plan here). */
+  /** Shown above the search box (the subscriptions tab puts the current plan there). */
   header?: ReactNode;
 }) {
   const shop = useShop();
   const nav = useNav();
-  const p = usePalette();
   const client = shop.client;
   const [query, setQuery] = useState("");
   const [profile, setProfile] = useState<Profile | undefined>();
@@ -30,9 +30,10 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  const [sort, setSort] = useState<SortKey>("best");
   const lastQuery = useRef("");
 
-  // the person's saved default profile (weights, preferences, budget)
+  // the person's saved default profile (weights, wishes, budget)
   useEffect(() => {
     let alive = true;
     client?.profiles().then((all) => alive && setProfile(all.find((x) => x.name === "default")?.profile)).catch(() => {});
@@ -74,131 +75,156 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
     [shop, category, run],
   );
 
-  const onSearch = useCallback(async () => {
-    const text = query.trim();
-    if (!text && !category) return;
-    lastQuery.current = text;
-    setBusy(true);
-    setSelected([]);
-    const r = await run(text);
-    setBusy(false);
-    // Integrated: the search button is what reads the shops. A server already has it all.
-    if (shop.integrated && shop.info && shop.info.sources.length > 0) await buildIndex(text, r);
-  }, [query, category, run, shop.integrated, shop.info, buildIndex]);
+  const search = useCallback(
+    async (text: string) => {
+      const q = text.trim();
+      if (!q && !category) return;
+      setQuery(q);
+      lastQuery.current = q;
+      setBusy(true);
+      setSelected([]);
+      const r = await run(q);
+      setBusy(false);
+      // Integrated: the search button is what reads the shops. A server already has it all.
+      if (shop.integrated && shop.info && shop.info.sources.length > 0) await buildIndex(q, r);
+    },
+    [category, run, shop.integrated, shop.info, buildIndex],
+  );
 
   const step = response ? nextStep(response, shop.integrated) : null;
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length < 6 ? [...s, id] : s));
   const noSources = shop.info !== null && shop.info.sources.length === 0;
+  const months = response?.profile.horizon_months ?? 24;
+  const items = response ? sortItems(response.items, sort) : [];
+  const monthly = items.length > 0 && isMonthly(items[0]);
+
+  const card = (item: SearchItem, layout: "grid" | "row"): ProductCardProps => {
+    const offer = bestOffer(item);
+    return {
+      title: item.product.title,
+      brand: item.product.brand,
+      imageUri: item.product.image,
+      priceCents: item.ranked.price_cents,
+      perMonth: isMonthly(item),
+      wasCents: offer && !offer.recurring ? offer.list_price_cents : null,
+      shop: item.ranked.shop,
+      score: item.ranked.score,
+      tier: item.ranked.tier,
+      badges: dealBadges(item.deal?.verdict),
+      strengths: item.ranked.strengths,
+      weaknesses: item.ranked.weaknesses,
+      note: savingNote(item, months),
+      layout,
+      selected: selected.includes(item.product.id),
+      onToggleCompare: () => toggle(item.product.id),
+      onPress: () => nav.push({ name: "product", id: item.product.id }),
+    };
+  };
 
   return (
-    <Screen>
-      <Title onBack={onBack}>{title}</Title>
+    <Screen
+      header={
+        <TopBar
+          title={title}
+          onBack={onBack}
+          actions={response?.category ? <IconButton icon="tune-variant" label="What matters to me" onPress={() => nav.push({ name: "weights", category: response.category as string })} /> : undefined}
+        />
+      }
+      footer={
+        selected.length >= 2 ? (
+          <Box bg="surface" px="lg" py="md" shadow="lg">
+            <Button label={`Compare ${selected.length} products`} size="lg" full icon="scale-balance" onPress={() => nav.push({ name: "compare", ids: selected, category: response?.category ?? null })} />
+          </Box>
+        ) : undefined
+      }
+    >
       {header}
-      <Field label="What are you looking for?" value={query} onChangeText={setQuery} placeholder={placeholder} returnKeyType="search" onSubmitEditing={onSearch} />
-      <Row>
-        <View style={{ flex: 1 }}>
-          <Button label={shop.integrated ? "Search the web" : "Search"} onPress={onSearch} busy={busy || shop.indexing !== null} disabled={!client} />
-        </View>
-        {response?.category ? <Button label="Weights" kind="secondary" onPress={() => nav.push({ name: "weights", category: response.category as string })} /> : null}
-      </Row>
-      {shop.integrated ? (
-        <Body small muted>
-          Nothing is read from the web until you press the button.
-        </Body>
-      ) : (
-        <Body small muted>
-          {shop.info?.products ?? 0} products on file, kept fresh by the server.
-        </Body>
-      )}
+      <Stack gap="md">
+        <SearchBar value={query} onChangeText={setQuery} onSubmit={() => void search(query)} placeholder={placeholder} testID="search-box" />
+        <Row gap="md" wrap>
+          <Button label={shop.integrated ? "Search the web" : "Search"} icon="magnify" size="lg" onPress={() => void search(query)} loading={busy || shop.indexing !== null} disabled={!client} />
+          <Box grow>
+            <Text variant="caption" tone="muted">
+              {shop.integrated ? "Nothing is read from the web until you press the button." : `${shop.info?.products ?? 0} products on file, kept fresh by the server.`}
+            </Text>
+          </Box>
+        </Row>
+      </Stack>
 
-      {shop.indexing ? <IndexProgress /> : null}
+      {shop.indexing ? (
+        <Card tone="accent">
+          <Row justify="between" gap="md">
+            <Box grow><Text variant="bodyStrong" tone="on-accent-soft">{shop.indexing.model.title}</Text></Box>
+            <Button label="Stop" variant="ghost" size="sm" onPress={() => void shop.cancelIndex()} />
+          </Row>
+          <Meter value={shop.indexing.model.indeterminate ? 0.08 : shop.indexing.model.percent / 100} label="Indexing progress" />
+          <Text variant="caption" tone="on-accent-soft">{shop.indexing.model.body} · {shop.indexing.model.percent} %</Text>
+        </Card>
+      ) : null}
       {noSources ? (
-        <Banner tone="warn" action={<Button label="Add shops" kind="secondary" onPress={() => nav.push({ name: "sources" })} />}>
-          No shops are set up, so there is nothing to read prices from.
+        <Banner tone="warning" title="No shops are set up" action={<Button label="Add shops" variant="soft" tone="warning" size="sm" onPress={() => nav.push({ name: "sources" })} />}>
+          There is nothing to read prices from yet.
         </Banner>
       ) : null}
-      {error ? <Banner tone="bad">{error}</Banner> : null}
+      {error ? <Banner tone="danger">{error}</Banner> : null}
 
       {response ? (
-        <>
+        <Stack gap="xl">
           {response.category ? (
-            <Row wrap>
-              <Chip label={response.category.replace(/_/g, " ")} tone={response.category_guessed ? "warn" : undefined} />
-              {chipsFor(response).map((c) => (
-                <Chip key={c} label={c} />
-              ))}
-              {response.excluded.length > 0 ? <Chip label={`${response.excluded.length} left out`} /> : null}
-            </Row>
+            <ChipRow>
+              <Chip label={response.category.replace(/_/g, " ")} icon="shape-outline" tone={response.category_guessed ? "warning" : "accent"} selected />
+              {understood(response.parsed).map((f) => <Chip key={f.key} label={f.label} />)}
+              {response.excluded.length > 0 ? <Chip label={`${response.excluded.length} left out`} icon="filter-off-outline" /> : null}
+            </ChipRow>
           ) : null}
 
           {step?.kind === "suggest-index" && !shop.indexing && shop.info && shop.info.sources.length > 0 ? (
-            <Banner
-              action={
-                <Button
-                  label={shop.integrated ? "Build the index" : "Refresh now"}
-                  onPress={() => buildIndex(lastQuery.current, response)}
-                  busy={shop.indexing !== null}
-                />
-              }
-            >
+            <Banner title={shop.integrated ? "Build the index" : "Refresh now"} action={<Button label={shop.integrated ? "Build the index" : "Refresh now"} onPress={() => void buildIndex(lastQuery.current, response)} loading={shop.indexing !== null} />}>
               {suggestionText(step.reason)}
             </Banner>
           ) : null}
-          {step?.kind === "none-found" ? <Empty title="Nothing matches" message="Try fewer words or a higher price limit." /> : null}
+          {step?.kind === "none-found" ? <EmptyState icon="magnify-close" title="Nothing matches" message="Try fewer words or a higher price limit." /> : null}
 
           <Picks response={response} />
-          {response.items.length > 0 ? <H2>{`${response.items.length} ranked`}</H2> : null}
-          {response.items.map((item, i) => (
-            <ResultCard
-              key={item.product.id}
-              item={item}
-              rank={i + 1}
-              monthly={Boolean(item.product.offers[0]?.recurring)}
-              horizon={response.profile.horizon_months ?? 24}
-              selected={selected.includes(item.product.id)}
-              onSelect={() => toggle(item.product.id)}
-              onOpen={() => nav.push({ name: "product", id: item.product.id })}
-            />
-          ))}
-          {response.items.length > 0 ? (
-            <Row wrap>
-              <Button
-                label={selected.length >= 2 ? `Compare ${selected.length}` : "Pick 2 or more to compare"}
-                disabled={selected.length < 2}
-                onPress={() => nav.push({ name: "compare", ids: selected, category: response.category })}
-              />
-              <Button label="Tell me about deals" kind="secondary" onPress={() => nav.push({ name: "watch", query: lastQuery.current, category: response.category })} />
-            </Row>
-          ) : null}
-          <Problems items={response.excluded.slice(0, 5).map((e) => `${e.product_id.split(":")[1] ?? e.product_id}: ${e.reasons.join(", ")}`)} />
-        </>
-      ) : (
-        <Empty
-          title={shop.integrated ? "Search, compare, decide" : "Ask the server"}
-          message="Describe what you want. Prices, specs, deals and your own weights decide the order."
-        />
-      )}
-      {response === null ? null : <View style={{ height: space.lg }} />}
-      <Text style={[type.small, { color: p.muted }]}>{shop.where === "phone" ? "Running on this phone" : shop.where === "server" ? "Connected to your server" : ""}</Text>
-    </Screen>
-  );
-}
 
-function IndexProgress() {
-  const shop = useShop();
-  const m = shop.indexing?.model;
-  if (!m) return null;
-  return (
-    <Card tone="accent">
-      <Row between>
-        <Body>{m.title}</Body>
-        <Button label="Stop" kind="ghost" onPress={() => void shop.cancelIndex()} />
-      </Row>
-      <Meter value={m.indeterminate ? 0.08 : m.percent / 100} label="Indexing progress" />
-      <Body small muted>
-        {m.body} · {m.percent} %
-      </Body>
-    </Card>
+          {items.length > 0 ? (
+            <Section title={`${items.length} ranked`}>
+              <FilterBar applied={[]} onRemove={() => {}} sort={{ value: sort, onChange: setSort, options: SORT_OPTIONS }} />
+              {monthly ? (
+                <Stack gap="md">{items.map((it) => <ProductCard key={it.product.id} {...card(it, "row")} />)}</Stack>
+              ) : (
+                <ProductGrid>{items.map((it) => <ProductCard key={it.product.id} {...card(it, "grid")} />)}</ProductGrid>
+              )}
+              <Row wrap gap="sm">
+                <Button label="Tell me about deals" icon="bell-plus-outline" variant="soft" onPress={() => nav.push({ name: "watch", query: lastQuery.current, category: response.category })} />
+              </Row>
+            </Section>
+          ) : null}
+
+          {response.excluded.length > 0 ? (
+            <Section title="Left out">
+              <Stack gap="xs">
+                {response.excluded.slice(0, 5).map((e) => (
+                  <Text key={e.product_id} variant="caption" tone="muted">{e.product_id.split(":")[1] ?? e.product_id}: {e.reasons.join(", ")}</Text>
+                ))}
+              </Stack>
+            </Section>
+          ) : null}
+        </Stack>
+      ) : (
+        <Stack gap="lg">
+          <EmptyState icon="shopping-search-outline" title={shop.integrated ? "Search, compare, decide" : "Ask the server"} message="Describe what you want. Prices, specs, deals and your own weights decide the order." />
+          <Section title="Try">
+            <ChipRow>
+              {EXAMPLE_SEARCHES.map((q) => <Chip key={q} label={q} icon="magnify" onPress={() => void search(q)} />)}
+            </ChipRow>
+          </Section>
+        </Stack>
+      )}
+      <Text variant="caption" tone="subtle" align="center">
+        {shop.where === "phone" ? "Running on this phone" : shop.where === "server" ? "Connected to your server" : ""}
+      </Text>
+    </Screen>
   );
 }
 
@@ -216,70 +242,26 @@ function Picks({ response }: { response: SearchResponse }) {
   for (const [label, id] of entries) if (id && by.has(id)) cards.set(id, [...(cards.get(id) ?? []), label]);
   if (cards.size === 0) return null;
   return (
-    <View style={{ gap: space.sm }}>
-      <H2>Our picks</H2>
-      {[...cards.entries()].map(([id, labels]) => {
-        const item = by.get(id) as SearchItem;
-        return (
-          <Card key={id} tone="accent" onPress={() => nav.push({ name: "product", id })}>
-            <Body small muted>
-              {labels.join(" · ")}
-            </Body>
-            <Body>{item.product.title}</Body>
-            <Body small muted>
-              {formatPrice(item.ranked.price_cents, Boolean(item.product.offers[0]?.recurring))} · score {Math.round(item.ranked.score)}
-            </Body>
-          </Card>
-        );
-      })}
-    </View>
-  );
-}
-
-export function ResultCard({ item, rank, monthly, horizon, selected, onSelect, onOpen }: {
-  item: SearchItem;
-  rank: number;
-  monthly: boolean;
-  horizon: number;
-  selected: boolean;
-  onSelect: () => void;
-  onOpen: () => void;
-}) {
-  const p = usePalette();
-  const r = item.ranked;
-  const offer = item.product.offers.find((o) => o.url === r.url) ?? item.product.offers[0];
-  return (
-    <Card onPress={onOpen}>
-      <Row between>
-        <Text style={[type.small, { color: p.muted }]}>#{rank}</Text>
-        <Chip label={selected ? "Selected" : "Compare"} selected={selected} onPress={onSelect} />
-      </Row>
-      <Text style={[type.heading, { color: p.text }]}>{item.product.title}</Text>
-      <Row between>
-        <Text style={[type.heading, { color: p.accent }]}>{formatPrice(r.price_cents, monthly)}</Text>
-        <Text style={[type.body, { color: p.muted }]}>{r.shop ?? ""}</Text>
-      </Row>
-      <Row>
-        <View style={{ flex: 1 }}>
-          <Meter value={r.score / 100} label={`Score ${Math.round(r.score)} of 100`} />
-        </View>
-        <Text style={[type.body, { color: p.text, fontWeight: "700" }]}>{Math.round(r.score)}</Text>
-      </Row>
-      <Row wrap>
-        {r.tier ? <Chip label={r.tier} /> : null}
-        {item.deal && item.deal.verdict !== "none" && item.deal.verdict !== "fair" ? <Chip label={verdictText(item.deal.verdict)} tone="good" /> : null}
-        {r.on_frontier ? <Chip label="Efficient price" /> : null}
-        {r.confidence < 0.7 ? <Chip label="Some specs unknown" tone="warn" /> : null}
-      </Row>
-      {r.strengths.length > 0 ? (
-        <Text style={[type.small, { color: p.good }]}>Strong: {r.strengths.join(", ")}</Text>
-      ) : null}
-      {r.weaknesses.length > 0 ? <Text style={[type.small, { color: p.bad }]}>Weak: {r.weaknesses.join(", ")}</Text> : null}
-      {item.deal && item.deal.verdict !== "none" ? <Text style={[type.small, { color: p.muted }]}>{dealLine(item.deal)}</Text> : null}
-      {item.saving ? <Text style={[type.small, { color: item.saving.per_month_cents > 0 ? p.good : p.muted }]}>{savingText(item.saving.per_month_cents, item.saving.over_horizon_cents, horizon, item.saving.current)}</Text> : null}
-      {offer?.url ? (
-        <Button label="Open in shop" kind="ghost" onPress={() => void openLink(offer.url)} />
-      ) : null}
-    </Card>
+    <Section title="Our picks" description="The best choices for your weights">
+      <Stack gap="sm">
+        {[...cards.entries()].map(([id, labels]) => {
+          const item = by.get(id) as SearchItem;
+          return (
+            <ProductCard
+              key={id}
+              layout="row"
+              title={item.product.title}
+              brand={labels.join(" · ")}
+              imageUri={item.product.image}
+              priceCents={item.ranked.price_cents}
+              perMonth={isMonthly(item)}
+              shop={item.ranked.shop}
+              score={item.ranked.score}
+              onPress={() => nav.push({ name: "product", id })}
+            />
+          );
+        })}
+      </Stack>
+    </Section>
   );
 }

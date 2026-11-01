@@ -19,6 +19,8 @@ type Nav = {
   stack: Route[];
   push(r: Route): void;
   pop(): void;
+  /** Back to the tab's own screen. */
+  reset(): void;
   /** Leave the module (only meaningful inside another app). */
   exit?: () => void;
 };
@@ -36,6 +38,7 @@ export function NavProvider({ children, exit }: { children: ReactNode; exit?: ()
   const [stack, setStack] = useState<Route[]>([]);
   const push = useCallback((r: Route) => setStack((s) => [...s, r]), []);
   const pop = useCallback(() => setStack((s) => s.slice(0, -1)), []);
+  const reset = useCallback(() => setStack([]), []);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -56,5 +59,5 @@ export function NavProvider({ children, exit }: { children: ReactNode; exit?: ()
     return () => sub.remove();
   }, [stack, tab, pop, exit]);
 
-  return <Ctx.Provider value={{ tab, setTab, stack, push, pop, exit }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ tab, setTab, stack, push, pop, reset, exit }}>{children}</Ctx.Provider>;
 }

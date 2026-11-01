@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Switch, View } from "react-native";
+
+import { Badge, Banner, Box, Button, Card, Divider, ListItem, Row, Screen, Section, Segmented, Stack, SwitchRow, Text, TextField, TopBar } from "@financer/ui";
 
 import { SOURCES_EXAMPLE, checkSources } from "../../logic/sources";
-import { Banner, Body, Button, Card, Field, H2, Problems, Row, Screen, Segmented, Title } from "../kit";
 import { useNav } from "../nav";
 import { useShop, type Mode } from "../runtime";
 
@@ -46,64 +46,62 @@ export function SettingsScreen() {
     }
   };
 
+  const onMore = nav.stack.length === 0;
   return (
-    <Screen>
-      <Title onBack={nav.pop}>Settings</Title>
-      {shop.status === "error" ? <Banner tone="bad">{shop.error ?? "Could not connect."}</Banner> : null}
-      {shop.status === "unconfigured" ? <Banner tone="warn">Choose where the searching happens.</Banner> : null}
-      {note ? <Banner>{note}</Banner> : null}
+    <Screen header={<TopBar title="Settings" onBack={onMore ? undefined : nav.pop} />}>
+      {shop.status === "error" ? <Banner tone="danger">{shop.error ?? "Could not connect."}</Banner> : null}
+      {shop.status === "unconfigured" ? <Banner tone="warning">Choose where the searching happens.</Banner> : null}
+      {note ? <Banner tone="success">{note}</Banner> : null}
 
-      <H2>Where it runs</H2>
-      <Segmented<Mode>
-        value={mode === "auto" ? "server" : mode}
-        onChange={setMode}
-        options={[
-          { value: "server", label: "My server" },
-          ...(canPhone ? [{ value: "phone" as const, label: "This phone" }] : []),
-        ]}
-      />
-      {mode === "phone" ? (
-        <Body small muted>
-          The phone reads the web only when you press Search, shows progress in a notification, and keeps everything on this device. It cannot watch prices while the app is closed.
-        </Body>
-      ) : (
-        <Body small muted>
-          A server searches all the time like a search engine, keeps price history and tells you about deals, even when this app is closed.
-        </Body>
-      )}
-      {mode !== "phone" ? (
-        <>
-          <Field label="Server address" value={url} onChangeText={setUrl} placeholder="https://shop.example.com" keyboardType="url" />
-          <Field label="Token" value={token} onChangeText={setToken} secureTextEntry placeholder="FINANCER_SHOP_API_TOKEN" />
-        </>
-      ) : null}
-      <Button label="Connect" onPress={connect} busy={busy} />
+      <Section title="Where it runs">
+        <Stack gap="md">
+          <Segmented<Mode>
+            value={mode === "auto" ? "server" : mode}
+            onChange={setMode}
+            options={[{ value: "server", label: "My server" }, ...(canPhone ? [{ value: "phone" as const, label: "This phone" }] : [])]}
+          />
+          <Text variant="caption" tone="muted">
+            {mode === "phone"
+              ? "The phone reads the web only when you press Search, shows progress in a notification, and keeps everything on this device. It cannot watch prices while the app is closed."
+              : "A server searches all the time like a search engine, keeps price history and tells you about deals, even when this app is closed."}
+          </Text>
+          {mode !== "phone" ? (
+            <>
+              <TextField label="Server address" value={url} onChangeText={setUrl} placeholder="https://shop.example.com" keyboardType="url" />
+              <TextField label="Token" value={token} onChangeText={setToken} secure placeholder="FINANCER_SHOP_API_TOKEN" />
+            </>
+          ) : null}
+          <Row><Button label="Connect" onPress={() => void connect()} loading={busy} /></Row>
+        </Stack>
+      </Section>
 
       {shop.info ? (
-        <Card>
-          <Body>{shop.info.mode === "server" ? "Server mode" : "Integrated mode"}</Body>
-          <Body small muted>
-            {`${shop.info.products} products · ${shop.info.sources.length} shops · ${shop.info.categories} categories`}
-          </Body>
-          {shop.info.notifiers.length > 0 ? <Body small muted>{`Deal messages through: ${shop.info.notifiers.join(", ")}`}</Body> : null}
-          {shop.info.last_error ? <Body small>{`Last problem: ${shop.info.last_error}`}</Body> : null}
+        <Card tone="accent" gap="xs">
+          <Row gap="sm"><Text variant="bodyStrong" tone="on-accent-soft">{shop.info.mode === "server" ? "Server mode" : "Integrated mode"}</Text><Badge label="connected" tone="success" /></Row>
+          <Text variant="caption" tone="on-accent-soft">{`${shop.info.products} products · ${shop.info.sources.length} shops · ${shop.info.categories} categories`}</Text>
+          {shop.info.notifiers.length > 0 ? <Text variant="caption" tone="on-accent-soft">{`Deal messages through: ${shop.info.notifiers.join(", ")}`}</Text> : null}
+          {shop.info.last_error ? <Text variant="caption" tone="on-accent-soft">{`Last problem: ${shop.info.last_error}`}</Text> : null}
         </Card>
       ) : null}
 
-      <H2>Alerts</H2>
-      <Row between>
-        <View style={{ flex: 1 }}>
-          <Body>Tell me about deals</Body>
-          <Body small muted>
-            {shop.where === "server" ? "The server pushes them; this app also shows the ones it finds when open." : "Shown when a search finds a watched price."}
-          </Body>
-        </View>
-        <Switch value={alerts} onValueChange={toggleAlerts} accessibilityLabel="Tell me about deals" />
-      </Row>
+      <Section title="Alerts">
+        <SwitchRow
+          label="Tell me about deals"
+          description={shop.where === "server" ? "The server pushes them; this app also shows the ones it finds when open." : "Shown when a search finds a watched price."}
+          value={alerts}
+          onChange={(v) => void toggleAlerts(v)}
+        />
+      </Section>
 
-      <H2>More</H2>
-      <Button label="Shops to read" kind="secondary" onPress={() => nav.push({ name: "sources" })} />
-      <Button label="Categories and criteria" kind="secondary" onPress={() => nav.push({ name: "categories" })} />
+      <Section title="More">
+        <Card padded={false}>
+          <Box px="lg">
+            <ListItem title="Shops to read" subtitle="Where prices and specs come from" icon="storefront-outline" onPress={() => nav.push({ name: "sources" })} />
+            <Divider />
+            <ListItem title="Categories and criteria" subtitle="Change what is measured" icon="shape-outline" onPress={() => nav.push({ name: "categories" })} />
+          </Box>
+        </Card>
+      </Section>
     </Screen>
   );
 }
@@ -127,37 +125,42 @@ export function SourcesScreen() {
   };
 
   return (
-    <Screen>
-      <Title onBack={nav.pop}>Shops to read</Title>
+    <Screen header={<TopBar title="Shops to read" onBack={nav.pop} />}>
       {!phone ? (
         <>
-          <Banner>
-            A server reads the shops listed in its own sources file (FINANCER_SHOP_SOURCES). These are the ones it reads now:
-          </Banner>
-          {(shop.info?.sources ?? []).map((s) => (
-            <Card key={s.name}>
-              <Body>{s.name}</Body>
-              <Body small muted>{`${s.kind}${s.category ? ` · ${s.category}` : ""}`}</Body>
-            </Card>
-          ))}
+          <Banner tone="info">A server reads the shops listed in its own sources file (FINANCER_SHOP_SOURCES). These are the ones it reads now:</Banner>
+          <Card padded={false}>
+            <Box px="lg">
+              {(shop.info?.sources ?? []).map((s, i) => (
+                <Box key={s.name}>
+                  {i > 0 ? <Divider /> : null}
+                  <ListItem title={s.name} subtitle={`${s.kind}${s.category ? ` · ${s.category}` : ""}`} icon="storefront-outline" />
+                </Box>
+              ))}
+            </Box>
+          </Card>
         </>
       ) : (
         <>
-          <Body muted>
+          <Text variant="body" tone="muted">
             Say where prices and specs come from: product pages with schema.org data, a shop search, a product feed (CSV or JSON) or a sitemap. Adding a shop is adding an entry.
-          </Body>
-          <Field label="Sources (JSON)" value={text} onChangeText={setText} multiline placeholder="[ ... ]" />
-          <Problems items={problems} />
-          <Row wrap>
-            <Button label="Use the example" kind="secondary" onPress={() => setText(SOURCES_EXAMPLE)} />
-          </Row>
-          <H2>Reading pages without structured data (optional)</H2>
-          <Body small muted>
-            A Claude or OpenAI key lets the phone read ordinary pages with a model. The page text is sent to the provider, so it is off unless a source asks for it (use_llm).
-          </Body>
-          <Field label="Claude API key" value={claude} onChangeText={setClaude} secureTextEntry />
-          <Field label="OpenAI API key" value={openai} onChangeText={setOpenai} secureTextEntry />
-          <Button label={saved ? "Saved" : "Save"} onPress={save} />
+          </Text>
+          <Stack gap="md">
+            <TextField label="Sources (JSON)" value={text} onChangeText={setText} multiline placeholder="[ ... ]" />
+            {problems.length > 0 ? (
+              <Banner tone="danger" title="Not saved">
+                <Stack gap="xs">{problems.map((m) => <Text key={m} variant="body" tone="on-danger-soft">• {m}</Text>)}</Stack>
+              </Banner>
+            ) : null}
+            <Row><Button label="Use the example" variant="outline" tone="neutral" onPress={() => setText(SOURCES_EXAMPLE)} /></Row>
+          </Stack>
+          <Section title="Reading pages without structured data (optional)" description="A Claude or OpenAI key lets the phone read ordinary pages with a model. The page text is sent to the provider, so it is off unless a source asks for it (use_llm).">
+            <Stack gap="md">
+              <TextField label="Claude API key" value={claude} onChangeText={setClaude} secure />
+              <TextField label="OpenAI API key" value={openai} onChangeText={setOpenai} secure />
+            </Stack>
+          </Section>
+          <Row><Button label={saved ? "Saved" : "Save"} size="lg" onPress={() => void save()} /></Row>
         </>
       )}
     </Screen>
