@@ -92,8 +92,8 @@ describe("progress notification", () => {
     assert.equal(textBar(0), "▱▱▱▱▱▱▱▱▱▱ 0 %");
     assert.equal(textBar(140), "▰▰▰▰▰▰▰▰▰▰ 100 %");
     const m = progressModel("pixel 9", running({}));
-    assert.equal(m.title, 'Indexing "pixel 9"');
-    assert.equal(m.body, "Reading Shop · 2/8 pages · 5 products");
+    assert.equal(m.title, "Reading shops");
+    assert.equal(m.body, "Reading Shop · page 2 of 8");
     assert.ok(m.ongoing && !m.finished && !m.indeterminate);
     assert.ok(progressModel("x", running({ total: 0, done: 0, percent: 0 })).indeterminate);
     const done = progressModel("pixel 9", running({ phase: "done", percent: 100, products: 12 }));

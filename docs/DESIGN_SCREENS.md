@@ -123,9 +123,14 @@ Project `12266519070521644318`, design system `assets/945437121770425370`.
 
 ## Implemented
 
-The screens above are built in `packages/shopping/src/ui/screens` on `@financer/ui`. What the app does differently from
-the Stitch drawings, on purpose:
+Every screen above is built in `packages/shopping/src/ui/screens` on `@financer/ui`, and was looked at in a browser at
+390, 820 and 1280 px, in light and dark (the phone-mode sources editor through a temporary preview build that
+pretended the browser was a phone, since that mode needs the native backend).
 
-- Notifications keep their wording (`Indexing "<query>"`, pages and products done) rather than Stitch's "Reading shops".
-- No offline state: it needs a saved copy of the last prices, which the app does not keep yet. Errors show a banner with Try again.
-- Phone mode (this phone searches itself) cannot run in a browser, so the JSON sources editor (now inside cards, like the server list) was checked in code and with the type check, not on screen.
+Where the app reads the drawings its own way:
+
+- Offline product: when the server cannot be reached, the product page shows the copy saved the last time it loaded,
+  under an "Offline: showing the last prices we saved" banner with Try again. Other screens show an error banner with Try again.
+- The progress notification reads "Reading shops" with "<shop> · page 14 of 22", as drawn. The text bar and the Android
+  progress bar are the host's; they were not run on a device.
+- The category editor's header shows the category's name (Stitch wrote "Category editor").

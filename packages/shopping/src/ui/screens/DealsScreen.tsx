@@ -45,7 +45,7 @@ export function DealsScreen() {
 
   return (
     <Screen header={<TopBar title="Deals" actions={<Button label="Refresh" variant="ghost" size="sm" icon="refresh" onPress={() => void load()} />} />}>
-      {error ? <Banner tone="danger" action={<Button label="Try again" variant="soft" tone="danger" size="sm" onPress={() => { setError(null); void load(); }} />}>{error}</Banner> : null}
+      {error ? <Banner tone="danger" action={<Button label="Try again" variant="outline" tone="neutral" size="sm" onPress={() => { setError(null); void load(); }} />}>{error}</Banner> : null}
       <Section title="Messages" aside={`${unread} new`} action={unread > 0 ? { label: "Mark read", onPress: () => void markRead() } : undefined}>
         {messages.length === 0 ? (
           <EmptyState card icon="bell-outline" title="No messages yet" message="Watch a search or a product and you are told here when its price drops." action={<Button label="Start watching" variant="soft" icon="bell-plus-outline" onPress={() => nav.push({ name: "watch" })} />} />

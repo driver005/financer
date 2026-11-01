@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { Comparison, DealItem, SearchItem } from "../src/api/types";
+import { parseCached, serialize } from "../src/logic/offlineCache";
 import {
   bestOffer, bestSaving, budgetPresets, compareView, dealBadges, dealFilters, filterDeals, isMonthly, savingNote, savingShare, sortItems, understood, understoodLine,
 } from "../src/logic/view";
@@ -139,4 +140,19 @@ describe("pictures in the compare headers", () => {
     assert.equal(v.columns[1].imageUri, null);
   });
   it("works without any pictures", () => assert.equal(compareView(cmp).columns[0].imageUri, null));
+});
+
+describe("the saved copy of a product", () => {
+  const detail = { product: { id: "a", title: "A" }, deal: null, history: [], schema: {} } as never;
+  it("round-trips", () => {
+    const back = parseCached(serialize(detail, 1700000000));
+    assert.equal(back?.savedAt, 1700000000);
+    assert.equal((back?.detail as { product: { id: string } }).product.id, "a");
+  });
+  it("ignores anything that is not a saved product", () => {
+    assert.equal(parseCached(null), null);
+    assert.equal(parseCached("not json"), null);
+    assert.equal(parseCached('{"savedAt":1}'), null);
+    assert.equal(parseCached('{"savedAt":"x","detail":{"product":{}}}'), null);
+  });
 });

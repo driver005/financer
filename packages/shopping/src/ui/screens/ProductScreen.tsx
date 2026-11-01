@@ -7,6 +7,7 @@ import {
 import { ShopApiError } from "../../api/client";
 import type { AttrValue, ProductDetail } from "../../api/types";
 import { ago, dealLine, planTerms } from "../../logic/format";
+import { cacheKey, parseCached, serialize } from "../../logic/offlineCache";
 import { openLink } from "../links";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
@@ -18,9 +19,10 @@ function show(v: AttrValue, unit?: string | null): string {
 }
 
 export function ProductScreen({ id }: { id: string }) {
-  const { client } = useShop();
+  const { client, host } = useShop();
   const nav = useNav();
   const { isExpanded } = useLayout();
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [key, setKey] = useState("");
@@ -31,11 +33,22 @@ export function ProductScreen({ id }: { id: string }) {
   const load = useCallback(async () => {
     if (!client) return;
     try {
-      setDetail(await client.product(id));
+      const fresh = await client.product(id);
+      setDetail(fresh);
+      setSavedAt(null);
+      setError(null);
+      // keep the last good copy for when the server cannot be reached
+      void host.storage.set(cacheKey(id), serialize(fresh, Math.floor(Date.now() / 1000))).catch(() => {});
     } catch (e) {
-      setError(e instanceof ShopApiError ? e.message : "Could not load the product.");
+      const saved = e instanceof ShopApiError && e.status < 500 ? null : parseCached(await host.storage.get(cacheKey(id)).catch(() => null));
+      if (saved) {
+        setDetail(saved.detail);
+        setSavedAt(saved.savedAt);
+      } else {
+        setError(e instanceof ShopApiError ? e.message : "Could not load the product.");
+      }
     }
-  }, [client, id]);
+  }, [client, host, id]);
   useEffect(() => void load(), [load]);
 
   const addSpec = async () => {
@@ -57,7 +70,7 @@ export function ProductScreen({ id }: { id: string }) {
   if (!detail) {
     return (
       <Screen header={<TopBar title="Product" onBack={nav.pop} />}>
-        {error ? <Banner tone="danger" action={<Button label="Try again" variant="soft" tone="danger" size="sm" onPress={() => { setError(null); void load(); }} />}>{error}</Banner> : <ProductCardSkeletonList count={2} />}
+        {error ? <Banner tone="danger" action={<Button label="Try again" variant="outline" tone="neutral" size="sm" onPress={() => { setError(null); void load(); }} />}>{error}</Banner> : <ProductCardSkeletonList count={2} />}
       </Screen>
     );
   }
@@ -70,6 +83,11 @@ export function ProductScreen({ id }: { id: string }) {
 
   return (
     <Screen header={<TopBar title={product.title} subtitle={product.brand ?? undefined} onBack={nav.pop} />}>
+      {savedAt !== null ? (
+        <Banner tone="warning" title="Offline" action={<Button label="Try again" variant="outline" tone="neutral" size="sm" onPress={() => void load()} />}>
+          {`Showing the last prices we saved, ${ago(savedAt, now)}.`}
+        </Banner>
+      ) : null}
       {error ? <Banner tone="danger">{error}</Banner> : null}
 
       <Split>

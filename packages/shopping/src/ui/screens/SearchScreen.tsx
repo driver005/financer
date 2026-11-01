@@ -173,7 +173,7 @@ export function SearchScreen({ category, title = "Shopping assistant", placehold
           There is nothing to read prices from yet.
         </Banner>
       ) : null}
-      {error ? <Banner tone="danger" action={<Button label="Try again" variant="soft" tone="danger" size="sm" onPress={() => void search(lastQuery.current || query)} />}>{error}</Banner> : null}
+      {error ? <Banner tone="danger" action={<Button label="Try again" variant="outline" tone="neutral" size="sm" onPress={() => void search(lastQuery.current || query)} />}>{error}</Banner> : null}
 
       {response ? (
         <Stack gap="xl">
