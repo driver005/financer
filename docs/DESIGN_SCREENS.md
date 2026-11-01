@@ -62497,3 +62497,18 @@ r- The progress notification reads "Reading shops" with "<shop> · page 14 of 22
 - The deal notification is the system notification with the deal as its title and the watch as its text; tapping it opens the
   product. There is no separate "Open" button, because the tap does that.
 - Loading skeletons were checked in the app in light and dark; the catalog shows them too.
+
+## The one check that needs a phone
+
+The notifications are drawn by the operating system, so the only way to see them is a build on a device (this sandbox has no
+Android SDK and no virtualisation). What to look at, on Android with Notifee and once on iOS:
+
+1. Start a search on the phone ("This phone" mode, with a shops file): a notification "Reading shops" appears with
+   "<shop> · page x of y" and a bar that fills.
+2. Press **Stop** on it, with the app in front and again with the app in the background: the run ends, the notification turns
+   into "Indexing stopped" and the foreground service goes away.
+3. Let a run finish: "Search index ready" appears and can be swiped away.
+4. With a server and a watch whose price is met: a deal notification appears; tapping it opens that product.
+
+What is already tested without a device (`packages/shopping/tests/logic.test.ts`): what each notification says, the progress
+values, the Stop action, and that Stop only affects the run that is showing.
