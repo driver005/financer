@@ -15,6 +15,7 @@ export function CompareScreen({ ids }: { ids: string[] }) {
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | undefined>();
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [images, setImages] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     client?.profiles().then((all) => setProfile(all.find((x) => x.name === "default")?.profile)).finally(() => setProfileLoaded(true));
@@ -24,6 +25,18 @@ export function CompareScreen({ ids }: { ids: string[] }) {
     client.compare(ids, profile).then(setCmp).catch((e) => setError(e instanceof ShopApiError ? e.message : "Could not compare."));
   }, [client, ids, profile, profileLoaded]);
 
+  // the comparison itself carries no pictures: fetch each product's (a missing one just shows the placeholder)
+  useEffect(() => {
+    if (!client) return;
+    let alive = true;
+    Promise.all(ids.map((id) => client.product(id).then((d) => [id, d.product.image ?? null] as const).catch(() => [id, null] as const))).then((pairs) => {
+      if (alive) setImages(Object.fromEntries(pairs));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [client, ids]);
+
   const header = <TopBar title="Compare" subtitle={`${ids.length} products`} onBack={nav.pop} />;
   if (!cmp) {
     return (
@@ -32,7 +45,7 @@ export function CompareScreen({ ids }: { ids: string[] }) {
       </Screen>
     );
   }
-  const view = compareView(cmp);
+  const view = compareView(cmp, images);
   const winner = cmp.columns.find((c) => c.product_id === cmp.winner);
   return (
     <Screen header={header} fixed>

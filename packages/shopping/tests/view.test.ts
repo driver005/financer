@@ -130,3 +130,13 @@ describe("filtering deals", () => {
     assert.deepEqual(filterDeals(deals, "category:laptop").map((d) => d.product.id), ["c"]);
   });
 });
+
+describe("pictures in the compare headers", () => {
+  const cmp = { columns: [{ product_id: "a", title: "A", price_cents: 100, score: 1 }, { product_id: "b", title: "B", price_cents: null, score: 2 }], rows: [] } as unknown as Comparison;
+  it("puts each product's picture on its column", () => {
+    const v = compareView(cmp, { a: "https://x/a.png" });
+    assert.equal(v.columns[0].imageUri, "https://x/a.png");
+    assert.equal(v.columns[1].imageUri, null);
+  });
+  it("works without any pictures", () => assert.equal(compareView(cmp).columns[0].imageUri, null));
+});

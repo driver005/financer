@@ -7,7 +7,7 @@ import { formatCents, savingText } from "./format";
 // has no dependency on React Native and runs in the Node tests.
 export type AppliedFilter = { key: string; label: string };
 export type ProductBadge = { label: string; tone?: "success" | "warning" | "danger" | "info" | "accent" | "neutral" };
-export type CompareColumn = { id: string; title: string; subtitle?: string | null; priceText?: string | null; score?: number | null };
+export type CompareColumn = { id: string; title: string; subtitle?: string | null; priceText?: string | null; score?: number | null; imageUri?: string | null };
 export type CompareRow = { key: string; label: string; group?: string | null; cells: { value: string | null; best?: boolean }[] };
 
 export type SortKey = "best" | "price" | "deal";
@@ -67,13 +67,14 @@ function dropRepeatedSpecs<R extends { kind: string; label: string; cells: { val
   );
 }
 
-export function compareView(c: Comparison): { columns: CompareColumn[]; rows: CompareRow[] } {
+export function compareView(c: Comparison, images: Readonly<Record<string, string | null | undefined>> = {}): { columns: CompareColumn[]; rows: CompareRow[] } {
   return {
     columns: c.columns.map((col) => ({
       id: col.product_id,
       title: col.title,
       priceText: col.price_cents === null ? null : formatCents(col.price_cents),
       score: col.score,
+      imageUri: images[col.product_id] ?? null,
     })),
     rows: dropRepeatedSpecs(c.rows.filter((r) => r.kind !== "price"))
       .map((r) => ({ key: r.key, label: r.label, group: r.group, cells: r.cells.map((cell) => ({ value: cell.value, best: cell.best })) })),

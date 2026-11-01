@@ -5,12 +5,13 @@ import { SwitchRow } from "../components/Switch";
 import { Divider } from "../components/Divider";
 import { Icon } from "../primitives/Icon";
 import { ScoreRing } from "../components/ScoreRing";
+import { Thumbnail } from "../components/Thumbnail";
 import { Box, Row, Stack } from "../primitives/Box";
 import { Text } from "../primitives/Text";
 import { size } from "../constants/sizes";
 import { useLayout } from "../responsive/useLayout";
 
-export type CompareColumn = { id: string; title: string; subtitle?: string | null; priceText?: string | null; score?: number | null };
+export type CompareColumn = { id: string; title: string; subtitle?: string | null; priceText?: string | null; score?: number | null; imageUri?: string | null };
 export type CompareCell = { value: string | null; best?: boolean };
 export type CompareRow = { key: string; label: string; cells: readonly CompareCell[]; group?: string | null };
 
@@ -41,6 +42,7 @@ export function ComparisonTable({ columns, rows, onlyDifferences = true }: Compa
       {isCompact ? null : <LabelSpacer width={labelWidth} />}
       {columns.map((c) => (
         <Box key={c.id} equal gap="xs" align="start">
+          <Thumbnail uri={c.imageUri} dim="thumb-sm" label={c.title} />
           <Text variant="label" numberOfLines={3}>{c.title}</Text>
           {c.priceText ? <Text variant="number" tone="accent">{c.priceText}</Text> : null}
           {typeof c.score === "number" ? <ScoreRing score={c.score} size="sm" /> : null}
