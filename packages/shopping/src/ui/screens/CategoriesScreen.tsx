@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Badge, Banner, Box, Button, Card, Chip, ChipRow, Divider, EmptyState, ListItem, Row, Screen, Section, Segmented, Stack, Text, TextField, TopBar } from "@financer/ui";
+import { Badge, Banner, Box, Button, Card, Chip, ChipRow, Divider, EmptyState, ListItem, Row, Screen, Section, Segmented, Sheet, Stack, Text, TextField, TopBar } from "@financer/ui";
 
 import { ShopApiError } from "../../api/client";
 import type { AttrKind, CategoryDetail, CategoryItem, CategorySchema } from "../../api/types";
-import { addAlias, addAttribute, addCriterion, formulaNames, formulaProblem, newCategory, removeCriterion } from "../../logic/schemaEdit";
+import { addAlias, addAttribute, addCriterion, formulaNames, formulaProblem, newCategory, removeAlias, removeCriterion } from "../../logic/schemaEdit";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
 
@@ -212,6 +212,13 @@ export function CategoryEditorScreen({ id }: { id: string }) {
                 }}
               />
             </Row>
+            {(draft.attributes ?? []).find((a) => a.key === aliasKey)?.aliases?.length ? (
+              <ChipRow>
+                {((draft.attributes ?? []).find((a) => a.key === aliasKey)?.aliases ?? []).map((name) => (
+                  <Chip key={name} label={name} onRemove={() => edit(removeAlias(draft, aliasKey, name))} />
+                ))}
+              </ChipRow>
+            ) : null}
             {!own.has(aliasKey) ? <Text variant="caption" tone="muted">This attribute comes from the category you started from. Add a new attribute with the same name to override it.</Text> : null}
           </Card>
         ) : null}
@@ -273,27 +280,32 @@ export function CategoryEditorScreen({ id }: { id: string }) {
       </Section>
 
       <Section title="Advanced" card>
-        {json === null ? (
-          <Row><Button label="Edit as JSON" variant="outline" tone="neutral" icon="code-json" onPress={() => setJson(JSON.stringify(draft, null, 2))} /></Row>
-        ) : (
-          <Stack gap="md">
-            <TextField label="Category definition" value={json} onChangeText={setJson} multiline />
-            <Row gap="sm">
-              <Button
-                label="Save JSON"
-                onPress={() => {
-                  try {
-                    void save(JSON.parse(json) as CategorySchema);
-                  } catch (e) {
-                    setProblems([`Not valid JSON: ${e instanceof Error ? e.message : "unreadable"}`]);
-                  }
-                }}
-              />
-              <Button label="Close" variant="ghost" tone="neutral" onPress={() => setJson(null)} />
-            </Row>
-          </Stack>
-        )}
+        <Row><Button label="Edit as JSON" variant="outline" tone="neutral" icon="code-json" onPress={() => setJson(JSON.stringify(draft, null, 2))} /></Row>
       </Section>
+
+      <Sheet
+        visible={json !== null}
+        onClose={() => setJson(null)}
+        title="Category definition"
+        footer={
+          <Row gap="sm">
+            <Button
+              label="Save JSON"
+              onPress={() => {
+                try {
+                  void save(JSON.parse(json ?? "") as CategorySchema);
+                } catch (e) {
+                  setProblems([`Not valid JSON: ${e instanceof Error ? e.message : "unreadable"}`]);
+                }
+              }}
+            />
+            <Button label="Close" variant="ghost" tone="neutral" onPress={() => setJson(null)} />
+          </Row>
+        }
+      >
+        <TextField label="Category definition" value={json ?? ""} onChangeText={setJson} multiline />
+        <Problems items={problems} />
+      </Sheet>
 
       {detail.customized ? (
         <Row>

@@ -6,7 +6,7 @@ import { planDealNotices } from "../src/logic/dealNotifications";
 import { ago, dealLine, formatCents, planTerms, safeUrl, savingText } from "../src/logic/format";
 import { ACTION_PRESS, NotifeeSurface, STOP_ACTION, registerIndexService, type NotifeeEvent, type NotifeeLike } from "../src/logic/notifeeSurface";
 import { followJob, progressModel, textBar, worthShowing, type ProgressModel, type ProgressSurface } from "../src/logic/progress";
-import { addAlias, addAttribute, addCriterion, formulaProblem, newCategory, removeCriterion, slugKey, uniqueKey } from "../src/logic/schemaEdit";
+import { addAlias, removeAlias, addAttribute, addCriterion, formulaProblem, newCategory, removeCriterion, slugKey, uniqueKey } from "../src/logic/schemaEdit";
 import { chipsFor, indexRequestFor, nextStep } from "../src/logic/searchPlan";
 import { SOURCES_EXAMPLE, checkSources } from "../src/logic/sources";
 import { currentLevel, groups, levelOf, presetsFor, setLevel, weightFor } from "../src/logic/weights";
@@ -334,5 +334,16 @@ describe("the Android progress notification", () => {
     await new NotifeeSurface(n, () => {}).finish(progressModel("pixel 9", state({ phase: "done", percent: 100, products: 12 })));
     assert.equal(shown[0].title, "Search index ready");
     assert.equal(shown[0].android.ongoing, false);
+  });
+});
+
+describe("names shops use for an attribute", () => {
+  const schema = { id: "x", name: "X", attributes: [{ key: "battery", label: "Battery", kind: "number", aliases: ["Akku"] }] } as unknown as CategorySchema;
+  it("adds a name once and takes it off again, whatever the case", () => {
+    const added = addAlias(schema, "battery", "Batterie");
+    assert.deepEqual(added.attributes?.[0].aliases, ["Akku", "Batterie"]);
+    assert.deepEqual(addAlias(added, "battery", "akku").attributes?.[0].aliases, ["Akku", "Batterie"]);
+    assert.deepEqual(removeAlias(added, "battery", "AKKU").attributes?.[0].aliases, ["Batterie"]);
+    assert.deepEqual(removeAlias(schema, "other", "Akku").attributes?.[0].aliases, ["Akku"]);
   });
 });
