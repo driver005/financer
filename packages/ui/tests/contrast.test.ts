@@ -51,8 +51,12 @@ function check(name: string, colors: ThemeColors) {
       assert.ok(contrast(colors.border.focus, colors.background) >= PARTS, "focus ring on the background");
     });
 
-    it("tells a solid fill from the surface it sits on", () => {
-      for (const t of tones) assert.ok(contrast(colors.tones[t].solid, colors.surface) >= PARTS, `${t} solid on surface`);
+    it("tells a solid control from the surface it sits on (its face or its thick edge reaches 3:1)", () => {
+      for (const t of tones) {
+        const c = colors.tones[t];
+        const best = Math.max(contrast(c.solid, colors.surface), contrast(c.edge, colors.surface));
+        assert.ok(best >= PARTS, `${t} solid control on surface is ${best.toFixed(2)}:1`);
+      }
     });
   });
 }

@@ -13,6 +13,7 @@
     "test": "npm test --prefix ../../packages/shopping"
   },
   "dependencies": {
+    "@expo-google-fonts/nunito": "^0.4.2",
     "@expo/vector-icons": "^15.1.1",
     "@notifee/react-native": "9.1.8",
     "expo": "~58.0.17",

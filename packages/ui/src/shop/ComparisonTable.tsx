@@ -51,7 +51,7 @@ export function ComparisonTable({ columns, rows, onlyDifferences = true }: Compa
   return (
     <Box grow gap="md">
       <SwitchRow label="Show only what differs" value={diff} onChange={setDiff} />
-      <Box grow bg="surface" radius="2xl" border="hairline" overflow="hidden">
+      <Box grow bg="surface" radius="2xl" border="thick" borderTone="default" edge="border" overflow="hidden">
         <ScrollView stickyHeaderIndices={[0]}>
           <Box bg="surface">{header}<Divider /></Box>
           {shown.length === 0 ? (

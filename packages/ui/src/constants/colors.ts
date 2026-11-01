@@ -1,16 +1,18 @@
-// Semantic colours: roles, not shades. Neutral greys and the violet brand of Untitled UI, with HeroUI's
-// layering (page, surface, secondary fill) and its soft status fills. A component asks for `text.muted` or `tones.accent.solid`;
+// Semantic colours: roles, not shades. Playful and chunky in the manner of Duolingo: bright faces with a
+// darker edge, soft tinted fills with a 2 px line, a blue-green night for the dark theme. A component asks for `text.muted` or `tones.accent.solid`;
 // which palette step that is, in light and in dark, is decided here and only here.
 // Tests (tests/contrast.test.ts) check these pairs against WCAG 2.2 AA (4.5:1 for text, 3:1 for
 // parts of the interface).
-import { alpha, palette as p } from "./palette";
+import { alpha, duo, palette as p } from "./palette";
 
 export type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
 export const tones: readonly Tone[] = ["neutral", "accent", "success", "warning", "danger", "info"];
 
 export type ToneColors = {
-  /** Solid fill (buttons, badges). */
+  /** Solid fill (buttons, badges): the bright face. */
   solid: string;
+  /** The darker colour of the thick lower edge under a solid face. */
+  edge: string;
   /** Text and icons on the solid fill. */
   onSolid: string;
   /** Soft tinted fill (chips, banners, selected rows). */
@@ -39,54 +41,50 @@ export type ThemeColors = {
   scrim: string;
   text: { default: string; muted: string; subtle: string; inverse: string };
   border: { default: string; strong: string; focus: string };
-  /** Untitled UI's focus ring: a 4 px halo in the palest brand tint, as a `boxShadow`. */
-  focusRing: string;
-  /** The same halo for a field in error. */
-  dangerRing: string;
   tones: Record<Tone, ToneColors>;
 };
 
+const n = p.neutral;
+const d = duo.night;
+const ink = n[900];
+
 export const lightColors: ThemeColors = {
-  background: p.neutral[100],
+  background: n[100],
   surface: p.white,
   raised: p.white,
-  field: p.white,
+  field: n[50],
   thumb: p.white,
-  sunken: p.neutral[200],
+  sunken: n[200],
   scrim: alpha.scrimLight,
-  text: { default: p.neutral[900], muted: p.neutral[700], subtle: p.neutral[600], inverse: p.white },
-  border: { default: p.neutral[200], strong: p.neutral[300], focus: p.brand[600] },
-  focusRing: `0 0 0 4px ${p.brand[100]}`,
-  dangerRing: `0 0 0 4px ${p.red[100]}`,
+  text: { default: n[800], muted: n[700], subtle: n[600], inverse: p.white },
+  border: { default: n[200], strong: n[300], focus: duo.blue.text },
   tones: {
-    neutral: { solid: p.neutral[900], onSolid: p.white, soft: p.neutral[100], onSoft: p.neutral[700], text: p.neutral[700], line: p.neutral[300] },
-    accent: { solid: p.brand[600], onSolid: p.white, soft: p.brand[50], onSoft: p.brand[700], text: p.brand[600], line: p.brand[200] },
-    success: { solid: p.green[700], onSolid: p.white, soft: p.green[50], onSoft: p.green[700], text: p.green[700], line: p.green[200] },
-    warning: { solid: p.yellow[700], onSolid: p.white, soft: p.yellow[50], onSoft: p.yellow[700], text: p.yellow[700], line: p.yellow[200] },
-    danger: { solid: p.red[600], onSolid: p.white, soft: p.red[50], onSoft: p.red[700], text: p.red[700], line: p.red[200] },
-    info: { solid: p.sky[700], onSolid: p.white, soft: p.sky[50], onSoft: p.sky[800], text: p.sky[700], line: p.sky[200] },
+    neutral: { solid: n[600], onSolid: p.white, edge: n[800], soft: n[100], onSoft: n[700], text: n[700], line: n[200] },
+    accent: { solid: duo.green.face, onSolid: ink, edge: duo.green.edge, soft: duo.green.soft, onSoft: duo.green.onSoft, text: duo.green.text, line: duo.green.line },
+    success: { solid: duo.green.face, onSolid: ink, edge: duo.green.edge, soft: duo.green.soft, onSoft: duo.green.onSoft, text: duo.green.text, line: duo.green.line },
+    warning: { solid: duo.yellow.face, onSolid: ink, edge: duo.yellow.edge, soft: duo.yellow.soft, onSoft: duo.yellow.onSoft, text: duo.yellow.text, line: duo.yellow.line },
+    danger: { solid: duo.red.face, onSolid: ink, edge: duo.red.edge, soft: duo.red.soft, onSoft: duo.red.onSoft, text: duo.red.text, line: duo.red.line },
+    info: { solid: duo.blue.face, onSolid: ink, edge: duo.blue.edge, soft: duo.blue.soft, onSoft: duo.blue.onSoft, text: duo.blue.text, line: duo.blue.line },
   },
 };
 
 export const darkColors: ThemeColors = {
-  background: p.neutral[950],
-  surface: p.neutral[900],
-  raised: p.neutral[800],
-  field: p.neutral[900],
-  thumb: p.neutral[50],
-  sunken: p.neutral[800],
+  background: d.background,
+  surface: d.surface,
+  raised: d.raised,
+  field: d.background,
+  thumb: d.text,
+  sunken: d.raised,
   scrim: alpha.scrimDark,
-  text: { default: p.neutral[50], muted: p.neutral[300], subtle: p.neutral[400], inverse: p.neutral[950] },
-  border: { default: p.neutral[800], strong: p.neutral[600], focus: p.brand[400] },
-  focusRing: `0 0 0 4px ${p.brand[900]}`,
-  dangerRing: `0 0 0 4px ${p.red[950]}`,
+  text: { default: d.text, muted: d.muted, subtle: d.subtle, inverse: ink },
+  border: { default: d.border, strong: d.borderStrong, focus: duo.blue.face },
   tones: {
-    neutral: { solid: p.neutral[50], onSolid: p.neutral[950], soft: p.neutral[800], onSoft: p.neutral[200], text: p.neutral[200], line: p.neutral[600] },
-    accent: { solid: p.brand[400], onSolid: p.neutral[950], soft: p.brand[950], onSoft: p.brand[200], text: p.brand[300], line: p.brand[800] },
-    success: { solid: p.green[400], onSolid: p.neutral[950], soft: p.green[950], onSoft: p.green[300], text: p.green[400], line: p.green[800] },
-    warning: { solid: p.yellow[400], onSolid: p.neutral[950], soft: p.yellow[950], onSoft: p.yellow[300], text: p.yellow[400], line: p.yellow[800] },
-    danger: { solid: p.red[400], onSolid: p.neutral[950], soft: p.red[950], onSoft: p.red[300], text: p.red[400], line: p.red[800] },
-    info: { solid: p.sky[400], onSolid: p.neutral[950], soft: p.sky[950], onSoft: p.sky[300], text: p.sky[400], line: p.sky[800] },
+    neutral: { solid: d.text, onSolid: ink, edge: d.edgeNeutral, soft: d.raised, onSoft: d.muted, text: d.muted, line: d.border },
+    accent: { solid: duo.green.face, onSolid: ink, edge: duo.green.edge, soft: d.green.soft, onSoft: d.green.onSoft, text: duo.green.face, line: d.green.line },
+    success: { solid: duo.green.face, onSolid: ink, edge: duo.green.edge, soft: d.green.soft, onSoft: d.green.onSoft, text: duo.green.face, line: d.green.line },
+    warning: { solid: duo.yellow.face, onSolid: ink, edge: duo.yellow.edge, soft: d.yellow.soft, onSoft: d.yellow.onSoft, text: duo.yellow.face, line: d.yellow.line },
+    danger: { solid: duo.red.face, onSolid: ink, edge: duo.red.edge, soft: d.red.soft, onSoft: d.red.onSoft, text: d.red.text, line: d.red.line },
+    info: { solid: duo.blue.face, onSolid: ink, edge: duo.blue.edge, soft: d.blue.soft, onSoft: d.blue.onSoft, text: duo.blue.face, line: d.blue.line },
   },
 };
 

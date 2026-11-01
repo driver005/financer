@@ -7,7 +7,7 @@ export type SegmentedOption<T extends string> = { value: T; label: string };
 /** A few exclusive choices side by side (view as grid or list, week or month). */
 export function Segmented<T extends string>({ options, value, onChange, testID }: { options: readonly SegmentedOption<T>[]; value: T; onChange: (v: T) => void; testID?: string }) {
   return (
-    <Row gap="2xs" p="2xs" bg="sunken" radius="2xl" testID={testID} accessibilityRole="tablist">
+    <Row gap="2xs" bg="sunken" radius="2xl" p="xs" testID={testID} accessibilityRole="tablist">
       {options.map((o) => {
         const on = o.value === value;
         return (
@@ -17,8 +17,11 @@ export function Segmented<T extends string>({ options, value, onChange, testID }
               label={o.label}
               role="tab"
               selected={on}
-              bg={on ? "field" : undefined}
-              shadow={on ? "field" : undefined}
+              bg={on ? "surface" : undefined}
+              border={on ? "thick" : undefined}
+              borderTone="default"
+              edge={on ? "border" : undefined}
+              edgeSize="sm"
               radius="xl"
               control="sm"
               align="center"
@@ -26,7 +29,7 @@ export function Segmented<T extends string>({ options, value, onChange, testID }
               px="sm"
               hit={false}
             >
-              <Text variant="label" tone={on ? "default" : "muted"}>{o.label}</Text>
+              <Text variant="label" tone={on ? "info" : "muted"}>{o.label}</Text>
             </Touchable>
           </Box>
         );

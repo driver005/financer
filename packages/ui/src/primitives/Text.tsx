@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Platform, Text as RNText, type TextStyle } from "react-native";
 
 import type { Tone } from "../constants/colors";
-import { fontFamilyWeb, fontSize, fontWeight, letterSpacing, lineHeight, textVariants, type TextVariant } from "../constants/typography";
+import { fontFamilyByWeight, fontFamilyWeb, fontSize, letterSpacing, lineHeight, textVariants, type TextVariant } from "../constants/typography";
 import { useTheme } from "../theme/ThemeProvider";
 import type { Mutable } from "./box";
 
@@ -43,11 +43,13 @@ export function Text({ children, variant = "body", tone = "default", align, numb
     color,
     fontSize: fontSize[v.size],
     lineHeight: lineHeight[v.size],
-    fontWeight: fontWeight[v.weight],
+    // one font file per weight; the weight itself stays "normal" so no platform fakes a second bold
+    fontFamily: Platform.OS === "web" ? `${fontFamilyByWeight[v.weight]}, ${fontFamilyWeb}` : fontFamilyByWeight[v.weight],
+    fontWeight: "normal",
     letterSpacing: letterSpacing[v.tracking] * fontSize[v.size],
   };
   if ("tabular" in v && v.tabular) style.fontVariant = ["tabular-nums"];
-  if (Platform.OS === "web") style.fontFamily = fontFamilyWeb;
+  if ("caps" in v && v.caps) style.textTransform = "uppercase";
   if (align) style.textAlign = align;
   if (strike) style.textDecorationLine = "line-through";
   return (

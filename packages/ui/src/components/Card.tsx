@@ -7,7 +7,7 @@ import { Touchable } from "../primitives/Touchable";
 
 export type CardProps = {
   children: ReactNode;
-  /** `raised` (HeroUI surface) sits on a soft shadow, and in the dark theme on a lighter fill, `outline` has only a border, `flat` is a quiet fill. */
+  /** `raised` has a 2 px line and a thick edge below, like a key, `outline` has only a border, `flat` is a quiet fill. */
   variant?: "raised" | "outline" | "flat";
   /** Tint the card with a tone's soft colour. */
   tone?: Tone;
@@ -15,21 +15,24 @@ export type CardProps = {
   onPress?: () => void;
   label?: string;
   padded?: boolean;
+  /** Fill the height of the cell it is in (cards side by side keep one height). */
+  fill?: boolean;
   gap?: BoxProps["gap"];
   testID?: string;
 };
 
-export function Card({ children, variant = "raised", tone, selected, onPress, label, padded = true, gap = "md", testID }: CardProps) {
+export function Card({ children, variant = "raised", tone, selected, onPress, label, padded = true, fill, gap = "md", testID }: CardProps) {
   const look: BoxProps = {
-    bg: tone ? `${tone}-soft` : variant === "flat" ? "sunken" : "surface",
-    radius: "3xl",
-    border: selected ? "thick" : variant === "outline" ? "hairline" : undefined,
-    borderTone: selected ? "accent" : "default",
-    shadow: variant === "raised" ? "surface" : undefined,
+    bg: selected ? "info-soft" : tone ? `${tone}-soft` : variant === "flat" ? "sunken" : "surface",
+    radius: "2xl",
+    border: variant === "flat" && !selected && !tone ? undefined : "thick",
+    borderTone: selected ? "info" : tone ?? "default",
+    // a raised card sits on a thick edge, like a key; a selected one on a blue edge
+    edge: selected ? "info-line" : variant === "raised" ? (tone ? `${tone}-line` : "border") : undefined,
     p: padded ? "lg" : "none",
     gap,
     overflow: "hidden",
-    grow: true,
+    grow: fill,
   };
   if (!onPress) return <Box {...look} testID={testID}>{children}</Box>;
   return (

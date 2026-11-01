@@ -42,4 +42,30 @@ export const alpha = {
   scrimLight: "rgba(10, 10, 10, 0.5)",
   scrimDark: "rgba(0, 0, 0, 0.7)",
   clear: "rgba(0, 0, 0, 0)",
+  /** The light streak along the top of a progress bar. */
+  shine: "rgba(255, 255, 255, 0.35)",
+} as const;
+
+/**
+ * The playful set, in the manner of Duolingo: bright faces with a darker "edge" that becomes the thick
+ * lower border of a button or card. The faces (#58cc02 green, #1cb0f6 blue, #ff4b4b red, #ffc800 yellow)
+ * and the green and blue edges and tints are the values third-party style guides list for Duolingo; the
+ * app's own values are not public, so treat them as "in the manner of", not a copy. Departures: text
+ * colours and the yellow edge are darker so they pass WCAG AA, and text on a bright face is dark ink,
+ * not white (white on #58cc02 is 2.1:1).
+ */
+export const duo = {
+  green: { face: "#58cc02", edge: "#58a700", soft: "#d7ffb8", line: "#a5ed6e", text: "#2f7d00", onSoft: "#2a5f00" },
+  blue: { face: "#1cb0f6", edge: "#1899d6", soft: "#ddf4ff", line: "#84d8ff", text: "#0a6aa6", onSoft: "#0a5a8c" },
+  red: { face: "#ff4b4b", edge: "#ea2b2b", soft: "#ffdfe0", line: "#ffb3b3", text: "#c62828", onSoft: "#a4201f" },
+  yellow: { face: "#ffc800", edge: "#a87a00", soft: "#fff4cc", line: "#ffe27a", text: "#8a6100", onSoft: "#6b4a00" },
+  /** The dark theme: a blue-green night instead of black, with the same bright faces. */
+  night: {
+    background: "#131f24", surface: "#202f36", raised: "#2b3d46", border: "#37464f", borderStrong: "#52656d",
+    text: "#f1f7fb", muted: "#c0d0d8", subtle: "#9fb4bf", edgeNeutral: "#b6c4cb",
+    green: { soft: "#1f3a12", line: "#2f5a1a", onSoft: "#a5ed6e" },
+    blue: { soft: "#123a4d", line: "#1d5a78", onSoft: "#84d8ff" },
+    red: { soft: "#4a1f22", line: "#7a2f33", onSoft: "#ffb3b3", text: "#ff7070" },
+    yellow: { soft: "#4a3a0a", line: "#7a5f10", onSoft: "#ffe27a" },
+  },
 } as const;

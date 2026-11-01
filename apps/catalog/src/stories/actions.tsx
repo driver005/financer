@@ -103,7 +103,7 @@ function Choices() {
 }
 
 export const actions: StoryDef[] = [
-  { id: "buttons", title: "Buttons", note: "Six variants (HeroUI: primary, secondary, tertiary, soft, outline, ghost) in six tones, three sizes of 40, 48 and 56. One solid primary action per screen.", render: () => <Buttons /> },
+  { id: "buttons", title: "Buttons", note: "Six variants in six tones, three sizes of 48, 56 and 64. A solid button sits on a thick edge and sinks onto it when pressed. One solid primary action per screen.", render: () => <Buttons /> },
   { id: "chips", title: "Chips", note: "Switchable filters, removable applied filters, plain labels.", render: () => <Chips /> },
   { id: "fields", title: "Text fields and search", render: () => <Fields /> },
   { id: "choices", title: "Choices", render: () => <Choices /> },

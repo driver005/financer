@@ -59,10 +59,16 @@ export type BoxProps = {
   bg?: BgToken;
   radius?: Radius;
   border?: BorderWidth;
-  borderTone?: Tone | "default" | "strong";
+  borderTone?: Tone | "default" | "strong" | "focus";
   shadow?: Shadow;
-  /** The focus halo (Untitled UI): brand coloured, or red for a field in error. */
-  ring?: "focus" | "danger";
+  /**
+   * The thick lower edge that makes a button, card or chip look like a raised key: a solid shadow in the
+   * tone's edge colour (or the border colour). Space for it is added below the box. A pressed
+   * `Touchable` sinks onto its edge.
+   */
+  edge?: Tone | `${Tone}-line` | "border" | "strong";
+  /** How thick the edge is: md 4 px (buttons, cards), sm 2 px (chips, segments). */
+  edgeSize?: keyof typeof size.edge;
   overflow?: "hidden" | "visible";
   /** A fixed height for previews that need a bounded box. */
   h?: "preview";
@@ -70,6 +76,8 @@ export type BoxProps = {
   maxH?: "sheet";
   /** Keep it mounted (its state survives) but not shown. */
   hidden?: boolean;
+  /** Never wider than the parent (a long label shortens instead of spilling out). */
+  fit?: boolean;
   /** Stretch to the full width of the parent. */
   full?: boolean;
   /** Keep the box square (aspect ratio 1). */
@@ -143,6 +151,7 @@ export function boxStyle(p: BoxProps, theme: Theme, width: number): ViewStyle {
   if (p.maxH) style.maxHeight = SHEET_MAX_HEIGHT;
   if (p.h) style.height = size.preview;
   if (p.hidden) style.display = "none";
+  if (p.fit) style.maxWidth = "100%";
   if (p.full) style.width = "100%";
   if (p.square) style.aspectRatio = 1;
   if (p.dim) {
@@ -156,10 +165,19 @@ export function boxStyle(p: BoxProps, theme: Theme, width: number): ViewStyle {
   if (p.border) {
     style.borderWidth = borderWidth[p.border];
     const t = p.borderTone ?? "default";
-    style.borderColor = t === "default" ? theme.colors.border.default : t === "strong" ? theme.colors.border.strong : theme.colors.tones[t].line;
+    style.borderColor = t === "default" ? theme.colors.border.default : t === "strong" ? theme.colors.border.strong : t === "focus" ? theme.colors.border.focus : theme.colors.tones[t].line;
   }
-  if (p.ring) style.boxShadow = p.ring === "danger" ? theme.colors.dangerRing : theme.colors.focusRing;
-  else if (p.shadow && p.shadow !== "none" && theme.shadows[p.shadow] !== "none") style.boxShadow = theme.shadows[p.shadow];
+  if (p.edge) {
+    const px = size.edge[p.edgeSize ?? "md"];
+    const colour =
+      p.edge === "border" ? theme.colors.border.default
+      : p.edge === "strong" ? theme.colors.border.strong
+      : p.edge.endsWith("-line") ? theme.colors.tones[p.edge.slice(0, -5) as Tone].line
+      : theme.colors.tones[p.edge as Tone].edge;
+    style.boxShadow = `0 ${px}px 0 0 ${colour}`;
+    const below = style.marginBottom ?? style.marginVertical ?? style.margin;
+    style.marginBottom = (typeof below === "number" ? below : 0) + px;
+  } else if (p.shadow && p.shadow !== "none" && theme.shadows[p.shadow] !== "none") style.boxShadow = theme.shadows[p.shadow];
   if (p.overflow) style.overflow = p.overflow;
   return style;
 }

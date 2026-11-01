@@ -1,19 +1,20 @@
 import { useEffect, useRef } from "react";
 import { Animated, Platform, Pressable } from "react-native";
 
-import { duration, state } from "../constants/misc";
+import { spring, state } from "../constants/misc";
+import { borderWidth } from "../constants/radius";
 import { size } from "../constants/sizes";
 import { space } from "../constants/spacing";
 import { Box, Row } from "../primitives/Box";
 import { Text } from "../primitives/Text";
 import { useTheme } from "../theme/ThemeProvider";
 
-/** HeroUI's switch: a 48 x 24 track with an oval 28 x 20 knob, the same on every platform (not the system switch). */
+/** A chunky switch: a 56 x 32 track and a round knob that springs across, the same on every platform (not the system switch). */
 export function Switch({ value, onChange, label, disabled }: { value: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
-  const { colors, shadows } = useTheme();
+  const { colors } = useTheme();
   const at = useRef(new Animated.Value(value ? 1 : 0)).current;
   useEffect(() => {
-    Animated.timing(at, { toValue: value ? 1 : 0, duration: duration.base, useNativeDriver: Platform.OS !== "web" }).start();
+    Animated.spring(at, { toValue: value ? 1 : 0, ...spring, useNativeDriver: Platform.OS !== "web" }).start();
   }, [at, value]);
   const s = size.switch;
   return (
@@ -29,17 +30,19 @@ export function Switch({ value, onChange, label, disabled }: { value: boolean; o
         height: s.height,
         borderRadius: s.height,
         justifyContent: "center",
-        backgroundColor: value ? colors.tones.accent.solid : colors.border.strong,
+        backgroundColor: value ? colors.tones.accent.solid : colors.sunken,
+        borderWidth: borderWidth.thick,
+        borderColor: value ? colors.tones.accent.edge : colors.border.default,
         opacity: disabled ? state.disabled : 1,
       }}
     >
       <Animated.View
         style={{
-          width: s.thumbWidth,
-          height: s.thumbHeight,
-          borderRadius: s.thumbHeight,
+          width: s.thumb,
+          height: s.thumb,
+          borderRadius: s.thumb,
           backgroundColor: colors.thumb,
-          boxShadow: shadows.field === "none" ? undefined : shadows.field,
+          boxShadow: `0 ${size.edge.sm}px 0 0 ${colors.border.strong}`,
           marginLeft: s.inset,
           transform: [{ translateX: at.interpolate({ inputRange: [0, 1], outputRange: [0, s.travel] }) }],
         }}

@@ -11,43 +11,42 @@ The research behind the shapes of the screens is in [UI_RESEARCH.md](UI_RESEARCH
 
 | Folder | What is in it |
 | --- | --- |
-| `src/constants/` | **The only place for raw numbers and colour values.** Tailwind's neutral, green, yellow, red and sky (v3.4 hex values) and Untitled UI's brand violet, spacing on a 4 px grid, radius, font sizes with line heights, shadows, breakpoints, touch and control sizes. |
+| `src/constants/` | **The only place for raw numbers and colour values.** Tailwind's neutral and red/sky (v3.4 hex values) and the Duolingo-style `duo` set, spacing on a 4 px grid, radius, font sizes with line heights, shadows, breakpoints, touch and control sizes. |
 | `src/theme/` | `ThemeProvider`, light and dark colour roles built from the palette, `useTheme()`. |
 | `src/responsive/` | `useLayout()` (layout class, columns, device), `Responsive<T>` values, `Viewport` (forces a width, used by the catalog). |
 | `src/primitives/` | `Box`, `Stack`, `Row`, `Spacer`, `Text`, `Icon`, `Touchable`: they turn token props into styles. |
-| `src/components/` | Button (six variants), Chip, Badge, Banner, Card, TextField, Switch, Checkbox, Segmented, OptionList, Meter, ScoreRing, Sparkline, Skeleton, Spinner, EmptyState, ListItem, Thumbnail, Divider. |
+| `src/components/` | Button (six variants, pressable keys), Chip, Badge, Banner, Card, TextField, Switch, Checkbox, Segmented, OptionList, Meter, ScoreRing, Sparkline, Skeleton, Spinner, EmptyState, ListItem, Thumbnail, Divider. |
 | `src/layout/` | `Screen`, `Section`, `Sheet`, `TopBar`, `Grid`, and the adaptive navigation (`AppShell`). |
 | `src/shop/` | Shopping pieces built on the above: `ProductCard`, `ProductGrid`, `PriceTag`, `DealBadge`, `FilterBar`, `OfferRow`, `PriceHistory`, `ComparisonTable`. |
 
-## Design language: Untitled UI and HeroUI
+## Design language: chunky and playful, in the manner of Duolingo
 
-The look combines two sources. What was actually read from each is listed so nothing is claimed
-that was not checked.
+The look is thick, round and bright, after Duolingo's app. What it rests on, and what is ours:
 
-**From the Untitled UI community kit** (Figma file, read through the Figma tools):
-- Colours: the kit uses Tailwind's **neutral, green, yellow and red** for its badges (neutral 100/700,
-  green 50/700, yellow 50/700, red 50/700; read from the file) and a custom **violet brand** (brand 50
-  `#f9f5ff` and 700 `#6941c6` read from the file). Our palette uses exactly these; the other brand steps
-  are the kit's published ramp, **not read from the file**.
-- Badges: a pill, 10 x 2 padding, 14/20 Inter medium, soft fill with the dark step as text (read).
-- Toggles 44 x 24 (36 x 20 small), the 4 px spacing grid, containers of 640/768/1024/1280, 16 px phone
-  margins and 32 px tablet and desktop margins (read from the file's metadata).
-- Inputs and the focus halo (a 4 px brand-100 ring, a faint `xs` shadow) follow the kit's style from
-  memory: the input and button nodes could not be read (the Figma tool timed out on them).
+- **Keys, not flat buttons.** A solid button, a card and a chip sit on a thick lower **edge** in a darker
+  shade (`edge` prop, 4 px, 2 px for small things). A pressed button sinks onto its edge. Soft and white
+  faces have a 2 px line and a matching edge.
+- **Bright faces.** Green (the main action), blue (selected things and the navigation), red, yellow, with
+  tinted soft fills (`soft`, `line`) for badges, banners and selected rows. The dark theme is a blue-green
+  night (`#131f24`) with the same bright faces.
+- **Round everything.** Controls are 16 px radius, buttons 48, 56 and 64 px high, a 56 x 32 switch whose knob
+  springs, progress bars 16 px thick with a light streak, a thicker score ring.
+- **Round bold type.** Nunito (`@expo-google-fonts/nunito`, loaded by `ThemeProvider`), every weight one step
+  heavier than its name; button labels and badges are bold capitals.
+- Earlier steps of this restyle took values from the Untitled UI community kit (its badge and toggle
+  proportions and the Tailwind-based status colours) and HeroUI's component set (variants, sizes); the
+  neutral greys and the variant names stay from that.
 
-**From HeroUI** (read from its `heroui-native` style sheets in `apps/mobile/node_modules`):
-- Shapes: buttons are pills (radius 3xl = 24, 4xl = 32 for large) at heights 40, 48 and 56; fields have
-  a 14 px radius; cards are 24 px; a switch is 48 x 24 with an oval 28 x 20 knob.
-- Variants: button primary, secondary, tertiary, outline, ghost, danger, danger-soft; chips are soft
-  fills without an outline; fields are filled.
-- Layering: page, white surface, a neutral secondary fill; soft layered shadows in the light theme and
-  none in the dark one (overlays get a faint inner rim instead). Labels are medium weight.
+**What is a copy and what is not.** Duolingo's own values are not public. The faces `#58cc02`, `#1cb0f6`,
+`#ff4b4b`, `#ffc800`, the green and blue edges (`#58a700`, `#1899d6`) and the pale tints are the values
+third-party style guides list for it; none was read from Duolingo, so this is "in the manner of", not a copy
+(see `duo` in `constants/palette.ts`).
 
-**Ours on top:** a selected chip also shows a check (never colour alone), text colours are tuned so
-every pair passes WCAG AA (`tests/contrast.test.ts`), and every size and radius is a token.
-
-**Not done:** Inter is used where the machine has it (the web stack lists it first). No font file is
-bundled, because loading one on the phones needs a font package; ask if you want it.
+**Where it departs on purpose (accessibility).** Duolingo puts white text on its bright faces. White on
+`#58cc02` is 2.1:1, on `#1cb0f6` 2.4:1, on `#ffc800` 1.6:1, all below WCAG AA's 4.5:1. So text on a bright face
+is dark ink, text colours (green, blue, red, yellow on white) are darker steps, the yellow edge is darker
+(`#a87a00`), and a control counts as visible when its face or its edge reaches 3:1 (`tests/contrast.test.ts`).
+To get white labels back, change `onSolid` in `constants/colors.ts` and relax that test knowingly.
 
 ## Tokens
 
@@ -58,7 +57,7 @@ bundled, because loading one on the phones needs a font package; ask if you want
   `solid / onSolid / soft / onSoft / text / line`. Light and dark are two sets of the same roles; contrast
   of every pair is tested against WCAG AA (`tests/contrast.test.ts`).
 - **Type** is a variant: `display, title, heading, subheading, body, bodyStrong, label, caption, price, priceLarge, number`.
-- **Radius, shadow, sizes**: `radius="3xl"`, `shadow="surface"` (also `field`, `overlay`, `xs`), `control="md"` (xs 32, sm 40, md 48, lg 56), `touch` (minimum 44 px target), `ring="focus"`.
+- **Radius, edge, sizes**: `radius="2xl"`, `edge="accent"` (a thick lower edge; also `"info-line"`, `"border"`), `shadow="overlay"` for sheets, `control="md"` (xs 40, sm 48, md 56, lg 64), `touch` (minimum 44 px target).
 
 ```tsx
 <Card p="lg" gap="md" tone="accent">

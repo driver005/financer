@@ -4,6 +4,9 @@ export const zIndex = { base: 0, raised: 10, sticky: 20, nav: 30, overlay: 40, m
 export const duration = { instant: 75, fast: 150, base: 200, slow: 300, slower: 500 } as const;
 
 /** Interaction states of controls. */
-export const state = { pressed: opacity[90], disabled: opacity[40], loading: opacity[75], pressScale: 0.97 } as const;
+export const state = { pressed: opacity[100], disabled: opacity[40], loading: opacity[75], pressScale: 0.97 } as const;
 
 export type Opacity = keyof typeof opacity;
+
+/** A springy overshoot for things that flip (the switch knob): playful, not slow. */
+export const spring = { bounciness: 14, speed: 16 } as const;

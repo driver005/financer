@@ -1,5 +1,5 @@
 // Corner radii: Tailwind CSS 3.4.17 `borderRadius` (rem converted at 16 px), plus the steps HeroUI
-// derives from a 0.5 rem base (3xl 24, 4xl 32: pill-shaped buttons) and its field radius (1.75 x the base).
+// derives from a 0.5 rem base (3xl 24, 4xl 32: pill-shaped buttons) and a field radius of 16 (the chunky look: everything you can touch is round, nothing is sharp).
 export const radius = {
   none: 0,
   sm: 2,
@@ -10,7 +10,7 @@ export const radius = {
   "2xl": 16,
   "3xl": 24,
   "4xl": 32,
-  field: 14,
+  field: 16,
   full: 9999,
 } as const;
 

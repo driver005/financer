@@ -72,7 +72,7 @@ export function ProductCard({
     </Box>
   );
   return (
-    <Card variant="raised" padded={false} selected={selected} onPress={onPress} label={title} testID={testID} gap="none">
+    <Card variant="raised" fill padded={false} selected={selected} onPress={onPress} label={title} testID={testID} gap="none">
       {layout === "grid" ? (
         <Box gap="none">
           <Thumbnail uri={imageUri} fill radius="none" label={title} />

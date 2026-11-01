@@ -3,7 +3,7 @@ import { Platform, TextInput, type TextInputProps } from "react-native";
 
 import { size } from "../constants/sizes";
 import { space } from "../constants/spacing";
-import { fontFamilyWeb, fontSize, lineHeight } from "../constants/typography";
+import { fontFamilyByWeight, fontFamilyWeb, fontSize, lineHeight } from "../constants/typography";
 import { Box, Row } from "../primitives/Box";
 import { Icon, type IconName } from "../primitives/Icon";
 import { Text } from "../primitives/Text";
@@ -26,7 +26,7 @@ export type TextFieldProps = {
   onSubmit?: () => void;
   /** Show a clear button while there is text. */
   clearable?: boolean;
-  /** Pill shape and taller, for the search box. */
+  /** The search box (same rounded field, with a magnifier). */
   pill?: boolean;
   autoFocus?: boolean;
   capitalize?: boolean;
@@ -45,14 +45,12 @@ export function TextField({
       <Row
         gap="sm"
         px="md"
-        bg="field"
-        radius={pill ? "full" : "field"}
+        bg={error ? "danger-soft" : focused ? "info-soft" : "field"}
+        radius="field"
         align={multiline ? "start" : "center"}
         control="md"
-        border="hairline"
-        borderTone={error ? "danger" : focused ? "accent" : "strong"}
-        shadow="xs"
-        ring={error ? "danger" : focused ? "focus" : undefined}
+        border="thick"
+        borderTone={error ? "danger" : focused ? "focus" : "default"}
       >
         {icon ? <Icon name={icon} size="md" tone="muted" /> : null}
         <Box grow>
@@ -76,6 +74,7 @@ export function TextField({
             style={[
               {
                 color: colors.text.default,
+                fontFamily: Platform.OS === "web" ? `${fontFamilyByWeight.medium}, ${fontFamilyWeb}` : fontFamilyByWeight.medium,
                 fontSize: fontSize.base,
                 lineHeight: lineHeight.base,
                 paddingVertical: multiline ? space.md : space.none,
@@ -83,7 +82,7 @@ export function TextField({
                 textAlignVertical: multiline ? "top" : "center",
               },
               // the border of the row shows the focus; the browser's own outline would double it
-              Platform.OS === "web" ? { fontFamily: fontFamilyWeb, outlineStyle: "none" as never } : null,
+              Platform.OS === "web" ? { outlineStyle: "none" as never } : null,
             ]}
           />
         </Box>

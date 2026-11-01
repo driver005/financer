@@ -29,10 +29,10 @@ export function TabBar<K extends string>({ items, active, onChange }: Props<K>) 
           return (
             <Box key={it.key} equal>
               <Touchable onPress={() => onChange(it.key)} label={it.label} role="tab" selected={on} align="center" gap="2xs" py="xs" hit={false} control="md">
-                <Box px="lg" py="2xs" radius="full" bg={on ? "accent-soft" : undefined} align="center">
-                  <Icon name={on && it.activeIcon ? it.activeIcon : it.icon} size="lg" tone={on ? "on-accent-soft" : "muted"} />
+                <Box px="lg" py="2xs" radius="xl" bg={on ? "info-soft" : undefined} border={on ? "thick" : undefined} borderTone="info" align="center">
+                  <Icon name={on && it.activeIcon ? it.activeIcon : it.icon} size="lg" tone={on ? "on-info-soft" : "muted"} />
                 </Box>
-                <Text variant="caption" tone={on ? "default" : "muted"} numberOfLines={1}>{it.label}</Text>
+                <Text variant="caption" tone={on ? "info" : "muted"} numberOfLines={1}>{it.label}</Text>
               </Touchable>
             </Box>
           );
@@ -53,10 +53,10 @@ export function NavRail<K extends string>({ items, active, onChange, header }: P
           const on = it.key === active;
           return (
             <Touchable key={it.key} onPress={() => onChange(it.key)} label={it.label} role="tab" selected={on} align="center" gap="2xs" hit={false}>
-              <Box px="lg" py="xs" radius="full" bg={on ? "accent-soft" : undefined} align="center">
-                <Icon name={on && it.activeIcon ? it.activeIcon : it.icon} size="lg" tone={on ? "on-accent-soft" : "muted"} />
+              <Box px="lg" py="xs" radius="xl" bg={on ? "info-soft" : undefined} border={on ? "thick" : undefined} borderTone="info" align="center">
+                <Icon name={on && it.activeIcon ? it.activeIcon : it.icon} size="lg" tone={on ? "on-info-soft" : "muted"} />
               </Box>
-              <Text variant="caption" tone={on ? "default" : "muted"} numberOfLines={1}>{it.label}</Text>
+              <Text variant="caption" tone={on ? "info" : "muted"} numberOfLines={1}>{it.label}</Text>
             </Touchable>
           );
         })}
@@ -75,9 +75,9 @@ export function Sidebar<K extends string>({ items, active, onChange, title, foot
         {items.map((it) => {
           const on = it.key === active;
           return (
-            <Touchable key={it.key} onPress={() => onChange(it.key)} label={it.label} role="tab" selected={on} direction="row" align="center" gap="md" px="md" py="sm" radius="lg" bg={on ? "accent-soft" : undefined} hit={false} control="md">
-              <Icon name={on && it.activeIcon ? it.activeIcon : it.icon} size="md" tone={on ? "on-accent-soft" : "muted"} />
-              <Box grow><Text variant="label" tone={on ? "on-accent-soft" : "default"} numberOfLines={1}>{it.label}</Text></Box>
+            <Touchable key={it.key} onPress={() => onChange(it.key)} label={it.label} role="tab" selected={on} direction="row" align="center" gap="md" px="lg" py="sm" radius="2xl" bg={on ? "info-soft" : undefined} border={on ? "thick" : undefined} borderTone="info" hit={false} control="md">
+              <Icon name={on && it.activeIcon ? it.activeIcon : it.icon} size="md" tone={on ? "on-info-soft" : "muted"} />
+              <Box grow><Text variant="label" tone={on ? "on-info-soft" : "default"} numberOfLines={1}>{it.label}</Text></Box>
               {it.badge ? <Badge label={it.badge} tone="accent" solid /> : null}
             </Touchable>
           );
