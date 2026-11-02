@@ -1,6 +1,6 @@
 //! Receipt documents inside an email: PDF attachments, HTML/text attachments and the body.
 
-use mail_parser::{MessageParser, MimeHeaders};
+use mail_parser::MessageParser;
 use time::{Date, Month};
 
 use crate::text::html_to_text;
@@ -75,9 +75,9 @@ impl MailReader {
             ..Default::default()
         };
         for (n, part) in msg.attachments().enumerate() {
-            if let Some(inner) = part.message() {
+            if let Some(inner) = part.nested() {
                 if depth < MAX_DEPTH {
-                    if let Some(nested) = Self::parse_depth(inner.raw_message(), depth + 1) {
+                    if let Some(nested) = Self::parse_depth(inner.raw(), depth + 1) {
                         out.attachments.extend(nested.attachments);
                         if out.body.is_none() {
                             out.body = nested.body;
@@ -112,7 +112,7 @@ impl MailReader {
             out.attachments.push(Attachment {
                 name,
                 kind,
-                data: part.contents().to_vec(),
+                data: part.decoded().into_owned(),
             });
         }
         out.body = out.body.or_else(|| {
