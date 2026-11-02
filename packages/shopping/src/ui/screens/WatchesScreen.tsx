@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { Banner, Button, Card, EmptyState, Grid, Row, Screen, Section, Stack, Text, TextField, TopBar } from "@financer/ui";
+
 import { ShopApiError } from "../../api/client";
 import type { Watch } from "../../api/types";
 import { formatCents } from "../../logic/format";
-import { Banner, Body, Button, Card, Empty, Field, H2, Row, Screen, Title } from "../kit";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
 
@@ -24,30 +25,31 @@ export function WatchesScreen() {
   useEffect(() => void load(), [load]);
 
   return (
-    <Screen>
-      <Title>Watching</Title>
-      {error ? <Banner tone="bad">{error}</Banner> : null}
+    <Screen header={<TopBar title="Watching" actions={watches.length > 0 ? <Button label="Add" variant="ghost" size="sm" icon="plus" onPress={() => nav.push({ name: "watch" })} /> : undefined} />}>
+      {error ? <Banner tone="danger" action={<Button label="Try again" variant="outline" tone="neutral" size="sm" onPress={() => { setError(null); void load(); }} />}>{error}</Banner> : null}
       {info && !info.continuous ? (
-        <Banner tone="warn">
-          This phone only looks when you search. A watch notices a price change the next time you search for it. For alerts while you are away, connect a server.
+        <Banner tone="warning" title="This phone only looks when you search">
+          A watch notices a price change the next time you search for it. For alerts while you are away, connect a server.
         </Banner>
       ) : null}
       {watches.length === 0 ? (
-        <Empty title="Nothing watched" message="Say what you want a price alert for, and at what price." action={<Button label="Add a watch" onPress={() => nav.push({ name: "watch" })} />} />
+        <EmptyState icon="bell-plus-outline" title="Nothing watched" message="Say what you want a price alert for, and at what price." action={<Button label="Add a watch" onPress={() => nav.push({ name: "watch" })} />} />
       ) : (
-        <>
+        <Grid columns={{ base: 1, md: 2 }}>
           {watches.map((w) => (
-            <Card key={w.id}>
-              <H2>{w.name}</H2>
-              <Body small muted>
+            <Card key={w.id} gap="sm">
+              <Text variant="subheading">{w.name}</Text>
+              <Text variant="caption" tone="muted">
                 {[w.query ? `“${w.query}”` : `${w.product_ids?.length ?? 0} products`, w.max_price_cents ? `at or below ${formatCents(w.max_price_cents)}` : null, w.min_discount_pct ? `or ${w.min_discount_pct} % off` : null]
                   .filter(Boolean)
                   .join(" · ")}
-              </Body>
-              <Row>
+              </Text>
+              <Row gap="sm">
                 <Button
                   label={w.enabled === false ? "Switch on" : "Switch off"}
-                  kind="secondary"
+                  variant="soft"
+                  tone="neutral"
+                  size="sm"
                   onPress={async () => {
                     await client?.updateWatch({ ...w, id: w.id as number, enabled: w.enabled === false });
                     await load();
@@ -55,7 +57,9 @@ export function WatchesScreen() {
                 />
                 <Button
                   label="Remove"
-                  kind="ghost"
+                  variant="ghost"
+                  tone="danger"
+                  size="sm"
                   onPress={async () => {
                     await client?.deleteWatch(w.id as number);
                     await load();
@@ -64,8 +68,7 @@ export function WatchesScreen() {
               </Row>
             </Card>
           ))}
-          <Button label="Add a watch" onPress={() => nav.push({ name: "watch" })} />
-        </>
+        </Grid>
       )}
     </Screen>
   );
@@ -92,7 +95,7 @@ export function NewWatchScreen({ query: initial = "", category }: { query?: stri
         min_discount_pct: discount.trim() && pct > 0 ? pct : null,
         enabled: true,
       });
-      nav.pop();
+      nav.reset();
       nav.setTab("watches");
     } catch (e) {
       setError(e instanceof ShopApiError ? e.message : "Could not save the watch.");
@@ -100,14 +103,21 @@ export function NewWatchScreen({ query: initial = "", category }: { query?: stri
   };
 
   return (
-    <Screen>
-      <Title onBack={nav.pop}>New watch</Title>
-      {error ? <Banner tone="bad">{error}</Banner> : null}
-      <Field label="Name" value={name} onChangeText={setName} placeholder="Pixel under 500" />
-      <Field label="What to watch (a search)" value={query} onChangeText={setQuery} placeholder="pixel 9" />
-      <Field label="Tell me at or below (€)" value={target} onChangeText={setTarget} keyboardType="numeric" placeholder="500" />
-      <Field label="Or when it is this many % below its usual price" value={discount} onChangeText={setDiscount} keyboardType="numeric" />
-      <Button label="Save" onPress={save} disabled={!query.trim()} />
+    <Screen header={<TopBar title="New watch" onBack={nav.pop} />} maxW="normal">
+      {error ? <Banner tone="danger">{error}</Banner> : null}
+      <Section title="What to watch" description="A search: every product it finds is watched." card>
+        <Stack gap="md">
+          <TextField label="Name" value={name} onChangeText={setName} placeholder="Pixel under 500" capitalize />
+          <TextField label="Search" value={query} onChangeText={setQuery} placeholder="pixel 9" />
+        </Stack>
+      </Section>
+      <Section title="When to tell me" card>
+        <Stack gap="md">
+          <TextField label="At or below (€)" value={target} onChangeText={setTarget} keyboardType="numeric" placeholder="500" />
+          <TextField label="Or this many % below its usual price" value={discount} onChangeText={setDiscount} keyboardType="numeric" />
+        </Stack>
+      </Section>
+      <Row><Button label="Save watch" size="lg" icon="bell-plus-outline" onPress={() => void save()} disabled={!query.trim()} /></Row>
     </Screen>
   );
 }

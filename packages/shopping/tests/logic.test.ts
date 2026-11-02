@@ -4,8 +4,9 @@ import { describe, it } from "node:test";
 import type { CategorySchema, CriterionDef, JobView, Notification, ProgressState, SearchResponse } from "../src/api/types";
 import { planDealNotices } from "../src/logic/dealNotifications";
 import { ago, dealLine, formatCents, planTerms, safeUrl, savingText } from "../src/logic/format";
+import { ACTION_PRESS, NotifeeSurface, STOP_ACTION, registerIndexService, type NotifeeEvent, type NotifeeLike } from "../src/logic/notifeeSurface";
 import { followJob, progressModel, textBar, worthShowing, type ProgressModel, type ProgressSurface } from "../src/logic/progress";
-import { addAlias, addAttribute, addCriterion, formulaProblem, newCategory, removeCriterion, slugKey, uniqueKey } from "../src/logic/schemaEdit";
+import { addAlias, removeAlias, addAttribute, addCriterion, formulaProblem, newCategory, removeCriterion, slugKey, uniqueKey } from "../src/logic/schemaEdit";
 import { chipsFor, indexRequestFor, nextStep } from "../src/logic/searchPlan";
 import { SOURCES_EXAMPLE, checkSources } from "../src/logic/sources";
 import { currentLevel, groups, levelOf, presetsFor, setLevel, weightFor } from "../src/logic/weights";
@@ -92,8 +93,8 @@ describe("progress notification", () => {
     assert.equal(textBar(0), "▱▱▱▱▱▱▱▱▱▱ 0 %");
     assert.equal(textBar(140), "▰▰▰▰▰▰▰▰▰▰ 100 %");
     const m = progressModel("pixel 9", running({}));
-    assert.equal(m.title, 'Indexing "pixel 9"');
-    assert.equal(m.body, "Reading Shop · 2/8 pages · 5 products");
+    assert.equal(m.title, "Reading shops");
+    assert.equal(m.body, "Reading Shop · page 2 of 8");
     assert.ok(m.ongoing && !m.finished && !m.indeterminate);
     assert.ok(progressModel("x", running({ total: 0, done: 0, percent: 0 })).indeterminate);
     const done = progressModel("pixel 9", running({ phase: "done", percent: 100, products: 12 }));
@@ -272,5 +273,77 @@ describe("sources editor", () => {
     assert.ok(problems.some((m) => /kind must be/.test(m)));
     assert.deepEqual(checkSources("{nope"), { ok: false, problems: [`Not valid JSON: ${(() => { try { JSON.parse("{nope"); return ""; } catch (e) { return (e as Error).message; } })()}`] });
     assert.deepEqual(checkSources("{}"), { ok: false, problems: ["The sources must be a list: [ { ... }, { ... } ]"] });
+  });
+});
+
+describe("the Android progress notification", () => {
+  type Shown = { id: string; title: string; body: string; android: Record<string, unknown> };
+  const fake = () => {
+    const shown: Shown[] = [];
+    const handlers: { fg: ((e: NotifeeEvent) => void)[]; bg: ((e: NotifeeEvent) => Promise<void>)[] } = { fg: [], bg: [] };
+    const n: NotifeeLike = {
+      createChannel: async (c) => c.id,
+      displayNotification: async (x) => (shown.push(x as Shown), x.id),
+      registerForegroundService: () => {},
+      stopForegroundService: async () => {},
+      cancelNotification: async () => {},
+      requestPermission: async () => ({}),
+      onForegroundEvent: (f) => (handlers.fg.push(f), () => {}),
+      onBackgroundEvent: (f) => void handlers.bg.push(f),
+    };
+    return { n, shown, handlers };
+  };
+  const state = (over: Partial<ProgressState>): ProgressState =>
+    ({ phase: "fetching", message: "Local Shop", done: 14, total: 22, percent: 62, products: 5, ...over }) as ProgressState;
+
+  it("shows the title, the shop and page count, a real bar and a Stop button", async () => {
+    const { n, shown } = fake();
+    const surface = new NotifeeSurface(n, () => {});
+    await surface.show(progressModel("pixel 9", state({})));
+    assert.equal(shown[0].title, "Reading shops");
+    assert.equal(shown[0].body, "Local Shop · page 14 of 22");
+    assert.deepEqual(shown[0].android.progress, { max: 100, current: 62, indeterminate: false });
+    assert.equal(shown[0].android.ongoing, true);
+    assert.deepEqual(shown[0].android.actions, [{ title: "Stop", pressAction: { id: STOP_ACTION } }]);
+  });
+
+  it("has no Stop button when nothing can stop the run", async () => {
+    const { n, shown } = fake();
+    await new NotifeeSurface(n).show(progressModel("q", state({})));
+    assert.deepEqual(shown[0].android.actions, []);
+  });
+
+  it("stops the run when Stop is pressed, in the front or in the background, and not after it ended", async () => {
+    const { n, handlers } = fake();
+    let stops = 0;
+    registerIndexService(n);
+    const surface = new NotifeeSurface(n, () => void stops++);
+    const press = (id: string, type = ACTION_PRESS): NotifeeEvent => ({ type, detail: { pressAction: { id } } });
+    handlers.fg[0](press(STOP_ACTION));
+    await handlers.bg[0](press(STOP_ACTION));
+    handlers.fg[0](press("default"));
+    handlers.fg[0](press(STOP_ACTION, 1));
+    assert.equal(stops, 2);
+    await surface.finish(progressModel("q", state({ phase: "done", percent: 100 })));
+    handlers.fg[0](press(STOP_ACTION));
+    assert.equal(stops, 2);
+  });
+
+  it("ends with a plain, dismissable notification", async () => {
+    const { n, shown } = fake();
+    await new NotifeeSurface(n, () => {}).finish(progressModel("pixel 9", state({ phase: "done", percent: 100, products: 12 })));
+    assert.equal(shown[0].title, "Search index ready");
+    assert.equal(shown[0].android.ongoing, false);
+  });
+});
+
+describe("names shops use for an attribute", () => {
+  const schema = { id: "x", name: "X", attributes: [{ key: "battery", label: "Battery", kind: "number", aliases: ["Akku"] }] } as unknown as CategorySchema;
+  it("adds a name once and takes it off again, whatever the case", () => {
+    const added = addAlias(schema, "battery", "Batterie");
+    assert.deepEqual(added.attributes?.[0].aliases, ["Akku", "Batterie"]);
+    assert.deepEqual(addAlias(added, "battery", "akku").attributes?.[0].aliases, ["Akku", "Batterie"]);
+    assert.deepEqual(removeAlias(added, "battery", "AKKU").attributes?.[0].aliases, ["Batterie"]);
+    assert.deepEqual(removeAlias(schema, "other", "Akku").attributes?.[0].aliases, ["Akku"]);
   });
 });

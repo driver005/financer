@@ -54,8 +54,8 @@ export function progressModel(query: string, s: ProgressState): ProgressModel {
     default:
       return {
         ...base,
-        title: `Indexing "${query}"`,
-        body: s.total > 0 ? `${s.message} · ${s.done}/${s.total} pages · ${s.products} products` : s.message,
+        title: "Reading shops",
+        body: s.total > 0 ? `${s.message} · page ${s.done} of ${s.total}` : s.message,
         indeterminate: s.total === 0,
       };
   }

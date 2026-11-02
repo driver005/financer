@@ -86,7 +86,7 @@ export function createHost(opts: HostOptions = {}): ModuleHost {
     secrets: secretStorage(),
     sharedServer: opts.sharedServer,
     startEmbedded: backend ? (c: EmbeddedStart) => backend.start(c) : null,
-    progress: () => createProgressSurface(),
+    progress: (_query, onStop) => createProgressSurface(onStop),
     dataDir: documentDir,
     onExit: opts.onExit,
     notices: {

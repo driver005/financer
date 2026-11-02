@@ -41,7 +41,7 @@ SHOP_MOD  := packages/shopping
 SHOP_BIND ?= 127.0.0.1:8090
 SHOP_STAMP := $(SHOP_APP)/node_modules/.package-lock.json
 
-.PHONY: shop-setup shop-server shop-app shop-web shop-test help doctor setup token info check-port stop dev dev-postgres server server-watch web app android ios \
+.PHONY: ui-test ui-catalog ui-catalog-export shop-setup shop-server shop-app shop-web shop-test help doctor setup token info check-port stop dev dev-postgres server server-watch web app android ios \
         web-build serve db-up db-down db-reset dev-reset gen-api test lint fmt check clean
 
 help: ## Show this list
@@ -128,6 +128,18 @@ shop-test: $(SHOP_STAMP) ## Everything of the shopping assistant: Rust crates, m
 	cargo test -p financer-server --features shop
 	cd $(SHOP_MOD) && npm test
 	cd $(SHOP_APP) && npm run typecheck
+
+# ---- the UI package and its catalog (docs/UI.md) -----------------------------------------------------
+
+ui-test: ## UI package: token tests, contrast tests and the guard against raw spacing/colours
+	cd packages/ui && npm ci && npm test
+	cd $(SHOP_MOD) && npm ci && npm test
+
+ui-catalog: ## The catalog of every UI element in the browser (phone, tablet, web; light and dark)
+	cd apps/catalog && npm ci && npx expo start --web
+
+ui-catalog-export: ## Static web build of the catalog into apps/catalog/dist
+	cd apps/catalog && npm ci && npm run typecheck && npx expo export --platform web --output-dir dist
 
 dev: check-port $(DEV_DIR)/token $(DEV_DIR)/financer.toml $(NPM_STAMP) ## Server (restarts on changes) + web app together; Ctrl-C stops both
 	@$(MAKE) --no-print-directory info

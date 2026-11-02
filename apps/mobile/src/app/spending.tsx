@@ -5,7 +5,6 @@ import { useFocusEffect, useRouter } from "expo-router";
 
 import type { Split, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
-import { BarChart } from "@/components/Charts";
 import { CategorizationTools } from "@/components/CategorizationTools";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
@@ -13,11 +12,14 @@ import { RecategorizeSheet } from "@/components/RecategorizeSheet";
 import { ListGroup, SectionHeader, StatusPill } from "@/components/rows";
 import { SkeletonList } from "@/components/Skeleton";
 import { TransactionRow } from "@/components/TransactionRow";
-import { Card, HeaderAction, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { Chip } from "@/components/kit";
+import { HeroPanel, PanelBars, PanelCaption, PanelChip, PanelFigure } from "@/components/panel";
+import { HeaderAction, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
 import { peakText, spendingTrend, trendSummary } from "@/charts";
 import { dayHeading, spokenMoney } from "@/format";
 import { pickFileBytes } from "@/native/files";
 import { localIsoDate } from "@/period";
+import { TX_FILTERS, dayTotal, emptyFilterText, filterTx, type TxFilter } from "@/spendingView";
 import { space, typography, usePalette } from "@/theme";
 
 const TREND_DAYS = 14;
@@ -45,6 +47,7 @@ export default function Spending() {
   const [message, setMessage] = useState<string | null>(null);
   const [splits, setSplits] = useState<Split[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
+  const [filter, setFilter] = useState<TxFilter>("all");
 
   const load = useCallback(async () => {
     if (!api) return;
@@ -85,7 +88,7 @@ export default function Spending() {
   }, [api]);
 
   const today = localIsoDate();
-  const groups = useMemo(() => groupByDay(items), [items]);
+  const groups = useMemo(() => groupByDay(filterTx(items, filter)), [items, filter]);
   const splitIds = useMemo(() => new Set(splits.map((s) => s.transaction_id)), [splits]);
   const trend = useMemo(() => spendingTrend(items, today, TREND_DAYS), [items, today]);
 
@@ -98,23 +101,27 @@ export default function Spending() {
   const header = (
     <View>
       {items.length > 0 ? (
-        <Card>
-          <RNText style={[typography.overline, { color: p.muted }]}>Spent, last {TREND_DAYS} days</RNText>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, flexWrap: "wrap", marginTop: space.xs }}>
-            <Money cents={trend.total} variant="display" tone="plain" style={{ fontSize: 36, lineHeight: 42 }} label={`Spent ${spokenMoney(trend.total)} in the last ${TREND_DAYS} days`} />
-            {delta !== null && delta !== 0 ? (
-              <StatusPill
-                tone={delta > 0 ? "warn" : "good"}
-                icon={delta > 0 ? "trending-up" : "trending-down"}
-                label={`${Math.abs(delta)} % ${delta > 0 ? "more" : "less"}`}
-                accessibilityLabel={`${Math.abs(delta)} percent ${delta > 0 ? "more" : "less"} than the ${TREND_DAYS} days before`}
-              />
-            ) : null}
+        <>
+          <HeroPanel
+            label={`Spent, last ${TREND_DAYS} days`}
+            chip={
+              delta !== null && delta !== 0 ? (
+                <PanelChip icon={delta > 0 ? "trending-up" : "trending-down"} text={`${Math.abs(delta)} % ${delta > 0 ? "more" : "less"}`} />
+              ) : null
+            }
+          >
+            <PanelFigure cents={trend.total} label={`Spent ${spokenMoney(trend.total)} in the last ${TREND_DAYS} days`} />
+            <PanelBars values={trend.series} highlight={trend.peak} summary={`${summary}${peak ? ` ${peak}.` : ""}`} />
+            <PanelCaption>{`${summary}${peak ? ` ${peak}.` : ""}`}</PanelCaption>
+          </HeroPanel>
+          <View style={{ flexDirection: "row", gap: space.sm, marginBottom: space.md }} accessibilityRole="radiogroup">
+            {TX_FILTERS.map((f) => (
+              <Chip key={f.value} selected={filter === f.value} onPress={() => setFilter(f.value)} accessibilityLabel={`Show ${f.label.toLowerCase()}`}>
+                {f.label}
+              </Chip>
+            ))}
           </View>
-          <View style={{ marginTop: space.md }}>
-            <BarChart values={trend.series} highlight={trend.peak} summary={`${summary}${peak ? ` ${peak}.` : ""}`} showSummary />
-          </View>
-        </Card>
+        </>
       ) : null}
 
       {message ? (
@@ -168,6 +175,8 @@ export default function Spending() {
             ListEmptyComponent={
               !fetched ? (
                 <SkeletonList rows={5} />
+              ) : items.length > 0 ? (
+                <RNText style={[typography.body, { color: p.muted, paddingVertical: space.lg }]}>{emptyFilterText(filter)}</RNText>
               ) : (
                 <EmptyState
                   title="No transactions yet"
@@ -180,7 +189,7 @@ export default function Spending() {
             }
             renderItem={({ item: g }) => (
               <View>
-                <SectionHeader title={dayHeading(g.date, today)} />
+                <SectionHeader title={dayHeading(g.date, today)} action={<Money cents={dayTotal(g.items)} variant="caption" signed tone="muted" />} />
                 <ListGroup inset={68}>
                   {g.items.map((t) => (
                     <TransactionRow key={t.id} item={t} split={splitIds.has(t.id)} onPress={() => setSelected(t)} />

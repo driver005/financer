@@ -78,6 +78,52 @@ check on every push.
 - By hand: Actions tab, **Release builds**, choose `android-apk` or `ios-simulator` to build just
   those (both variants each).
 
+## The shopping assistant in a release
+
+The shopping assistant ([SHOP.md](SHOP.md)) is a second app. Its files are built by extra jobs
+(`shop-web`, `desktop-shop`, `docker-shop`, `android-apk-shop`, `ios-simulator-shop`) in two
+flavours, each next to the finance files above:
+
+| | **shop**: the assistant on its own | **bundle**: the finance app with the assistant inside |
+|---|---|---|
+| Server | `financer-shop-desktop-<platform>` bundles, Docker image `ghcr.io/<owner>/financer-shop-server` | `financer-bundle-desktop-<platform>` bundles, Docker image `ghcr.io/<owner>/financer-bundle-server` |
+| Web | `financer-shop-web.zip` (served by the shop server bundle) | inside the bundle's `web` folder |
+| Android | `financer-shopping-client-android.apk`, `financer-shopping-compact-android.apk` | `financer-bundle-client-android.apk`, `financer-bundle-compact-android.apk` |
+| iOS Simulator | `financer-shopping-client-ios-simulator.zip`, `...-compact-...` | `financer-bundle-client-ios-simulator.zip`, `...-compact-...` |
+
+"client" talks to a server; "compact" has the Rust backend inside the phone, where the assistant
+searches only when you press Search (a server searches all the time).
+
+- **Nothing here can hold back a release.** The tag release still needs only the finance jobs; the
+  shopping files are attached when they were built (the `release` job has `!cancelled()` and checks
+  only the finance jobs). A broken shop job costs you its files, not the release.
+- **How the flavours are built:** the standalone server is `cargo build -p financer-shop-server`;
+  the bundled one is `cargo build -p financer-server --features shop` (and the Docker build argument
+  `FEATURES=shop`). The bundled apps are `apps/mobile` built with `EXPO_PUBLIC_SHOPPING=1` (without it
+  the shop code is not in the app at all); the standalone ones are `apps/shopping`.
+- **Version stamping:** `apps/mobile/scripts/set-version.mjs` takes `--dir <app folder>`, so
+  `apps/shopping` gets the same version and build number rules; the Rust version applies to all crates.
+- **Desktop bundles** are assembled by `.github/scripts/assemble-shop-desktop.sh` (tested by
+  `test-assemble-shop-desktop.sh` in CI, and the standalone one was run locally: start script, token,
+  web app, API). The shop bundles contain `shop-sources.example.json`; you list the shops to read in
+  `shop-sources.json` next to the start script.
+- **Notifee:** the standalone Android app includes `@notifee/react-native` and a config plugin
+  (`packages/shopping/plugins/withIndexService.js`) that declares its foreground service; the bundled
+  finance app does not include Notifee, so its index-progress notification is a text bar. To change
+  that, install `@notifee/react-native@9.1.8` in `apps/mobile` and add the same plugin to its `app.json`.
+- By hand: Actions tab, **Release builds**, `shop` builds only these jobs.
+- `native.yml` also builds the standalone shopping app with the on-phone backend for Android and iOS on
+  every push that touches the shop (`android-shop-app`, `ios-shop-app`); it checks that `ShopBackend` is
+  generated, that the app compiles against it, and that the foreground service is in the manifest.
+
+**Checked, and not.** The workflow files parse as YAML, the desktop assembly was tested, the
+standalone shop bundle was assembled and started locally (`/health`, token, web app), the manifest
+plugin was run with `expo prebuild` and put the foreground service and permissions into the generated
+`AndroidManifest.xml`, and the shop web builds export. **None of the new jobs has run on GitHub**: not
+the Docker images (no Docker daemon was available here), not the Android/iOS builds, not the signed-APK
+path, not the Windows/macOS bundles. Expect a round of fixes on the first run, like the earlier
+release jobs needed.
+
 ## What you get
 
 | Output | Needs | Notes |

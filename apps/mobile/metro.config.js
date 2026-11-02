@@ -9,6 +9,10 @@ const config = getDefaultConfig(__dirname);
 // THIS app's copies (one React, one native module registry).
 config.watchFolders = [...(config.watchFolders ?? []), path.resolve(__dirname, "../../packages")];
 config.resolver.nodeModulesPaths = [path.resolve(__dirname, "node_modules")];
+config.resolver.extraNodeModules = {
+  ...(config.resolver.extraNodeModules ?? {}),
+  "@financer/ui": path.resolve(__dirname, "../../packages/ui"),
+};
 
 module.exports = withUniwindConfig(config, {
   cssEntryFile: "./src/global.css",

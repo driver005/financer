@@ -8,6 +8,12 @@ const config = getDefaultConfig(__dirname);
 const shared = path.resolve(__dirname, "../../packages");
 
 config.watchFolders = [...(config.watchFolders ?? []), shared];
+// the design system, by its package name
+config.resolver.extraNodeModules = {
+  ...(config.resolver.extraNodeModules ?? {}),
+  "@financer/ui": path.resolve(shared, "ui"),
+  "@financer/shopping": path.resolve(shared, "shopping"),
+};
 config.resolver.nodeModulesPaths = [path.resolve(__dirname, "node_modules")];
 // a second copy of React in the shared package would break hooks
 config.resolver.disableHierarchicalLookup = false;

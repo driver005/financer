@@ -32,7 +32,7 @@ export type ModuleHost = {
   /** Start the Rust shopping backend of this build; absent or null when the build has none. */
   startEmbedded?: ((config: EmbeddedStart) => Promise<ShopBackendHandle>) | null;
   /** Where the index run's progress is shown (a notification). */
-  progress: (query: string) => ProgressSurface;
+  progress: (query: string, onStop?: () => void) => ProgressSurface;
   notices: {
     requestPermission(): Promise<boolean>;
     present(notice: LocalNotice): Promise<void>;

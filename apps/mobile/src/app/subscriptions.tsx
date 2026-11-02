@@ -5,6 +5,7 @@ import { useFocusEffect } from "expo-router";
 import type { Subscriptions } from "@/api/client";
 import { useApi } from "@/api/config";
 import { EmptyState, FieldMessage, Segmented } from "@/components/settings/SettingsKit";
+import { HeroPanel, PanelCaption, PanelChip, PanelFigure } from "@/components/panel";
 import { Badge } from "@/components/Watchdog";
 import { Body, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
@@ -81,13 +82,10 @@ export default function SubscriptionsScreen() {
               body="A payment counts once it has been booked three times on a steady rhythm. Import more history from your bank to find more."
             />
           ) : (
-            <Card>
-              <Text style={{ color: c.muted, fontSize: 13, fontWeight: "600" }}>Running subscriptions</Text>
-              <Text style={{ color: c.text, fontSize: 26, fontWeight: "800", marginTop: 4 }}>{formatCents(data.monthly_total_cents)} / month</Text>
-              <Text style={{ color: c.muted, fontSize: 13, marginTop: 2 }}>
-                {data.active.length} recurring payment{data.active.length === 1 ? "" : "s"}, yearly and quarterly ones averaged per month.
-              </Text>
-            </Card>
+            <HeroPanel label="Running subscriptions" chip={<PanelChip text={`${data.active.length} active`} />}>
+              <PanelFigure cents={data.monthly_total_cents} label={`Running subscriptions: ${formatCents(data.monthly_total_cents)} per month`} />
+              <PanelCaption>per month · yearly and quarterly payments averaged</PanelCaption>
+            </HeroPanel>
           )}
 
           {data.price_hikes.length > 0 ? (

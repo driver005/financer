@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { AA_LARGE, AA_TEXT, MIN_TOUCH, blend, contrast, luminance, parseHex } from "../src/a11y";
-import { palette, type Palette } from "../src/colors";
+import { chartColors, palette, type Palette } from "../src/colors";
 import { motion, radius, space, tabular, typography } from "../src/tokens";
 
 describe("contrast helpers", () => {
@@ -95,4 +95,21 @@ describe("tokens", () => {
     for (const ms of Object.values(motion)) assert.ok(ms <= 1000);
     assert.equal(MIN_TOUCH, 44);
   });
+});
+
+describe("chart colours", () => {
+  for (const scheme of ["light", "dark"] as const) {
+    it(`${scheme}: five distinct colours, each at least 3:1 on every surface`, () => {
+      const p = palette[scheme];
+      const colours = chartColors(p);
+      assert.equal(colours.length, 5);
+      assert.equal(new Set(colours).size, 5);
+      for (const c of colours) {
+        for (const surface of SURFACES) {
+          const ratio = contrast(c, p[surface]);
+          assert.ok(ratio >= 3, `${c} on ${surface} (${scheme}): ${ratio.toFixed(2)}`);
+        }
+      }
+    });
+  }
 });

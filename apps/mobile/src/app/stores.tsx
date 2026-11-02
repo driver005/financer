@@ -9,7 +9,9 @@ import { RecategorizeSheet } from "@/components/RecategorizeSheet";
 import { TransactionRow } from "@/components/TransactionRow";
 import { SegmentedButtons } from "@/components/kit";
 import { Badge } from "@/components/Watchdog";
+import { HeroPanel, PanelCaption, PanelChip, PanelFigure } from "@/components/panel";
 import { Bar, Body, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
+import { chartColors, usePalette } from "@/theme";
 import { formatCents } from "@/format";
 import { localIsoDate, periodLabel } from "@/period";
 import {
@@ -36,6 +38,8 @@ type Visits = { loading: boolean; items: Transaction[]; error?: string };
 export default function Stores() {
   const { api, loaded } = useApi();
   const c = useColors();
+  const palette = usePalette();
+  const hues = chartColors(palette);
   const [view, setView] = useState<StoresView>("current");
   const [data, setData] = useState<StoreSpending | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,21 +140,11 @@ export default function Stores() {
 
           {data ? (
             <>
-              <Card>
-                <RNText style={{ color: c.muted, fontSize: 13, fontWeight: "600" }}>
-                  {periodLabel({ start: data.start, end: data.end })}
-                </RNText>
-                <RNText
-                  accessibilityLabel={`Spent in stores: ${formatCents(data.total_cents)}`}
-                  style={{ color: c.text, fontSize: 30, fontWeight: "900", marginTop: 4 }}
-                >
-                  {formatCents(data.total_cents)}
-                </RNText>
-                <RNText style={{ color: c.muted, fontSize: 13, marginTop: 2 }}>{totalText(data)}</RNText>
-                {data.previous_total_cents > 0 || data.total_cents > 0 ? (
-                  <RNText style={{ color: c.muted, fontSize: 12, marginTop: 6 }}>Compared with {compareText(data)}</RNText>
-                ) : null}
-              </Card>
+              <HeroPanel label="Spent in stores" chip={<PanelChip text={periodLabel({ start: data.start, end: data.end })} />}>
+                <PanelFigure cents={data.total_cents} label={`Spent in stores: ${formatCents(data.total_cents)}`} />
+                <PanelCaption>{totalText(data)}</PanelCaption>
+                {data.previous_total_cents > 0 || data.total_cents > 0 ? <PanelCaption>Compared with {compareText(data)}</PanelCaption> : null}
+              </HeroPanel>
 
               {rows.length === 0 ? (
                 <Card>
@@ -161,7 +155,7 @@ export default function Stores() {
                 </Card>
               ) : null}
 
-              {rows.map((row) => {
+              {rows.map((row, index) => {
                 const isOpen = open === row.chain;
                 const v = visits[row.chain];
                 const last = lastVisitText(row.last_visit, today);
@@ -180,7 +174,7 @@ export default function Stores() {
                         <RNText style={{ color: c.text, fontSize: 18, fontWeight: "800" }}>{formatCents(row.total_cents)}</RNText>
                         <MaterialCommunityIcons name={isOpen ? "chevron-up" : "chevron-down"} size={22} color={c.muted} />
                       </View>
-                      <Bar progress={barFraction(row, rows)} height={12} />
+                      <Bar progress={barFraction(row, rows)} height={10} color={hues[index % hues.length]} />
                       <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
                         <RNText style={{ color: c.text, fontWeight: "800" }}>{formatPermille(row.share_permille)}</RNText>
                         <RNText style={{ color: c.muted }}>
@@ -193,7 +187,7 @@ export default function Stores() {
                     </Pressable>
 
                     {isOpen ? (
-                      <View style={{ marginTop: 12, borderTopWidth: 2, borderTopColor: c.border, paddingTop: 8 }}>
+                      <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 8 }}>
                         {v?.loading && v.items.length === 0 ? <Loading /> : null}
                         {v?.error ? <Body muted>{v.error}</Body> : null}
                         {v && !v.loading && !v.error && v.items.length === 0 ? <Body muted>No bookings in this range.</Body> : null}
