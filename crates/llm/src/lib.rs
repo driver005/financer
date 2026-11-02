@@ -133,7 +133,9 @@ impl GenaiProvider {
             );
             builder = builder.with_service_target_resolver(target);
         }
-        let client = builder.build();
+        let client = builder
+            .build()
+            .map_err(|e| LlmError::Request(e.to_string()))?;
         let model = match settings.model.trim() {
             "" => settings.provider.default_model().to_string(),
             m => m.to_string(),
