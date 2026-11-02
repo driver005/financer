@@ -11,7 +11,7 @@ export { contrast } from "./responsive/contrast";
 export { formatCents, formatPercent } from "./format";
 
 export { Box, Row, Spacer, Stack, type BoxProps } from "./primitives/Box";
-export type { BgToken, Dim, MaxWidth } from "./primitives/box";
+export type { BgToken, Dim, MaxWidth } from "./primitives/boxStyle";
 export { Text, type TextProps, type TextTone } from "./primitives/Text";
 export { Icon, type IconName } from "./primitives/Icon";
 export { Touchable } from "./primitives/Touchable";

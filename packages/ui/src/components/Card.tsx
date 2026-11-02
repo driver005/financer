@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import type { Tone } from "../constants/colors";
 import { Box } from "../primitives/Box";
-import type { BoxProps } from "../primitives/box";
+import type { BoxProps } from "../primitives/boxStyle";
 import { Touchable } from "../primitives/Touchable";
 
 export type CardProps = {

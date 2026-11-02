@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { MaxWidth } from "../primitives/box";
+import type { MaxWidth } from "../primitives/boxStyle";
 import { Box } from "../primitives/Box";
 import { useTheme } from "../theme/ThemeProvider";
 

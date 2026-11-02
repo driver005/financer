@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Image } from "react-native";
 
 import { radius as radii, type Radius } from "../constants/radius";
-import { type Dim, dimValue } from "../primitives/box";
+import { type Dim, dimValue } from "../primitives/boxStyle";
 import { Box } from "../primitives/Box";
 import { Icon, type IconName } from "../primitives/Icon";
 

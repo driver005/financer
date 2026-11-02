@@ -1,6 +1,6 @@
 import type { Tone } from "../constants/colors";
 import { Icon, type IconName } from "../primitives/Icon";
-import type { BgToken } from "../primitives/box";
+import type { BgToken } from "../primitives/boxStyle";
 import { Text, type TextTone } from "../primitives/Text";
 import { Touchable } from "../primitives/Touchable";
 import { Spinner } from "./Spinner";

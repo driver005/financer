@@ -5,7 +5,7 @@ import { state } from "../constants/misc";
 import { size } from "../constants/sizes";
 import { useViewportWidth } from "../responsive/Viewport";
 import { useTheme } from "../theme/ThemeProvider";
-import { type BoxProps, boxStyle } from "./box";
+import { type BoxProps, boxStyle } from "./boxStyle";
 
 type Props = BoxProps & {
   children: ReactNode | ((s: { pressed: boolean; hovered: boolean }) => ReactNode);

@@ -3,9 +3,9 @@ import { View, type ViewProps } from "react-native";
 
 import { useViewportWidth } from "../responsive/Viewport";
 import { useTheme } from "../theme/ThemeProvider";
-import { type BoxProps, boxStyle } from "./box";
+import { type BoxProps, boxStyle } from "./boxStyle";
 
-export type { BoxProps } from "./box";
+export type { BoxProps } from "./boxStyle";
 
 type Accessibility = Pick<ViewProps, "accessibilityRole" | "accessibilityLabel" | "accessibilityState" | "accessibilityValue" | "accessible" | "testID" | "pointerEvents" | "onLayout">;
 

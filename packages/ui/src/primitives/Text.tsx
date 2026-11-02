@@ -4,7 +4,7 @@ import { Platform, Text as RNText, type TextStyle } from "react-native";
 import type { Tone } from "../constants/colors";
 import { fontFamilyWeb, fontSize, fontWeight, letterSpacing, lineHeight, textVariants, type TextVariant } from "../constants/typography";
 import { useTheme } from "../theme/ThemeProvider";
-import type { Mutable } from "./box";
+import type { Mutable } from "./boxStyle";
 
 /** Text colours: the plain roles, a tone on the surface, or the text that goes on a tone's solid or soft fill. */
 export type TextTone = "default" | "muted" | "subtle" | "inverse" | Tone | `on-${Tone}-solid` | `on-${Tone}-soft`;
