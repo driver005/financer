@@ -1,23 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
-import { Text } from "react-native";
+
+import { Badge, Banner, Box, Button, Card, Chip, ChipRow, Divider, EmptyState, Grid, ListItem, ProductCard, Screen, Section, TopBar } from "@financer/ui";
 
 import { ShopApiError } from "../../api/client";
 import type { DealItem, Notification } from "../../api/types";
-import { dealLine, formatPrice, verdictText } from "../../logic/format";
-import { Banner, Body, Button, Card, Chip, Empty, H2, HeroPanel, PanelCaption, PanelChip, PanelValue, Row, Screen, Title } from "../kit";
+import { dealLine } from "../../logic/format";
+import { dealFilters, filterDeals, type DealFilter } from "../../logic/view";
 import { openLink } from "../links";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
-import { usePalette, type } from "../theme";
 
 export function DealsScreen() {
   const { client } = useShop();
   const nav = useNav();
-  const p = usePalette();
   const [deals, setDeals] = useState<DealItem[]>([]);
   const [messages, setMessages] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<DealFilter>("all");
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -40,45 +40,62 @@ export function DealsScreen() {
     }
   };
 
+  const filters = dealFilters(deals);
+  const shown = filterDeals(deals, filters.some((f) => f.key === filter) ? filter : "all");
+
   return (
-    <Screen>
-      <Title>Deals</Title>
-      {error ? <Banner tone="bad">{error}</Banner> : null}
-      <HeroPanel label="Cheap right now" chip={unread > 0 ? <PanelChip text={`${unread} new`} /> : null}>
-        <PanelValue value={`${deals.length}`} suffix={deals.length === 1 ? "deal" : "deals"} />
-        <PanelCaption>Products clearly below their usual price.</PanelCaption>
-      </HeroPanel>
-      <Row between>
-        <H2>{unread > 0 ? `Messages (${unread} new)` : "Messages"}</H2>
-        {unread > 0 ? <Button label="Mark read" kind="ghost" onPress={markRead} /> : null}
-      </Row>
-      {messages.length === 0 ? (
-        <Empty title="No messages yet" message="Watch a search or a product and you are told here when its price drops." />
-      ) : (
-        messages.slice(0, 10).map((m) => (
-          <Card key={m.id} onPress={() => (m.event.product_id ? nav.push({ name: "product", id: m.event.product_id }) : undefined)}>
-            <Row between>
-              <Text style={[type.body, { color: p.text, flex: 1, fontWeight: m.read ? "400" : "700" }]}>{m.message}</Text>
-              {!m.read ? <Chip label="New" tone="good" /> : null}
-            </Row>
-            <Body small muted>{`${m.event.watch_name} · ${verdictText(m.event.verdict)}`}</Body>
-            {m.event.url ? <Button label="Open in shop" kind="ghost" onPress={() => void openLink(m.event.url)} /> : null}
+    <Screen header={<TopBar title="Deals" actions={<Button label="Refresh" variant="ghost" size="sm" icon="refresh" onPress={() => void load()} />} />}>
+      {error ? <Banner tone="danger" action={<Button label="Try again" variant="outline" tone="neutral" size="sm" onPress={() => { setError(null); void load(); }} />}>{error}</Banner> : null}
+      <Section title="Messages" aside={`${unread} new`} action={unread > 0 ? { label: "Mark read", onPress: () => void markRead() } : undefined}>
+        {messages.length === 0 ? (
+          <EmptyState card icon="bell-outline" title="No messages yet" message="Watch a search or a product and you are told here when its price drops." action={<Button label="Start watching" variant="soft" icon="bell-plus-outline" onPress={() => nav.push({ name: "watch" })} />} />
+        ) : (
+          <Card padded={false}>
+            <Box px="lg">
+              {messages.slice(0, 10).map((m, i) => (
+                <Box key={m.id}>
+                  {i > 0 ? <Divider /> : null}
+                  <ListItem
+                    title={m.message}
+                    subtitle={m.event.watch_name}
+                    icon={m.read ? "bell-outline" : "bell-ring"}
+                    trailing={m.read ? undefined : <Badge label="New" tone="success" solid />}
+                    onPress={() => (m.event.product_id ? nav.push({ name: "product", id: m.event.product_id }) : m.event.url ? void openLink(m.event.url) : undefined)}
+                  />
+                </Box>
+              ))}
+            </Box>
           </Card>
-        ))
-      )}
-      <H2>Cheap right now</H2>
-      {deals.length === 0 ? (
-        <Body muted>No product is clearly below its usual price at the moment.</Body>
-      ) : (
-        deals.map((d) => (
-          <Card key={d.product.id} onPress={() => nav.push({ name: "product", id: d.product.id })}>
-            <Text style={[type.heading, { color: p.text }]}>{d.product.title}</Text>
-            <Text style={[type.heading, { color: p.accent }]}>{formatPrice(d.deal.current_cents)}</Text>
-            <Body small muted>{dealLine(d.deal)}</Body>
-          </Card>
-        ))
-      )}
-      <Button label="Refresh" kind="secondary" onPress={load} />
+        )}
+      </Section>
+      <Section title="Cheap right now" tag={deals.length > 0 ? { label: `${deals.length} live ${deals.length === 1 ? "deal" : "deals"}` } : undefined} description="Clearly below the price we usually saw">
+        {deals.length > 0 && filters.length > 1 ? (
+          <ChipRow>
+            {filters.map((f) => <Chip key={f.key} label={f.label} selected={filter === f.key} onPress={() => setFilter(f.key)} />)}
+          </ChipRow>
+        ) : null}
+        {deals.length === 0 ? (
+          <EmptyState icon="tag-off-outline" title="No clear deals" message="No product is clearly below its usual price at the moment." />
+        ) : (
+          <Grid columns={{ base: 1, md: 2 }}>
+            {shown.map((d) => (
+              <ProductCard
+                key={d.product.id}
+                layout="row"
+                title={d.product.title}
+                brand={d.product.brand}
+                imageUri={d.product.image}
+                priceCents={d.deal.current_cents}
+                wasCents={d.deal.reference_cents}
+                shop={dealLine(d.deal)}
+                badges={d.deal.verdict === "great" ? [{ label: "Great deal", tone: "success" }] : [{ label: "Good deal", tone: "success" }]}
+                onPress={() => nav.push({ name: "product", id: d.product.id })}
+                onOpen={d.product.offers[0]?.url ? () => void openLink(d.product.offers[0].url) : undefined}
+              />
+            ))}
+          </Grid>
+        )}
+      </Section>
     </Screen>
   );
 }

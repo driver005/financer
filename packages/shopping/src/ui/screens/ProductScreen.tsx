@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { Text, View } from "react-native";
+
+import {
+  Badge, Banner, Box, Button, Chip, ChipRow, DealBadge, EmptyState, ListItem, OfferRow, PriceHistory, PriceTag, ProductCardSkeletonList, Row, Screen, Section, Split, Stack, Text, TextField, Thumbnail, TopBar, Card, Divider, useLayout,
+} from "@financer/ui";
 
 import { ShopApiError } from "../../api/client";
 import type { AttrValue, ProductDetail } from "../../api/types";
-import { ago, dealLine, formatPrice, planTerms, verdictText } from "../../logic/format";
-import { Banner, Body, Button, Card, Chip, Empty, Field, H2, HeroPanel, PanelCaption, PanelChip, PanelValue, Row, Screen, Title } from "../kit";
+import { ago, dealLine, planTerms } from "../../logic/format";
+import { cacheKey, parseCached, serialize } from "../../logic/offlineCache";
 import { openLink } from "../links";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
-import { space, usePalette, type } from "../theme";
 
 function show(v: AttrValue, unit?: string | null): string {
   if (typeof v === "boolean") return v ? "yes" : "no";
@@ -17,9 +19,10 @@ function show(v: AttrValue, unit?: string | null): string {
 }
 
 export function ProductScreen({ id }: { id: string }) {
-  const { client } = useShop();
+  const { client, host } = useShop();
   const nav = useNav();
-  const p = usePalette();
+  const { isExpanded } = useLayout();
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [key, setKey] = useState("");
@@ -30,11 +33,22 @@ export function ProductScreen({ id }: { id: string }) {
   const load = useCallback(async () => {
     if (!client) return;
     try {
-      setDetail(await client.product(id));
+      const fresh = await client.product(id);
+      setDetail(fresh);
+      setSavedAt(null);
+      setError(null);
+      // keep the last good copy for when the server cannot be reached
+      void host.storage.set(cacheKey(id), serialize(fresh, Math.floor(Date.now() / 1000))).catch(() => {});
     } catch (e) {
-      setError(e instanceof ShopApiError ? e.message : "Could not load the product.");
+      const saved = e instanceof ShopApiError && e.status < 500 ? null : parseCached(await host.storage.get(cacheKey(id)).catch(() => null));
+      if (saved) {
+        setDetail(saved.detail);
+        setSavedAt(saved.savedAt);
+      } else {
+        setError(e instanceof ShopApiError ? e.message : "Could not load the product.");
+      }
     }
-  }, [client, id]);
+  }, [client, host, id]);
   useEffect(() => void load(), [load]);
 
   const addSpec = async () => {
@@ -55,104 +69,111 @@ export function ProductScreen({ id }: { id: string }) {
 
   if (!detail) {
     return (
-      <Screen>
-        <Title onBack={nav.pop}>Product</Title>
-        {error ? <Banner tone="bad">{error}</Banner> : <Body muted>Loading…</Body>}
+      <Screen header={<TopBar title="Product" onBack={nav.pop} />}>
+        {error ? <Banner tone="danger" action={<Button label="Try again" variant="outline" tone="neutral" size="sm" onPress={() => { setError(null); void load(); }} />}>{error}</Banner> : <ProductCardSkeletonList count={2} />}
       </Screen>
     );
   }
   const { product, deal, history, schema } = detail;
   const offers = [...product.offers].sort((a, b) => a.price_cents + (a.recurring?.monthly_cents ?? 0) - (b.price_cents + (b.recurring?.monthly_cents ?? 0)));
   const monthly = offers.some((o) => o.recurring);
+  const best = offers.find((o) => o.in_stock !== false) ?? offers[0];
   const defs = new Map((schema.attributes ?? []).map((a) => [a.key, a]));
   const specKeys = Object.keys(product.attributes).sort((a, b) => (defs.has(b) ? 1 : 0) - (defs.has(a) ? 1 : 0) || a.localeCompare(b));
-  const prices = history.map((h) => h.cents);
-  const lo = Math.min(...prices);
-  const hi = Math.max(...prices);
 
   return (
-    <Screen>
-      <Title onBack={nav.pop}>{product.title}</Title>
-      {product.brand ? <Body muted>{product.brand}</Body> : null}
-      {error ? <Banner tone="bad">{error}</Banner> : null}
-
-      {offers.length > 0 ? (
-        <HeroPanel label={monthly ? "Best monthly price" : "Best price"} chip={deal && deal.verdict !== "none" ? <PanelChip text={verdictText(deal.verdict)} /> : null}>
-          <PanelValue value={offers[0].recurring ? formatPrice(offers[0].recurring.monthly_cents, true) : formatPrice(offers[0].price_cents)} suffix={`at ${offers[0].shop}`} />
-          {deal ? <PanelCaption>{dealLine(deal)}</PanelCaption> : null}
-        </HeroPanel>
-      ) : deal ? (
-        <Body small muted>
-          {dealLine(deal)}
-        </Body>
+    <Screen header={<TopBar title={product.title} subtitle={product.brand ?? undefined} onBack={nav.pop} />}>
+      {savedAt !== null ? (
+        <Banner tone="warning" title="Offline" action={<Button label="Try again" variant="outline" tone="neutral" size="sm" onPress={() => void load()} />}>
+          {`Showing the last prices we saved, ${ago(savedAt, now)}.`}
+        </Banner>
       ) : null}
+      {error ? <Banner tone="danger">{error}</Banner> : null}
 
-      <H2>{monthly ? "Plans and prices" : "Where to buy"}</H2>
-      {offers.length === 0 ? <Empty title="No price yet" message="Build the index for a search that finds this product." /> : null}
-      {offers.map((o) => (
-        <Card key={`${o.shop}${o.url}${o.condition}`} onPress={() => void openLink(o.url)}>
-          <Row between>
-            <Body>{o.shop}</Body>
-            <Text style={[type.heading, { color: p.accent }]}>
-              {o.recurring ? formatPrice(o.recurring.monthly_cents, true) : formatPrice(o.price_cents)}
-            </Text>
+      <Split>
+        <Thumbnail uri={product.image} dim="thumb-lg" label={product.title} />
+        <Box grow gap="md">
+          <PriceTag
+            cents={best ? (best.recurring ? best.recurring.monthly_cents : best.price_cents) : null}
+            perMonth={Boolean(best?.recurring)}
+            wasCents={best && !best.recurring ? best.list_price_cents : null}
+            size="lg"
+          />
+          <Row gap="sm" wrap>
+            {deal ? <DealBadge verdict={deal.verdict} discountPct={deal.discount_pct} /> : null}
+            <Badge label={product.category.replace(/_/g, " ")} />
           </Row>
-          {o.recurring ? <Body small muted>{planTerms(o)}</Body> : null}
-          {o.list_price_cents && !o.recurring ? <Body small muted>{`List price ${formatPrice(o.list_price_cents)}`}</Body> : null}
-          <Body small muted>
-            {[o.in_stock === false ? "out of stock" : "in stock", o.condition && o.condition !== "new" ? o.condition : null, o.seen_at ? `seen ${ago(o.seen_at, now)}` : null].filter(Boolean).join(" · ")}
-          </Body>
-        </Card>
-      ))}
+          {deal ? <Text variant="caption" tone="muted">{dealLine(deal)}</Text> : null}
+          <Row gap="sm" wrap>
+            {best?.url ? <Button label="Open in shop" icon="open-in-new" onPress={() => void openLink(best.url)} /> : null}
+            <Button label="Tell me about deals" variant="soft" icon="bell-plus-outline" onPress={() => nav.push({ name: "watch", query: product.title, category: product.category })} />
+          </Row>
+        </Box>
+      </Split>
 
-      {history.length >= 2 ? (
-        <>
-          <H2>Price history</H2>
-          <Card>
-            <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 2, height: 56 }}>
-              {history.slice(-40).map((h) => (
-                <View key={h.at} style={{ flex: 1, height: 8 + (hi === lo ? 24 : ((h.cents - lo) / (hi - lo)) * 40), backgroundColor: p.accent, borderRadius: 2 }} />
+      <Section title={monthly ? "Plans and prices" : "Where to buy"}>
+        {offers.length === 0 ? (
+          <EmptyState icon="tag-off-outline" title="No price yet" message="Build the index for a search that finds this product." />
+        ) : (
+          <Card padded={false}>
+            <Box px="lg">
+              {offers.map((o, i) => (
+                <Box key={`${o.shop}${o.url}${o.condition}`}>
+                  {i > 0 ? <Divider /> : null}
+                  <OfferRow
+                    shop={o.shop}
+                    priceCents={o.recurring ? o.recurring.monthly_cents : o.price_cents}
+                    perMonth={Boolean(o.recurring)}
+                    wasCents={o.recurring ? null : o.list_price_cents}
+                    detail={[o.recurring ? planTerms(o) : null, o.condition && o.condition !== "new" ? o.condition : null, o.seen_at ? `seen ${ago(o.seen_at, now)}` : null].filter(Boolean).join(" · ")}
+                    inStock={o.in_stock !== false}
+                    best={o === best && offers.length > 1}
+                    onOpen={() => void openLink(o.url)}
+                  />
+                </Box>
               ))}
-            </View>
-            <Row between>
-              <Body small muted>{`low ${formatPrice(lo, monthly)}`}</Body>
-              <Body small muted>{`high ${formatPrice(hi, monthly)}`}</Body>
-            </Row>
+            </Box>
           </Card>
-        </>
-      ) : null}
+        )}
+      </Section>
 
-      <H2>Specifications</H2>
-      <Card>
-        {specKeys.length === 0 ? <Body muted>No specs known yet. Add the ones you know below.</Body> : null}
-        {specKeys.map((k) => {
-          const def = defs.get(k);
-          return (
-            <Row key={k} between>
-              <Text style={[type.body, { color: p.muted, flex: 1 }]}>{def?.label ?? k.replace(/_/g, " ")}</Text>
-              <Text style={[type.body, { color: p.text, flex: 1, textAlign: "right" }]}>{show(product.attributes[k], def?.unit)}</Text>
-            </Row>
-          );
-        })}
-      </Card>
+      <Section title="Price history">
+        <PriceHistory cents={history.map((h) => h.cents)} perMonth={monthly} />
+      </Section>
 
-      <H2>Add or correct a spec</H2>
-      <Body small muted>
-        Your own facts count in the ranking and survive later crawls. Any name works; names the category knows are used by its criteria.
-      </Body>
-      <Row wrap>
-        {(schema.attributes ?? []).filter((a) => !(a.key in product.attributes)).slice(0, 8).map((a) => (
-          <Chip key={a.key} label={a.label} selected={key === a.key} onPress={() => setKey(a.key)} />
-        ))}
-      </Row>
-      <Field label="Name" value={key} onChangeText={setKey} placeholder="camera_score" />
-      <Field label="Value" value={value} onChangeText={setValue} placeholder="92 or 5000 mAh or yes" />
-      <Button label="Save spec" onPress={addSpec} busy={saving} disabled={!key.trim() || !value.trim()} />
+      <Section title="Specifications">
+        <Card padded={false}>
+          {specKeys.length === 0 ? <Box p="lg"><Text variant="body" tone="muted">No specs known yet. Add the ones you know below.</Text></Box> : null}
+          <Row align="start">
+            {(isExpanded ? [specKeys.slice(0, Math.ceil(specKeys.length / 2)), specKeys.slice(Math.ceil(specKeys.length / 2))] : [specKeys]).map((keys, col) => (
+              <Box key={col} equal px="lg">
+                {keys.map((k, i) => {
+                  const def = defs.get(k);
+                  return (
+                    <Box key={k}>
+                      {i > 0 ? <Divider /> : null}
+                      <ListItem title={def?.label ?? k.replace(/_/g, " ")} trailing={<Text variant="number" align="right">{show(product.attributes[k], def?.unit)}</Text>} />
+                    </Box>
+                  );
+                })}
+              </Box>
+            ))}
+          </Row>
+        </Card>
+      </Section>
 
-      <Row wrap>
-        <Button label="Tell me about deals" kind="secondary" onPress={() => nav.push({ name: "watch", query: product.title, category: product.category })} />
-      </Row>
-      <View style={{ height: space.xl }} />
+      <Section card title="Add or correct a spec" description="Your own facts count in the ranking and survive later crawls. Any name works; names the category knows are used by its criteria.">
+        <Stack gap="md">
+          <ChipRow>
+            {(schema.attributes ?? []).filter((a) => !(a.key in product.attributes)).slice(0, 8).map((a) => (
+              <Chip key={a.key} label={a.label} selected={key === a.key} onPress={() => setKey(a.key)} />
+            ))}
+          </ChipRow>
+          <TextField label="Name" value={key} onChangeText={setKey} placeholder="camera_score" />
+          <TextField label="Value" value={value} onChangeText={setValue} placeholder="92 or 5000 mAh or yes" />
+          <Row><Button label="Save spec" onPress={() => void addSpec()} loading={saving} disabled={!key.trim() || !value.trim()} /></Row>
+        </Stack>
+      </Section>
     </Screen>
   );
 }

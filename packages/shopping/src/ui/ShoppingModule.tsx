@@ -1,11 +1,12 @@
 import { useEffect } from "react";
-import { AppState, Pressable, Text, View } from "react-native";
+import { AppState } from "react-native";
+
+import { AppShell, Box, Button, EmptyState, Screen, ThemeProvider, TopBar, type NavItem } from "@financer/ui";
 
 import type { ModuleHost } from "../host";
 import { planDealNotices } from "../logic/dealNotifications";
-import { NavProvider, useNav, type Tab } from "./nav";
+import { NavProvider, useNav, type Route, type Tab } from "./nav";
 import { ShopRuntime, useShop } from "./runtime";
-import { Banner, Body, Button, Empty, Screen, Title } from "./kit";
 import { CategoriesScreen, CategoryEditorScreen } from "./screens/CategoriesScreen";
 import { CompareScreen } from "./screens/CompareScreen";
 import { DealsScreen } from "./screens/DealsScreen";
@@ -15,62 +16,66 @@ import { SearchScreen } from "./screens/SearchScreen";
 import { SettingsScreen, SourcesScreen } from "./screens/SettingsScreen";
 import { NewWatchScreen, WatchesScreen } from "./screens/WatchesScreen";
 import { WeightsScreen } from "./screens/WeightsScreen";
-import { usePalette } from "./theme";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "search", label: "Search" },
-  { id: "deals", label: "Deals" },
-  { id: "plans", label: "Plans" },
-  { id: "watches", label: "Watching" },
-  { id: "more", label: "More" },
+const TABS: NavItem<Tab>[] = [
+  { key: "search", label: "Search", icon: "magnify" },
+  { key: "deals", label: "Deals", icon: "tag-outline", activeIcon: "tag" },
+  { key: "plans", label: "Plans", icon: "sim-outline", activeIcon: "sim" },
+  { key: "watches", label: "Watching", icon: "bell-outline", activeIcon: "bell" },
+  { key: "more", label: "More", icon: "dots-horizontal" },
 ];
 
 /**
  * The whole shopping assistant as one component. A host gives it storage, notifications and
- * (optionally) a server or the on-phone backend, and renders it wherever it wants.
+ * (optionally) a server or the on-phone backend, and renders it wherever it wants. It follows the
+ * system's light or dark setting and the window's size (bottom bar, rail or sidebar).
  */
 export function ShoppingModule({ host }: { host: ModuleHost }) {
   return (
-    <ShopRuntime host={host}>
-      <NavProvider exit={host.onExit}>
-        <Shell />
-      </NavProvider>
-    </ShopRuntime>
+    <ThemeProvider>
+      <ShopRuntime host={host}>
+        <NavProvider exit={host.onExit}>
+          <Shell />
+        </NavProvider>
+      </ShopRuntime>
+    </ThemeProvider>
   );
 }
 
 function Shell() {
   const shop = useShop();
   const nav = useNav();
-  const p = usePalette();
   useDealNotices();
 
-  if (shop.status === "loading") {
-    return (
-      <Screen>
-        <Title>Shopping assistant</Title>
-        <Body muted>Starting…</Body>
-      </Screen>
-    );
-  }
   const top = nav.stack[nav.stack.length - 1];
-  // Not connected: everything but the settings (reached from More or from the setup screen) waits
+  // Not connected: everything but the settings waits (settings are reached from More or the setup screen)
   const needsSetup = shop.status !== "ready" && !top && nav.tab !== "more";
+  // The search tab stays mounted under other screens and tabs, so that going back finds the results,
+  // the query and the selection as they were.
+  const searchShown = !top && nav.tab === "search";
+  const content =
+    shop.status === "loading" ? (
+      <Starting />
+    ) : needsSetup ? (
+      <Setup />
+    ) : (
+      <>
+        <Box grow hidden={!searchShown}><SearchScreen onBack={nav.exit} /></Box>
+        {top ? <Routed route={top} /> : nav.tab !== "search" ? <TabScreen tab={nav.tab} /> : null}
+      </>
+    );
   return (
-    <View style={{ flex: 1, backgroundColor: p.background }}>
-      <View style={{ flex: 1 }}>{needsSetup ? <Setup /> : top ? <Routed route={top} /> : <TabScreen tab={nav.tab} />}</View>
-      {top ? null : (
-        <View accessibilityRole="tablist" style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: p.border, backgroundColor: p.surface }}>
-          {TABS.map((t) => (
-            <Pressable key={t.id} accessibilityRole="tab" accessibilityState={{ selected: nav.tab === t.id }} onPress={() => nav.setTab(t.id)} style={{ flex: 1, minHeight: 56, alignItems: "center", justifyContent: "center" }}>
-              <View style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, backgroundColor: nav.tab === t.id ? p.accentSoft : "transparent" }}>
-                <Text style={{ color: nav.tab === t.id ? p.accent : p.muted, fontSize: 13, fontWeight: nav.tab === t.id ? "800" : "600" }}>{t.label}</Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      )}
-    </View>
+    <AppShell items={TABS} active={nav.tab} onChange={(t) => { nav.reset(); nav.setTab(t); }} title="Shopping assistant">
+      {content}
+    </AppShell>
+  );
+}
+
+function Starting() {
+  return (
+    <Screen header={<TopBar title="Shopping assistant" />}>
+      <EmptyState icon="shopping-search-outline" title="Starting…" />
+    </Screen>
   );
 }
 
@@ -78,12 +83,12 @@ function Setup() {
   const shop = useShop();
   const nav = useNav();
   return (
-    <Screen>
-      <Title onBack={nav.exit}>Shopping assistant</Title>
-      {shop.status === "error" ? <Banner tone="bad">{shop.error ?? "Could not connect."}</Banner> : null}
-      <Empty
+    <Screen header={<TopBar title="Shopping assistant" onBack={nav.exit} />}>
+      <EmptyState
+        card
+        icon="cog-outline"
         title="Set it up"
-        message="Connect to your server, or let this phone do the searching itself. Nothing is read from the web until you search."
+        message={shop.status === "error" ? (shop.error ?? "Could not connect.") : "Connect to your server, or let this phone do the searching itself. Nothing is read from the web until you search."}
         action={<Button label="Open settings" onPress={() => nav.push({ name: "settings" })} />}
       />
     </Screen>
@@ -91,10 +96,9 @@ function Setup() {
 }
 
 function TabScreen({ tab }: { tab: Tab }) {
-  const nav = useNav();
   switch (tab) {
     case "search":
-      return <SearchScreen onBack={nav.exit} />;
+      return null;
     case "deals":
       return <DealsScreen />;
     case "plans":
@@ -106,7 +110,7 @@ function TabScreen({ tab }: { tab: Tab }) {
   }
 }
 
-function Routed({ route }: { route: ReturnType<typeof useNav>["stack"][number] }) {
+function Routed({ route }: { route: Route }) {
   switch (route.name) {
     case "product":
       return <ProductScreen id={route.id} />;
@@ -164,3 +168,4 @@ function useDealNotices() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, settings.dealAlerts, host]);
 }
+

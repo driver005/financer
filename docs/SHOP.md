@@ -22,6 +22,8 @@ crates/shop-api       the /v1/shop router, index jobs with progress, watches, no
 crates/shop-server    the standalone server (`financer-shop-server`)
 crates/embedded       `ShopBackend`: the same router in-process on the phone (feature `shop`, on by default)
 packages/shopping     the app as a module: client, scoring helpers, notification logic, screens
+packages/ui           every visual element, tokens and responsive layout (docs/UI.md)
+apps/catalog          the catalog of those elements (phone, tablet, web; light and dark)
 apps/shopping         a thin Expo app around the module
 apps/mobile           the finance app; carries the module when built with EXPO_PUBLIC_SHOPPING=1
 ```
