@@ -57,11 +57,11 @@ jobs:
         env:
           CI: "1"
       - run: cd dist && zip -qr ../financer-web.zip .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web
           path: apps/mobile/financer-web.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-files
           path: apps/mobile/dist
@@ -109,7 +109,7 @@ jobs:
           else
             tar czf "$dir.tar.gz" "$dir"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: desktop-${{ matrix.name }}
           path: |
@@ -211,7 +211,7 @@ jobs:
           echo "APP_FILE=$file" >> "$GITHUB_ENV"
           echo "### ${{ matrix.platform }} ($PROFILE)" >> "$GITHUB_STEP_SUMMARY"
           jq -r '.[0].buildDetailsPageUrl // empty' build.json >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.gate.outputs.enabled == 'true'
         with:
           name: app-${{ matrix.platform }}
@@ -322,7 +322,7 @@ jobs:
             exit 1
           fi
           rm signer.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: app-android-${{ matrix.variant }}-apk
           path: apps/mobile/out/financer-${{ matrix.variant }}-android.apk
@@ -380,7 +380,7 @@ jobs:
           app=$(ls -d ios/build/Build/Products/Release-iphonesimulator/*.app | head -n1)
           ditto -c -k --sequesterRsrc --keepParent "$app" "out/financer-${{ matrix.variant }}-ios-simulator.zip"
           ls -lh out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: app-ios-simulator-${{ matrix.variant }}
           path: apps/mobile/out/financer-${{ matrix.variant }}-ios-simulator.zip
@@ -423,16 +423,16 @@ jobs:
           EXPO_PUBLIC_SHOPPING: "1"
       - name: The shop code is in the bundled build
         run: grep -rl "Nothing is read from the web" apps/mobile/dist-bundle/_expo
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: shop-web
           path: apps/shopping/financer-shop-web.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: shop-web-files
           path: apps/shopping/dist
           retention-days: 1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bundle-web-files
           path: apps/mobile/dist-bundle
@@ -478,7 +478,7 @@ jobs:
           path: web-files
       - name: Assemble the bundle
         run: bash .github/scripts/assemble-shop-desktop.sh "${{ matrix.variant }}" "${{ matrix.target }}" "${{ matrix.exe }}" "${{ matrix.start }}" web-files
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: desktop-${{ matrix.variant }}-${{ matrix.target }}
           path: |
@@ -626,7 +626,7 @@ jobs:
           mkdir out
           cp android/app/build/outputs/apk/release/*.apk "out/financer-${{ matrix.name }}-android.apk"
           ls -lh out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: app-android-${{ matrix.name }}-apk
           path: ${{ matrix.dir }}/out/financer-${{ matrix.name }}-android.apk
@@ -688,7 +688,7 @@ jobs:
           app=$(ls -d ios/build/Build/Products/Release-iphonesimulator/*.app | head -n1)
           ditto -c -k --sequesterRsrc --keepParent "$app" "out/financer-${{ matrix.name }}-ios-simulator.zip"
           ls -lh out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: app-ios-simulator-${{ matrix.name }}
           path: ${{ matrix.dir }}/out/financer-${{ matrix.name }}-ios-simulator.zip
