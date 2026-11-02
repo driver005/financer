@@ -22,6 +22,8 @@ crates/shop-api       the /v1/shop router, index jobs with progress, watches, no
 crates/shop-server    the standalone server (`financer-shop-server`)
 crates/embedded       `ShopBackend`: the same router in-process on the phone (feature `shop`, on by default)
 packages/shopping     the app as a module: client, scoring helpers, notification logic, screens
+packages/ui           every visual element, tokens and responsive layout (docs/UI.md)
+apps/catalog          the catalog of those elements (phone, tablet, web; light and dark)
 apps/shopping         a thin Expo app around the module
 apps/mobile           the finance app; carries the module when built with EXPO_PUBLIC_SHOPPING=1
 ```
@@ -215,8 +217,9 @@ cd apps/shopping && npm install && npm start            # the shopping app
 cd apps/mobile && EXPO_PUBLIC_SHOPPING=1 npm start      # the finance app with the shop inside
 ```
 
-A Docker image of the finance server with the shop inside: `docker build -f deploy/Dockerfile --build-arg FEATURES=shop .`
-(written, not built here). There is no image of the standalone shop server yet.
+Docker images (written, not built: no Docker daemon was available): the finance server with the shop inside,
+`docker build -f deploy/Dockerfile --build-arg FEATURES=shop .`, and the standalone shop server,
+`docker build -f deploy/Dockerfile.shop .`. Release files for both flavours: [RELEASE.md](RELEASE.md#the-shopping-assistant-in-a-release).
 
 The on-phone backend: `crates/embedded` builds `ShopBackend` by default, so
 `apps/mobile/scripts/enable-embedded.sh` (see [EMBEDDED.md](EMBEDDED.md)) makes it available to both

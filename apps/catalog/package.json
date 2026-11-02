@@ -1,0 +1,30 @@
+{
+  "name": "financer-ui-catalog",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "private": true,
+  "description": "The catalog of every UI element in packages/ui, on a phone, a tablet and the web, in light and dark (Widgetbook-style).",
+  "scripts": {
+    "start": "expo start --web",
+    "web": "expo start --web",
+    "export": "expo export --platform web --output-dir dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
+    "expo": "~58.0.17",
+    "expo-font": "~58.0.7",
+    "expo-status-bar": "~58.0.4",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-native": "0.88.1",
+    "react-native-safe-area-context": "~5.11.0",
+    "react-native-svg": "15.16.0",
+    "react-native-web": "^0.21.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "~19.3.0",
+    "typescript": "~7.0.2"
+  }
+}

@@ -6,8 +6,11 @@ import { RefreshControl, ScrollView, Text as RNText, View } from "react-native";
 
 import { ForecastCard } from "@/components/ForecastCard";
 import { Mascot } from "@/components/Mascot";
-import { SafeToSpendCard } from "@/components/SafeToSpendCard";
 import { StoresLink } from "@/components/StoresLink";
+import { CategoryCard } from "@/components/today/CategoryCard";
+import { OverviewTiles } from "@/components/today/OverviewTiles";
+import { TodayHero } from "@/components/today/TodayHero";
+import { WeekCard } from "@/components/today/WeekCard";
 import { TrophiesCard } from "@/components/TrophiesCard";
 import { WatchdogCard } from "@/components/Watchdog";
 import { EmptyState } from "@/components/EmptyState";
@@ -21,7 +24,7 @@ import { useApi } from "@/api/config";
 import { formatMoney } from "@/format";
 import { computeRewards, coachMessage, dailyAllowanceOn, freshBadges, level, moodFor, quests, spentOn, xp, type Progress, type Quest } from "@/game";
 import { useScreenData } from "@/hooks";
-import { MONTH_NAMES, localIsoDate } from "@/period";
+import { MONTH_NAMES, budgetPeriod, localIsoDate } from "@/period";
 import { getSavingsGoal } from "@/savingsGoal";
 import { getSecret, setSecret } from "@/api/storage";
 import { celebrate } from "@/native/haptics";
@@ -100,6 +103,7 @@ export default function Today() {
   const p = usePalette();
   const { toast } = useToast();
   const [celebrating, setCelebrating] = useState(false);
+  const [allQuests, setAllQuests] = useState(false);
   const { data, error, busy, reload } = useScreenData<TodayData>(async (a) => {
     const [txs, envelopes, basket, prices, receipts, safe, forecast, savingsGoal] = await Promise.all([
       a.transactions(),
@@ -247,15 +251,26 @@ export default function Today() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void reload()} tintColor={p.accent} />}
         >
-          <SafeToSpendCard data={data.safe} />
+          <TodayHero safe={data.safe} forecast={data.forecast} txs={data.txs} today={today} />
+
+          <OverviewTiles safe={data.safe} txs={data.txs} today={today} />
+
+          <WeekCard txs={data.txs} today={today} />
+
+          <CategoryCard txs={data.txs} period={data.safe ? { start: data.safe.period_start, end: data.safe.period_end } : budgetPeriod(today, payday)} />
 
           <Card>
             <RNText style={[typography.overline, { color: p.muted }]}>Today's grocery goal</RNText>
             {allowance > 0 ? (
               <>
-                <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.sm, marginTop: space.xs, flexWrap: "wrap" }}>
-                  <Money cents={goalLeft} variant="heading" tone={over ? "bad" : "plain"} style={{ fontSize: 26, lineHeight: 32 }} />
-                  <RNText style={[typography.label, { color: p.muted }]}>left</RNText>
+                <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.sm, marginTop: space.xs, flexWrap: "wrap" }}>
+                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.sm }}>
+                    <Money cents={goalLeft} variant="heading" tone={over ? "bad" : "plain"} style={{ fontSize: 26, lineHeight: 32 }} />
+                    <RNText style={[typography.label, { color: p.muted }]}>left</RNText>
+                  </View>
+                  <RNText style={[typography.caption, { color: p.muted }]}>
+                    {formatMoney(spentToday)} of {formatMoney(allowance)}
+                  </RNText>
                 </View>
                 <Bar
                   progress={spentToday / allowance}
@@ -264,9 +279,6 @@ export default function Today() {
                   marginTop={space.sm}
                   accessibilityLabel={`${Math.round((spentToday / allowance) * 100)} percent of today's grocery goal spent`}
                 />
-                <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>
-                  {formatMoney(spentToday)} spent of {formatMoney(allowance)} a day
-                </RNText>
               </>
             ) : (
               <>
@@ -300,10 +312,22 @@ export default function Today() {
             </View>
             <Bar progress={doneCount / Math.max(1, list.length)} marginTop={space.md} accessibilityLabel={`${doneCount} of ${list.length} quests done`} />
             <View style={{ marginTop: space.sm }}>
-              {list.map((q) => (
+              {/* the next open quest is enough at a glance; the rest is one tap away */}
+              {(allQuests ? list : list.filter((q) => !q.done).slice(0, 1)).map((q) => (
                 <QuestRow key={q.id} quest={q} onGo={() => router.push(q.route)} />
               ))}
             </View>
+            {list.length > 1 ? (
+              <View style={{ alignSelf: "flex-start", marginLeft: -space.sm }}>
+                <ChunkyButton
+                  compact
+                  flat
+                  icon={allQuests ? "chevron-up" : "chevron-down"}
+                  label={allQuests ? "Show fewer" : `All ${list.length} quests`}
+                  onPress={() => setAllQuests((v) => !v)}
+                />
+              </View>
+            ) : null}
           </Card>
 
           {rewards ? <TrophiesCard rewards={rewards} /> : null}

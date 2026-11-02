@@ -53,6 +53,14 @@ export function addAlias(schema: CategorySchema, key: string, alias: string): Ca
   };
 }
 
+/** Take a name back off an attribute. */
+export function removeAlias(schema: CategorySchema, key: string, alias: string): CategorySchema {
+  return {
+    ...schema,
+    attributes: (schema.attributes ?? []).map((d) => (d.key === key ? { ...d, aliases: (d.aliases ?? []).filter((x) => x.toLowerCase() !== alias.toLowerCase()) } : d)),
+  };
+}
+
 export type CriterionTemplate =
   | { kind: "number"; attribute: string; min: number; max: number; higherIsBetter: boolean }
   | { kind: "flag"; attribute: string }

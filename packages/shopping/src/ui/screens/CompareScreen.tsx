@@ -1,26 +1,21 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+
+import { Badge, Banner, Card, ComparisonTable, EmptyState, Row, Screen, Stack, Text, TopBar } from "@financer/ui";
 
 import { ShopApiError } from "../../api/client";
-import type { Comparison } from "../../api/types";
-import { formatPrice } from "../../logic/format";
-import { groupLabel } from "../../logic/weights";
-import { Banner, Body, Button, Card, H2, Meter, Screen, Title } from "../kit";
+import type { Comparison, Profile } from "../../api/types";
+import { compareView } from "../../logic/view";
 import { useNav } from "../nav";
 import { useShop } from "../runtime";
-import { scoreTone, usePalette, type } from "../theme";
-
-const COLUMN = 132;
-const LABEL = 118;
 
 export function CompareScreen({ ids }: { ids: string[] }) {
   const { client } = useShop();
   const nav = useNav();
-  const p = usePalette();
   const [cmp, setCmp] = useState<Comparison | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile | undefined>();
   const [profileLoaded, setProfileLoaded] = useState(false);
-  const [profile, setProfile] = useState<import("../../api/types").Profile | undefined>();
+  const [images, setImages] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     client?.profiles().then((all) => setProfile(all.find((x) => x.name === "default")?.profile)).finally(() => setProfileLoaded(true));
@@ -30,74 +25,39 @@ export function CompareScreen({ ids }: { ids: string[] }) {
     client.compare(ids, profile).then(setCmp).catch((e) => setError(e instanceof ShopApiError ? e.message : "Could not compare."));
   }, [client, ids, profile, profileLoaded]);
 
+  // the comparison itself carries no pictures: fetch each product's (a missing one just shows the placeholder)
+  useEffect(() => {
+    if (!client) return;
+    let alive = true;
+    Promise.all(ids.map((id) => client.product(id).then((d) => [id, d.product.image ?? null] as const).catch(() => [id, null] as const))).then((pairs) => {
+      if (alive) setImages(Object.fromEntries(pairs));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [client, ids]);
+
+  const header = <TopBar title="Compare" subtitle={`${ids.length} products`} onBack={nav.pop} />;
   if (!cmp) {
     return (
-      <Screen>
-        <Title onBack={nav.pop}>Compare</Title>
-        {error ? <Banner tone="bad">{error}</Banner> : <Body muted>Comparing…</Body>}
+      <Screen header={header}>
+        {error ? <Banner tone="danger">{error}</Banner> : <EmptyState icon="timer-sand" title="Comparing…" />}
       </Screen>
     );
   }
+  const view = compareView(cmp, images);
   const winner = cmp.columns.find((c) => c.product_id === cmp.winner);
-  const sections: { group: string; rows: Comparison["rows"] }[] = [];
-  for (const row of cmp.rows) {
-    const g = row.kind === "price" ? "cost" : (row.group ?? (row.kind === "spec" ? "specs" : "other"));
-    const last = sections[sections.length - 1];
-    if (last && last.group === g) last.rows.push(row);
-    else sections.push({ group: g, rows: [row] });
-  }
-
   return (
-    <Screen>
-      <Title onBack={nav.pop}>Compare</Title>
+    <Screen header={header} fixed>
       {winner ? (
-        <Card tone="accent">
-          <Body small muted>
-            Best fit for your weights
-          </Body>
-          <Text style={[type.heading, { color: p.text }]}>{winner.title}</Text>
-          <Body small muted>{`score ${Math.round(winner.score)} · ${formatPrice(winner.price_cents)}`}</Body>
+        <Card gap="sm">
+          <Row><Badge label="Best fit for your weights" tone="accent" icon="check-decagram-outline" /></Row>
+          <Text variant="heading">{winner.title}</Text>
         </Card>
       ) : null}
-      <ScrollView horizontal showsHorizontalScrollIndicator>
-        <View>
-          <View style={{ flexDirection: "row" }}>
-            <View style={{ width: LABEL }} />
-            {cmp.columns.map((c) => (
-              <View key={c.product_id} style={{ width: COLUMN, paddingRight: 8, gap: 2 }}>
-                <Text style={[type.small, { color: p.text, fontWeight: "700" }]} numberOfLines={3}>
-                  {c.title}
-                </Text>
-                <Text style={[type.small, { color: p.muted }]}>{c.tier ?? ""}</Text>
-                <Meter value={c.score / 100} label={`${c.title}: score ${Math.round(c.score)}`} />
-                <Text style={[type.small, { color: p.muted }]}>{`score ${Math.round(c.score)}`}</Text>
-              </View>
-            ))}
-          </View>
-          {sections.map((s) => (
-            <View key={s.group}>
-              <H2>{groupLabel(s.group)}</H2>
-              {s.rows.map((row) => (
-                <View key={row.key} style={{ flexDirection: "row", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: p.border }}>
-                  <Text style={[type.small, { color: p.muted, width: LABEL, paddingRight: 8 }]}>{row.label}</Text>
-                  {row.cells.map((cell, i) => {
-                    const tone = scoreTone(cell.score);
-                    return (
-                      <Text
-                        key={cmp.columns[i].product_id}
-                        style={[type.small, { width: COLUMN, paddingRight: 8, color: cell.best ? p.good : tone === "bad" ? p.bad : p.text, fontWeight: cell.best ? "700" : "400" }]}
-                      >
-                        {cell.value ?? "unknown"}
-                      </Text>
-                    );
-                  })}
-                </View>
-              ))}
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-      <Button label="Back to results" kind="secondary" onPress={nav.pop} />
+      <Stack grow gap="md">
+        <ComparisonTable columns={view.columns} rows={view.rows} />
+      </Stack>
     </Screen>
   );
 }

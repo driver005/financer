@@ -9,6 +9,9 @@
       "*": [
         "./node_modules/@types/*",
         "./node_modules/*"
+      ],
+      "@financer/ui": [
+        "../../packages/ui/src/index.ts"
       ]
     },
     "types": [
@@ -21,7 +24,9 @@
     "../../packages/shopping/src/**/*.ts",
     "../../packages/shopping/src/**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "../../packages/ui/src/**/*.ts",
+    "../../packages/ui/src/**/*.tsx"
   ],
   "exclude": [
     "node_modules",

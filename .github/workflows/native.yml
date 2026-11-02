@@ -12,6 +12,9 @@ on:
       - "Cargo.lock"
       - "apps/embedded-bindings/**"
       - "apps/mobile/scripts/enable-embedded.sh"
+      - "apps/shopping/**"
+      - "packages/shopping/**"
+      - "packages/ui/**"
       - ".github/workflows/native.yml"
   workflow_dispatch:
     inputs:
@@ -27,7 +30,7 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,x86_64-linux-android
@@ -42,7 +45,7 @@ jobs:
       - name: Build for arm64 phones and the x86_64 emulator
         run: cargo ndk -t arm64-v8a -t x86_64 --platform 24 -o jniLibs build --release -p financer-embedded --locked
       - run: find jniLibs -name '*.so' -exec ls -lh {} +
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android-jniLibs
           path: jniLibs
@@ -55,7 +58,7 @@ jobs:
       # SDK's iOS: the symbol ___chkstk_darwin is then missing at link time. Pin one version.
       IPHONEOS_DEPLOYMENT_TARGET: "15.0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim
@@ -76,7 +79,7 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,x86_64-linux-android
@@ -113,7 +116,7 @@ jobs:
           mkdir out
           cp android/app/build/outputs/apk/release/*.apk out/financer-android-embedded.apk
           ls -lh out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: app-android-embedded-apk
           path: apps/mobile/out/financer-android-embedded.apk
@@ -129,7 +132,7 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim
@@ -156,6 +159,97 @@ jobs:
             CODE_SIGNING_ALLOWED=NO ARCHS=arm64 build | tail -40
           exit ${PIPESTATUS[0]}
 
+  # The shopping app with the backend inside, the whole chain like android-app: Rust -> bindings ->
+  # type check of the app against the generated TypeScript -> Expo prebuild (with the Notifee and
+  # foreground-service setup) -> Gradle. It proves `ShopBackend` is generated and that the app
+  # compiles and links with it and with Notifee; it does not run it on a device.
+  android-shop-app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/shopping
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/shopping/package-lock.json
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Build the Rust library and generate the bindings
+        run: scripts/enable-embedded.sh android
+      - name: Typecheck against the generated bindings
+        run: npx tsc --noEmit
+      - name: Generate the native Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: "1"
+      - name: The foreground service for the progress notification is declared
+        run: |
+          grep -q 'app.notifee.core.ForegroundService' android/app/src/main/AndroidManifest.xml
+          grep -q 'FOREGROUND_SERVICE_DATA_SYNC' android/app/src/main/AndroidManifest.xml
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build the APK
+        working-directory: apps/shopping/android
+        run: ./gradlew assembleRelease --no-daemon
+      - run: |
+          mkdir out
+          cp android/app/build/outputs/apk/release/*.apk out/financer-shopping-android-embedded.apk
+          ls -lh out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: app-android-shopping-embedded-apk
+          path: apps/shopping/out/financer-shopping-android-embedded.apk
+          retention-days: 7
+
+  # Same chain for iOS: Rust -> bindings -> Expo prebuild -> CocoaPods -> xcodebuild (simulator,
+  # unsigned) for the shopping app.
+  ios-shop-app:
+    runs-on: macos-latest
+    env:
+      IPHONEOS_DEPLOYMENT_TARGET: "15.1"
+    defaults:
+      run:
+        working-directory: apps/shopping
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/shopping/package-lock.json
+      - run: npm ci
+      - name: Build the Rust library and generate the bindings
+        run: scripts/enable-embedded.sh ios
+      - name: Typecheck against the generated bindings
+        run: npx tsc --noEmit
+      - name: Generate the native iOS project and install the pods
+        run: npx expo prebuild --platform ios
+        env:
+          CI: "1"
+      - name: Build for the simulator
+        working-directory: apps/shopping/ios
+        run: |
+          xcodebuild -workspace *.xcworkspace -scheme "$(basename *.xcworkspace .xcworkspace)" \
+            -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 build | tail -40
+          exit ${PIPESTATUS[0]}
+
   # The first real run of the on-phone backend: install the APK from android-app on an x86_64
   # emulator, start it, and wait for the smoke line that apps/mobile/scripts/smoke-entry.js logs
   # after starting the Rust backend, importing a transaction through it and reading it back.
@@ -167,7 +261,7 @@ jobs:
     env:
       SCREENSHOTS: ${{ inputs.screenshots && 'true' || 'false' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: app-android-embedded-apk

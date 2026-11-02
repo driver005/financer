@@ -1,0 +1,30 @@
+# The standalone shopping server (no finance app).
+# Build: docker build -f deploy/Dockerfile.shop -t financer-shop-server .
+# Behind Docker Hub rate limits: --build-arg REGISTRY=mirror.gcr.io/library/
+# Run:   docker run -p 8090:8090 -e FINANCER_SHOP_API_TOKEN=<32+ characters> \
+#          -e FINANCER_SHOP_SOURCES=/config/shop-sources.json \
+#          -v shop-data:/data -v ./shop-sources.json:/config/shop-sources.json:ro financer-shop-server
+ARG REGISTRY=docker.io/library/
+
+FROM ${REGISTRY}rust:1-bookworm AS build
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+RUN cargo build --release -p financer-shop-server
+
+ARG REGISTRY
+FROM ${REGISTRY}debian:bookworm-slim
+# CA certificates come from the build image, so this stage needs no apt (and no network).
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN useradd --system --uid 10001 --create-home financer \
+ && mkdir /data /config && chown financer /data
+COPY --from=build /src/target/release/financer-shop-server /usr/local/bin/financer-shop-server
+COPY deploy/config/shop-sources.example.json /config/shop-sources.example.json
+USER financer
+# Add FINANCER_SHOP_SOURCES=/config/shop-sources.json when you mount your sources file there (it
+# must exist then: a missing file is an error, not an empty list).
+ENV FINANCER_SHOP_BIND=0.0.0.0:8090 \
+    FINANCER_SHOP_DATABASE_URL=sqlite:///data/shop.db?mode=rwc
+VOLUME /data
+EXPOSE 8090
+CMD ["financer-shop-server"]

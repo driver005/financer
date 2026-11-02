@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Financer UI catalog",
+    "slug": "financer-ui-catalog",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "web": { "favicon": "./assets/favicon.png", "bundler": "metro" },
+    "experiments": { "tsconfigPaths": false }
+  }
+}

@@ -26,10 +26,12 @@ jobs:
     env:
       FINANCER_TEST_POSTGRES_URL: postgres://financer:financer@127.0.0.1:5432/financer_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The release version rules (.github/scripts/next-version.sh); no build needed, runs in seconds.
       - name: Version script tests
         run: bash .github/scripts/test-next-version.sh
+      - name: Desktop bundle assembly tests (the shopping assistant's bundles)
+        run: bash .github/scripts/test-assemble-shop-desktop.sh
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -48,7 +50,7 @@ jobs:
       # The two mock bank servers are built from source (several minutes); keep the binaries.
       - name: Cache the FinTS mock banks
         id: fints-mock
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ runner.temp }}/fints
@@ -80,7 +82,7 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -90,12 +92,37 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # The UI package: token and contrast tests, and the guard that keeps raw spacing, sizes and
+  # colours out of the screens (CLAUDE.md); the catalog must type check and bundle (docs/UI.md).
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/ui/package-lock.json
+            packages/shopping/package-lock.json
+            apps/catalog/package-lock.json
+      - name: Tokens, contrast and the no-raw-values guard
+        run: |
+          npm ci --prefix packages/ui
+          npm test --prefix packages/ui
+      - name: Catalog type check and web bundle
+        working-directory: apps/catalog
+        run: |
+          npm ci
+          npm run typecheck
+          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/catalog-web"
+
   # The shopping assistant: its module (logic tests), the standalone app (type check, web bundle)
   # and the finance app bundled with it (docs/SHOP.md).
   shopping:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22

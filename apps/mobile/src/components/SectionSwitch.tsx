@@ -1,14 +1,16 @@
 import { usePathname, useRouter } from "expo-router";
-import { Pressable, ScrollView, Text as RNText } from "react-native";
+import { Pressable, ScrollView, Text as RNText, View } from "react-native";
 
 import { MIN_TOUCH } from "@/a11y";
 import { tap } from "@/native/haptics";
 import { switchFor } from "@/navigation";
-import { radius, space, usePalette } from "@/theme";
+import { space, usePalette } from "@/theme";
 
 /**
- * The switcher under the title of screens that share a tab (Spending | Budget, Prices | Recipes |
- * Meal plan | Usual items). Renders nothing on other screens, so it can be dropped in anywhere.
+ * The tab strip under the title of screens that share a tab (Spending | Budget, Prices | Recipes |
+ * Meal plan | Usual items): plain text, the open one in the accent colour with a line under it,
+ * the whole strip closed by a hairline. Renders nothing on other screens, so it can be dropped in
+ * anywhere.
  */
 export function SectionSwitch() {
   const p = usePalette();
@@ -20,8 +22,8 @@ export function SectionSwitch() {
       horizontal
       showsHorizontalScrollIndicator={false}
       accessibilityRole="tablist"
-      style={{ flexGrow: 0, flexShrink: 0, marginBottom: space.md }}
-      contentContainerStyle={{ gap: space.sm }}
+      style={{ flexGrow: 0, flexShrink: 0, marginBottom: space.md, borderBottomWidth: 1, borderBottomColor: p.border }}
+      contentContainerStyle={{ gap: space.xl }}
     >
       {current.items.map((item) => {
         const selected = item.href === current.active;
@@ -34,16 +36,10 @@ export function SectionSwitch() {
               tap();
               if (!selected) router.replace(item.href as never);
             }}
-            style={{
-              minHeight: MIN_TOUCH,
-              paddingHorizontal: space.md,
-              borderRadius: radius.pill,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: selected ? p.accent : p.surfaceAlt,
-            }}
+            style={{ minHeight: MIN_TOUCH, justifyContent: "center" }}
           >
-            <RNText style={{ color: selected ? p.onAccent : p.text, fontSize: 15, fontWeight: "700" }}>{item.label}</RNText>
+            <RNText style={{ color: selected ? p.accent : p.muted, fontSize: 15, fontWeight: selected ? "800" : "600" }}>{item.label}</RNText>
+            <View style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 2, backgroundColor: selected ? p.accent : "transparent" }} />
           </Pressable>
         );
       })}
