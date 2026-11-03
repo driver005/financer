@@ -6,6 +6,7 @@ mod bank;
 mod bank_connections;
 mod bank_plaid;
 mod budget_period;
+mod calendar;
 mod categorization;
 mod dto;
 mod export;
@@ -323,6 +324,16 @@ impl AppState {
         mealplan::get_shopping_list,
         mealplan::get_pantry,
         mealplan::put_pantry,
+        calendar::list_calendars,
+        calendar::create_calendar,
+        calendar::update_calendar,
+        calendar::delete_calendar,
+        calendar::list_events,
+        calendar::get_event,
+        calendar::create_event,
+        calendar::update_event,
+        calendar::delete_event,
+        calendar::add_exception,
     ),
     components(schemas(
         dto::TransactionDto,
@@ -341,6 +352,9 @@ impl AppState {
         dto::ErrorBody,
         dto::ExportTransaction,
         dto::ExportReceipt,
+        dto::ExportCalendar,
+        dto::ExportEvent,
+        calendar::EventBody,
         dto::ExportSettings,
         dto::ExportDto,
         dto::ImportReportDto,
@@ -438,6 +452,12 @@ impl AppState {
         mealplan::ChainTotalDto,
         mealplan::UnmatchedDto,
         mealplan::MealBudgetDto,
+        calendar::CalendarDto,
+        calendar::CalendarInput,
+        calendar::RepeatDto,
+        calendar::EventDto,
+        calendar::EventInput,
+        calendar::ExceptionInput,
         mealplan::ShoppingListDto,
     )),
     modifiers(&BearerAuth)
@@ -569,6 +589,28 @@ impl Api {
             .route("/subscriptions", get(watchdog::subscriptions))
             .route("/alerts", get(watchdog::alerts))
             .route("/alerts/{id}/dismiss", post(watchdog::dismiss_alert))
+            .route(
+                "/calendar/calendars",
+                get(calendar::list_calendars).post(calendar::create_calendar),
+            )
+            .route(
+                "/calendar/calendars/{id}",
+                put(calendar::update_calendar).delete(calendar::delete_calendar),
+            )
+            .route(
+                "/calendar/events",
+                get(calendar::list_events).post(calendar::create_event),
+            )
+            .route(
+                "/calendar/events/{id}",
+                get(calendar::get_event)
+                    .put(calendar::update_event)
+                    .delete(calendar::delete_event),
+            )
+            .route(
+                "/calendar/events/{id}/exceptions",
+                post(calendar::add_exception),
+            )
             .route(
                 "/meal-plan",
                 get(mealplan::get_meal_plan).put(mealplan::put_meal_plan),

@@ -353,6 +353,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/calendar/calendars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your calendars in display order. A new database has one, "Personal". */
+        get: operations["list_calendars"];
+        put?: never;
+        /** Add a calendar. */
+        post: operations["create_calendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/calendar/calendars/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change a calendar's name, colour or whether it is shown. */
+        put: operations["update_calendar"];
+        post?: never;
+        /** Delete a calendar with all its events. The last calendar cannot be deleted. */
+        delete: operations["delete_calendar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/calendar/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The events that can show between two days (inclusive): single events overlapping the range and
+         *     every repeating event that has started and not ended. Expanding the repeats is up to the client.
+         */
+        get: operations["list_events"];
+        put?: never;
+        /** Add an event. */
+        post: operations["create_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/calendar/events/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One event. */
+        get: operations["get_event"];
+        /** Replace an event, or a whole repeating series. */
+        put: operations["update_event"];
+        post?: never;
+        /** Delete an event, or a whole repeating series. */
+        delete: operations["delete_event"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/calendar/events/{id}/exceptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete one occurrence of a repeating event; the rest of the series stays. */
+        post: operations["add_exception"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/catalog": {
         parameters: {
             query?: never;
@@ -1290,6 +1383,19 @@ export interface components {
             quantity: number;
             reference_pack: string;
         };
+        CalendarDto: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /** @description accent, success, warning, danger, info or neutral. */
+            tone: string;
+            visible: boolean;
+        };
+        CalendarInput: {
+            name: string;
+            tone: string;
+            visible: boolean;
+        };
         CatalogItemDto: {
             key: string;
             name: string;
@@ -1500,6 +1606,94 @@ export interface components {
         ErrorBody: {
             error: string;
         };
+        /** @description The fields of an event that do not depend on which backend holds it. */
+        EventBody: {
+            all_day: boolean;
+            /**
+             * Format: date
+             * @example 2026-11-03
+             */
+            end_date: string;
+            end_time?: string | null;
+            exceptions?: string[];
+            location?: string | null;
+            notes?: string | null;
+            reminders: number[];
+            repeat: components["schemas"]["RepeatDto"];
+            /**
+             * Format: date
+             * @example 2026-11-03
+             */
+            start_date: string;
+            start_time?: string | null;
+            title: string;
+        };
+        EventDto: {
+            all_day: boolean;
+            /** Format: int64 */
+            calendar_id: number;
+            /**
+             * Format: date
+             * @description For an all-day event this day is included.
+             * @example 2026-11-03
+             */
+            end_date: string;
+            end_time?: string | null;
+            /** @description Occurrences that were deleted from a repeating event. */
+            exceptions: string[];
+            /** Format: int64 */
+            id: number;
+            location?: string | null;
+            notes?: string | null;
+            /** @description Minutes before the start at which to remind. */
+            reminders: number[];
+            repeat: components["schemas"]["RepeatDto"];
+            /**
+             * Format: date
+             * @example 2026-11-03
+             */
+            start_date: string;
+            /** @description `HH:MM`; none for an all-day event. */
+            start_time?: string | null;
+            title: string;
+        };
+        EventInput: {
+            all_day: boolean;
+            /** Format: int64 */
+            calendar_id: number;
+            /**
+             * Format: date
+             * @example 2026-11-03
+             */
+            end_date: string;
+            end_time?: string | null;
+            exceptions?: string[];
+            location?: string | null;
+            notes?: string | null;
+            reminders: number[];
+            repeat: components["schemas"]["RepeatDto"];
+            /**
+             * Format: date
+             * @example 2026-11-03
+             */
+            start_date: string;
+            start_time?: string | null;
+            title: string;
+        };
+        ExceptionInput: {
+            /**
+             * Format: date
+             * @description The occurrence to skip.
+             * @example 2026-11-10
+             */
+            date: string;
+        };
+        /** @description A calendar in an export. */
+        ExportCalendar: {
+            name: string;
+            tone: string;
+            visible: boolean;
+        };
         /**
          * @description Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
          *     which are fetched again.
@@ -1507,6 +1701,9 @@ export interface components {
         ExportDto: {
             basket: components["schemas"]["BasketItemDto"][];
             budget: components["schemas"]["EnvelopeDto"][];
+            /** @description Added in the calendar release; older exports have none. */
+            calendars?: components["schemas"]["ExportCalendar"][];
+            events?: components["schemas"]["ExportEvent"][];
             receipts: components["schemas"]["ExportReceipt"][];
             settings: components["schemas"]["ExportSettings"];
             transactions: components["schemas"]["ExportTransaction"][];
@@ -1515,6 +1712,10 @@ export interface components {
              * @description Format version, currently 1.
              */
             version: number;
+        };
+        /** @description An event in an export; its calendar is named, since ids differ between backends. */
+        ExportEvent: components["schemas"]["EventBody"] & {
+            calendar: string;
         };
         ExportReceipt: {
             fingerprint: string;
@@ -1683,6 +1884,7 @@ export interface components {
         ImportReportDto: {
             basket_items: number;
             budget_envelopes: number;
+            events_added: number;
             receipts_added: number;
             receipts_known: number;
             transactions_added: number;
@@ -2139,6 +2341,29 @@ export interface components {
             /** @description Quotes stored after this refresh. */
             stored: number;
             unmatched: number;
+        };
+        /** @description How an event repeats. */
+        RepeatDto: {
+            /**
+             * Format: int32
+             * @description Stop after this many occurrences (not together with `until`).
+             */
+            count?: number | null;
+            /**
+             * Format: int32
+             * @description Every n days, weeks, months or years (1 to 99).
+             */
+            interval: number;
+            /** @description none, daily, weekly, monthly or yearly. */
+            kind: string;
+            /**
+             * Format: date
+             * @description The last day an occurrence may fall on.
+             * @example 2026-12-31
+             */
+            until?: string | null;
+            /** @description Weekly only: MO, TU, WE, TH, FR, SA, SU. Empty means the weekday of the start. */
+            weekdays: string[];
         };
         /**
          * @description A user categorization rule. Rules run in list order; the first match wins and beats the
@@ -3379,6 +3604,354 @@ export interface operations {
             };
             /** @description Invalid month */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_calendars: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarDto"][];
+                };
+            };
+        };
+    };
+    create_calendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarDto"];
+                };
+            };
+            /** @description Empty name, unknown colour or too many calendars */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_calendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarDto"];
+                };
+            };
+            /** @description Empty name or unknown colour */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such calendar */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_calendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description It is the last calendar */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such calendar */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description First day, inclusive.
+                 * @example 2026-11-01
+                 */
+                from: string;
+                /**
+                 * @description Last day, inclusive.
+                 * @example 2026-11-30
+                 */
+                to: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventDto"][];
+                };
+            };
+            /** @description The range is backwards or longer than 800 days */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventDto"];
+                };
+            };
+            /** @description Empty title, bad times, bad repeat or unknown calendar */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventDto"];
+                };
+            };
+            /** @description No such event */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventDto"];
+                };
+            };
+            /** @description Empty title, bad times, bad repeat or unknown calendar */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such event */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such event */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_exception: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExceptionInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventDto"];
+                };
+            };
+            /** @description The event does not repeat */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such event */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -92,7 +92,11 @@ impl MigrationTrait for Migration {
                             .integer()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(CalendarEvents::RepeatWeekdays).string().null())
+                    .col(
+                        ColumnDef::new(CalendarEvents::RepeatWeekdays)
+                            .string()
+                            .null(),
+                    )
                     .col(ColumnDef::new(CalendarEvents::RepeatUntil).date().null())
                     .col(ColumnDef::new(CalendarEvents::RepeatCount).integer().null())
                     .col(

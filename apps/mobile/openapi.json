@@ -1087,6 +1087,510 @@
         ]
       }
     },
+    "/v1/calendar/calendars": {
+      "get": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "Your calendars in display order. A new database has one, \"Personal\".",
+        "operationId": "list_calendars",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "Add a calendar.",
+        "operationId": "create_calendar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty name, unknown colour or too many calendars",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/calendar/calendars/{id}": {
+      "put": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "Change a calendar's name, colour or whether it is shown.",
+        "operationId": "update_calendar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty name or unknown colour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such calendar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "Delete a calendar with all its events. The last calendar cannot be deleted.",
+        "operationId": "delete_calendar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "400": {
+            "description": "It is the last calendar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such calendar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/calendar/events": {
+      "get": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "The events that can show between two days (inclusive): single events overlapping the range and\nevery repeating event that has started and not ended. Expanding the repeats is up to the client.",
+        "operationId": "list_events",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "path",
+            "description": "First day, inclusive.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2026-11-01"
+          },
+          {
+            "name": "to",
+            "in": "path",
+            "description": "Last day, inclusive.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2026-11-30"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The range is backwards or longer than 800 days",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "Add an event.",
+        "operationId": "create_event",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty title, bad times, bad repeat or unknown calendar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/calendar/events/{id}": {
+      "get": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "One event.",
+        "operationId": "get_event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "Replace an event, or a whole repeating series.",
+        "operationId": "update_event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty title, bad times, bad repeat or unknown calendar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "Delete an event, or a whole repeating series.",
+        "operationId": "delete_event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "No such event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/calendar/events/{id}/exceptions": {
+      "post": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "Delete one occurrence of a repeating event; the rest of the series stays.",
+        "operationId": "add_exception",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExceptionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The event does not repeat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/catalog": {
       "get": {
         "tags": [
@@ -3736,6 +4240,50 @@
           }
         }
       },
+      "CalendarDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "tone",
+          "visible"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tone": {
+            "type": "string",
+            "description": "accent, success, warning, danger, info or neutral."
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CalendarInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "tone",
+          "visible"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tone": {
+            "type": "string"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        }
+      },
       "CatalogItemDto": {
         "type": "object",
         "required": [
@@ -4279,6 +4827,274 @@
           }
         }
       },
+      "EventBody": {
+        "type": "object",
+        "description": "The fields of an event that do not depend on which backend holds it.",
+        "required": [
+          "title",
+          "all_day",
+          "start_date",
+          "end_date",
+          "repeat",
+          "reminders"
+        ],
+        "properties": {
+          "all_day": {
+            "type": "boolean"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-11-03"
+          },
+          "end_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exceptions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          "repeat": {
+            "$ref": "#/components/schemas/RepeatDto"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-11-03"
+          },
+          "start_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "EventDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "calendar_id",
+          "title",
+          "all_day",
+          "start_date",
+          "end_date",
+          "repeat",
+          "exceptions",
+          "reminders"
+        ],
+        "properties": {
+          "all_day": {
+            "type": "boolean"
+          },
+          "calendar_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "description": "For an all-day event this day is included.",
+            "example": "2026-11-03"
+          },
+          "end_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exceptions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Occurrences that were deleted from a repeating event."
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Minutes before the start at which to remind."
+          },
+          "repeat": {
+            "$ref": "#/components/schemas/RepeatDto"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-11-03"
+          },
+          "start_time": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`HH:MM`; none for an all-day event."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "EventInput": {
+        "type": "object",
+        "required": [
+          "calendar_id",
+          "title",
+          "all_day",
+          "start_date",
+          "end_date",
+          "repeat",
+          "reminders"
+        ],
+        "properties": {
+          "all_day": {
+            "type": "boolean"
+          },
+          "calendar_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-11-03"
+          },
+          "end_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exceptions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          "repeat": {
+            "$ref": "#/components/schemas/RepeatDto"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-11-03"
+          },
+          "start_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "ExceptionInput": {
+        "type": "object",
+        "required": [
+          "date"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "The occurrence to skip.",
+            "example": "2026-11-10"
+          }
+        }
+      },
+      "ExportCalendar": {
+        "type": "object",
+        "description": "A calendar in an export.",
+        "required": [
+          "name",
+          "tone",
+          "visible"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tone": {
+            "type": "string"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        }
+      },
       "ExportDto": {
         "type": "object",
         "description": "Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,\nwhich are fetched again.",
@@ -4303,6 +5119,19 @@
               "$ref": "#/components/schemas/EnvelopeDto"
             }
           },
+          "calendars": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportCalendar"
+            },
+            "description": "Added in the calendar release; older exports have none."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportEvent"
+            }
+          },
           "receipts": {
             "type": "array",
             "items": {
@@ -4325,6 +5154,25 @@
             "minimum": 0
           }
         }
+      },
+      "ExportEvent": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EventBody"
+          },
+          {
+            "type": "object",
+            "required": [
+              "calendar"
+            ],
+            "properties": {
+              "calendar": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "An event in an export; its calendar is named, since ids differ between backends."
       },
       "ExportReceipt": {
         "type": "object",
@@ -4770,7 +5618,8 @@
           "receipts_added",
           "receipts_known",
           "budget_envelopes",
-          "basket_items"
+          "basket_items",
+          "events_added"
         ],
         "properties": {
           "basket_items": {
@@ -4778,6 +5627,10 @@
             "minimum": 0
           },
           "budget_envelopes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "events_added": {
             "type": "integer",
             "minimum": 0
           },
@@ -6007,6 +6860,52 @@
           "unmatched": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "RepeatDto": {
+        "type": "object",
+        "description": "How an event repeats.",
+        "required": [
+          "kind",
+          "interval",
+          "weekdays"
+        ],
+        "properties": {
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Stop after this many occurrences (not together with `until`).",
+            "minimum": 0
+          },
+          "interval": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Every n days, weeks, months or years (1 to 99).",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "description": "none, daily, weekly, monthly or yearly."
+          },
+          "until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "The last day an occurrence may fall on.",
+            "example": "2026-12-31"
+          },
+          "weekdays": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Weekly only: MO, TU, WE, TH, FR, SA, SU. Empty means the weekday of the start."
           }
         }
       },

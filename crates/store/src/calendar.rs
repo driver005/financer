@@ -235,7 +235,10 @@ impl Store {
 
     /// Replaces name, colour and visibility; false when the calendar does not exist.
     pub async fn update_calendar(&self, id: i64, c: &NewCalendar) -> Result<bool, StoreError> {
-        let Some(m) = calendar_entity::Entity::find_by_id(id).one(&self.db).await? else {
+        let Some(m) = calendar_entity::Entity::find_by_id(id)
+            .one(&self.db)
+            .await?
+        else {
             return Ok(false);
         };
         let mut a: calendar_entity::ActiveModel = m.into();
@@ -318,7 +321,9 @@ impl Store {
 
     /// Deletes an event or a whole series; false when it does not exist.
     pub async fn delete_event(&self, id: i64) -> Result<bool, StoreError> {
-        let gone = event_entity::Entity::delete_by_id(id).exec(&self.db).await?;
+        let gone = event_entity::Entity::delete_by_id(id)
+            .exec(&self.db)
+            .await?;
         Ok(gone.rows_affected > 0)
     }
 
@@ -375,25 +380,65 @@ mod tests {
         let store = Store::connect("sqlite::memory:").await.unwrap();
         let personal = store.calendars().await.unwrap()[0].id;
         let work = store
-            .create_calendar(&NewCalendar { name: "Work".into(), tone: "info".into(), visible: true })
+            .create_calendar(&NewCalendar {
+                name: "Work".into(),
+                tone: "info".into(),
+                visible: true,
+            })
             .await
             .unwrap();
         assert_eq!(work.position, 1);
         assert!(store
-            .update_calendar(work.id, &NewCalendar { name: "Job".into(), tone: "danger".into(), visible: false })
+            .update_calendar(
+                work.id,
+                &NewCalendar {
+                    name: "Job".into(),
+                    tone: "danger".into(),
+                    visible: false
+                }
+            )
             .await
             .unwrap());
         let job = store.calendar(work.id).await.unwrap().unwrap();
-        assert_eq!((job.name.as_str(), job.tone.as_str(), job.visible), ("Job", "danger", false));
+        assert_eq!(
+            (job.name.as_str(), job.tone.as_str(), job.visible),
+            ("Job", "danger", false)
+        );
         assert!(!store
-            .update_calendar(999, &NewCalendar { name: "x".into(), tone: "info".into(), visible: true })
+            .update_calendar(
+                999,
+                &NewCalendar {
+                    name: "x".into(),
+                    tone: "info".into(),
+                    visible: true
+                }
+            )
             .await
             .unwrap());
 
-        store.create_event(&event(work.id, "Standup", date!(2026 - 11 - 03), date!(2026 - 11 - 03))).await.unwrap();
-        store.create_event(&event(personal, "Dentist", date!(2026 - 11 - 04), date!(2026 - 11 - 04))).await.unwrap();
+        store
+            .create_event(&event(
+                work.id,
+                "Standup",
+                date!(2026 - 11 - 03),
+                date!(2026 - 11 - 03),
+            ))
+            .await
+            .unwrap();
+        store
+            .create_event(&event(
+                personal,
+                "Dentist",
+                date!(2026 - 11 - 04),
+                date!(2026 - 11 - 04),
+            ))
+            .await
+            .unwrap();
         assert!(store.delete_calendar(work.id).await.unwrap());
-        let left = store.calendar_events(date!(2026 - 11 - 01), date!(2026 - 11 - 30)).await.unwrap();
+        let left = store
+            .calendar_events(date!(2026 - 11 - 01), date!(2026 - 11 - 30))
+            .await
+            .unwrap();
         assert_eq!(left.len(), 1);
         assert_eq!(left[0].event.title, "Dentist");
         assert!(!store.delete_calendar(work.id).await.unwrap());
@@ -404,10 +449,42 @@ mod tests {
         let store = Store::connect("sqlite::memory:").await.unwrap();
         let cal = store.calendars().await.unwrap()[0].id;
         // a trip that starts before the range and ends inside it, one fully inside, one after
-        store.create_event(&event(cal, "Trip", date!(2026 - 10 - 29), date!(2026 - 11 - 02))).await.unwrap();
-        store.create_event(&event(cal, "Lunch", date!(2026 - 11 - 10), date!(2026 - 11 - 10))).await.unwrap();
-        store.create_event(&event(cal, "Later", date!(2026 - 12 - 01), date!(2026 - 12 - 01))).await.unwrap();
-        store.create_event(&event(cal, "Earlier", date!(2026 - 10 - 01), date!(2026 - 10 - 01))).await.unwrap();
+        store
+            .create_event(&event(
+                cal,
+                "Trip",
+                date!(2026 - 10 - 29),
+                date!(2026 - 11 - 02),
+            ))
+            .await
+            .unwrap();
+        store
+            .create_event(&event(
+                cal,
+                "Lunch",
+                date!(2026 - 11 - 10),
+                date!(2026 - 11 - 10),
+            ))
+            .await
+            .unwrap();
+        store
+            .create_event(&event(
+                cal,
+                "Later",
+                date!(2026 - 12 - 01),
+                date!(2026 - 12 - 01),
+            ))
+            .await
+            .unwrap();
+        store
+            .create_event(&event(
+                cal,
+                "Earlier",
+                date!(2026 - 10 - 01),
+                date!(2026 - 10 - 01),
+            ))
+            .await
+            .unwrap();
         let titles: Vec<_> = store
             .calendar_events(date!(2026 - 11 - 01), date!(2026 - 11 - 30))
             .await
@@ -432,19 +509,34 @@ mod tests {
         ended.repeat_until = Some(date!(2026 - 09 - 30));
         store.create_event(&ended).await.unwrap();
 
-        let found = store.calendar_events(date!(2026 - 11 - 01), date!(2026 - 11 - 30)).await.unwrap();
+        let found = store
+            .calendar_events(date!(2026 - 11 - 01), date!(2026 - 11 - 30))
+            .await
+            .unwrap();
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].event, weekly);
         assert_eq!(found[0].id, saved.id);
         // before the series started, nothing
-        assert!(store.calendar_events(date!(2026 - 08 - 01), date!(2026 - 08 - 31)).await.unwrap().is_empty());
+        assert!(store
+            .calendar_events(date!(2026 - 08 - 01), date!(2026 - 08 - 31))
+            .await
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]
     async fn events_are_replaced_and_deleted_and_all_day_has_no_times() {
         let store = Store::connect("sqlite::memory:").await.unwrap();
         let cal = store.calendars().await.unwrap()[0].id;
-        let saved = store.create_event(&event(cal, "Draft", date!(2026 - 11 - 03), date!(2026 - 11 - 03))).await.unwrap();
+        let saved = store
+            .create_event(&event(
+                cal,
+                "Draft",
+                date!(2026 - 11 - 03),
+                date!(2026 - 11 - 03),
+            ))
+            .await
+            .unwrap();
         let mut changed = saved.event.clone();
         changed.title = "Holiday".into();
         changed.all_day = true;
@@ -453,7 +545,10 @@ mod tests {
         changed.end_date = date!(2026 - 11 - 07);
         changed.location = Some("Sylt".into());
         assert!(store.update_event(saved.id, &changed).await.unwrap());
-        assert_eq!(store.calendar_event(saved.id).await.unwrap().unwrap().event, changed);
+        assert_eq!(
+            store.calendar_event(saved.id).await.unwrap().unwrap().event,
+            changed
+        );
         assert!(!store.update_event(999, &changed).await.unwrap());
         assert!(store.delete_event(saved.id).await.unwrap());
         assert!(!store.delete_event(saved.id).await.unwrap());
