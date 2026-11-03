@@ -10,3 +10,6 @@ export type Opacity = keyof typeof opacity;
 
 /** How far a one-line text may shrink to fit (`Text fit`), and how far the system font size may enlarge it. */
 export const fitScale = { min: 0.6, max: 1.2 } as const;
+
+/** Events that overlap in the calendar lie on top of each other, each one `indent` percent further right, together at most `spread` percent. */
+export const overlap = { indent: 12, spread: 60 } as const;

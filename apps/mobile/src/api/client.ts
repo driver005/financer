@@ -35,6 +35,11 @@ export type MealDayInput = components["schemas"]["MealDayInput"];
 export type MealShoppingList = components["schemas"]["ShoppingListDto"];
 export type ShoppingItem = components["schemas"]["ShoppingItemDto"];
 export type Pantry = components["schemas"]["PantryDto"];
+export type Calendar = components["schemas"]["CalendarDto"];
+export type CalendarInput = components["schemas"]["CalendarInput"];
+export type CalendarEvent = components["schemas"]["EventDto"];
+export type CalendarEventInput = components["schemas"]["EventInput"];
+export type Repeat = components["schemas"]["RepeatDto"];
 export type Settings = components["schemas"]["SettingsDto"];
 export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
 export type BankStatus = components["schemas"]["BankStatus"];
@@ -404,6 +409,65 @@ export class Api {
   }
 
   // ---- categorization: rules, corrections, splits, AI suggestions ----
+
+  /**
+   * Where the shopping assistant's current subscription plans end (a phone or internet contract).
+   * The assistant runs under `/v1/shop` on the same server when the build has it; without it, or
+   * without a plan, the answer is an empty list.
+   */
+  async shopContracts(): Promise<{ category: string; name: string; plan: string | null; endsOn: string }[]> {
+    try {
+      const categories = await this.request<{ id: string; name: string; kind: string }[]>("/v1/shop/categories");
+      const out: { category: string; name: string; plan: string | null; endsOn: string }[] = [];
+      for (const c of categories.filter((x) => x.kind === "subscription")) {
+        const plan = await this.request<{ name?: string | null; ends_on?: string | null } | null>(`/v1/shop/my/${encodeURIComponent(c.id)}`);
+        if (plan?.ends_on) out.push({ category: c.id, name: c.name, plan: plan.name ?? null, endsOn: plan.ends_on });
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  // ---- calendar ----
+
+  calendars() {
+    return this.request<Calendar[]>("/v1/calendar/calendars");
+  }
+
+  createCalendar(calendar: CalendarInput) {
+    return this.json<Calendar>("/v1/calendar/calendars", "POST", calendar);
+  }
+
+  updateCalendar(id: number, calendar: CalendarInput) {
+    return this.json<Calendar>(`/v1/calendar/calendars/${id}`, "PUT", calendar);
+  }
+
+  deleteCalendar(id: number) {
+    return this.request<void>(`/v1/calendar/calendars/${id}`, { method: "DELETE" });
+  }
+
+  /** Events that can show between two days (`YYYY-MM-DD`, inclusive); repeating ones come as one rule. */
+  calendarEvents(from: string, to: string) {
+    return this.request<CalendarEvent[]>(`/v1/calendar/events?from=${from}&to=${to}`);
+  }
+
+  createEvent(event: CalendarEventInput) {
+    return this.json<CalendarEvent>("/v1/calendar/events", "POST", event);
+  }
+
+  updateEvent(id: number, event: CalendarEventInput) {
+    return this.json<CalendarEvent>(`/v1/calendar/events/${id}`, "PUT", event);
+  }
+
+  deleteEvent(id: number) {
+    return this.request<void>(`/v1/calendar/events/${id}`, { method: "DELETE" });
+  }
+
+  /** Delete one occurrence of a repeating event. */
+  skipOccurrence(id: number, date: string) {
+    return this.json<CalendarEvent>(`/v1/calendar/events/${id}/exceptions`, "POST", { date });
+  }
 
   rules() {
     return this.request<Rule[]>("/v1/rules");

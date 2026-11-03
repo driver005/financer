@@ -24,6 +24,7 @@ export default function RootLayout() {
         <Tabs screenOptions={{ headerShown: false }} tabBar={() => null}>
           {/* the bottom bar (AppFrame) lists three tabs; every route below stays reachable by link */}
           <Tabs.Screen name="index" options={{ title: "Today" }} />
+          <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
           <Tabs.Screen name="spending" options={{ title: "Spending" }} />
           <Tabs.Screen name="budget" options={{ title: "Budget" }} />
           <Tabs.Screen name="prices" options={{ title: "Prices" }} />

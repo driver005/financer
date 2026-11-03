@@ -6,6 +6,7 @@ import { AppShell, Box, Row, Screen, Segmented, Stack, Text, ThemeProvider, TopB
 
 import { Story, type StoryDef } from "./Story";
 import { actions } from "./stories/actions";
+import { calendarStories } from "./stories/calendar";
 import { feedback } from "./stories/feedback";
 import { financeStories } from "./stories/finance";
 import { foundations } from "./stories/foundations";
@@ -13,7 +14,7 @@ import { layoutStories } from "./stories/layout";
 import { mailStories } from "./stories/mail";
 import { shopStories } from "./stories/shop";
 
-type Group = "foundations" | "actions" | "feedback" | "layout" | "finance" | "shop" | "mail";
+type Group = "foundations" | "actions" | "feedback" | "layout" | "finance" | "calendar" | "shop" | "mail";
 
 const GROUPS: (NavItem<Group> & { stories: StoryDef[]; title: string })[] = [
   { key: "foundations", label: "Tokens", title: "Foundations", icon: "palette-outline", stories: foundations },
@@ -21,6 +22,7 @@ const GROUPS: (NavItem<Group> & { stories: StoryDef[]; title: string })[] = [
   { key: "feedback", label: "Display", title: "Feedback and data", icon: "view-dashboard-outline", stories: feedback },
   { key: "layout", label: "Layout", title: "Layout and navigation", icon: "page-layout-body", stories: layoutStories },
   { key: "finance", label: "Finance", title: "Finance", icon: "cash-multiple", stories: financeStories },
+  { key: "calendar", label: "Calendar", title: "Calendar", icon: "calendar-month-outline", stories: calendarStories },
   { key: "shop", label: "Shopping", title: "Shopping", icon: "shopping-outline", stories: shopStories },
   { key: "mail", label: "Mail", title: "Mail", icon: "email-outline", stories: mailStories },
 ];

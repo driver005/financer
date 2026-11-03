@@ -2,6 +2,7 @@
 //! on the phone, or a single-file server) and PostgreSQL; the backend is chosen by URL.
 
 mod alerts;
+mod calendar;
 pub mod entity;
 mod mealplan;
 pub mod migration;
@@ -17,6 +18,7 @@ use sea_orm::{
 use sea_orm_migration::MigratorTrait;
 
 pub use alerts::AlertDismissal;
+pub use calendar::{NewCalendar, NewEvent, StoredCalendar, StoredEvent};
 pub use mealplan::StoredMealDay;
 pub use receipt_sources::{NewReceipt, ReceiptMeta, SourceState};
 pub use rules::{SplitOutcome, StoredSplit, UnknownMerchant};

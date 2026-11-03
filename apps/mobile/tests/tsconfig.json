@@ -27,6 +27,11 @@
     "../src/rules.ts",
     "../src/receiptSources.ts",
     "../src/navigation.ts",
+    "../src/calendar.ts",
+    "../src/calendarView.ts",
+    "../src/calendarForm.ts",
+    "../src/calendarFeeds.ts",
+    "../src/period.ts",
     "./*.test.ts"
   ]
 }

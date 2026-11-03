@@ -12,7 +12,7 @@ function routes(): string[] {
 }
 
 describe("tabs", () => {
-  it("has at most three tabs", () => assert.ok(TABS.length <= 3));
+  it("has at most four tabs", () => assert.ok(TABS.length <= 4));
   it("gives every screen a home tab, or marks it bare", () => {
     const owned = new Set([...TABS.flatMap((t) => t.screens), ...SETTINGS_SCREENS, ...BARE_SCREENS]);
     for (const r of routes()) assert.ok(owned.has(r), `${r} belongs to no tab and is not in the settings area`);

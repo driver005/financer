@@ -79,8 +79,21 @@ p("use crate::transport::Transport;");
 p("");
 
 // ---- schemas -----------------------------------------------------------------------------------
+/** An `allOf` (a flattened struct on the server) becomes one object with all the fields. */
+function flatten(s) {
+  if (!s.allOf) return s;
+  const out = { type: "object", properties: {}, required: [], description: s.description };
+  for (const part of s.allOf) {
+    const r = flatten(part.$ref ? schemas[refName(part.$ref)] : part);
+    if (r.type !== "object") fail(`allOf part is ${r.type}`);
+    Object.assign(out.properties, r.properties ?? {});
+    out.required.push(...(r.required ?? []));
+  }
+  return out;
+}
+
 for (const name of Object.keys(schemas).sort()) {
-  const s = schemas[name];
+  const s = flatten(schemas[name]);
   if (s.enum) {
     p(doc3(s.description, "").trimEnd());
     p("#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]");

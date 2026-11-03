@@ -20,7 +20,7 @@ export function dimValue(d: Dim): number {
 }
 
 export type MaxWidth = keyof typeof size.content;
-export type Basis = "auto" | "full" | "half";
+export type Basis = "auto" | "full" | "half" | "third" | "quarter";
 /** How much of the parent a box may take: most of it (a chat bubble leaves room on the other side). */
 export type Share = "most";
 
@@ -92,7 +92,7 @@ const JUSTIFY: Record<Justify, ViewStyle["justifyContent"]> = {
   start: "flex-start", center: "center", end: "flex-end", between: "space-between", around: "space-around",
 };
 const SHEET_MAX_HEIGHT = "85%";
-const BASIS: Record<Basis, DimensionValue> = { auto: "auto", full: "100%", half: "50%" };
+const BASIS: Record<Basis, DimensionValue> = { auto: "auto", full: "100%", half: "50%", third: "33.333%", quarter: "25%" };
 const SHARE: Record<Share, DimensionValue> = { most: "80%" };
 
 export function bgColor(bg: BgToken, theme: Theme): string {

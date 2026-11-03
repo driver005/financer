@@ -249,3 +249,55 @@ export function lidlStateText(state: string, connectedAt: number | null | undefi
       return `Switched off on this ${onPhone ? "phone" : "server"}`;
   }
 }
+
+// ---- shops that have an app but no way in ----
+
+export type ShopGuide = {
+  shop: string;
+  /** What the shop offers, as far as it says so itself. */
+  summary: string;
+  /** How its receipts get into Financer. */
+  steps: string[];
+};
+
+/**
+ * REWE, Kaufland, Penny and ALDI. None of them offers a public interface for receipts, so Financer
+ * does not sign in to their apps; this says for each what does work. REWE mails the eBon as a PDF
+ * (the email source reads it); Kaufland and Penny keep the digital receipt inside their app; ALDI
+ * is not known to offer one. Written from what the shops publish (checked on 2026-11-03), so a
+ * shop may have changed it; the app itself is the authority.
+ */
+export const SHOP_GUIDES: readonly ShopGuide[] = [
+  {
+    shop: "REWE",
+    summary: "The eBon comes by email as a PDF. Financer reads it from your mailbox.",
+    steps: [
+      "In the REWE app (or your account on rewe.de) switch on the eBon and hold the app to the scanner at the till. Without that scan you get a paper receipt, and a missing eBon cannot be sent again.",
+      "REWE mails the eBon as a PDF to the address of your REWE account.",
+      "Connect that mailbox under Email above (needs your own server). Receipts then arrive by themselves.",
+    ],
+  },
+  {
+    shop: "Kaufland",
+    summary: "The digital receipt stays inside the Kaufland app. Financer cannot sign in there.",
+    steps: [
+      "In the Kaufland app, with your Kaufland Card, switch on the paperless receipt (\"Papierbon sparen\").",
+      "Open the receipt in the app and take a screenshot.",
+      "In Financer open Receipts and scan the screenshot. Kaufland receipts that reach your mailbox are picked up by the Email source.",
+    ],
+  },
+  {
+    shop: "Penny",
+    summary: "The eBon stays inside the PENNY app. Financer cannot sign in there.",
+    steps: [
+      "In the PENNY app switch on the eBon (it is off until you do) and scan the app at the till.",
+      "Open the receipt in the app and take a screenshot.",
+      "In Financer open Receipts and scan the screenshot. Penny receipts that reach your mailbox are picked up by the Email source.",
+    ],
+  },
+  {
+    shop: "ALDI",
+    summary: "No digital receipt is known for ALDI, so there is nothing to connect.",
+    steps: ["Keep the paper receipt and photograph it in Financer under Receipts.", "Your bank payment is matched to it afterwards, as with every other receipt."],
+  },
+];

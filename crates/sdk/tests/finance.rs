@@ -102,7 +102,7 @@ fn every_call_and_type_of_the_api_exists() {
             calls += 1;
         }
     }
-    assert_eq!(calls, 67);
+    assert_eq!(calls, 77);
     for name in doc["components"]["schemas"].as_object().unwrap().keys() {
         assert!(
             GENERATED.contains(&format!("pub struct {name} {{"))

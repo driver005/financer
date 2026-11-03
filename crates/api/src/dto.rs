@@ -516,6 +516,22 @@ pub struct ExportSettings {
     pub llm_model: Option<String>,
 }
 
+/// A calendar in an export.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ExportCalendar {
+    pub name: String,
+    pub tone: String,
+    pub visible: bool,
+}
+
+/// An event in an export; its calendar is named, since ids differ between backends.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ExportEvent {
+    pub calendar: String,
+    #[serde(flatten)]
+    pub event: crate::calendar::EventBody,
+}
+
 /// Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
 /// which are fetched again.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -527,6 +543,11 @@ pub struct ExportDto {
     pub basket: Vec<BasketItemDto>,
     pub receipts: Vec<ExportReceipt>,
     pub settings: ExportSettings,
+    /// Added in the calendar release; older exports have none.
+    #[serde(default)]
+    pub calendars: Vec<ExportCalendar>,
+    #[serde(default)]
+    pub events: Vec<ExportEvent>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -537,4 +558,5 @@ pub struct ImportReportDto {
     pub receipts_known: usize,
     pub budget_envelopes: usize,
     pub basket_items: usize,
+    pub events_added: usize,
 }

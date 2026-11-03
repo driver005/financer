@@ -209,6 +209,22 @@ pub struct BasketItemOutDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct CalendarDto {
+    pub id: i64,
+    pub name: String,
+    /// accent, success, warning, danger, info or neutral.
+    pub tone: String,
+    pub visible: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct CalendarInput {
+    pub name: String,
+    pub tone: String,
+    pub visible: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct CatalogItemDto {
     pub key: String,
     pub name: String,
@@ -436,6 +452,91 @@ pub struct ErrorBody {
     pub error: String,
 }
 
+/// The fields of an event that do not depend on which backend holds it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct EventBody {
+    pub all_day: bool,
+    pub end_date: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exceptions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(default)]
+    pub reminders: Vec<i32>,
+    pub repeat: RepeatDto,
+    pub start_date: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct EventDto {
+    pub all_day: bool,
+    pub calendar_id: i64,
+    /// For an all-day event this day is included.
+    pub end_date: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
+    /// Occurrences that were deleted from a repeating event.
+    #[serde(default)]
+    pub exceptions: Vec<String>,
+    pub id: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    /// Minutes before the start at which to remind.
+    #[serde(default)]
+    pub reminders: Vec<i32>,
+    pub repeat: RepeatDto,
+    pub start_date: String,
+    /// `HH:MM`; none for an all-day event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct EventInput {
+    pub all_day: bool,
+    pub calendar_id: i64,
+    pub end_date: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exceptions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(default)]
+    pub reminders: Vec<i32>,
+    pub repeat: RepeatDto,
+    pub start_date: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ExceptionInput {
+    /// The occurrence to skip.
+    pub date: String,
+}
+
+/// A calendar in an export.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ExportCalendar {
+    pub name: String,
+    pub tone: String,
+    pub visible: bool,
+}
+
 /// Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
 /// which are fetched again.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
@@ -444,6 +545,11 @@ pub struct ExportDto {
     pub basket: Vec<BasketItemDto>,
     #[serde(default)]
     pub budget: Vec<EnvelopeDto>,
+    /// Added in the calendar release; older exports have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calendars: Option<Vec<ExportCalendar>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub events: Option<Vec<ExportEvent>>,
     #[serde(default)]
     pub receipts: Vec<ExportReceipt>,
     pub settings: ExportSettings,
@@ -451,6 +557,29 @@ pub struct ExportDto {
     pub transactions: Vec<ExportTransaction>,
     /// Format version, currently 1.
     pub version: i32,
+}
+
+/// An event in an export; its calendar is named, since ids differ between backends.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ExportEvent {
+    pub all_day: bool,
+    pub end_date: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exceptions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(default)]
+    pub reminders: Vec<i32>,
+    pub repeat: RepeatDto,
+    pub start_date: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+    pub title: String,
+    pub calendar: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
@@ -609,6 +738,7 @@ pub struct ImportReport {
 pub struct ImportReportDto {
     pub basket_items: u32,
     pub budget_envelopes: u32,
+    pub events_added: u32,
     pub receipts_added: u32,
     pub receipts_known: u32,
     pub transactions_added: u32,
@@ -1064,6 +1194,24 @@ pub struct RefreshReportDto {
     /// Quotes stored after this refresh.
     pub stored: u32,
     pub unmatched: u32,
+}
+
+/// How an event repeats.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct RepeatDto {
+    /// Stop after this many occurrences (not together with `until`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<i32>,
+    /// Every n days, weeks, months or years (1 to 99).
+    pub interval: i32,
+    /// none, daily, weekly, monthly or yearly.
+    pub kind: String,
+    /// The last day an occurrence may fall on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<String>,
+    /// Weekly only: MO, TU, WE, TH, FR, SA, SU. Empty means the weekday of the start.
+    #[serde(default)]
+    pub weekdays: Vec<String>,
 }
 
 /// A user categorization rule. Rules run in list order; the first match wins and beats the
@@ -1588,6 +1736,11 @@ impl FinanceSdk {
         self.caller.decode(self.caller.json("POST", "/v1/transactions/categorize-unknown/accept".to_string(), Some(&body)).await?)
     }
 
+    /// Delete one occurrence of a repeating event; the rest of the series stays.
+    pub async fn add_exception(&self, id: i64, body: ExceptionInput) -> Result<EventDto, SdkError> {
+        self.caller.decode(self.caller.json("POST", format!("/v1/calendar/events/{}/exceptions", encode(&id.to_string())), Some(&body)).await?)
+    }
+
     /// What the budget buys: how long your usual basket lasts per chain, the cheapest items that
     /// fit, and the cheapest way to split the shopping.
     pub async fn affordability(&self, budget_cents: Option<i64>, days_per_basket: Option<i32>) -> Result<AffordabilityDto, SdkError> {
@@ -1657,9 +1810,29 @@ impl FinanceSdk {
         self.caller.decode(self.caller.json("POST", "/v1/backup/create".to_string(), Some(&body)).await?)
     }
 
+    /// Add a calendar.
+    pub async fn create_calendar(&self, body: CalendarInput) -> Result<CalendarDto, SdkError> {
+        self.caller.decode(self.caller.json("POST", "/v1/calendar/calendars".to_string(), Some(&body)).await?)
+    }
+
+    /// Add an event.
+    pub async fn create_event(&self, body: EventInput) -> Result<EventDto, SdkError> {
+        self.caller.decode(self.caller.json("POST", "/v1/calendar/events".to_string(), Some(&body)).await?)
+    }
+
     /// Add a rule at the end of the priority order.
     pub async fn create_rule(&self, body: RuleInput) -> Result<RuleDto, SdkError> {
         self.caller.decode(self.caller.json("POST", "/v1/rules".to_string(), Some(&body)).await?)
+    }
+
+    /// Delete a calendar with all its events. The last calendar cannot be deleted.
+    pub async fn delete_calendar(&self, id: i64) -> Result<(), SdkError> {
+        self.caller.json("DELETE", format!("/v1/calendar/calendars/{}", encode(&id.to_string())), None::<&()>).await.map(|_| ())
+    }
+
+    /// Delete an event, or a whole repeating series.
+    pub async fn delete_event(&self, id: i64) -> Result<(), SdkError> {
+        self.caller.json("DELETE", format!("/v1/calendar/events/{}", encode(&id.to_string())), None::<&()>).await.map(|_| ())
     }
 
     /// DELETE /v1/receipts/{id}
@@ -1727,6 +1900,11 @@ impl FinanceSdk {
         self.caller.decode(self.caller.json("GET", "/v1/budget/envelopes".to_string(), None::<&()>).await?)
     }
 
+    /// One event.
+    pub async fn get_event(&self, id: i64) -> Result<EventDto, SdkError> {
+        self.caller.decode(self.caller.json("GET", format!("/v1/calendar/events/{}", encode(&id.to_string())), None::<&()>).await?)
+    }
+
     /// The meals planned for a week (Monday to Sunday), one per day at most.
     pub async fn get_meal_plan(&self, week: Option<String>) -> Result<MealPlanDto, SdkError> {
         self.caller.decode(self.caller.json("GET", format!("/v1/meal-plan{}", query(&[("week", qv(&week))])), None::<&()>).await?)
@@ -1784,10 +1962,21 @@ impl FinanceSdk {
         self.caller.decode(self.caller.json("GET", "/v1/receipts/lidl/status".to_string(), None::<&()>).await?)
     }
 
+    /// Your calendars in display order. A new database has one, "Personal".
+    pub async fn list_calendars(&self) -> Result<Vec<CalendarDto>, SdkError> {
+        self.caller.decode(self.caller.json("GET", "/v1/calendar/calendars".to_string(), None::<&()>).await?)
+    }
+
     /// The bank connections from `financer.toml`, with the state of each. The login is masked and no
     /// secret is part of the answer.
     pub async fn list_connections(&self) -> Result<Vec<BankConnectionDto>, SdkError> {
         self.caller.decode(self.caller.json("GET", "/v1/bank/connections".to_string(), None::<&()>).await?)
+    }
+
+    /// The events that can show between two days (inclusive): single events overlapping the range and
+    /// every repeating event that has started and not ended. Expanding the repeats is up to the client.
+    pub async fn list_events(&self, from: Option<String>, to: Option<String>) -> Result<Vec<EventDto>, SdkError> {
+        self.caller.decode(self.caller.json("GET", format!("/v1/calendar/events{}", query(&[("from", qv(&from)), ("to", qv(&to))])), None::<&()>).await?)
     }
 
     /// Current prices per chain, cheapest first within each item.
@@ -1947,6 +2136,16 @@ impl FinanceSdk {
     /// transactions where that is unambiguous. `409` while another sync is running.
     pub async fn sync_now(&self, body: Option<ReceiptSyncRequest>) -> Result<ReceiptSyncDto, SdkError> {
         self.caller.decode(self.caller.json("POST", "/v1/receipts/sync".to_string(), body.as_ref()).await?)
+    }
+
+    /// Change a calendar's name, colour or whether it is shown.
+    pub async fn update_calendar(&self, id: i64, body: CalendarInput) -> Result<CalendarDto, SdkError> {
+        self.caller.decode(self.caller.json("PUT", format!("/v1/calendar/calendars/{}", encode(&id.to_string())), Some(&body)).await?)
+    }
+
+    /// Replace an event, or a whole repeating series.
+    pub async fn update_event(&self, id: i64, body: EventInput) -> Result<EventDto, SdkError> {
+        self.caller.decode(self.caller.json("PUT", format!("/v1/calendar/events/{}", encode(&id.to_string())), Some(&body)).await?)
     }
 
     /// Replace a rule's fields; its place in the order stays.

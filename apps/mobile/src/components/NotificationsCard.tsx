@@ -20,6 +20,7 @@ import { asIcon } from "@/uiTone";
 const ROWS: { kind: NotifyKind; icon: string; title: string; hint: string }[] = [
   { kind: "evening", icon: "weather-night", title: "Evening check", hint: "Around 18:00: what is still safe to spend today." },
   { kind: "payday", icon: "calendar-star", title: "Payday reminder", hint: "Around 08:00 on the day your next budget period starts." },
+  { kind: "events", icon: "calendar-clock", title: "Event reminders", hint: "The reminders you set on calendar events, for the next two weeks." },
   {
     kind: "priceDrop",
     icon: "tag-arrow-down-outline",

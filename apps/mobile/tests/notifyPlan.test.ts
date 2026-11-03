@@ -7,6 +7,7 @@ import {
   EMPTY_MEMORY,
   MAX_ANNOUNCED,
   anyEnabled,
+  eventPlan,
   eveningPlan,
   findPriceDrops,
   parsePrefs,
@@ -48,7 +49,7 @@ describe("preferences", () => {
 
   it("read the stored flags and ignore anything that is not exactly true", () => {
     const prefs = parsePrefs('{"evening":true,"payday":"yes","priceDrop":true,"other":true}');
-    assert.deepEqual(prefs, { evening: true, payday: false, priceDrop: true });
+    assert.deepEqual(prefs, { evening: true, payday: false, priceDrop: true, events: false });
     assert.equal(anyEnabled(prefs), true);
   });
 });
@@ -276,5 +277,47 @@ describe("priceDropMessage", () => {
     assert.equal(msg.title, "5 of your usual items got cheaper");
     assert.equal(msg.body.split("\n").length, 4);
     assert.match(msg.body, /and 2 more$/);
+  });
+});
+
+describe("eventPlan", () => {
+  const rule = (over: Partial<import("../src/calendar").EventRule> = {}): import("../src/calendar").EventRule => ({
+    id: 7,
+    calendarId: 1,
+    title: "Dentist",
+    location: "Dr. Weber",
+    allDay: false,
+    startDate: "2026-11-05",
+    startTime: "14:30",
+    endDate: "2026-11-05",
+    endTime: "15:15",
+    repeat: { kind: "none", interval: 1, weekdays: [] },
+    exceptions: [],
+    reminders: [60],
+    ...over,
+  });
+  const now = { date: "2026-11-03", minutes: 600 };
+
+  it("reminds minutes before the start, with place and time", () => {
+    const [p] = eventPlan([rule()], now);
+    assert.equal(p.date, "2026-11-05");
+    assert.equal(`${p.hour}:${p.minute}`, "13:30");
+    assert.equal(p.title, "Dentist");
+    assert.ok(p.body.includes("14:30") && p.body.includes("Dr. Weber"));
+    assert.equal(p.id, "financer.event.7:2026-11-05:60");
+  });
+  it("an all-day event counts from 09:00 and a day before lands the day before", () => {
+    const [p] = eventPlan([rule({ allDay: true, startTime: null, endTime: null, reminders: [1440] })], now);
+    assert.equal(p.date, "2026-11-04");
+    assert.equal(p.hour, 9);
+  });
+  it("leaves out reminders in the past and events beyond the horizon", () => {
+    assert.deepEqual(eventPlan([rule({ startDate: "2026-11-03", endDate: "2026-11-03", startTime: "10:30", endTime: "11:00", reminders: [60] })], now), []);
+    assert.deepEqual(eventPlan([rule({ startDate: "2027-03-01", endDate: "2027-03-01" })], now), []);
+  });
+  it("plans the next occurrences of a series, soonest first, up to the cap", () => {
+    const daily = rule({ repeat: { kind: "daily", interval: 1, weekdays: [] }, reminders: [0] });
+    const plan = eventPlan([daily], now, { max: 3 });
+    assert.deepEqual(plan.map((p) => p.date), ["2026-11-05", "2026-11-06", "2026-11-07"]);
   });
 });

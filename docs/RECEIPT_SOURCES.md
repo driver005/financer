@@ -254,3 +254,32 @@ pure helpers of the screen.
   documentation was not reachable either, so the behaviour of the authentication session on iOS with
   a custom callback scheme, and the Android intent filter, are taken from the package's own type
   definitions and general knowledge, not from a run.
+
+## REWE, Kaufland, Penny and ALDI
+
+None of the four has a public interface for receipts, and Financer does not sign in to their apps. Looked up on
+2026-11-03 from what the shops and press say, not tried with accounts:
+
+| Shop | What the shop offers | What works in Financer |
+| --- | --- | --- |
+| REWE | eBon in the REWE app or account; the PDF is mailed to the account's address and kept under "Meine Einkäufe" | the **Email** source reads the PDF. The REWE app's own interface is protected (Cloudflare mutual TLS since March 2024, certificates from the APK), so an app sign-in is not an option |
+| Kaufland | digital receipt in the Kaufland app with the Kaufland Card ("Papierbon sparen") | screenshot of the receipt, scanned under Receipts; the Email source picks up any receipt mail that does arrive |
+| Penny | eBon in the PENNY app (off until switched on) | same as Kaufland |
+| ALDI | no digital receipt found | photograph the paper receipt |
+
+What other people have worked out (read in their public code on 2026-11-03, none of it run by me):
+
+- **Kaufland**: the Bonfire project (`Naxter/bonfire`, pull request 26, file `backend/app/kaufland.py`) signs in through
+  Kaufland's own account page (OAuth with PKCE, `account.kaufland.com`, the redirect goes to the app's own
+  address) and reads the receipt history from a private API of the Schwarz group (`p.crm-dynamics.schwarz`,
+  `/api/v2/customers/{user}/transactions`), sending the app's client id and version. Its author says the API is
+  made for the app, is not stable, and was only tested with fake answers. A second project (`receipt-radar`) says
+  the receipt host is certificate-pinned, which a program written like the app's own client would meet too. This is
+  the same family of sign-in as Lidl Plus, so Financer could follow the Lidl Plus module.
+- **REWE**: `grocy-rewe-connect` reads `shop.rewe.de/api/receipts/` with the `rstp` session cookie copied from a
+  browser that is signed in to the REWE account (it expires and cannot be refreshed by a program). The app's own
+  API is behind client certificates (see above) and no project covers receipts there.
+- **Penny and ALDI**: nothing found.
+
+None of this is an official interface; it can stop working at any app update and may go against the shops' terms
+of use. Nothing of it is built into Financer yet. The guide in Settings > Receipt sources shows the table above.
