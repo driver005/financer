@@ -9,6 +9,8 @@ export type ListItemProps = {
   title: string;
   subtitle?: string;
   icon?: IconName;
+  /** Replaces the icon (an avatar, a tile in a tone). */
+  leading?: ReactNode;
   /** A quiet value on the right ("Weekly", "Off"). */
   value?: string;
   /** Anything on the right: a badge, a switch. */
@@ -33,9 +35,9 @@ export type ListItemProps = {
 };
 
 /** A row of a list or of the settings: icon, two lines of text, something on the right. */
-export function ListItem({ title, subtitle, icon, value, trailing, note, tile, tone = "default", disclosure, label, role, checked, onPress, chevron, testID }: ListItemProps) {
+export function ListItem({ title, subtitle, icon, leading, value, trailing, note, tile, tone = "default", disclosure, label, role, checked, onPress, chevron, testID }: ListItemProps) {
   const danger = tone === "danger";
-  const mark = icon ? (
+  const mark = leading ?? (icon ? (
     tile ? (
       <Box dim="avatar-sm" radius="xl" bg={danger ? "danger-soft" : "sunken"} align="center" justify="center" shrink={false}>
         <Icon name={icon} size="md" tone={danger ? "danger" : "accent"} />
@@ -43,7 +45,7 @@ export function ListItem({ title, subtitle, icon, value, trailing, note, tile, t
     ) : (
       <Icon name={icon} size="lg" tone={danger ? "danger" : "muted"} />
     )
-  ) : null;
+  ) : null);
   const body = (
     <>
       {mark}

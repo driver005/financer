@@ -1,10 +1,8 @@
 import { useCallback, useState } from "react";
-import { View } from "react-native";
-import { Chip, HelperText, List, Text, TextInput } from "@/components/kit";
+import { Box, Button, Chip, ChipRow, ListItem, Note, Section, Text, TextField } from "@financer/ui";
 
 import type { Affordability } from "@/api/client";
 import { useApi } from "@/api/config";
-import { Body, Button, Card, useColors } from "@/components/ui";
 import { chainLabel } from "@/hooks";
 import { formatCents, formatDate, parseEuroInput } from "@/format";
 
@@ -17,7 +15,6 @@ const BASKET_NOTE: Record<string, string> = {
 /** "What can I buy with my budget?": basket per chain, cheapest items and the best split. */
 export function Afford() {
   const { api } = useApi();
-  const c = useColors();
   const [budgetText, setBudgetText] = useState("");
   const [result, setResult] = useState<Affordability | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -51,96 +48,66 @@ export function Afford() {
   const staples = result ? (showAll ? result.staples : result.staples.slice(0, 6)) : [];
 
   return (
-    <Card>
-      <Text variant="titleLarge" accessibilityRole="header">
-        What can I buy?
-      </Text>
-      <Text variant="bodyMedium" style={{ color: c.muted, marginTop: 4 }}>
-        Leave the amount empty to use what is left of this budget period's groceries limit.
-      </Text>
-      <TextInput
-        mode="outlined"
-        label="Budget in euro (optional)"
-        accessibilityLabel="Budget in euro (optional)"
-        value={budgetText}
-        onChangeText={setBudgetText}
-        keyboardType="decimal-pad"
-        style={{ marginTop: 12 }}
-      />
-      <View style={{ marginTop: 12 }}>
-        <Button label={busy ? "Calculating…" : "Show what it buys"} icon="cart-outline" onPress={run} disabled={busy} />
-      </View>
-      {message ? <HelperText type="error" visible>{message}</HelperText> : null}
+    <Section title="What can I buy?" description="Leave the amount empty to use what is left of this budget period's groceries limit." card>
+      <TextField label="Budget in euro (optional)" value={budgetText} onChangeText={setBudgetText} keyboardType="decimal-pad" />
+      <Button label={busy ? "Calculating…" : "Show what it buys"} icon="cart-outline" onPress={run} disabled={busy} />
+      {message ? <Note tone="error">{message}</Note> : null}
 
       {result ? (
-        <View style={{ marginTop: 16 }}>
-          <Body bold>Budget {formatCents(result.budget_cents)}</Body>
-          <Text variant="bodySmall" style={{ color: c.muted, marginBottom: 8 }}>
-            {BASKET_NOTE[result.basket_source] ?? ""}
-          </Text>
+        <Box gap="md">
+          <Box gap="2xs">
+            <Text variant="bodyStrong">{`Budget ${formatCents(result.budget_cents)}`}</Text>
+            <Text variant="caption" tone="muted">{BASKET_NOTE[result.basket_source] ?? ""}</Text>
+          </Box>
 
           {result.per_chain.length === 0 ? (
-            <Body muted>No prices yet. Refresh the prices first.</Body>
+            <Text variant="body" tone="muted">No prices yet. Refresh the prices first.</Text>
           ) : (
             result.per_chain.map((p) => (
-              <List.Item
+              <ListItem
                 key={p.chain}
+                icon={p === cheapestComplete ? "star" : "store-outline"}
                 title={chainLabel(p.chain)}
-                description={
-                  p.missing.length
-                    ? `No price for ${p.missing.length} of your items`
-                    : `${formatCents(p.basket_cents)} per basket · ${p.baskets}× = ${p.days_covered} days`
-                }
-                left={() => <List.Icon icon={p === cheapestComplete ? "star" : "store-outline"} />}
-                accessibilityLabel={`${chainLabel(p.chain)}: ${formatCents(p.basket_cents)} per basket`}
+                subtitle={p.missing.length ? `No price for ${p.missing.length} of your items` : `${formatCents(p.basket_cents)} per basket · ${p.baskets}× = ${p.days_covered} days`}
+                label={`${chainLabel(p.chain)}: ${formatCents(p.basket_cents)} per basket`}
               />
             ))
           )}
 
           {result.plan ? (
-            <View style={{ marginTop: 8 }}>
-              <Body bold>Cheapest way to shop: {formatCents(result.plan.total_cents)}</Body>
-              {result.plan.single_chain_total_cents != null &&
-              result.plan.single_chain_total_cents > result.plan.total_cents ? (
-                <Text variant="bodySmall" style={{ color: c.good }}>
-                  {formatCents(result.plan.single_chain_total_cents - result.plan.total_cents)} less than one stop
-                </Text>
+            <Box gap="sm">
+              <Text variant="bodyStrong">{`Cheapest way to shop: ${formatCents(result.plan.total_cents)}`}</Text>
+              {result.plan.single_chain_total_cents != null && result.plan.single_chain_total_cents > result.plan.total_cents ? (
+                <Text variant="caption" tone="success">{`${formatCents(result.plan.single_chain_total_cents - result.plan.total_cents)} less than one stop`}</Text>
               ) : null}
               {result.plan.stops.map((s) => (
-                <View key={s.chain} style={{ marginTop: 8 }}>
-                  <Text variant="titleSmall">{chainLabel(s.chain)}</Text>
+                <Box key={s.chain} gap="2xs">
+                  <Text variant="label">{chainLabel(s.chain)}</Text>
                   {s.items.map((i) => (
-                    <Text key={i.item} variant="bodyMedium" style={{ color: c.muted }}>
-                      {i.name} · {formatCents(i.price_cents)}
-                      {i.is_offer ? ` · offer${i.valid_until ? ` until ${formatDate(i.valid_until)}` : ""}` : ""}
+                    <Text key={i.item} variant="caption" tone="muted">
+                      {`${i.name} · ${formatCents(i.price_cents)}${i.is_offer ? ` · offer${i.valid_until ? ` until ${formatDate(i.valid_until)}` : ""}` : ""}`}
                     </Text>
                   ))}
-                </View>
+                </Box>
               ))}
-            </View>
+            </Box>
           ) : result.per_chain.length ? (
-            <Text variant="bodySmall" style={{ color: c.muted, marginTop: 8 }}>
-              No complete plan: some basket items have no price anywhere yet.
-            </Text>
+            <Text variant="caption" tone="muted">No complete plan: some basket items have no price anywhere yet.</Text>
           ) : null}
 
           {staples.length ? (
-            <View style={{ marginTop: 16 }}>
-              <Body bold>Cheapest items within the budget</Body>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+            <Box gap="sm">
+              <Text variant="bodyStrong">Cheapest items within the budget</Text>
+              <ChipRow>
                 {staples.map((s) => (
-                  <Chip key={`${s.item}-${s.chain}`} compact accessibilityLabel={`${s.name} at ${chainLabel(s.chain)}`}>
-                    {s.name} {formatCents(s.price_cents)} · {chainLabel(s.chain)}
-                  </Chip>
+                  <Chip key={`${s.item}-${s.chain}`} label={`${s.name} ${formatCents(s.price_cents)} · ${chainLabel(s.chain)}`} />
                 ))}
-              </View>
-              {result.staples.length > 6 ? (
-                <Button mode="text" label={showAll ? "Show fewer" : "Show more"} onPress={() => setShowAll((v) => !v)} />
-              ) : null}
-            </View>
+              </ChipRow>
+              {result.staples.length > 6 ? <Button variant="ghost" size="sm" label={showAll ? "Show fewer" : "Show more"} onPress={() => setShowAll((v) => !v)} /> : null}
+            </Box>
           ) : null}
-        </View>
+        </Box>
       ) : null}
-    </Card>
+    </Section>
   );
 }

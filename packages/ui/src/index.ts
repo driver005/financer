@@ -14,6 +14,7 @@ export { Box, Row, Spacer, Stack, type BoxProps } from "./primitives/Box";
 export type { BgToken, Dim, MaxWidth } from "./primitives/boxStyle";
 export { Text, type TextProps, type TextTone } from "./primitives/Text";
 export { Icon, type IconName } from "./primitives/Icon";
+export { Dot } from "./primitives/Dot";
 export { Touchable } from "./primitives/Touchable";
 
 export { Badge } from "./components/Badge";
@@ -63,7 +64,7 @@ export { Stepper } from "./components/Stepper";
 export { formatMoney, spokenMoney, splitMoney } from "./format";
 export { Money, type MoneyTone } from "./finance/Money";
 export { HeroCaption, HeroCard, HeroChip, HeroFigure, HeroNumber, HeroProgress, HeroStats } from "./finance/Hero";
-export { BarChart, CompareBars, ProgressRing, type CompareBarRow } from "./finance/charts";
+export { BarChart, ColumnChart, CompareBars, CurveChart, DonutChart, ProgressRing, useSeriesColor, type Column, type CompareBarRow, type CurveGeometry } from "./finance/charts";
 export { ConfirmAction } from "./components/ConfirmAction";
 export { Expandable } from "./components/Expandable";
 export { Note } from "./components/Note";

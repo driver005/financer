@@ -1,17 +1,14 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text as RNText, View } from "react-native";
+import { Badge, Box, Card, Divider, HeroCaption, HeroCard, HeroChip, HeroFigure, Icon, Meter, Row, Segmented, Text, Touchable, type Tone } from "@financer/ui";
 
 import type { Split, StoreSpend, StoreSpending, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
 import { RecategorizeSheet } from "@/components/RecategorizeSheet";
 import { TransactionRow } from "@/components/TransactionRow";
-import { SegmentedButtons } from "@/components/kit";
-import { Badge } from "@/components/Watchdog";
-import { HeroPanel, PanelCaption, PanelChip, PanelFigure } from "@/components/panel";
-import { Bar, Body, Card, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
-import { chartColors, usePalette } from "@/theme";
+import { Page } from "@/components/Page";
+import { Loading, NeedsSetup } from "@/components/Status";
+import { toTone, type LegacyTone } from "@/uiTone";
 import { formatCents } from "@/format";
 import { localIsoDate, periodLabel } from "@/period";
 import {
@@ -32,14 +29,13 @@ import {
   type StoresView,
 } from "@/stores";
 
+const SERIES: Tone[] = ["accent", "info", "success", "warning", "danger"];
+
 type Visits = { loading: boolean; items: Transaction[]; error?: string };
 
 /** What I spend at each supermarket: ranked chains for a budget period, tap one for its visits. */
 export default function Stores() {
   const { api, loaded } = useApi();
-  const c = useColors();
-  const palette = usePalette();
-  const hues = chartColors(palette);
   const [view, setView] = useState<StoresView>("current");
   const [data, setData] = useState<StoreSpending | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -111,103 +107,76 @@ export default function Stores() {
     void loadVisits(row.chain, view);
   }
 
-  if (!loaded) return <Screen><Loading /></Screen>;
+  if (!loaded) return <Page title="Stores"><Loading /></Page>;
+  if (!api) return <Page title="Stores"><NeedsSetup /></Page>;
 
   const rows = data ? rankedRows(data) : [];
-  const tone: Record<ChangeTone, "bad" | "good" | "muted" | "warn"> = { up: "bad", down: "good", flat: "muted", new: "warn" };
+  const tone: Record<ChangeTone, LegacyTone> = { up: "bad", down: "good", flat: "muted", new: "warn" };
   const hint = data ? unmatchedHint(data) : null;
 
   return (
-    <Screen>
-      <Title>Stores</Title>
-      {!api ? (
-        <NeedsSetup />
-      ) : (
-        <ScrollView
-          contentContainerStyle={{ paddingBottom: 24 }}
-          refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}
-        >
-          <SegmentedButtons
-            value={view}
-            onValueChange={choose}
-            buttons={STORES_VIEWS.map((v) => ({ value: v.value, label: v.label }))}
-          />
-          <View style={{ height: 12 }} />
+    <Page title="Stores">
+      <Segmented value={view} onChange={choose} options={STORES_VIEWS.map((v) => ({ value: v.value, label: v.label }))} />
 
-          {error ? <Body muted>{error}</Body> : null}
-          {!data && !error ? <Loading /> : null}
-          {note ? <RNText style={{ color: c.muted, marginBottom: 8 }}>{note}</RNText> : null}
+      {error ? <Text variant="body" tone="muted">{error}</Text> : null}
+      {!data && !error ? <Loading /> : null}
+      {note ? <Text variant="label" tone="muted">{note}</Text> : null}
 
-          {data ? (
-            <>
-              <HeroPanel label="Spent in stores" chip={<PanelChip text={periodLabel({ start: data.start, end: data.end })} />}>
-                <PanelFigure cents={data.total_cents} label={`Spent in stores: ${formatCents(data.total_cents)}`} />
-                <PanelCaption>{totalText(data)}</PanelCaption>
-                {data.previous_total_cents > 0 || data.total_cents > 0 ? <PanelCaption>Compared with {compareText(data)}</PanelCaption> : null}
-              </HeroPanel>
+      {data ? (
+        <>
+          <HeroCard label="Spent in stores" chip={<HeroChip text={periodLabel({ start: data.start, end: data.end })} />}>
+            <HeroFigure cents={data.total_cents} label={`Spent in stores: ${formatCents(data.total_cents)}`} />
+            <HeroCaption>{totalText(data)}</HeroCaption>
+            {data.previous_total_cents > 0 || data.total_cents > 0 ? <HeroCaption>{`Compared with ${compareText(data)}`}</HeroCaption> : null}
+          </HeroCard>
 
-              {rows.length === 0 ? (
-                <Card>
-                  <Body muted>
-                    No store spending in this period yet. Import or sync your bank transactions on the Spending tab; chains such as
-                    Lidl, Aldi, Rewe or Kaufland are recognized from the booking text.
-                  </Body>
-                </Card>
-              ) : null}
-
-              {rows.map((row, index) => {
-                const isOpen = open === row.chain;
-                const v = visits[row.chain];
-                const last = lastVisitText(row.last_visit, today);
-                return (
-                  <Card key={row.chain}>
-                    <Pressable
-                      onPress={() => toggle(row)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${rowLabel(row)}. ${isOpen ? "Hide" : "Show"} the visits`}
-                      accessibilityState={{ expanded: isOpen }}
-                    >
-                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                        <RNText style={{ color: c.text, fontSize: 18, fontWeight: "800", flex: 1 }} numberOfLines={1}>
-                          {row.name}
-                        </RNText>
-                        <RNText style={{ color: c.text, fontSize: 18, fontWeight: "800" }}>{formatCents(row.total_cents)}</RNText>
-                        <MaterialCommunityIcons name={isOpen ? "chevron-up" : "chevron-down"} size={22} color={c.muted} />
-                      </View>
-                      <Bar progress={barFraction(row, rows)} height={10} color={hues[index % hues.length]} />
-                      <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-                        <RNText style={{ color: c.text, fontWeight: "800" }}>{formatPermille(row.share_permille)}</RNText>
-                        <RNText style={{ color: c.muted }}>
-                          {visitsText(row.visits)}
-                          {row.visits > 0 ? ` · ⌀ ${formatCents(row.average_basket_cents)}` : ""}
-                          {last ? ` · ${last}` : ""}
-                        </RNText>
-                        <Badge text={changeText(row)} tone={tone[changeTone(row)]} />
-                      </View>
-                    </Pressable>
-
-                    {isOpen ? (
-                      <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 8 }}>
-                        {v?.loading && v.items.length === 0 ? <Loading /> : null}
-                        {v?.error ? <Body muted>{v.error}</Body> : null}
-                        {v && !v.loading && !v.error && v.items.length === 0 ? <Body muted>No bookings in this range.</Body> : null}
-                        {v?.items.map((t) => (
-                          <TransactionRow key={t.id} item={t} split={splits.some((s) => s.transaction_id === t.id)} onPress={() => setSelected(t)} />
-                        ))}
-                      </View>
-                    ) : null}
-                  </Card>
-                );
-              })}
-
-              {hint ? <RNText style={{ color: c.muted, fontSize: 13, marginTop: 4 }}>{hint}</RNText> : null}
-              <RNText style={{ color: c.muted, fontSize: 12, marginTop: 8 }}>
-                Counts expenses only, one visit per booking. Refunds are not subtracted.
-              </RNText>
-            </>
+          {rows.length === 0 ? (
+            <Card>
+              <Text variant="body" tone="muted">
+                No store spending in this period yet. Import or sync your bank transactions on the Spending tab; chains such as Lidl, Aldi, Rewe or Kaufland are recognized from the booking text.
+              </Text>
+            </Card>
           ) : null}
-        </ScrollView>
-      )}
+
+          {rows.map((row, index) => {
+            const isOpen = open === row.chain;
+            const v = visits[row.chain];
+            const last = lastVisitText(row.last_visit, today);
+            return (
+              <Card key={row.chain} gap="md">
+                <Touchable onPress={() => toggle(row)} label={`${rowLabel(row)}. ${isOpen ? "Hide" : "Show"} the visits`} selected={isOpen} gap="sm">
+                  <Row justify="between" gap="sm">
+                    <Box grow><Text variant="subheading" numberOfLines={1}>{row.name}</Text></Box>
+                    <Text variant="subheading">{formatCents(row.total_cents)}</Text>
+                    <Icon name={isOpen ? "chevron-up" : "chevron-down"} size="md" tone="muted" />
+                  </Row>
+                  <Meter value={barFraction(row, rows)} tone={SERIES[index % SERIES.length]} thickness="lg" />
+                  <Row gap="sm" wrap>
+                    <Text variant="label">{formatPermille(row.share_permille)}</Text>
+                    <Text variant="label" tone="muted">{`${visitsText(row.visits)}${row.visits > 0 ? ` · ⌀ ${formatCents(row.average_basket_cents)}` : ""}${last ? ` · ${last}` : ""}`}</Text>
+                    <Badge label={changeText(row)} tone={toTone(tone[changeTone(row)])} />
+                  </Row>
+                </Touchable>
+
+                {isOpen ? (
+                  <Box gap="xs">
+                    <Divider />
+                    {v?.loading && v.items.length === 0 ? <Loading /> : null}
+                    {v?.error ? <Text variant="body" tone="muted">{v.error}</Text> : null}
+                    {v && !v.loading && !v.error && v.items.length === 0 ? <Text variant="body" tone="muted">No bookings in this range.</Text> : null}
+                    {v?.items.map((t) => (
+                      <TransactionRow key={t.id} item={t} split={splits.some((s) => s.transaction_id === t.id)} onPress={() => setSelected(t)} />
+                    ))}
+                  </Box>
+                ) : null}
+              </Card>
+            );
+          })}
+
+          {hint ? <Text variant="caption" tone="muted">{hint}</Text> : null}
+          <Text variant="caption" tone="muted">Counts expenses only, one visit per booking. Refunds are not subtracted.</Text>
+        </>
+      ) : null}
 
       <RecategorizeSheet
         tx={selected}
@@ -219,6 +188,6 @@ export default function Stores() {
           await load();
         }}
       />
-    </Screen>
+    </Page>
   );
 }

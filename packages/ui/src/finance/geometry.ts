@@ -43,3 +43,37 @@ export function sparkPoints(values: number[], width: number, height: number, pad
     y: pad + innerH - (max > 0 ? (innerH * Math.max(0, v)) / max : 0),
   }));
 }
+
+export type Point = { x: number; y: number };
+
+/** SVG path (`M x y L x y ...`) through the points; empty string without points. */
+export function linePath(points: Point[]): string {
+  return points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+}
+
+/** The same line closed down to the baseline, for a soft fill under it. */
+export function areaPath(points: Point[], height: number, pad: number): string {
+  if (points.length === 0) return "";
+  const base = height - pad;
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `${linePath(points)} L${last.x.toFixed(1)} ${base} L${first.x.toFixed(1)} ${base} Z`;
+}
+
+/**
+ * Donut arcs for shares that add up to 1: `dash` goes to `strokeDasharray` and `offset` to
+ * `strokeDashoffset` on a circle of radius `r`, rotated -90 degrees so the first share starts at 12
+ * o'clock. `gap` separates neighbours; a single share has none.
+ */
+export function donutArcs(shares: number[], r: number, gap: number): { dash: string; offset: number }[] {
+  const circumference = 2 * Math.PI * r;
+  const g = shares.length > 1 ? gap : 0;
+  let start = 0;
+  return shares.map((s) => {
+    const full = s * circumference;
+    const len = Math.max(0, full - g);
+    const arc = { dash: `${len.toFixed(2)} ${(circumference - len).toFixed(2)}`, offset: 0 - start };
+    start += full;
+    return arc;
+  });
+}

@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Animated, type LayoutChangeEvent, View } from "react-native";
-import Svg, { Circle, Rect } from "react-native-svg";
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 
 import type { Tone } from "../constants/colors";
 import { duration, opacity } from "../constants/misc";
@@ -8,9 +8,10 @@ import { radius } from "../constants/radius";
 import { size } from "../constants/sizes";
 import { space } from "../constants/spacing";
 import { Box, Row } from "../primitives/Box";
+import { Dot } from "../primitives/Dot";
 import { Text } from "../primitives/Text";
 import { useTheme } from "../theme/ThemeProvider";
-import { barRects, clamp01, dashOffset, ringGeometry } from "./geometry";
+import { type Point, areaPath, barRects, clamp01, dashOffset, donutArcs, linePath, ringGeometry } from "./geometry";
 
 function useWidth() {
   const [w, setW] = useState(0);
@@ -98,7 +99,7 @@ export function CompareBars({ rows, summary, currentLabel = "This period", previ
 function Legend({ color, label }: { color: string; label: string }) {
   return (
     <Row gap="xs">
-      <View style={{ width: size.icon.xs, height: size.icon.xs, borderRadius: radius.full, backgroundColor: color }} />
+      <Dot color={color} />
       <Text variant="caption" tone="muted">{label}</Text>
     </Row>
   );
@@ -159,3 +160,139 @@ export function ProgressRing({
   );
 }
 
+
+// ---- the curve under a hero card, the week's columns and the donut of categories ----
+
+
+export type CurveGeometry = { solid: Point[]; dashed: Point[]; today: Point };
+
+/**
+ * A line that grows through the period with a soft fill under it, and a dashed continuation to where
+ * it is heading. `build` turns the measured width and height into points (the screen owns the data);
+ * the chart draws them in the hero card's ink.
+ */
+export function CurveChart({ summary, build }: { summary: string; build: (width: number, height: number, pad: number) => CurveGeometry }) {
+  const { colors } = useTheme();
+  const { w, onLayout } = useWidth();
+  const h = size.chart.lg + size.chart.md / 2;
+  const pad = space.sm;
+  const ink = colors.tones.accent.onSolid;
+  const geo = w > 0 ? build(w, h, pad) : null;
+  return (
+    <View accessible accessibilityRole="image" accessibilityLabel={summary} onLayout={onLayout} style={{ height: h }}>
+      {geo ? (
+        <Svg width={w} height={h}>
+          <Defs>
+            <LinearGradient id="heroFill" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={ink} stopOpacity={opacity[40]} />
+              <Stop offset="1" stopColor={ink} stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+          <Line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke={ink} strokeOpacity={opacity[25]} strokeWidth={size.stroke.md} />
+          {geo.solid.length > 1 ? <Path d={areaPath(geo.solid, h, pad)} fill="url(#heroFill)" /> : null}
+          {geo.solid.length > 1 ? <Path d={linePath(geo.solid)} stroke={ink} strokeWidth={size.stroke.lg} strokeLinecap="round" strokeLinejoin="round" fill="none" /> : null}
+          {geo.dashed.length > 1 ? <Path d={linePath(geo.dashed)} stroke={ink} strokeOpacity={opacity[75]} strokeWidth={size.stroke.lg} strokeDasharray={`${size.stroke.md} ${space.sm}`} strokeLinecap="round" fill="none" /> : null}
+          {geo.dashed.length > 1 ? <Circle cx={geo.dashed[1].x} cy={geo.dashed[1].y} r={size.stroke.xl} fill="none" stroke={ink} strokeOpacity={opacity[75]} strokeWidth={size.stroke.md} /> : null}
+          <Circle cx={geo.today.x} cy={geo.today.y} r={space.sm + size.stroke.md} fill={ink} fillOpacity={opacity[25]} />
+          <Circle cx={geo.today.x} cy={geo.today.y} r={size.stroke.xl} fill={ink} />
+        </Svg>
+      ) : null}
+    </View>
+  );
+}
+
+export type Column = { key: string; value: number; label: string; strong?: boolean; note?: string };
+
+/**
+ * Columns with a letter under each (the last seven days): the strong one in the accent, the rest
+ * faint, an optional dotted line for the average. Drawn with plain views, so the columns line up
+ * with their letters at any text size.
+ */
+export function ColumnChart({ columns, average, summary }: { columns: Column[]; average?: number; summary: string }) {
+  const { colors } = useTheme();
+  const plot = size.chart.lg + size.chart.md / 2;
+  const room = plot - size.icon.xl;
+  const max = Math.max(...columns.map((c) => c.value), 0);
+  const peak = max > 0 ? columns.findIndex((c) => c.value === max) : -1;
+  const avgY = max > 0 && average ? Math.round((average / max) * room) : 0;
+  return (
+    <View accessible accessibilityRole="image" accessibilityLabel={summary}>
+      <View style={{ height: plot, flexDirection: "row", gap: space.sm }}>
+        {avgY > 0 ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: avgY, borderTopWidth: size.stroke.md / 2, borderTopColor: colors.text.muted, borderStyle: "dotted", opacity: opacity[75] }} /> : null}
+        {columns.map((c, i) => {
+          const hh = c.value > 0 ? Math.max(size.bar.lg, Math.round((c.value / max) * room)) : 0;
+          return (
+            <View key={c.key} style={{ flex: 1, justifyContent: "flex-end", alignItems: "center" }}>
+              {i === peak && c.note ? <Text variant="caption" numberOfLines={1}>{c.note}</Text> : null}
+              <View
+                style={{
+                  width: "72%",
+                  maxWidth: size.icon.xl,
+                  height: hh || size.stroke.lg,
+                  borderTopLeftRadius: radius.md,
+                  borderTopRightRadius: radius.md,
+                  borderBottomLeftRadius: radius.sm,
+                  borderBottomRightRadius: radius.sm,
+                  backgroundColor: hh === 0 ? colors.border.default : c.strong ? colors.tones.accent.solid : colors.tones.accent.solid,
+                  opacity: hh === 0 ? opacity[100] : c.strong ? opacity[100] : opacity[40],
+                }}
+              />
+            </View>
+          );
+        })}
+      </View>
+      <Row gap="sm">
+        {columns.map((c) => (
+          <Box key={c.key} equal align="center">
+            <Text variant="caption" tone={c.strong ? "accent" : "muted"} align="center">{c.label}</Text>
+          </Box>
+        ))}
+      </Row>
+    </View>
+  );
+}
+
+const SERIES: Tone[] = ["accent", "info", "success", "warning", "danger"];
+
+/** The colour of the i-th slice of a chart; the folded "other" slice is grey. */
+export function useSeriesColor(): (index: number, other?: boolean) => string {
+  const { colors } = useTheme();
+  return (index, other) => (other ? colors.text.muted : colors.tones[SERIES[index % SERIES.length]].solid);
+}
+
+/**
+ * A donut: shares that add up to 1, a label in the middle. The colours only tell the slices apart, so
+ * every slice also has a legend row that names it (use `useSeriesColor` for the legend dots).
+ */
+export function DonutChart({ slices, centre, caption, summary }: { slices: { key: string; share: number; other?: boolean }[]; centre: string; caption: string; summary: string }) {
+  const { colors } = useTheme();
+  const colour = useSeriesColor();
+  const d = size.ring.xl - size.icon.xl;
+  const sw = size.stroke.xl * 4 + size.stroke.lg;
+  const r = (d - sw) / 2;
+  const arcs = donutArcs(slices.map((s) => s.share), r, size.stroke.xl);
+  return (
+    <View style={{ width: d, height: d, alignItems: "center", justifyContent: "center" }} accessible accessibilityRole="image" accessibilityLabel={summary}>
+      <Svg width={d} height={d} style={{ position: "absolute" }}>
+        <Circle cx={d / 2} cy={d / 2} r={r} stroke={colors.sunken} strokeWidth={sw} fill="none" />
+        {slices.map((s, i) => (
+          <Circle
+            key={s.key}
+            cx={d / 2}
+            cy={d / 2}
+            r={r}
+            stroke={colour(i, s.other)}
+            strokeWidth={sw}
+            strokeLinecap="butt"
+            fill="none"
+            strokeDasharray={arcs[i].dash}
+            strokeDashoffset={arcs[i].offset}
+            transform={`rotate(-90 ${d / 2} ${d / 2})`}
+          />
+        ))}
+      </Svg>
+      <Text variant="caption" tone="muted">{caption}</Text>
+      <Text variant="bodyStrong" fit>{centre}</Text>
+    </View>
+  );
+}

@@ -1,16 +1,11 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
-import { Pressable, Text as RNText, View } from "react-native";
+import { Badge, Box, Icon, Meter, Row, Sparkline, Text, Touchable, type Tone } from "@financer/ui";
 
 import type { SafeToSpend } from "@/api/client";
-import { Sparkline } from "@/components/Charts";
-import { StatusPill } from "@/components/rows";
-import { Bar } from "@/components/ui";
 import { formatMoney, spokenMoney } from "@/format";
 import { periodLabel, previousPeriod } from "@/period";
 import { periodCurve, spendComparison } from "@/todayCharts";
-import { radius, space, tabular, typography, usePalette, type Palette } from "@/theme";
 
 type Tx = { booking_date: string; amount_cents: number; category?: string | null };
 type Route = "/spending" | "/budget" | "/subscriptions";
@@ -22,7 +17,6 @@ type Route = "/spending" | "/budget" | "/subscriptions";
  * behind it and says so in its label for screen readers.
  */
 export function OverviewTiles({ safe, txs, today }: { safe: SafeToSpend | null; txs: Tx[]; today: string }) {
-  const p = usePalette();
   if (!safe) return null;
 
   const period = { start: safe.period_start, end: safe.period_end };
@@ -32,94 +26,57 @@ export function OverviewTiles({ safe, txs, today }: { safe: SafeToSpend | null; 
   const leftShare = safe.income_cents > 0 ? Math.max(0, Math.min(1, safe.available_cents / safe.income_cents)) : 0;
 
   return (
-    <View style={{ marginBottom: space.lg }}>
-      <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.md, marginBottom: space.sm }}>
-        <RNText accessibilityRole="header" style={[typography.bodyStrong, { color: p.text }]}>This period</RNText>
-        <RNText style={[typography.caption, { color: p.muted }]}>{periodLabel(period)}</RNText>
-      </View>
-      <View style={{ gap: space.md }}>
-        <View style={{ flexDirection: "row", gap: space.md }}>
+    <Box gap="sm">
+      <Row justify="between" align="baseline" gap="md">
+        <Text variant="bodyStrong" level={2}>This period</Text>
+        <Text variant="caption" tone="muted">{periodLabel(period)}</Text>
+      </Row>
+      <Box gap="md">
+        <Row gap="md" align="stretch">
           <Tile
             label="Spent"
             cents={curve.spent}
-            tint={p.accentSoft}
+            tone="accent"
             to="/spending"
             spoken={`Spent ${spokenMoney(curve.spent)} so far${cmp.deltaPercent === null ? "" : `, ${Math.abs(cmp.deltaPercent)} percent ${cmp.deltaPercent > 0 ? "more" : "less"} than the same days last period`}`}
-            chip={
-              cmp.deltaPercent !== null && cmp.deltaPercent !== 0 ? (
-                <StatusPill tone={cmp.deltaPercent > 0 ? "warn" : "good"} icon={cmp.deltaPercent > 0 ? "arrow-up" : "arrow-down"} label={`${Math.abs(cmp.deltaPercent)} %`} />
-              ) : null
-            }
+            chip={cmp.deltaPercent !== null && cmp.deltaPercent !== 0 ? <Badge tone={cmp.deltaPercent > 0 ? "warning" : "success"} icon={cmp.deltaPercent > 0 ? "arrow-up" : "arrow-down"} label={`${Math.abs(cmp.deltaPercent)} %`} /> : null}
           >
-            <Sparkline values={curve.cumulative} height={36} summary="Spending so far this period" />
+            <Sparkline values={curve.cumulative} height="sm" label="Spending so far this period" />
           </Tile>
-          <Tile label="Income" cents={safe.income_received_cents} tint={p.goodSoft} to="/spending" spoken={`Income received ${spokenMoney(safe.income_received_cents)} of ${spokenMoney(safe.income_cents)} expected`}>
-            <Bar progress={incomeShare} color={p.good} height={8} marginTop={0} accessibilityLabel={`${Math.round(incomeShare * 100)} percent of the expected income received`} />
-            <Caption>of {formatMoney(safe.income_cents)} expected</Caption>
+          <Tile label="Income" cents={safe.income_received_cents} tone="success" to="/spending" spoken={`Income received ${spokenMoney(safe.income_received_cents)} of ${spokenMoney(safe.income_cents)} expected`}>
+            <Meter value={incomeShare} tone="success" label={`${Math.round(incomeShare * 100)} percent of the expected income received`} />
+            <Text variant="caption" tone="muted">{`of ${formatMoney(safe.income_cents)} expected`}</Text>
           </Tile>
-        </View>
-        <View style={{ flexDirection: "row", gap: space.md }}>
-          <Tile label="Still to pay" cents={safe.fixed_costs_due_cents} tint={p.warnSoft} to="/subscriptions" spoken={`Still to pay ${spokenMoney(safe.fixed_costs_due_cents)} in fixed costs`}>
-            <Caption>fixed costs due before the period ends</Caption>
+        </Row>
+        <Row gap="md" align="stretch">
+          <Tile label="Still to pay" cents={safe.fixed_costs_due_cents} tone="warning" to="/subscriptions" spoken={`Still to pay ${spokenMoney(safe.fixed_costs_due_cents)} in fixed costs`}>
+            <Text variant="caption" tone="muted">fixed costs due before the period ends</Text>
           </Tile>
-          <Tile label="Left to spend" cents={safe.available_cents} tint={p.blueSoft} to="/budget" bad={safe.income_detected && safe.available_cents < 0} spoken={`Left to spend ${spokenMoney(safe.available_cents)}`}>
-            <Bar progress={leftShare} color={p.blue} height={8} marginTop={0} accessibilityLabel={`${Math.round(leftShare * 100)} percent of the income is still free`} />
-            <Caption>{safe.income_cents > 0 ? `${Math.round(leftShare * 100)} % of income` : "free this period"}</Caption>
+          <Tile label="Left to spend" cents={safe.available_cents} tone="info" to="/budget" bad={safe.income_detected && safe.available_cents < 0} spoken={`Left to spend ${spokenMoney(safe.available_cents)}`}>
+            <Meter value={leftShare} tone="info" label={`${Math.round(leftShare * 100)} percent of the income is still free`} />
+            <Text variant="caption" tone="muted">{safe.income_cents > 0 ? `${Math.round(leftShare * 100)} % of income` : "free this period"}</Text>
           </Tile>
-        </View>
-      </View>
-    </View>
+        </Row>
+      </Box>
+    </Box>
   );
 }
 
-function Caption({ children }: { children: ReactNode }) {
-  const p = usePalette();
-  return <RNText style={[typography.caption, { color: p.muted, marginTop: space.xs }]}>{children}</RNText>;
-}
-
-function Tile({
-  label,
-  cents,
-  tint,
-  to,
-  spoken,
-  chip,
-  bad,
-  children,
-}: {
-  label: string;
-  cents: number;
-  tint: Palette["accentSoft"];
-  to: Route;
-  spoken: string;
-  chip?: ReactNode;
-  bad?: boolean;
-  children?: ReactNode;
-}) {
-  const p = usePalette();
+function Tile({ label, cents, tone, to, spoken, chip, bad, children }: { label: string; cents: number; tone: Tone; to: Route; spoken: string; chip?: ReactNode; bad?: boolean; children?: ReactNode }) {
   const router = useRouter();
   return (
-    <Pressable
-      onPress={() => router.push(to)}
-      accessibilityRole="button"
-      accessibilityLabel={`${spoken}. Opens the details.`}
-      style={({ pressed }) => ({ flex: 1, minWidth: 0, backgroundColor: tint, borderRadius: radius.xl, padding: space.md, opacity: pressed ? 0.85 : 1 })}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm }}>
-        <RNText style={[typography.label, { color: p.muted, flexShrink: 1 }]} numberOfLines={1}>
-          {label}
-        </RNText>
-        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: p.accent, alignItems: "center", justifyContent: "center" }}>
-          <MaterialCommunityIcons name="arrow-top-right" size={14} color={p.onAccent} />
-        </View>
-      </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs, flexWrap: "wrap" }}>
-        <RNText style={[typography.heading, tabular, { color: bad ? p.bad : p.text, flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-          {formatMoney(cents)}
-        </RNText>
-        {chip}
-      </View>
-      <View style={{ marginTop: space.sm, minHeight: 36, justifyContent: "flex-end" }}>{children}</View>
-    </Pressable>
+    <Box equal>
+      <Touchable onPress={() => router.push(to)} label={`${spoken}. Opens the details.`} bg={`${tone}-soft`} radius="3xl" p="md" gap="xs" grow>
+        <Row justify="between" gap="sm">
+          <Box grow><Text variant="label" tone={`on-${tone}-soft`} numberOfLines={1}>{label}</Text></Box>
+          <Box dim="icon-lg" radius="full" bg={`${tone}-solid`} align="center" justify="center"><Icon name="arrow-top-right" size="xs" tone={`on-${tone}-solid`} /></Box>
+        </Row>
+        <Row gap="sm" wrap>
+          <Text variant="heading" tone={bad ? "danger" : `on-${tone}-soft`} fit>{formatMoney(cents)}</Text>
+          {chip}
+        </Row>
+        <Box gap="xs" justify="end" grow>{children}</Box>
+      </Touchable>
+    </Box>
   );
 }
