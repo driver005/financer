@@ -53,7 +53,8 @@ export function StepFrame({
         maxW="narrow"
         safeBottom
         header={
-          <Row gap="sm" px="lg" py="sm">
+          <Box maxW="narrow" px="lg" py="sm">
+            <Row gap="sm">
             <IconButton
               icon={backIsClose ? "close" : "arrow-left"}
               label={backIsClose ? "Close setup" : "Back"}
@@ -64,7 +65,8 @@ export function StepFrame({
             />
             <Box grow><Meter value={fraction} thickness="lg" label={spokenStep(stepLabel)} /></Box>
             <Text variant="caption" tone="muted" accessibilityLabel={spokenStep(stepLabel)}>{stepLabel}</Text>
-          </Row>
+            </Row>
+          </Box>
         }
         footer={
           <Box bg="surface" p="lg" gap="xs" align="center">
