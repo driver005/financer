@@ -25,7 +25,12 @@ jobs:
           --health-retries 10
     env:
       FINANCER_TEST_POSTGRES_URL: postgres://financer:financer@127.0.0.1:5432/financer_test
+      # The workspace (with the SDK, mail and the shop) fills the runner's disk with debug info that no
+      # test reads: "No space left on device" while linking the server.
+      CARGO_PROFILE_DEV_DEBUG: "0"
     steps:
+      - name: Free disk space (toolchains this job does not use)
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - uses: actions/checkout@v7
       # The release version rules (.github/scripts/next-version.sh); no build needed, runs in seconds.
       - name: Version script tests
