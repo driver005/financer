@@ -43,6 +43,9 @@ jobs:
           shared-key: workspace
           cache-on-failure: true
       - run: cargo fmt --all --check
+      # The SDK's finance calls are generated from the API's OpenAPI file (docs/SDK.md): the generated
+      # file must be what the file produces, and the file must be what the server says (below).
+      - run: node crates/sdk/gen/finance.mjs --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       # The Rust SDK (docs/SDK.md) also runs in the browser, as WebAssembly: it must keep building there.

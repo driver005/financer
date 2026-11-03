@@ -83,9 +83,21 @@ scripts/enable-sdk.sh ios                         # needs Xcode
 | Native (JSI) build for Android and iOS | **written, never built or run**: `scripts/enable-sdk.sh android\|ios` and `rustSdk.native.ts` follow the embedded backend's setup, but this needs the NDK or Xcode (CI has a job to add) |
 | `ApiClient`, the generic client: bytes in, status and bytes out, a refusal is an answer, only not reaching the server is an error | done; tested against the real finance router (with mail mounted beside it), and over a real socket (token sent, `/health` open, no token in an error) |
 | The finance app and the shopping assistant sending everything through Rust | done and **driven in a real browser**: with the SDK on, all 9 requests of the Today screen, the shopping assistant's and mail's came from WebAssembly and none from JavaScript (seen by wrapping `fetch` and reading each call's stack). The first load waits for the module, so nothing is asked twice |
-| Typed Rust calls for the finance API | **not done** (68 operations, 114 schemas in `openapi.json`: the plan is to generate the Rust types and client from that file, with a CI check that the generated file is current) |
+| Typed Rust calls for the finance API | **done in Rust**: `crates/sdk/gen/finance.mjs` writes `src/finance.rs` from `apps/mobile/openapi.json`: 114 records and enums and 67 typed async calls (`FinanceSdk`), with a CI check that the file is current (and the existing check that `openapi.json` is what the server says). Tested against the real finance router (6 tests, every operation and schema of the document must exist); builds for wasm32; UniFFI generates a 13,000-line typed TypeScript binding from it. **Not yet used by the app** (see below) |
 | Typed Rust calls for the shopping API | **not done** (no OpenAPI file; its wire types would move out of `shop-api` into a light crate like mail's, and the untagged attribute value needs a UniFFI custom type) |
 | Removing the TypeScript clients | **not done, on purpose**: the typed wrappers of finance and shopping are still how those apps decide what to ask, and Expo Go, the standalone shopping app, the catalog and the tests need the TypeScript transports. What can go once every build has the SDK: `RemoteTransport`, `RemoteShopTransport` and the mail HTTP client; what can go once typed calls exist: the wrappers |
+
+### Why the finance screens do not call `FinanceSdk` yet
+
+The generated TypeScript speaks camelCase, `bigint` and numeric enums; the 48 files that use the finance API
+read snake_case, plain numbers and words (the types of `schema.d.ts`). Two ways to close that gap:
+
+- an adapter like mail's (`SdkMailClient`), one thin method per call of the existing `Api` class: the screens
+  stay as they are, but the TypeScript wrapper layer stays too (smaller: no HTTP, no URLs, no types of its own);
+- change the screens to read the generated types directly: the only way the TypeScript API types
+  (`schema.d.ts`, the `Api` class) can really go, and a rewrite of those 48 files and their tests.
+
+Either is a step of its own; the generic client already carries all their traffic in Rust.
 
 ### The rest of the plan
 
