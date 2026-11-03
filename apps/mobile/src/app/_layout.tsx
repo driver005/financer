@@ -2,10 +2,11 @@ import { Tabs } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { HeroUINativeProvider } from "heroui-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { ThemeProvider } from "@financer/ui";
 
 import { ApiProvider } from "@/api/config";
 import { AppLockOverlay } from "@/components/AppLockOverlay";
-import { AppTabBar } from "@/components/AppTabBar";
+import { AppFrame } from "@/components/AppFrame";
 import { BackupOnOpen } from "@/components/BackupOnOpen";
 import "@/native/background"; // defines the background task at startup
 import { NotificationSync } from "@/components/NotificationSync";
@@ -15,14 +16,16 @@ import "@/global.css";
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
       <HeroUINativeProvider config={{ toast: { defaultProps: { placement: "bottom" } } }}>
       <ApiProvider>
         {/* dark icons on the light theme, light icons on the dark one (the default left white ones on white) */}
         <StatusBar style="auto" />
         <NotificationSync />
         <OnboardingGate />
-        <Tabs screenOptions={{ headerShown: false }} tabBar={() => <AppTabBar />}>
-          {/* the bottom bar (AppTabBar) lists four tabs; every route below stays reachable by link */}
+        <AppFrame>
+        <Tabs screenOptions={{ headerShown: false }} tabBar={() => null}>
+          {/* the bottom bar (AppFrame) lists three tabs; every route below stays reachable by link */}
           <Tabs.Screen name="index" options={{ title: "Today" }} />
           <Tabs.Screen name="spending" options={{ title: "Spending" }} />
           <Tabs.Screen name="budget" options={{ title: "Budget" }} />
@@ -46,10 +49,12 @@ export default function RootLayout() {
           {/* first-run setup: full screen, no tab bar */}
           <Tabs.Screen name="onboarding" options={{ title: "Setup" }} />
         </Tabs>
+        </AppFrame>
         <BackupOnOpen />
         <AppLockOverlay />
       </ApiProvider>
     </HeroUINativeProvider>
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }

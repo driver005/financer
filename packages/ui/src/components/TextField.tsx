@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Platform, TextInput, type TextInputProps } from "react-native";
 
 import { size } from "../constants/sizes";
@@ -29,13 +29,19 @@ export type TextFieldProps = {
   /** `primary` is white with a soft shadow (on the page), `secondary` a grey fill (inside cards). */
   variant?: "primary" | "secondary";
   autoFocus?: boolean;
-  capitalize?: boolean;
+  capitalize?: boolean | "words" | "characters";
+  /** Something at the end of the field (a unit, a button). */
+  right?: ReactNode;
+  /** Do not let the keyboard fix the text (codes, IBANs, names of files). */
+  autoCorrect?: boolean;
+  editable?: boolean;
+  maxLength?: number;
   testID?: string;
 };
 
 export function TextField({
   label, value, onChangeText, placeholder, helper, error, icon, multiline, secure, keyboardType, returnKeyType, onSubmit,
-  clearable, variant = "secondary", autoFocus, capitalize, testID,
+  clearable, variant = "secondary", autoFocus, capitalize, right, autoCorrect = false, editable = true, maxLength, testID,
 }: TextFieldProps) {
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
@@ -68,8 +74,10 @@ export function TextField({
             returnKeyType={returnKeyType}
             onSubmitEditing={onSubmit}
             autoFocus={autoFocus}
-            autoCapitalize={capitalize ? "sentences" : "none"}
-            autoCorrect={false}
+            autoCapitalize={capitalize === "words" ? "words" : capitalize === "characters" ? "characters" : capitalize ? "sentences" : "none"}
+            autoCorrect={autoCorrect}
+            editable={editable}
+            maxLength={maxLength}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             accessibilityLabel={label ?? placeholder}
@@ -88,6 +96,7 @@ export function TextField({
             ]}
           />
         </Box>
+        {right}
         {clearable && value ? <IconButton icon="close-circle" label="Clear" size="sm" onPress={() => onChangeText("")} /> : null}
       </Row>
       {error ? <Text variant="caption" tone="danger">{error}</Text> : helper ? <Text variant="caption" tone="subtle">{helper}</Text> : null}

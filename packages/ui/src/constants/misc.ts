@@ -7,3 +7,6 @@ export const duration = { instant: 75, fast: 150, base: 200, slow: 300, slower: 
 export const state = { pressed: opacity[90], disabled: opacity[40], loading: opacity[75], pressScale: 0.97 } as const;
 
 export type Opacity = keyof typeof opacity;
+
+/** How far a one-line text may shrink to fit (`Text fit`), and how far the system font size may enlarge it. */
+export const fitScale = { min: 0.6, max: 1.2 } as const;

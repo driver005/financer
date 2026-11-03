@@ -1,73 +1,22 @@
 /**
  * Pure helpers behind the grocery screens' look (no React, so they are unit-tested in plain
- * Node): colour maths for contrast-safe tints, chain and meal avatars, the price comparison
+ * Node): which tone a chain or meal avatar takes, the price comparison
  * per item, the "who is cheapest overall" summary, and the cost per serving of a recipe.
  * Money stays integer cents; wording of amounts goes through `formatCents`.
  */
 import type { Price, RecipeMatch } from "./api/client";
 import { formatCents } from "./format";
 
-// ---- colour ----
-
-export function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.replace(/./g, (c) => c + c) : h;
-  const n = parseInt(full, 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function toHex(rgb: readonly number[]): string {
-  return `#${rgb.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
-}
-
-/** `fg` painted over `bg` at `alpha` (0..1), as a plain hex colour. */
-export function blend(fg: string, bg: string, alpha: number): string {
-  const a = hexToRgb(fg);
-  const b = hexToRgb(bg);
-  return toHex(a.map((v, i) => v * alpha + b[i] * (1 - alpha)));
-}
-
-function channel(v: number): number {
-  const s = v / 255;
-  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-}
-
-/** WCAG relative luminance. */
-export function luminance(hex: string): number {
-  const [r, g, b] = hexToRgb(hex);
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-}
-
-/** WCAG contrast ratio, 1 to 21. */
-export function contrast(a: string, b: string): number {
-  const la = luminance(a);
-  const lb = luminance(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
-
 // ---- avatars ----
 
-export type Tint = { bg: string; fg: string };
+/** The colour role of a tile (a design-system tone). */
+export type AvatarTone = "accent" | "success" | "warning" | "danger" | "info" | "neutral";
 
-/** Chain avatar colours: every pair has a contrast of at least 4.5:1 (unit-tested). */
-const CHAIN_TINT: Record<string, Tint> = {
-  aldi: { bg: "#1e3a8a", fg: "#ffffff" },
-  lidl: { bg: "#facc15", fg: "#1c1500" },
-  kaufland: { bg: "#b91c1c", fg: "#ffffff" },
-  rewe: { bg: "#be185d", fg: "#ffffff" },
-};
+/** Chain avatar tones. */
+const CHAIN_TONE: Record<string, AvatarTone> = { aldi: "info", lidl: "warning", kaufland: "danger", rewe: "danger" };
 
-/** Calm, distinct colours for meal and recipe avatars (white text, at least 4.5:1). */
-export const MEAL_TINTS: readonly Tint[] = [
-  { bg: "#4f46e5", fg: "#ffffff" },
-  { bg: "#0369a1", fg: "#ffffff" },
-  { bg: "#b45309", fg: "#ffffff" },
-  { bg: "#15803d", fg: "#ffffff" },
-  { bg: "#be185d", fg: "#ffffff" },
-  { bg: "#0f766e", fg: "#ffffff" },
-];
-
-export const CHAIN_TINTS = CHAIN_TINT;
+/** Calm, distinct tones for meal and recipe avatars. */
+export const MEAL_TONES: readonly AvatarTone[] = ["accent", "info", "warning", "success", "danger", "neutral"];
 
 /** A small stable number for a text (FNV-1a), used to pick a colour. */
 export function hashText(text: string): number {
@@ -79,12 +28,12 @@ export function hashText(text: string): number {
   return h >>> 0;
 }
 
-export function mealTint(seed: string): Tint {
-  return MEAL_TINTS[hashText(seed) % MEAL_TINTS.length];
+export function mealTone(seed: string): AvatarTone {
+  return MEAL_TONES[hashText(seed) % MEAL_TONES.length];
 }
 
-export function chainTint(chain: string): Tint {
-  return CHAIN_TINT[chain.toLowerCase()] ?? mealTint(chain);
+export function chainTone(chain: string): AvatarTone {
+  return CHAIN_TONE[chain.toLowerCase()] ?? mealTone(chain);
 }
 
 /** Letter(s) on an avatar: the first letter of the first word, or two for a short two-word name. */
@@ -190,24 +139,4 @@ export function shortList(names: readonly string[], max = 2): { shown: string[];
 /** Shopping list progress as a whole percent, 0 for an empty list. */
 export function percentDone(done: number, total: number): number {
   return total > 0 ? Math.round((done / total) * 100) : 0;
-}
-
-// ---- status colours ----
-
-export type ToneName = "good" | "bad" | "offer" | "accent";
-export type ToneColours = { fg: string; bg: string; border: string };
-
-const TONE_FG = {
-  light: { good: "#166534", bad: "#b91c1c", offer: "#9a3412", accent: "#4f46e5" },
-  dark: { good: "#4ade80", bad: "#ff6b6b", offer: "#ffb454", accent: "#a5b4fc" },
-} as const;
-
-/**
- * Text and tinted background for a status badge or highlighted row. `surface` is the colour the
- * tint sits on (the card colour); text on tint keeps a contrast of at least 4.5:1 (unit-tested).
- */
-export function toneColours(scheme: "light" | "dark", surface: string): Record<ToneName, ToneColours> {
-  const fg = TONE_FG[scheme];
-  const make = (c: string): ToneColours => ({ fg: c, bg: blend(c, surface, scheme === "dark" ? 0.16 : 0.1), border: blend(c, surface, 0.5) });
-  return { good: make(fg.good), bad: make(fg.bad), offer: make(fg.offer), accent: make(fg.accent) };
 }

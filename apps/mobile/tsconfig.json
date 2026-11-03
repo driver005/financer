@@ -5,14 +5,29 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@financer/ui": [
+        "../../packages/ui/src/index.ts"
+      ],
+      "react-native": [
+        "./node_modules/react-native/types_generated/index.d.ts"
+      ],
+      "*": [
+        "./node_modules/@types/*",
+        "./node_modules/*"
       ]
-    }
+    },
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "../../packages/ui/src/**/*.ts",
+    "../../packages/ui/src/**/*.tsx"
   ],
   "exclude": [
     "node_modules",

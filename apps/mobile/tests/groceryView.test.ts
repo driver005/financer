@@ -3,23 +3,19 @@ import { describe, it } from "node:test";
 
 import type { Price, RecipeMatch } from "../src/api/client";
 import {
-  CHAIN_TINTS,
-  MEAL_TINTS,
-  blend,
-  chainTint,
-  contrast,
+  MEAL_TONES,
+  chainTone,
   costPerServing,
   extraText,
   hashText,
   initials,
   itemSaving,
   matchTone,
-  mealTint,
+  mealTone,
   percentDone,
   rankPrices,
   shortList,
   summarizePrices,
-  toneColours,
 } from "../src/groceryView";
 
 const price = (chain: string, cents: number, extra: Partial<Price> = {}): Price => ({
@@ -35,50 +31,13 @@ const price = (chain: string, cents: number, extra: Partial<Price> = {}): Price 
   ...extra,
 });
 
-describe("colour maths", () => {
-  it("black on white is 21:1 and white on white 1:1", () => {
-    assert.equal(Math.round(contrast("#000000", "#ffffff")), 21);
-    assert.equal(contrast("#ffffff", "#ffffff"), 1);
-  });
-
-  it("blend mixes by alpha", () => {
-    assert.equal(blend("#000000", "#ffffff", 0.5), "#808080");
-    assert.equal(blend("#ff0000", "#ffffff", 1), "#ff0000");
-    assert.equal(blend("#ff0000", "#ffffff", 0), "#ffffff");
-  });
-});
-
-describe("accessible colours", () => {
-  it("chain and meal avatars have readable letters", () => {
-    for (const t of [...Object.values(CHAIN_TINTS), ...MEAL_TINTS]) {
-      assert.ok(contrast(t.bg, t.fg) >= 4.5, `${t.bg} / ${t.fg} = ${contrast(t.bg, t.fg)}`);
-    }
-  });
-
-  it("status text on its tint is readable on card, tinted card and page, light and dark", () => {
-    const surfaces = {
-      light: ["#ffffff", "#faf5ff"],
-      dark: ["#16161b", "#1e1e25", "#0a0a0d"],
-    } as const;
-    for (const scheme of ["light", "dark"] as const) {
-      for (const surface of surfaces[scheme]) {
-        const tones = toneColours(scheme, surface);
-        for (const [name, t] of Object.entries(tones)) {
-          assert.ok(contrast(t.fg, t.bg) >= 4.5, `${scheme} ${surface} ${name} on tint = ${contrast(t.fg, t.bg)}`);
-          assert.ok(contrast(t.fg, surface) >= 4.5, `${scheme} ${surface} ${name} on surface = ${contrast(t.fg, surface)}`);
-        }
-      }
-    }
-  });
-});
-
 describe("avatars", () => {
-  it("picks the same colour for the same text and a chain colour for a known chain", () => {
-    assert.deepEqual(mealTint("Spaghetti"), mealTint("Spaghetti"));
+  it("picks the same tone for the same text and a chain tone for a known chain", () => {
+    assert.equal(mealTone("Spaghetti"), mealTone("Spaghetti"));
     assert.equal(hashText("a"), hashText("a"));
     assert.notEqual(hashText("a"), hashText("b"));
-    assert.deepEqual(chainTint("Lidl"), CHAIN_TINTS.lidl);
-    assert.ok(MEAL_TINTS.includes(chainTint("netto")));
+    assert.equal(chainTone("Lidl"), "warning");
+    assert.ok(MEAL_TONES.includes(chainTone("netto")));
   });
 
   it("initials are the first letter, upper case, with a fallback", () => {
