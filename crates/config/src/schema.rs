@@ -281,6 +281,12 @@ pub const GROUPS: &[Group] = &[
         icon: "receipt-text-outline",
     },
     Group {
+        id: "kaufland",
+        title: "Receipts: Kaufland Card",
+        hint: "Experimental and unofficial.",
+        icon: "receipt-text-outline",
+    },
+    Group {
         id: "folder",
         title: "Receipts: watched folder",
         hint: "Receipts dropped into a folder on the server.",
@@ -549,6 +555,39 @@ pub const KEYS: &[Key] = &[
         .help("Only if Lidl changes the built-in value."),
     Key::new("receipts.lidl_plus.scope", "lidl", "Scope override", Kind::Text)
         .help("Only if Lidl changes the built-in value."),
+    // -------------------------------------------------------------------------------- kaufland
+    Key::new("receipts.kaufland.enabled", "kaufland", "Kaufland Card", Kind::Bool)
+        .help("Experimental and unofficial: it may stop working whenever Kaufland changes something. You sign in on Kaufland's own page from Settings > Receipt sources; only a refresh token is kept, encrypted.")
+        .env("FINANCER_RECEIPTS_KAUFLAND")
+        .default("off"),
+    Key::new("receipts.kaufland.country", "kaufland", "Country", Kind::Text)
+        .help("Two-letter country code of your Kaufland account.")
+        .env("FINANCER_RECEIPTS_KAUFLAND_COUNTRY")
+        .default("DE"),
+    Key::new("receipts.kaufland.language", "kaufland", "Language", Kind::Text)
+        .help("Two-letter language code.")
+        .env("FINANCER_RECEIPTS_KAUFLAND_LANGUAGE")
+        .default("de"),
+    Key::new("receipts.kaufland.poll_hours", "kaufland", "Check every (hours)", Kind::Int)
+        .env("FINANCER_RECEIPTS_KAUFLAND_POLL_HOURS")
+        .default("12")
+        .range(1, 24 * 14),
+    Key::new("receipts.kaufland.client_id", "kaufland", "Client id override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.loyalty_client_id", "kaufland", "Receipt client id override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.authorize_url", "kaufland", "Sign-in address override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.token_url", "kaufland", "Token address override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.userinfo_url", "kaufland", "Account address override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.api_url", "kaufland", "Receipts address override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.redirect_uri", "kaufland", "Return address override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.app_version", "kaufland", "App version override", Kind::Text)
+        .help("The app version sent along with receipt requests; only if Kaufland starts refusing the built-in one."),
     // -------------------------------------------------------------------------------- folder
     Key::new("receipts.folder.enabled", "folder", "Watch the folder", Kind::Bool)
         .help("Switch the source off without deleting its settings.")

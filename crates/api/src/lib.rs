@@ -235,7 +235,7 @@ impl AppState {
         self
     }
 
-    /// The automatic receipt sources (mailbox, Lidl Plus, watched folder). Without it the receipt
+    /// The automatic receipt sources (mailbox, Lidl Plus, Kaufland Card, watched folder). Without it the receipt
     /// source endpoints report every source as disabled.
     pub fn with_receipt_syncer(
         mut self,
@@ -297,6 +297,10 @@ impl AppState {
         receipt_sources::lidl_finish,
         receipt_sources::lidl_status,
         receipt_sources::lidl_disconnect,
+        receipt_sources::kaufland_start,
+        receipt_sources::kaufland_finish,
+        receipt_sources::kaufland_status,
+        receipt_sources::kaufland_disconnect,
         grocery::affordability,
         grocery::recipes,
         grocery::recipe_ideas,
@@ -548,6 +552,22 @@ impl Api {
             .route("/receipts/lidl/finish", post(receipt_sources::lidl_finish))
             .route("/receipts/lidl/status", get(receipt_sources::lidl_status))
             .route("/receipts/lidl", delete(receipt_sources::lidl_disconnect))
+            .route(
+                "/receipts/kaufland/start",
+                post(receipt_sources::kaufland_start),
+            )
+            .route(
+                "/receipts/kaufland/finish",
+                post(receipt_sources::kaufland_finish),
+            )
+            .route(
+                "/receipts/kaufland/status",
+                get(receipt_sources::kaufland_status),
+            )
+            .route(
+                "/receipts/kaufland",
+                delete(receipt_sources::kaufland_disconnect),
+            )
             .route("/affordability", get(grocery::affordability))
             .route("/recipes", get(grocery::recipes))
             .route("/recipes/ideas", post(grocery::recipe_ideas))

@@ -2201,6 +2201,160 @@
         ]
       }
     },
+    "/v1/receipts/kaufland": {
+      "delete": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Disconnect the Kaufland Card: the stored token is deleted. Receipts already imported stay.",
+        "operationId": "kaufland_disconnect",
+        "responses": {
+          "204": {
+            "description": "Disconnected"
+          },
+          "409": {
+            "description": "Kaufland is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/kaufland/finish": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Finish the sign-in with the address Kaufland's page ended on. Only the refresh token (and the\ncustomer id) is stored, the token encrypted. Starts a first sync.",
+        "operationId": "kaufland_finish",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LidlFinishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LidlStatusDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The address is wrong or the sign-in expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Kaufland is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Kaufland did not accept the code or could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/kaufland/start": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Start a Kaufland Card sign-in. Returns the address of Kaufland's own sign-in page; nothing is\nsent to Kaufland by this call. Same shapes as the Lidl Plus sign-in. Experimental and\nunofficial: see docs/RECEIPT_SOURCES.md.",
+        "operationId": "kaufland_start",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LidlStartDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Kaufland is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/kaufland/status": {
+      "get": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Whether the Kaufland Card is connected, when it last synced and how many receipts came from it.",
+        "operationId": "kaufland_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LidlStatusDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/receipts/lidl": {
       "delete": {
         "tags": [
@@ -6624,7 +6778,7 @@
           },
           "source": {
             "type": "string",
-            "description": "`email`, `lidl_plus` or `folder`."
+            "description": "`email`, `lidl_plus`, `kaufland_card` or `folder`."
           },
           "state": {
             "type": "string",
@@ -6668,7 +6822,7 @@
               "string",
               "null"
             ],
-            "description": "Only this source (`email`, `lidl_plus`, `folder`); all enabled ones when absent."
+            "description": "Only this source (`email`, `lidl_plus`, `kaufland_card`, `folder`); all enabled ones when absent."
           }
         }
       },

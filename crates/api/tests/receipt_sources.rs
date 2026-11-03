@@ -9,10 +9,13 @@ use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
 use financer_api::{Api, AppState, TokenHash};
 use financer_core::{Money, Transaction};
-use financer_receipt_sources::config::{EmailConfig, FolderConfig, LidlPlusConfig, OnDone};
+use financer_receipt_sources::config::{
+    EmailConfig, FolderConfig, KauflandCardConfig, LidlPlusConfig, OnDone,
+};
 use financer_receipt_sources::lidl::Method as LidlMethod;
 use financer_receipt_sources::testing::{
-    lidl_fixtures as fx, rewe_ebon_pdf, FakeLidlHttp, FakeMailbox, MailBuilder,
+    kaufland_fixtures as kfx, lidl_fixtures as fx, rewe_ebon_pdf, FakeLidlHttp, FakeMailbox,
+    MailBuilder,
 };
 use financer_receipt_sources::{ReceiptSourcesConfig, ReceiptSyncer, SyncDeps};
 use financer_store::Store;
@@ -33,6 +36,10 @@ struct Fixture {
 
 impl Fixture {
     async fn with(lidl: bool) -> Fixture {
+        Self::with_sources(lidl, false).await
+    }
+
+    async fn with_sources(lidl: bool, kaufland: bool) -> Fixture {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!(
             "financer-api-receipts-{}-{}",
@@ -60,6 +67,10 @@ impl Fixture {
             }),
             lidl_plus: LidlPlusConfig {
                 enabled: lidl,
+                ..Default::default()
+            },
+            kaufland: KauflandCardConfig {
+                enabled: kaufland,
                 ..Default::default()
             },
             folder: Some(FolderConfig {
@@ -192,7 +203,7 @@ async fn without_a_syncer_every_source_is_disabled_and_lidl_refuses() {
     };
     let (status, list) = f.get("/v1/receipts/sources").await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(list.as_array().unwrap().len(), 3);
+    assert_eq!(list.as_array().unwrap().len(), 4);
     assert!(list
         .as_array()
         .unwrap()
@@ -211,6 +222,14 @@ async fn without_a_syncer_every_source_is_disabled_and_lidl_refuses() {
         (status, st["state"].as_str(), st["enabled"].as_bool()),
         (StatusCode::OK, Some("disabled"), Some(false))
     );
+    let (status, body) = f.post("/v1/receipts/kaufland/start", None).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(body["error"].as_str().unwrap().contains("not switched on"));
+    let (status, st) = f.get("/v1/receipts/kaufland/status").await;
+    assert_eq!(
+        (status, st["state"].as_str(), st["enabled"].as_bool()),
+        (StatusCode::OK, Some("disabled"), Some(false))
+    );
 }
 
 #[tokio::test]
@@ -223,6 +242,10 @@ async fn every_route_needs_the_token() {
         (Method::POST, "/v1/receipts/lidl/finish"),
         (Method::GET, "/v1/receipts/lidl/status"),
         (Method::DELETE, "/v1/receipts/lidl"),
+        (Method::POST, "/v1/receipts/kaufland/start"),
+        (Method::POST, "/v1/receipts/kaufland/finish"),
+        (Method::GET, "/v1/receipts/kaufland/status"),
+        (Method::DELETE, "/v1/receipts/kaufland"),
     ] {
         let (status, _) = f.send(method.clone(), uri, None, false).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {uri}");
@@ -423,4 +446,94 @@ async fn lidl_trouble_is_a_clear_error_status() {
     assert!(body["error"].as_str().unwrap().contains("503"));
     let (_, st) = f.get("/v1/receipts/lidl/status").await;
     assert_eq!(st["state"], "never");
+}
+
+#[tokio::test]
+async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect() {
+    let f = Fixture::with_sources(false, true).await;
+    let (_, st) = f.get("/v1/receipts/kaufland/status").await;
+    assert_eq!(
+        (st["enabled"].as_bool(), st["state"].as_str()),
+        (Some(true), Some("never"))
+    );
+    let (_, list) = f.get("/v1/receipts/sources").await;
+    assert_eq!(
+        Fixture::source(&list, "kaufland_card")["state"],
+        "not_connected"
+    );
+    assert_eq!(Fixture::source(&list, "lidl_plus")["state"], "disabled");
+
+    let (status, start) = f.post("/v1/receipts/kaufland/start", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let url = start["authorization_url"].as_str().unwrap();
+    assert!(
+        url.starts_with("https://account.kaufland.com/authz-srv/authz?"),
+        "{url}"
+    );
+    assert!(url.contains("code_challenge_method=S256") && !url.contains("code_verifier"));
+    assert_eq!(start["callback_scheme"], "com.kaufland.kaufland");
+    assert_eq!(f.http.requests().len(), 0, "starting contacts nobody");
+
+    let (status, _) = f
+        .post(
+            "/v1/receipts/kaufland/finish",
+            Some(json!({"state": "unknown", "callback_url": "com.kaufland.kaufland://oauth/callback?code=A"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (_, start) = f.post("/v1/receipts/kaufland/start", None).await;
+    let state = start["state"].as_str().unwrap();
+    f.http
+        .respond(LidlMethod::Post, "/token-srv/token", 200, kfx::TOKEN);
+    f.http
+        .respond(LidlMethod::Get, "/users-srv/userinfo", 200, kfx::USERINFO);
+    f.http
+        .respond(LidlMethod::Get, "start=0&", 200, kfx::TRANSACTIONS_PAGE_1);
+    let (status, st) = f
+        .post(
+            "/v1/receipts/kaufland/finish",
+            Some(json!({
+                "state": state,
+                "callback_url": format!("com.kaufland.kaufland://oauth/callback?code=FIXTURECODE&state={state}")
+            })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{st}");
+    assert_eq!(st["state"], "connected");
+    assert_eq!(st["receipts"], 2, "the first sync ran right away");
+    let text = st.to_string();
+    assert!(!text.contains("fixture-kaufland") && !text.contains("user-4711"));
+
+    let (_, receipts) = f.get("/v1/receipts").await;
+    assert!(receipts
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|r| r["source"] == "kaufland_card" && r["chain"] == "kaufland"));
+
+    let row = f
+        .store
+        .source_state("kaufland_card")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(row.secret.unwrap().starts_with("v1."));
+    assert!(!row.state.contains("fixture-kaufland"));
+
+    let (status, _) = f
+        .send(Method::DELETE, "/v1/receipts/kaufland", None, true)
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, st) = f.get("/v1/receipts/kaufland/status").await;
+    assert_eq!(
+        (st["state"].as_str(), st["receipts"].as_i64()),
+        (Some("never"), Some(2))
+    );
+    assert!(f
+        .store
+        .source_state("kaufland_card")
+        .await
+        .unwrap()
+        .is_none());
 }

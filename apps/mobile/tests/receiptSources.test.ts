@@ -253,3 +253,30 @@ describe("shop guides", () => {
     for (const g of SHOP_GUIDES) assert.ok(!/sign in to (the )?(app|your account)/i.test(g.steps.join(" ")));
   });
 });
+
+import { SOURCE_ORDER, signInPromises, signInStateText, sourceBlurb, sourceTitle, setupSteps as steps } from "../src/receiptSources";
+
+describe("the Kaufland Card source", () => {
+  it("is one of the sources, between Lidl Plus and the folder", () => {
+    assert.deepEqual([...SOURCE_ORDER], ["email", "lidl_plus", "kaufland_card", "folder"]);
+    assert.equal(sourceTitle("kaufland_card"), "Kaufland Card");
+    assert.ok(sourceBlurb("kaufland_card").includes("Kaufland's own page"));
+  });
+  it("tells the same four truths as Lidl Plus, with the shop's name and where the token is kept", () => {
+    const k = signInPromises("Kaufland", true);
+    assert.equal(k.length, 4);
+    assert.ok(k[0].includes("Kaufland's own page"));
+    assert.ok(k[1].includes("on this phone"));
+    assert.ok(k[2].startsWith("This is unofficial"));
+    assert.ok(signInPromises("Kaufland", false)[1].includes("on your server"));
+  });
+  it("words the state of the card", () => {
+    assert.equal(signInStateText("Kaufland", "needs_signin", null, 0), "Kaufland no longer accepts the saved sign-in");
+    assert.equal(signInStateText("Kaufland", "never", null, 0), "Not connected");
+    assert.equal(signInStateText("Kaufland", "disabled", null, 0, true), "Switched off on this phone");
+  });
+  it("has setup steps on a server and on the phone", () => {
+    assert.ok(steps("kaufland_card", false)[0].includes("[receipts.kaufland]"));
+    assert.ok(steps("kaufland_card", true)[0].includes("this phone"));
+  });
+});

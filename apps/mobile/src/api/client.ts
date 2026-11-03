@@ -219,7 +219,7 @@ export class Api {
     return this.request<void>(`/v1/receipts/${id}`, { method: "DELETE" });
   }
 
-  /** The automatic receipt sources (mailbox, Lidl Plus, watched folder) and how each is doing. */
+  /** The automatic receipt sources (mailbox, Lidl Plus, Kaufland Card, watched folder) and how each is doing. */
   receiptSources() {
     return this.request<ReceiptSource[]>("/v1/receipts/sources");
   }
@@ -245,6 +245,23 @@ export class Api {
 
   lidlDisconnect() {
     return this.request<void>("/v1/receipts/lidl", { method: "DELETE" });
+  }
+
+  /** The Kaufland Card sign-in: same shapes as Lidl Plus, Kaufland's own page. */
+  kauflandStart() {
+    return this.request<LidlStart>("/v1/receipts/kaufland/start", { method: "POST" });
+  }
+
+  kauflandFinish(state: string, callbackUrl: string) {
+    return this.json<LidlStatus>("/v1/receipts/kaufland/finish", "POST", { state, callback_url: callbackUrl });
+  }
+
+  kauflandStatus() {
+    return this.request<LidlStatus>("/v1/receipts/kaufland/status");
+  }
+
+  kauflandDisconnect() {
+    return this.request<void>("/v1/receipts/kaufland", { method: "DELETE" });
   }
 
   affordability(budgetCents?: number, daysPerBasket?: number) {

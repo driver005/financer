@@ -13,7 +13,9 @@ use axum::Router;
 use financer_api::{Api, AppState, LlmKeys, PriceSourceConfig, TokenHash};
 use financer_fints::FintsBank;
 use financer_prices::{PoliteHttp, ReqwestHttp};
-use financer_receipt_sources::{LidlPlusConfig, ReceiptSourcesConfig, ReceiptSyncer};
+use financer_receipt_sources::{
+    KauflandCardConfig, LidlPlusConfig, ReceiptSourcesConfig, ReceiptSyncer,
+};
 use financer_store::Store;
 use http_body_util::BodyExt;
 use time::OffsetDateTime;
@@ -48,6 +50,9 @@ pub struct StartConfig {
     pub lidl_language: Option<String>,
     /// Hours between Lidl Plus syncs when the app asks (default 12).
     pub lidl_poll_hours: Option<u32>,
+    /// Switch on receipt import from the Kaufland Card (you sign in on Kaufland's own page from
+    /// the app). Needs `device_secret`; country, language and interval follow the Lidl Plus ones.
+    pub kaufland: bool,
     /// A secret the app keeps in the phone's secure storage and passes on every start (make one
     /// with `generate_device_secret`). It encrypts the Lidl Plus sign-in in the database, so the
     /// database alone, e.g. in a phone backup, does not give it away. It must not change.
@@ -156,6 +161,15 @@ impl Backend {
                     .unwrap_or_else(|| "de".into()),
                 poll_hours: config.lidl_poll_hours.map_or(12, u64::from),
                 ..LidlPlusConfig::default()
+            };
+        }
+        if config.kaufland {
+            cfg.kaufland = KauflandCardConfig {
+                enabled: true,
+                country: cfg.lidl_plus.country.clone(),
+                language: cfg.lidl_plus.language.clone(),
+                poll_hours: config.lidl_poll_hours.map_or(12, u64::from),
+                ..KauflandCardConfig::default()
             };
         }
         let receipts = match config.device_secret.as_deref().map(str::trim) {
@@ -336,7 +350,16 @@ mod tests {
                 lidl_country: None,
                 lidl_language: None,
                 lidl_poll_hours: None,
+                kaufland: false,
                 device_secret: None,
+            }
+        }
+
+        fn with_kaufland(name: &str) -> StartConfig {
+            StartConfig {
+                kaufland: true,
+                device_secret: Some(generate_device_secret()),
+                ..Self::config(name)
             }
         }
 
@@ -551,6 +574,39 @@ mod tests {
 
         // nothing to sync until someone has signed in, and this must not reach the network
         assert_eq!(b.sync_receipts().await.unwrap(), "no receipts due");
+    }
+
+    #[tokio::test]
+    async fn kaufland_can_be_switched_on_on_the_phone() {
+        let b = Backend::start_with(Fixtures::with_kaufland("receipts-kaufland"))
+            .await
+            .unwrap();
+        let status = b
+            .handle_request(Fixtures::get("/v1/receipts/kaufland/status"))
+            .await;
+        let status = Fixtures::json(&status);
+        assert_eq!(status["enabled"], true);
+        assert_eq!(status["state"], "never");
+        let start = b
+            .handle_request(HttpRequest {
+                method: "POST".into(),
+                path_and_query: "/v1/receipts/kaufland/start".into(),
+                content_type: None,
+                body: vec![],
+            })
+            .await;
+        assert_eq!(start.status, 200);
+        let start = Fixtures::json(&start);
+        assert!(start["authorization_url"]
+            .as_str()
+            .unwrap()
+            .starts_with("https://account.kaufland.com/"));
+        assert_eq!(start["callback_scheme"], "com.kaufland.kaufland");
+        // Lidl Plus stays off
+        let lidl = b
+            .handle_request(Fixtures::get("/v1/receipts/lidl/status"))
+            .await;
+        assert_eq!(Fixtures::json(&lidl)["state"], "disabled");
     }
 
     #[tokio::test]

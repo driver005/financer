@@ -676,6 +676,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/receipts/kaufland": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Disconnect the Kaufland Card: the stored token is deleted. Receipts already imported stay. */
+        delete: operations["kaufland_disconnect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/kaufland/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish the sign-in with the address Kaufland's page ended on. Only the refresh token (and the
+         *     customer id) is stored, the token encrypted. Starts a first sync.
+         */
+        post: operations["kaufland_finish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/kaufland/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a Kaufland Card sign-in. Returns the address of Kaufland's own sign-in page; nothing is
+         *     sent to Kaufland by this call. Same shapes as the Lidl Plus sign-in. Experimental and
+         *     unofficial: see docs/RECEIPT_SOURCES.md.
+         */
+        post: operations["kaufland_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/kaufland/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the Kaufland Card is connected, when it last synced and how many receipts came from it. */
+        get: operations["kaufland_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/receipts/lidl": {
         parameters: {
             query?: never;
@@ -2266,7 +2341,7 @@ export interface components {
             next_run?: number | null;
             /** @description Remarks from the last run, e.g. why a mail or file was skipped. */
             notes: string[];
-            /** @description `email`, `lidl_plus` or `folder`. */
+            /** @description `email`, `lidl_plus`, `kaufland_card` or `folder`. */
             source: string;
             /** @description `disabled`, `waiting`, `running`, `ok`, `error`, `not_connected` or `needs_signin`. */
             state: string;
@@ -2285,7 +2360,7 @@ export interface components {
             sources: components["schemas"]["ReceiptSourceDto"][];
         };
         ReceiptSyncRequest: {
-            /** @description Only this source (`email`, `lidl_plus`, `folder`); all enabled ones when absent. */
+            /** @description Only this source (`email`, `lidl_plus`, `kaufland_card`, `folder`); all enabled ones when absent. */
             source?: string | null;
         };
         ReceiptUpload: {
@@ -4374,6 +4449,130 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    kaufland_disconnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Kaufland is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    kaufland_finish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidlFinishRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidlStatusDto"];
+                };
+            };
+            /** @description The address is wrong or the sign-in expired */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Kaufland is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Kaufland did not accept the code or could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    kaufland_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidlStartDto"];
+                };
+            };
+            /** @description Kaufland is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    kaufland_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidlStatusDto"];
                 };
             };
         };

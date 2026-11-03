@@ -4,7 +4,7 @@ import { Badge, Box, Button, Card, Expandable, Group, ListItem, Note, Section, T
 import type { Api, LidlStatus, ReceiptSource } from "@/api/client";
 import { useApi } from "@/api/config";
 import { Page } from "@/components/Page";
-import { LidlCard } from "@/components/receipts/LidlCard";
+import { SignInCard } from "@/components/receipts/SignInCard";
 import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import { useScreenData } from "@/hooks";
 import {
@@ -25,11 +25,11 @@ import {
 } from "@/receiptSources";
 import { asIcon, toTone } from "@/uiTone";
 
-type Loaded = { sources: ReceiptSource[]; lidl: LidlStatus | null };
+type Loaded = { sources: ReceiptSource[]; lidl: LidlStatus | null; kaufland: LidlStatus | null };
 
 async function loadAll(api: Api): Promise<Loaded> {
-  const [sources, lidl] = await Promise.all([api.receiptSources(), api.lidlStatus().catch(() => null)]);
-  return { sources, lidl };
+  const [sources, lidl, kaufland] = await Promise.all([api.receiptSources(), api.lidlStatus().catch(() => null), api.kauflandStatus().catch(() => null)]);
+  return { sources, lidl, kaufland };
 }
 
 /**
@@ -92,7 +92,7 @@ export default function ReceiptSources() {
         footer={
           data ? (
             <Box gap="lg">
-              <Section title="REWE, Kaufland, Penny, ALDI" description="These shops have no public interface for receipts, so Financer cannot sign in to their apps. This is what works for each.">
+              <Section title="REWE, Kaufland, Penny, ALDI" description="None of these shops has a public interface for receipts. This is what works for each.">
                 <Card gap="sm">
                   {SHOP_GUIDES.map((g) => (
                     <Expandable key={g.shop} icon="storefront-outline" title={g.shop} summary={g.summary}>
@@ -110,8 +110,8 @@ export default function ReceiptSources() {
           ) : null
         }
         renderItem={(s) =>
-          s.source === "lidl_plus" && data ? (
-            <LidlCard api={api} source={s} status={data.lidl} onChanged={reload} />
+          (s.source === "lidl_plus" || s.source === "kaufland_card") && data ? (
+            <SignInCard brand={s.source} api={api} source={s} status={s.source === "lidl_plus" ? data.lidl : data.kaufland} onChanged={reload} />
           ) : (
             <SourceCard s={s} now={now} onPhone={onPhone} syncing={syncing === s.source} disabled={syncing !== null} onSync={() => void sync(s.source)} />
           )

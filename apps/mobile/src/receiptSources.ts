@@ -4,9 +4,9 @@
  * imports, so tests can run them under Node.
  */
 
-export type SourceKey = "email" | "lidl_plus" | "folder";
+export type SourceKey = "email" | "lidl_plus" | "kaufland_card" | "folder";
 
-export const SOURCE_ORDER: readonly SourceKey[] = ["email", "lidl_plus", "folder"];
+export const SOURCE_ORDER: readonly SourceKey[] = ["email", "lidl_plus", "kaufland_card", "folder"];
 
 /** The fields of a source the helpers read (a subset of `ReceiptSource`). */
 export type SourceLike = {
@@ -32,6 +32,8 @@ export function sourceTitle(s: string): string {
       return "Email";
     case "lidl_plus":
       return "Lidl Plus";
+    case "kaufland_card":
+      return "Kaufland Card";
     case "folder":
       return "Watched folder";
     default:
@@ -45,6 +47,8 @@ export function sourceIcon(s: string): string {
       return "email-fast-outline";
     case "lidl_plus":
       return "cart-heart";
+    case "kaufland_card":
+      return "card-account-details-outline";
     case "folder":
       return "folder-download-outline";
     default:
@@ -59,6 +63,8 @@ export function sourceBlurb(s: string): string {
       return "Reads the receipt mails your shops send you (REWE eBon and others) from your mailbox.";
     case "lidl_plus":
       return "Reads your Lidl Plus receipts after you sign in on Lidl's own page. Experimental.";
+    case "kaufland_card":
+      return "Reads the digital receipts of your Kaufland Card after you sign in on Kaufland's own page. Experimental.";
     case "folder":
       return "Imports any receipt PDF, text or web page you drop into a folder on your server.";
     default:
@@ -150,6 +156,11 @@ export function setupSteps(s: string, onPhone = false): string[] {
           "Switch it on below. The setting stays on this phone.",
           "Then tap Connect. You sign in on Lidl's own page; Financer never sees your password.",
         ];
+      case "kaufland_card":
+        return [
+          "Switch it on below. The setting stays on this phone.",
+          "Then tap Connect. You sign in on Kaufland's own page; Financer never sees your password.",
+        ];
       case "email":
         return [
           "Not available on this phone: reading a mailbox needs a server that can stay connected. Connect your own server (Settings > Backend) to use it, or forward receipts to the Receipts screen by hand.",
@@ -174,6 +185,11 @@ export function setupSteps(s: string, onPhone = false): string[] {
         "Switch it on with enabled = true under [receipts.lidl_plus] in financer.toml and restart the server.",
         "Come back here and tap Connect. You sign in on Lidl's own page; Financer never sees your password.",
       ];
+    case "kaufland_card":
+      return [
+        "Switch it on with enabled = true under [receipts.kaufland] in financer.toml and restart the server.",
+        "Come back here and tap Connect. You sign in on Kaufland's own page; Financer never sees your password.",
+      ];
     case "folder":
       return [
         "Add a [receipts.folder] section to financer.toml with the path of a folder on the server.",
@@ -184,14 +200,22 @@ export function setupSteps(s: string, onPhone = false): string[] {
   }
 }
 
-/** The short, plain statements shown on the Lidl Plus card. */
-export function lidlPromises(onPhone = false): string[] {
+/** The shops whose receipts come in by signing in on the shop's own page. */
+export type SignInShop = "Lidl" | "Kaufland";
+
+/** The short, plain statements shown on the sign-in card of a shop. */
+export function signInPromises(shop: SignInShop, onPhone = false): string[] {
   return [
-    "You sign in on Lidl's own page. Financer never sees your password.",
+    `You sign in on ${shop}'s own page. Financer never sees your password.`,
     `Only a refresh token is stored, ${onPhone ? "on this phone" : "on your server"}, encrypted.`,
-    "This is unofficial. Lidl has no public interface for this, so it can stop working at any time.",
+    `This is unofficial. ${shop} has no public interface for this, so it can stop working at any time.`,
     "You can disconnect whenever you like. That deletes the token; receipts already imported stay.",
   ];
+}
+
+/** The statements of the Lidl Plus card. */
+export function lidlPromises(onPhone = false): string[] {
+  return signInPromises("Lidl", onPhone);
 }
 
 export const LIDL_PROMISES: readonly string[] = lidlPromises(false);
@@ -204,8 +228,8 @@ export function disconnectedText(onPhone: boolean): string {
 /** The empty state when no receipt source is on. */
 export function noSourceText(onPhone: boolean): string {
   return onPhone
-    ? "On this phone the receipts can come from Lidl Plus. Switch it on in the Lidl Plus card below. Mailbox and folder import need your own server."
-    : "Receipts can arrive from your mailbox, from Lidl Plus or from a folder. Sources are switched on in the server's financer.toml; the cards below say how.";
+    ? "On this phone the receipts can come from Lidl Plus or the Kaufland Card. Switch one on in its card below. Mailbox and folder import need your own server."
+    : "Receipts can arrive from your mailbox, from Lidl Plus, from the Kaufland Card or from a folder. Sources are switched on in the server's financer.toml; the cards below say how.";
 }
 
 /** Where the sign-in can be completed: inside the app (a browser sheet that hands the address back) or by pasting it. */
@@ -236,18 +260,23 @@ export function callbackHasResult(url: string): boolean {
   return /[?&#](code|error)=/.test(url);
 }
 
-/** The one-line state of the Lidl card. */
-export function lidlStateText(state: string, connectedAt: number | null | undefined, nowSec: number, onPhone = false): string {
+/** The one-line state of a sign-in card. */
+export function signInStateText(shop: SignInShop, state: string, connectedAt: number | null | undefined, nowSec: number, onPhone = false): string {
   switch (state) {
     case "connected":
       return connectedAt ? `Connected ${lastSyncText(connectedAt, nowSec).toLowerCase()}` : "Connected";
     case "needs_signin":
-      return "Lidl no longer accepts the saved sign-in";
+      return `${shop} no longer accepts the saved sign-in`;
     case "never":
       return "Not connected";
     default:
       return `Switched off on this ${onPhone ? "phone" : "server"}`;
   }
+}
+
+/** The one-line state of the Lidl card. */
+export function lidlStateText(state: string, connectedAt: number | null | undefined, nowSec: number, onPhone = false): string {
+  return signInStateText("Lidl", state, connectedAt, nowSec, onPhone);
 }
 
 // ---- shops that have an app but no way in ----
@@ -261,8 +290,8 @@ export type ShopGuide = {
 };
 
 /**
- * REWE, Kaufland, Penny and ALDI. None of them offers a public interface for receipts, so Financer
- * does not sign in to their apps; this says for each what does work. REWE mails the eBon as a PDF
+ * REWE, Kaufland, Penny and ALDI. None of them offers a public interface for receipts. Kaufland has
+ * an unofficial sign-in of its own (the card above); for the others this says what does work. REWE mails the eBon as a PDF
  * (the email source reads it); Kaufland and Penny keep the digital receipt inside their app; ALDI
  * is not known to offer one. Written from what the shops publish (checked on 2026-11-03), so a
  * shop may have changed it; the app itself is the authority.
@@ -279,11 +308,11 @@ export const SHOP_GUIDES: readonly ShopGuide[] = [
   },
   {
     shop: "Kaufland",
-    summary: "The digital receipt stays inside the Kaufland app. Financer cannot sign in there.",
+    summary: "The Kaufland Card above signs in on Kaufland's own page and reads your digital receipts. Unofficial.",
     steps: [
-      "In the Kaufland app, with your Kaufland Card, switch on the paperless receipt (\"Papierbon sparen\").",
-      "Open the receipt in the app and take a screenshot.",
-      "In Financer open Receipts and scan the screenshot. Kaufland receipts that reach your mailbox are picked up by the Email source.",
+      "In the Kaufland app, with your Kaufland Card, switch on the paperless receipt (\"Papierbon sparen\"); only receipts bought that way exist digitally.",
+      "Switch the Kaufland Card on (the card above) and tap Connect. You sign in on Kaufland's own page.",
+      "If Kaufland stops accepting it, scan a screenshot of the receipt under Receipts instead.",
     ],
   },
   {

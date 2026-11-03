@@ -4,6 +4,7 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
+use financer_receipt_sources::kaufland::KauflandError;
 use financer_receipt_sources::lidl::{Connection, LidlError};
 use financer_receipt_sources::{SourceHealth, SourceKind, SourceStatus, SyncNowError, SyncReport};
 use serde::{Deserialize, Serialize};
@@ -16,7 +17,7 @@ use crate::AppState;
 /// One receipt source and how it is doing. Contains no secrets.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ReceiptSourceDto {
-    /// `email`, `lidl_plus` or `folder`.
+    /// `email`, `lidl_plus`, `kaufland_card` or `folder`.
     pub source: String,
     /// Has a setting in the server configuration (Lidl Plus always counts).
     pub configured: bool,
@@ -109,7 +110,7 @@ impl From<SyncReport> for ReceiptSyncDto {
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
 pub struct ReceiptSyncRequest {
-    /// Only this source (`email`, `lidl_plus`, `folder`); all enabled ones when absent.
+    /// Only this source (`email`, `lidl_plus`, `kaufland_card`, `folder`); all enabled ones when absent.
     pub source: Option<String>,
 }
 
@@ -159,6 +160,24 @@ fn lidl_error(e: LidlError) -> ApiError {
         LidlError::NeedsSignIn | LidlError::NotConnected => ApiError::Conflict(e.to_string()),
         LidlError::Config(_) | LidlError::Internal(_) => {
             tracing::error!("lidl plus: {e}");
+            ApiError::Internal
+        }
+    }
+}
+
+fn kaufland_error(e: KauflandError) -> ApiError {
+    match e {
+        KauflandError::BadCallback(_)
+        | KauflandError::SignInRefused(_)
+        | KauflandError::UnknownSignIn => ApiError::BadRequest(e.to_string()),
+        KauflandError::Network(_) | KauflandError::Status(_) | KauflandError::BadResponse(_) => {
+            ApiError::BadGateway(e.to_string())
+        }
+        KauflandError::NeedsSignIn | KauflandError::NotConnected => {
+            ApiError::Conflict(e.to_string())
+        }
+        KauflandError::Config(_) | KauflandError::Internal(_) => {
+            tracing::error!("kaufland: {e}");
             ApiError::Internal
         }
     }
@@ -214,7 +233,9 @@ impl ReceiptSourceRoutes {
         let only = match body.and_then(|b| b.0.source) {
             None => None,
             Some(name) => Some(SourceKind::from_key(&name).ok_or_else(|| {
-                ApiError::BadRequest("source must be email, lidl_plus or folder".into())
+                ApiError::BadRequest(
+                    "source must be email, lidl_plus, kaufland_card or folder".into(),
+                )
             })?),
         };
         let Some(syncer) = &state.receipt_syncer else {
@@ -317,6 +338,107 @@ impl ReceiptSourceRoutes {
         lidl.disconnect().await.map_err(sync_error)?;
         Ok(StatusCode::NO_CONTENT)
     }
+
+    fn kaufland(
+        state: &AppState,
+    ) -> Result<
+        (
+            &financer_receipt_sources::ReceiptSyncer,
+            &financer_receipt_sources::kaufland::KauflandCard,
+        ),
+        ApiError,
+    > {
+        state
+            .receipt_syncer
+            .as_deref()
+            .and_then(|s| s.kaufland().map(|k| (s, k)))
+            .ok_or_else(|| ApiError::Conflict("Kaufland is not switched on".into()))
+    }
+
+    pub async fn kaufland_start(
+        State(state): State<AppState>,
+    ) -> Result<Json<LidlStartDto>, ApiError> {
+        let (_, card) = Self::kaufland(&state)?;
+        let s = card.start().await.map_err(kaufland_error)?;
+        Ok(Json(LidlStartDto {
+            authorization_url: s.authorization_url,
+            state: s.state,
+            callback_scheme: s.callback_scheme,
+            redirect_uri: s.redirect_uri,
+            expires_in_seconds: s.expires_in_secs,
+        }))
+    }
+
+    async fn kaufland_status_dto(state: &AppState) -> Result<LidlStatusDto, ApiError> {
+        let Some(syncer) = state
+            .receipt_syncer
+            .as_deref()
+            .filter(|s| s.kaufland().is_some())
+        else {
+            return Ok(LidlStatusDto {
+                enabled: false,
+                state: "disabled".into(),
+                connected_at: None,
+                last_sync: None,
+                last_error: None,
+                receipts: state
+                    .store
+                    .count_receipts_from(SourceKind::KauflandCard.key())
+                    .await?,
+            });
+        };
+        let card = syncer.kaufland().ok_or(ApiError::Internal)?;
+        let status = syncer
+            .statuses()
+            .await
+            .map_err(sync_error)?
+            .into_iter()
+            .find(|s| s.kind == SourceKind::KauflandCard)
+            .ok_or(ApiError::Internal)?;
+        let connection = card.connection().await.map_err(sync_error)?;
+        Ok(LidlStatusDto {
+            enabled: true,
+            state: match connection {
+                Connection::Never => "never",
+                Connection::Connected => "connected",
+                Connection::NeedsSignin => "needs_signin",
+            }
+            .into(),
+            connected_at: card.connected_at().await.map_err(sync_error)?,
+            last_sync: status.last_run,
+            last_error: status.last_error,
+            receipts: status.imported_total,
+        })
+    }
+
+    pub async fn kaufland_status(
+        State(state): State<AppState>,
+    ) -> Result<Json<LidlStatusDto>, ApiError> {
+        Self::kaufland_status_dto(&state).await.map(Json)
+    }
+
+    pub async fn kaufland_finish(
+        State(state): State<AppState>,
+        Json(req): Json<LidlFinishRequest>,
+    ) -> Result<Json<LidlStatusDto>, ApiError> {
+        let (syncer, card) = Self::kaufland(&state)?;
+        card.finish(&req.state, &req.callback_url)
+            .await
+            .map_err(kaufland_error)?;
+        // first sync right away; failures are shown in the status, they do not undo the sign-in
+        if let Err(e) = syncer.sync_now(Some(SourceKind::KauflandCard)).await {
+            tracing::warn!("first Kaufland sync: {e}");
+        }
+        Self::kaufland_status_dto(&state).await.map(Json)
+    }
+
+    pub async fn kaufland_disconnect(
+        State(state): State<AppState>,
+    ) -> Result<StatusCode, ApiError> {
+        let (_, card) = Self::kaufland(&state)?;
+        card.disconnect().await.map_err(sync_error)?;
+        Ok(StatusCode::NO_CONTENT)
+    }
 }
 
 /// The receipt sources: the mailbox, the Lidl Plus account and the watched folder, with state,
@@ -380,4 +502,46 @@ pub async fn lidl_status(state: State<AppState>) -> Result<Json<LidlStatusDto>, 
     security(("bearer" = [])))]
 pub async fn lidl_disconnect(state: State<AppState>) -> Result<StatusCode, ApiError> {
     ReceiptSourceRoutes::lidl_disconnect(state).await
+}
+
+/// Start a Kaufland Card sign-in. Returns the address of Kaufland's own sign-in page; nothing is
+/// sent to Kaufland by this call. Same shapes as the Lidl Plus sign-in. Experimental and
+/// unofficial: see docs/RECEIPT_SOURCES.md.
+#[utoipa::path(post, path = "/v1/receipts/kaufland/start", responses(
+    (status = 200, body = LidlStartDto),
+    (status = 409, description = "Kaufland is not switched on", body = ErrorBody)),
+    security(("bearer" = [])))]
+pub async fn kaufland_start(state: State<AppState>) -> Result<Json<LidlStartDto>, ApiError> {
+    ReceiptSourceRoutes::kaufland_start(state).await
+}
+
+/// Finish the sign-in with the address Kaufland's page ended on. Only the refresh token (and the
+/// customer id) is stored, the token encrypted. Starts a first sync.
+#[utoipa::path(post, path = "/v1/receipts/kaufland/finish", request_body = LidlFinishRequest, responses(
+    (status = 200, body = LidlStatusDto),
+    (status = 400, description = "The address is wrong or the sign-in expired", body = ErrorBody),
+    (status = 502, description = "Kaufland did not accept the code or could not be reached", body = ErrorBody),
+    (status = 409, description = "Kaufland is not switched on", body = ErrorBody)),
+    security(("bearer" = [])))]
+pub async fn kaufland_finish(
+    state: State<AppState>,
+    body: Json<LidlFinishRequest>,
+) -> Result<Json<LidlStatusDto>, ApiError> {
+    ReceiptSourceRoutes::kaufland_finish(state, body).await
+}
+
+/// Whether the Kaufland Card is connected, when it last synced and how many receipts came from it.
+#[utoipa::path(get, path = "/v1/receipts/kaufland/status", responses(
+    (status = 200, body = LidlStatusDto)), security(("bearer" = [])))]
+pub async fn kaufland_status(state: State<AppState>) -> Result<Json<LidlStatusDto>, ApiError> {
+    ReceiptSourceRoutes::kaufland_status(state).await
+}
+
+/// Disconnect the Kaufland Card: the stored token is deleted. Receipts already imported stay.
+#[utoipa::path(delete, path = "/v1/receipts/kaufland", responses(
+    (status = 204, description = "Disconnected"),
+    (status = 409, description = "Kaufland is not switched on", body = ErrorBody)),
+    security(("bearer" = [])))]
+pub async fn kaufland_disconnect(state: State<AppState>) -> Result<StatusCode, ApiError> {
+    ReceiptSourceRoutes::kaufland_disconnect(state).await
 }

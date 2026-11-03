@@ -202,6 +202,35 @@ impl Renderer {
             out,
             "# the refresh token is kept encrypted in the database, never in this file"
         );
+        let k = &r.kaufland;
+        let _ = writeln!(out, "\n[receipts.kaufland]   # {src}");
+        let _ = writeln!(out, "enabled = {}", k.enabled);
+        let _ = writeln!(out, "country = {}", Self::q(&k.country));
+        let _ = writeln!(out, "language = {}", Self::q(&k.language));
+        let _ = writeln!(out, "poll_hours = {}", k.poll_hours);
+        let overridden = [
+            ("client_id", &k.client_id),
+            ("loyalty_client_id", &k.loyalty_client_id),
+            ("authorize_url", &k.authorize_url),
+            ("token_url", &k.token_url),
+            ("userinfo_url", &k.userinfo_url),
+            ("api_url", &k.api_url),
+            ("redirect_uri", &k.redirect_uri),
+            ("app_version", &k.app_version),
+        ];
+        for (name, v) in overridden {
+            if let Some(v) = v {
+                let _ = writeln!(
+                    out,
+                    "{name} = {}   # overrides the built-in value",
+                    Self::q(v)
+                );
+            }
+        }
+        let _ = writeln!(
+            out,
+            "# the refresh token is kept encrypted in the database, never in this file"
+        );
         let _ = writeln!(out, "\n[receipts.folder]   # {src}");
         match &r.folder {
             None => {
