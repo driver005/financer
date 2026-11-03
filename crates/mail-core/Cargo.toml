@@ -1,0 +1,17 @@
+[package]
+name = "financer-mail-core"
+description = "Mail client domain: people and topic conversations, quote and greeting stripping, greeting/closing templates, and calendar events found in invitations and text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+regex = "1"
+serde.workspace = true
+sha2 = "0.11"
+thiserror.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
