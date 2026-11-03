@@ -266,7 +266,7 @@ export function SignInCard({
             <Box gap="sm">
               {connected ? (
                 <>
-                  <Button label={busy ? "Syncing…" : `Sync ${brand.name} now`} icon="sync" onPress={() => void syncNow()} disabled={busy} />
+                  <Button label={busy ? "Syncing…" : "Sync now"} icon="sync" onPress={() => void syncNow()} disabled={busy} />
                   <ConfirmAction
                     label="Disconnect"
                     icon="link-off"
@@ -278,7 +278,7 @@ export function SignInCard({
                   />
                 </>
               ) : (
-                <Button label={busy ? "Opening…" : state === "needs_signin" ? "Sign in again" : `Connect ${brand.name}`} icon="login" onPress={() => void connect()} disabled={busy} />
+                <Button label={busy ? "Opening…" : state === "needs_signin" ? "Sign in again" : "Connect"} icon="login" onPress={() => void connect()} disabled={busy} />
               )}
             </Box>
           )}
