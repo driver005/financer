@@ -544,6 +544,23 @@ impl MailStore {
         Ok(out)
     }
 
+    /// The events that were found in these messages (not dismissed ones).
+    pub async fn events_of_messages(&self, message_rows: &[i64]) -> Result<Vec<StoredEvent>> {
+        let mut out = Vec::new();
+        for chunk in message_rows.chunks(400) {
+            let rows = event::Entity::find()
+                .filter(event::Column::MessageRow.is_in(chunk.to_vec()))
+                .filter(event::Column::Status.ne("dismissed"))
+                .order_by_asc(event::Column::Starts)
+                .all(&self.db)
+                .await?;
+            for r in rows {
+                out.push(stored_event(r)?);
+            }
+        }
+        Ok(out)
+    }
+
     pub async fn event(&self, id: i64) -> Result<Option<StoredEvent>> {
         match event::Entity::find_by_id(id).one(&self.db).await? {
             Some(r) => Ok(Some(stored_event(r)?)),

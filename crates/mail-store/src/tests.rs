@@ -402,3 +402,37 @@ async fn postgres_when_available() {
     assert_eq!(s.insert_message(&m, 1).await.unwrap(), None);
     assert!(!s.metas(5).await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn events_can_be_listed_by_the_message_they_came_from() {
+    let s = store().await;
+    s.upsert_event(
+        &event("a", "Eins", datetime!(2026-11-05 14:00)),
+        Some(10),
+        1,
+    )
+    .await
+    .unwrap();
+    s.upsert_event(
+        &event("b", "Zwei", datetime!(2026-11-06 14:00)),
+        Some(11),
+        1,
+    )
+    .await
+    .unwrap();
+    s.upsert_event(&event("c", "Drei", datetime!(2026-11-07 14:00)), None, 1)
+        .await
+        .unwrap();
+    let got = s.events_of_messages(&[10, 12]).await.unwrap();
+    assert_eq!(
+        got.iter()
+            .map(|e| e.event.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Eins"]
+    );
+    let id = got[0].id;
+    s.set_event_status(id, EventStatus::Dismissed, 2)
+        .await
+        .unwrap();
+    assert!(s.events_of_messages(&[10]).await.unwrap().is_empty());
+}

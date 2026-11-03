@@ -1,6 +1,7 @@
 # Build: docker build -f deploy/Dockerfile -t financer-server .
 # Behind Docker Hub rate limits: --build-arg REGISTRY=mirror.gcr.io/library/
-# With the shopping assistant inside (docs/SHOP.md): --build-arg FEATURES=shop
+# With the shopping assistant (docs/SHOP.md) and the mail client (docs/MAIL.md) inside:
+# --build-arg FEATURES=shop,mail
 ARG REGISTRY=docker.io/library/
 
 FROM ${REGISTRY}rust:1-bookworm AS build

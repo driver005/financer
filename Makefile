@@ -125,7 +125,7 @@ shop-web: $(SHOP_STAMP) ## The shopping app in the browser (needs: make shop-ser
 
 shop-test: $(SHOP_STAMP) ## Everything of the shopping assistant: Rust crates, module tests, type check
 	cargo test -p financer-shop-core -p financer-shop-sources -p financer-shop-store -p financer-shop-api -p financer-shop-server
-	cargo test -p financer-server --features shop
+	cargo test -p financer-server --features shop,mail
 	cd $(SHOP_MOD) && npm test
 	cd $(SHOP_APP) && npm run typecheck
 

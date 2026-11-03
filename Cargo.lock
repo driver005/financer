@@ -1749,6 +1749,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "financer-mail-api"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "base64 0.23.1",
+ "financer-mail-core",
+ "financer-mail-store",
+ "financer-receipt-sources",
+ "http-body-util",
+ "mail-builder",
+ "mail-parser",
+ "mail-send",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tokio-rustls",
+ "tower",
+ "tower-http 0.7.1",
+ "tracing",
+ "uuid",
+ "webpki-roots",
+]
+
+[[package]]
 name = "financer-mail-core"
 version = "0.1.0"
 dependencies = [
@@ -1871,6 +1898,7 @@ dependencies = [
  "financer-core",
  "financer-fints",
  "financer-llm",
+ "financer-mail-api",
  "financer-plaid",
  "financer-prices",
  "financer-receipt-sources",
@@ -2257,6 +2285,16 @@ dependencies = [
  "typenum",
  "version_check",
  "zeroize",
+]
+
+[[package]]
+name = "gethostname"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8"
+dependencies = [
+ "rustix",
+ "windows-link",
 ]
 
 [[package]]
@@ -3246,6 +3284,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc04a4c58212d57930a24bf47d3fa87485264a3a054e9c10e042eb373573ad3c"
 
 [[package]]
+name = "mail-builder"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aca3ad941e4c466402151719d6b4cea4bdfcb212b11e5970afa75e7d28c6502a"
+dependencies = [
+ "encodify",
+ "gethostname",
+ "web-time",
+]
+
+[[package]]
 name = "mail-parser"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3256,6 +3305,22 @@ dependencies = [
  "hashify",
  "memchr",
  "simdutf8",
+]
+
+[[package]]
+name = "mail-send"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a428956cced7e5493be6631590e009825635f6ffc3f19edbbf9e07418f8f2e2"
+dependencies = [
+ "encodify",
+ "gethostname",
+ "rustls",
+ "rustls-pki-types",
+ "rustls-platform-verifier",
+ "smtp-proto",
+ "tokio",
+ "tokio-rustls",
 ]
 
 [[package]]
@@ -4920,6 +4985,15 @@ name = "smawk"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8e2fb0f499abb4d162f2bedad68f5ef91a1682b5a03596ddb67efd37768d100"
+
+[[package]]
+name = "smtp-proto"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "142a5a642c6bd7ffd7e1b525ad6a6e9921ccef992dba4663974f8519209a00c1"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "socket2"
