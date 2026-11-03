@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::call::{encode, query, Caller};
+use crate::call::{answer, encode, parse_args, query, Caller};
 use crate::error::SdkError;
 use crate::json::JsonValue;
 use crate::transport::Transport;
@@ -1733,62 +1733,62 @@ impl FinanceSdk {
     /// Accept suggestions: one rule per merchant, then the rules are applied to existing
     /// transactions.
     pub async fn accept_suggestions(&self, body: AcceptSuggestions) -> Result<AcceptReport, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/transactions/categorize-unknown/accept".to_string(), Some(&body)).await?)
+        self.caller.decode(self.accept_suggestions_raw(body).await?)
     }
 
     /// Delete one occurrence of a repeating event; the rest of the series stays.
     pub async fn add_exception(&self, id: i64, body: ExceptionInput) -> Result<EventDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", format!("/v1/calendar/events/{}/exceptions", encode(&id.to_string())), Some(&body)).await?)
+        self.caller.decode(self.add_exception_raw(id, body).await?)
     }
 
     /// What the budget buys: how long your usual basket lasts per chain, the cheapest items that
     /// fit, and the cheapest way to split the shopping.
     pub async fn affordability(&self, budget_cents: Option<i64>, days_per_basket: Option<i32>) -> Result<AffordabilityDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/affordability{}", query(&[("budget_cents", qv(&budget_cents)), ("days_per_basket", qv(&days_per_basket))])), None::<&()>).await?)
+        self.caller.decode(self.affordability_raw(budget_cents, days_per_basket).await?)
     }
 
     /// Possible problems in recent payments: duplicate charges, amounts far above the usual, big
     /// first-time merchants and charges that are large for their category. Dismissed alerts are left
     /// out unless `include_dismissed=true`.
     pub async fn alerts(&self, include_dismissed: Option<bool>, lookback_days: Option<i64>, as_of: Option<String>) -> Result<AlertsDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/alerts{}", query(&[("include_dismissed", qv(&include_dismissed)), ("lookback_days", qv(&lookback_days)), ("as_of", qv(&as_of))])), None::<&()>).await?)
+        self.caller.decode(self.alerts_raw(include_dismissed, lookback_days, as_of).await?)
     }
 
     /// Run the rules again over existing transactions. Transactions you categorized by hand keep
     /// their category. Returns how many changed.
     pub async fn apply_rules(&self) -> Result<ApplyReport, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/rules/apply".to_string(), None::<&()>).await?)
+        self.caller.decode(self.apply_rules_raw().await?)
     }
 
     /// GET /v1/bank/status
     pub async fn bank_status(&self) -> Result<BankStatus, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/bank/status".to_string(), None::<&()>).await?)
+        self.caller.decode(self.bank_status_raw().await?)
     }
 
     /// For each item of your basket, the cheapest chain right now.
     pub async fn best_prices(&self) -> Result<Vec<PickDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/prices/best".to_string(), None::<&()>).await?)
+        self.caller.decode(self.best_prices_raw().await?)
     }
 
     /// The budget period you are in (or the previous one), from your payday setting.
     pub async fn budget_period(&self, period: Option<PeriodChoice>, date: Option<String>) -> Result<PeriodDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/budget/period{}", query(&[("period", qv(&period)), ("date", qv(&date))])), None::<&()>).await?)
+        self.caller.decode(self.budget_period_raw(period, date).await?)
     }
 
     /// Spent and remaining per envelope for one budget period (a calendar month unless a payday is
     /// set in the settings).
     pub async fn budget_status(&self, year: Option<i32>, month: Option<i32>, period: Option<PeriodChoice>, date: Option<String>) -> Result<Vec<EnvelopeStatusDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/budget/status{}", query(&[("year", qv(&year)), ("month", qv(&month)), ("period", qv(&period)), ("date", qv(&date))])), None::<&()>).await?)
+        self.caller.decode(self.budget_status_raw(year, month, period, date).await?)
     }
 
     /// Stop waiting for an approval.
     pub async fn cancel_connection(&self, name: String) -> Result<BankConnectionDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", format!("/v1/bank/connections/{}/cancel", encode(&name.to_string())), None::<&()>).await?)
+        self.caller.decode(self.cancel_connection_raw(name).await?)
     }
 
     /// All items prices and recipes can refer to.
     pub async fn catalog(&self) -> Result<Vec<CatalogItemDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/catalog".to_string(), None::<&()>).await?)
+        self.caller.decode(self.catalog_raw().await?)
     }
 
     /// Ask your Claude or OpenAI model to suggest categories for merchants still left as
@@ -1796,223 +1796,223 @@ impl FinanceSdk {
     /// categories are sent; never amounts, dates, IBANs or purposes. Nothing is changed until you
     /// accept suggestions.
     pub async fn categorize_unknown(&self) -> Result<SuggestionsDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/transactions/categorize-unknown".to_string(), None::<&()>).await?)
+        self.caller.decode(self.categorize_unknown_raw().await?)
     }
 
     /// Check whether you approved in the banking app; if so, import. Answers 409 while still
     /// waiting: keep calling every few seconds.
     pub async fn confirm_sync(&self, id: String) -> Result<SyncDone, SdkError> {
-        self.caller.decode(self.caller.json("POST", format!("/v1/bank/sync/{}/confirm", encode(&id.to_string())), None::<&()>).await?)
+        self.caller.decode(self.confirm_sync_raw(id).await?)
     }
 
     /// Create a passphrase-encrypted backup of everything that is yours (see `/v1/export`).
     pub async fn create_backup(&self, body: BackupCreateRequest) -> Result<BackupDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/backup/create".to_string(), Some(&body)).await?)
+        self.caller.decode(self.create_backup_raw(body).await?)
     }
 
     /// Add a calendar.
     pub async fn create_calendar(&self, body: CalendarInput) -> Result<CalendarDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/calendar/calendars".to_string(), Some(&body)).await?)
+        self.caller.decode(self.create_calendar_raw(body).await?)
     }
 
     /// Add an event.
     pub async fn create_event(&self, body: EventInput) -> Result<EventDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/calendar/events".to_string(), Some(&body)).await?)
+        self.caller.decode(self.create_event_raw(body).await?)
     }
 
     /// Add a rule at the end of the priority order.
     pub async fn create_rule(&self, body: RuleInput) -> Result<RuleDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/rules".to_string(), Some(&body)).await?)
+        self.caller.decode(self.create_rule_raw(body).await?)
     }
 
     /// Delete a calendar with all its events. The last calendar cannot be deleted.
     pub async fn delete_calendar(&self, id: i64) -> Result<(), SdkError> {
-        self.caller.json("DELETE", format!("/v1/calendar/calendars/{}", encode(&id.to_string())), None::<&()>).await.map(|_| ())
+        self.delete_calendar_raw(id).await.map(|_| ())
     }
 
     /// Delete an event, or a whole repeating series.
     pub async fn delete_event(&self, id: i64) -> Result<(), SdkError> {
-        self.caller.json("DELETE", format!("/v1/calendar/events/{}", encode(&id.to_string())), None::<&()>).await.map(|_| ())
+        self.delete_event_raw(id).await.map(|_| ())
     }
 
     /// DELETE /v1/receipts/{id}
     pub async fn delete_receipt(&self, id: i64) -> Result<(), SdkError> {
-        self.caller.json("DELETE", format!("/v1/receipts/{}", encode(&id.to_string())), None::<&()>).await.map(|_| ())
+        self.delete_receipt_raw(id).await.map(|_| ())
     }
 
     /// DELETE /v1/rules/{id}
     pub async fn delete_rule(&self, id: i64) -> Result<(), SdkError> {
-        self.caller.json("DELETE", format!("/v1/rules/{}", encode(&id.to_string())), None::<&()>).await.map(|_| ())
+        self.delete_rule_raw(id).await.map(|_| ())
     }
 
     /// Remove the split; the transaction counts as a whole again.
     pub async fn delete_split(&self, id: i64) -> Result<(), SdkError> {
-        self.caller.json("DELETE", format!("/v1/transactions/{}/split", encode(&id.to_string())), None::<&()>).await.map(|_| ())
+        self.delete_split_raw(id).await.map(|_| ())
     }
 
     /// Plaid: forget the connection. Tells Plaid to drop it and deletes the stored access token, so
     /// the next sync starts with signing in again. The imported transactions stay.
     pub async fn disconnect_connection(&self, name: String) -> Result<BankConnectionDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", format!("/v1/bank/connections/{}/disconnect", encode(&name.to_string())), None::<&()>).await?)
+        self.caller.decode(self.disconnect_connection_raw(name).await?)
     }
 
     /// Dismiss an alert so it no longer counts as unread. Dismissing twice is fine.
     pub async fn dismiss_alert(&self, id: String) -> Result<AlertDismissedDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", format!("/v1/alerts/{}/dismiss", encode(&id.to_string())), None::<&()>).await?)
+        self.caller.decode(self.dismiss_alert_raw(id).await?)
     }
 
     /// Monthly income minus fixed costs, from detected recurring payments.
     pub async fn disposable(&self) -> Result<DisposableDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/budget/disposable".to_string(), None::<&()>).await?)
+        self.caller.decode(self.disposable_raw().await?)
     }
 
     /// What a scanned barcode costs at Lidl, Aldi, Kaufland and Rewe: the best stored price per
     /// chain, recent Open Prices observations, unit prices and the cheapest chain. A valid barcode
     /// nobody has a price for answers `200` with no chains and a note.
     pub async fn ean_lookup(&self, ean: String) -> Result<EanLookupDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/prices/ean/{}", encode(&ean.to_string())), None::<&()>).await?)
+        self.caller.decode(self.ean_lookup_raw(ean).await?)
     }
 
     /// Download everything that is yours as one JSON document (no secrets, no prices).
     pub async fn export_data(&self) -> Result<ExportDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/export".to_string(), None::<&()>).await?)
+        self.caller.decode(self.export_data_raw().await?)
     }
 
     /// Project the current budget period to its end from the recurring payments still due, the
     /// average spending so far and the income expected.
     pub async fn forecast(&self, date: Option<String>) -> Result<ForecastDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/forecast{}", query(&[("date", qv(&date))])), None::<&()>).await?)
+        self.caller.decode(self.forecast_raw(date).await?)
     }
 
     /// GET /v1/basket
     pub async fn get_basket(&self) -> Result<BasketDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/basket".to_string(), None::<&()>).await?)
+        self.caller.decode(self.get_basket_raw().await?)
     }
 
     /// Every setting of the server with its value (secrets only as "set"), the place it comes from
     /// and what the app may change.
     pub async fn get_config(&self) -> Result<ConfigView, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/server-config".to_string(), None::<&()>).await?)
+        self.caller.decode(self.get_config_raw().await?)
     }
 
     /// GET /v1/budget/envelopes
     pub async fn get_envelopes(&self) -> Result<Vec<EnvelopeDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/budget/envelopes".to_string(), None::<&()>).await?)
+        self.caller.decode(self.get_envelopes_raw().await?)
     }
 
     /// One event.
     pub async fn get_event(&self, id: i64) -> Result<EventDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/calendar/events/{}", encode(&id.to_string())), None::<&()>).await?)
+        self.caller.decode(self.get_event_raw(id).await?)
     }
 
     /// The meals planned for a week (Monday to Sunday), one per day at most.
     pub async fn get_meal_plan(&self, week: Option<String>) -> Result<MealPlanDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/meal-plan{}", query(&[("week", qv(&week))])), None::<&()>).await?)
+        self.caller.decode(self.get_meal_plan_raw(week).await?)
     }
 
     /// Items assumed to be at home (salt, oil, flour...); the shopping list leaves them off.
     pub async fn get_pantry(&self) -> Result<PantryDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/meal-plan/pantry".to_string(), None::<&()>).await?)
+        self.caller.decode(self.get_pantry_raw().await?)
     }
 
     /// GET /v1/settings
     pub async fn get_settings(&self) -> Result<SettingsDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/settings".to_string(), None::<&()>).await?)
+        self.caller.decode(self.get_settings_raw().await?)
     }
 
     /// The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the
     /// servings and converted to packs), pantry items left off, priced per chain with the best split
     /// and checked against what is left of the groceries budget.
     pub async fn get_shopping_list(&self, week: Option<String>, date: Option<String>) -> Result<ShoppingListDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/meal-plan/shopping-list{}", query(&[("week", qv(&week)), ("date", qv(&date))])), None::<&()>).await?)
+        self.caller.decode(self.get_shopping_list_raw(week, date).await?)
     }
 
     /// Merge an export into this backend. Transactions and receipts already present (same
     /// fingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items
     /// list replace the current ones when the export has any; settings are applied if present.
     pub async fn import_data(&self, body: ExportDto) -> Result<ImportReportDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/import".to_string(), Some(&body)).await?)
+        self.caller.decode(self.import_data_raw(body).await?)
     }
 
     /// Import a Sparkasse CSV-CAMT export. Transactions are categorized, and rows that were
     /// imported before are skipped, so re-uploading an overlapping period is safe.
     pub async fn import_transactions(&self, csv: Vec<u8>) -> Result<ImportReport, SdkError> {
-        self.caller.decode(self.caller.raw("POST", "/v1/transactions/import".to_string(), "text/csv", csv).await?)
+        self.caller.decode(self.import_transactions_raw(csv).await?)
     }
 
     /// Disconnect Lidl Plus: the stored token is deleted. Receipts already imported stay.
     pub async fn lidl_disconnect(&self) -> Result<(), SdkError> {
-        self.caller.json("DELETE", "/v1/receipts/lidl".to_string(), None::<&()>).await.map(|_| ())
+        self.lidl_disconnect_raw().await.map(|_| ())
     }
 
     /// Finish the sign-in with the address Lidl's page ended on. Only the refresh token is stored,
     /// encrypted. The first receipts are fetched right away.
     pub async fn lidl_finish(&self, body: LidlFinishRequest) -> Result<LidlStatusDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/receipts/lidl/finish".to_string(), Some(&body)).await?)
+        self.caller.decode(self.lidl_finish_raw(body).await?)
     }
 
     /// Start a Lidl Plus sign-in. Returns the address of Lidl's own sign-in page; nothing is sent to
     /// Lidl by this call. Experimental and unofficial: see docs/RECEIPT_SOURCES.md.
     pub async fn lidl_start(&self) -> Result<LidlStartDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/receipts/lidl/start".to_string(), None::<&()>).await?)
+        self.caller.decode(self.lidl_start_raw().await?)
     }
 
     /// Whether Lidl Plus is connected, when it last synced and how many receipts came from it.
     pub async fn lidl_status(&self) -> Result<LidlStatusDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/receipts/lidl/status".to_string(), None::<&()>).await?)
+        self.caller.decode(self.lidl_status_raw().await?)
     }
 
     /// Your calendars in display order. A new database has one, "Personal".
     pub async fn list_calendars(&self) -> Result<Vec<CalendarDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/calendar/calendars".to_string(), None::<&()>).await?)
+        self.caller.decode(self.list_calendars_raw().await?)
     }
 
     /// The bank connections from `financer.toml`, with the state of each. The login is masked and no
     /// secret is part of the answer.
     pub async fn list_connections(&self) -> Result<Vec<BankConnectionDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/bank/connections".to_string(), None::<&()>).await?)
+        self.caller.decode(self.list_connections_raw().await?)
     }
 
     /// The events that can show between two days (inclusive): single events overlapping the range and
     /// every repeating event that has started and not ended. Expanding the repeats is up to the client.
     pub async fn list_events(&self, from: Option<String>, to: Option<String>) -> Result<Vec<EventDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/calendar/events{}", query(&[("from", qv(&from)), ("to", qv(&to))])), None::<&()>).await?)
+        self.caller.decode(self.list_events_raw(from, to).await?)
     }
 
     /// Current prices per chain, cheapest first within each item.
     pub async fn list_prices(&self, item: Option<String>) -> Result<Vec<PriceDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/prices{}", query(&[("item", qv(&item))])), None::<&()>).await?)
+        self.caller.decode(self.list_prices_raw(item).await?)
     }
 
     /// GET /v1/receipts
     pub async fn list_receipts(&self) -> Result<Vec<ReceiptDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/receipts".to_string(), None::<&()>).await?)
+        self.caller.decode(self.list_receipts_raw().await?)
     }
 
     /// Your categorization rules in priority order (first match wins, before the built-in rules).
     pub async fn list_rules(&self) -> Result<Vec<RuleDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/rules".to_string(), None::<&()>).await?)
+        self.caller.decode(self.list_rules_raw().await?)
     }
 
     /// The receipt sources: the mailbox, the Lidl Plus account and the watched folder, with state,
     /// last run, receipts imported and the last error. Never contains a password or token.
     pub async fn list_sources(&self) -> Result<Vec<ReceiptSourceDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/receipts/sources".to_string(), None::<&()>).await?)
+        self.caller.decode(self.list_sources_raw().await?)
     }
 
     /// All split transactions with their parts.
     pub async fn list_splits(&self) -> Result<Vec<SplitDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/transactions/splits".to_string(), None::<&()>).await?)
+        self.caller.decode(self.list_splits_raw().await?)
     }
 
     /// All transactions, newest first.
     pub async fn list_transactions(&self) -> Result<Vec<TransactionDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/transactions".to_string(), None::<&()>).await?)
+        self.caller.decode(self.list_transactions_raw().await?)
     }
 
     /// Replace your hand-maintained list of usual items (used in `manual` habit mode).
     pub async fn put_basket(&self, body: Vec<BasketItemDto>) -> Result<BasketDto, SdkError> {
-        self.caller.decode(self.caller.json("PUT", "/v1/basket".to_string(), Some(&body)).await?)
+        self.caller.decode(self.put_basket_raw(body).await?)
     }
 
     /// Save new values (`set`; `null` clears one) and drop values set earlier from the app (`reset`).
@@ -2020,142 +2020,1019 @@ impl FinanceSdk {
     /// nothing is saved. The server restarts to apply the change; if the changed settings do not
     /// start, the previous ones come back by themselves.
     pub async fn put_config(&self, body: Change) -> Result<ConfigSaved, SdkError> {
-        self.caller.decode(self.caller.json("PUT", "/v1/server-config".to_string(), Some(&body)).await?)
+        self.caller.decode(self.put_config_raw(body).await?)
     }
 
     /// Replace all monthly envelopes. A category may appear once; limits must not be negative.
     pub async fn put_envelopes(&self, body: Vec<EnvelopeDto>) -> Result<Vec<EnvelopeDto>, SdkError> {
-        self.caller.decode(self.caller.json("PUT", "/v1/budget/envelopes".to_string(), Some(&body)).await?)
+        self.caller.decode(self.put_envelopes_raw(body).await?)
     }
 
     /// Replace the plan of a week. Each day holds a bundled recipe by id, or a suggested recipe by
     /// title with its ingredients, and the servings to cook.
     pub async fn put_meal_plan(&self, week: Option<String>, body: MealPlanInput) -> Result<MealPlanDto, SdkError> {
-        self.caller.decode(self.caller.json("PUT", format!("/v1/meal-plan{}", query(&[("week", qv(&week))])), Some(&body)).await?)
+        self.caller.decode(self.put_meal_plan_raw(week, body).await?)
     }
 
     /// Replace the pantry list.
     pub async fn put_pantry(&self, body: PantryUpdate) -> Result<PantryDto, SdkError> {
-        self.caller.decode(self.caller.json("PUT", "/v1/meal-plan/pantry".to_string(), Some(&body)).await?)
+        self.caller.decode(self.put_pantry_raw(body).await?)
     }
 
     /// PUT /v1/settings
     pub async fn put_settings(&self, body: SettingsUpdate) -> Result<SettingsDto, SdkError> {
-        self.caller.decode(self.caller.json("PUT", "/v1/settings".to_string(), Some(&body)).await?)
+        self.caller.decode(self.put_settings_raw(body).await?)
     }
 
     /// Split a transaction into parts with their own category. The parts must add up to the
     /// transaction amount exactly. Budget and spending totals then use the parts.
     pub async fn put_split(&self, id: i64, body: SplitInput) -> Result<SplitDto, SdkError> {
-        self.caller.decode(self.caller.json("PUT", format!("/v1/transactions/{}/split", encode(&id.to_string())), Some(&body)).await?)
+        self.caller.decode(self.put_split_raw(id, body).await?)
     }
 
     /// New recipe ideas from Claude or OpenAI, based on your usual items and current offers. Only
     /// item names, the budget and your diet note are sent, never bank data.
     pub async fn recipe_ideas(&self, body: IdeasRequest) -> Result<Vec<IdeaDto>, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/recipes/ideas".to_string(), Some(&body)).await?)
+        self.caller.decode(self.recipe_ideas_raw(body).await?)
     }
 
     /// Bundled recipes ranked by how much of them you already buy, what is on offer and what the
     /// rest costs.
     pub async fn recipes(&self, budget_cents: Option<i64>, tag: Option<String>, limit: Option<u32>) -> Result<Vec<RecipeMatchDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/recipes{}", query(&[("budget_cents", qv(&budget_cents)), ("tag", qv(&tag)), ("limit", qv(&limit))])), None::<&()>).await?)
+        self.caller.decode(self.recipes_raw(budget_cents, tag, limit).await?)
     }
 
     /// Payments that repeat on a steady rhythm and amount (rent, salary, subscriptions).
     pub async fn recurring(&self) -> Result<Vec<RecurringDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", "/v1/recurring".to_string(), None::<&()>).await?)
+        self.caller.decode(self.recurring_raw().await?)
     }
 
     /// Fetch all configured price sources and store the result. A source that fails keeps its old
     /// prices.
     pub async fn refresh_prices(&self) -> Result<RefreshReportDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/prices/refresh".to_string(), None::<&()>).await?)
+        self.caller.decode(self.refresh_prices_raw().await?)
     }
 
     /// Set the priority order of all rules.
     pub async fn reorder_rules(&self, body: RuleOrder) -> Result<Vec<RuleDto>, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/rules/reorder".to_string(), Some(&body)).await?)
+        self.caller.decode(self.reorder_rules_raw(body).await?)
     }
 
     /// Decrypt a backup and merge it like `/v1/import`. A wrong passphrase or damaged file is a
     /// 400 and changes nothing.
     pub async fn restore_backup(&self, body: BackupRestoreRequest) -> Result<ImportReportDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/backup/restore".to_string(), Some(&body)).await?)
+        self.caller.decode(self.restore_backup_raw(body).await?)
     }
 
     /// What you can spend per day for the rest of the period, with the breakdown: expected income,
     /// recurring costs still to come, planned envelope money not yet spent, and spending so far.
     pub async fn safe_to_spend(&self, date: Option<String>) -> Result<SafeToSpendDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/budget/safe-to-spend{}", query(&[("date", qv(&date))])), None::<&()>).await?)
+        self.caller.decode(self.safe_to_spend_raw(date).await?)
     }
 
     /// Scan a receipt photo or a digital receipt PDF (a Rewe eBon or Lidl Plus receipt exported from
     /// their app or email): a model that can read documents (Claude or OpenAI, as configured) transcribes it
     /// and the transcript is parsed like pasted text. The photo is sent to that provider.
     pub async fn scan_receipt(&self, body: ReceiptScan) -> Result<ScanDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/receipts/scan".to_string(), Some(&body)).await?)
+        self.caller.decode(self.scan_receipt_raw(body).await?)
     }
 
     /// Recategorize one transaction. With `remember`, the merchant gets a rule so its other and
     /// future transactions follow.
     pub async fn set_category(&self, id: i64, body: CategoryChange) -> Result<CategoryChanged, SdkError> {
-        self.caller.decode(self.caller.json("PUT", format!("/v1/transactions/{}/category", encode(&id.to_string())), Some(&body)).await?)
+        self.caller.decode(self.set_category_raw(id, body).await?)
     }
 
     /// Log in to the bank and ask for approval. Approve in your Sparkasse app, then call confirm.
     pub async fn start_sync(&self, body: SyncRequest) -> Result<SyncStarted, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/bank/sync".to_string(), Some(&body)).await?)
+        self.caller.decode(self.start_sync_raw(body).await?)
     }
 
     /// What is spent at each supermarket chain in a budget period, ranked, with the share of all store
     /// spending, number of visits, average basket, last visit and the change against the range before.
     /// Groceries that no chain matched are in `other`.
     pub async fn store_spending(&self, period: Option<StoresPeriod>, n: Option<i32>, date: Option<String>) -> Result<StoresDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/spending/stores{}", query(&[("period", qv(&period)), ("n", qv(&n)), ("date", qv(&date))])), None::<&()>).await?)
+        self.caller.decode(self.store_spending_raw(period, n, date).await?)
     }
 
     /// The purchases behind one chain's total (`other` for unmatched groceries), newest first.
     pub async fn store_transactions(&self, chain: String, period: Option<StoresPeriod>, n: Option<i32>, date: Option<String>) -> Result<Vec<TransactionDto>, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/spending/stores/{}/transactions{}", encode(&chain.to_string()), query(&[("period", qv(&period)), ("n", qv(&n)), ("date", qv(&date))])), None::<&()>).await?)
+        self.caller.decode(self.store_transactions_raw(chain, period, n, date).await?)
     }
 
     /// Recurring payments seen as a watchdog: what is due in the next days, price hikes, possible
     /// duplicates, and subscriptions that seem to have stopped.
     pub async fn subscriptions(&self, days: Option<i64>, as_of: Option<String>) -> Result<SubscriptionsDto, SdkError> {
-        self.caller.decode(self.caller.json("GET", format!("/v1/subscriptions{}", query(&[("days", qv(&days)), ("as_of", qv(&as_of))])), None::<&()>).await?)
+        self.caller.decode(self.subscriptions_raw(days, as_of).await?)
     }
 
     /// Start a sync for one connection: logs in, then waits (in the background) for your approval in
     /// the banking app and imports. Send the PIN only when `pin_from_env` is false.
     pub async fn sync_connection(&self, name: String, body: Option<SyncNowRequest>) -> Result<BankConnectionDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", format!("/v1/bank/connections/{}/sync", encode(&name.to_string())), body.as_ref()).await?)
+        self.caller.decode(self.sync_connection_raw(name, body).await?)
     }
 
     /// Run the enabled receipt sources now (or just one). New receipts are linked to bank
     /// transactions where that is unambiguous. `409` while another sync is running.
     pub async fn sync_now(&self, body: Option<ReceiptSyncRequest>) -> Result<ReceiptSyncDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/receipts/sync".to_string(), body.as_ref()).await?)
+        self.caller.decode(self.sync_now_raw(body).await?)
     }
 
     /// Change a calendar's name, colour or whether it is shown.
     pub async fn update_calendar(&self, id: i64, body: CalendarInput) -> Result<CalendarDto, SdkError> {
-        self.caller.decode(self.caller.json("PUT", format!("/v1/calendar/calendars/{}", encode(&id.to_string())), Some(&body)).await?)
+        self.caller.decode(self.update_calendar_raw(id, body).await?)
     }
 
     /// Replace an event, or a whole repeating series.
     pub async fn update_event(&self, id: i64, body: EventInput) -> Result<EventDto, SdkError> {
-        self.caller.decode(self.caller.json("PUT", format!("/v1/calendar/events/{}", encode(&id.to_string())), Some(&body)).await?)
+        self.caller.decode(self.update_event_raw(id, body).await?)
     }
 
     /// Replace a rule's fields; its place in the order stays.
     pub async fn update_rule(&self, id: i64, body: RuleInput) -> Result<RuleDto, SdkError> {
-        self.caller.decode(self.caller.json("PUT", format!("/v1/rules/{}", encode(&id.to_string())), Some(&body)).await?)
+        self.caller.decode(self.update_rule_raw(id, body).await?)
     }
 
     /// Upload text recognised from a receipt photo. Your usual items are learned from receipts
     /// when the habit mode is `receipts`.
     pub async fn upload_receipt(&self, body: ReceiptUpload) -> Result<ReceiptDto, SdkError> {
-        self.caller.decode(self.caller.json("POST", "/v1/receipts".to_string(), Some(&body)).await?)
+        self.caller.decode(self.upload_receipt_raw(body).await?)
+    }
+}
+
+// The same calls, answering the server's own text: what `dispatch` hands the apps.
+impl FinanceSdk {
+    async fn accept_suggestions_raw(&self, body: AcceptSuggestions) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/transactions/categorize-unknown/accept".to_string(), Some(&body)).await
+    }
+
+    async fn add_exception_raw(&self, id: i64, body: ExceptionInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/calendar/events/{}/exceptions", encode(&id.to_string())), Some(&body)).await
+    }
+
+    async fn affordability_raw(&self, budget_cents: Option<i64>, days_per_basket: Option<i32>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/affordability{}", query(&[("budget_cents", qv(&budget_cents)), ("days_per_basket", qv(&days_per_basket))])), None::<&()>).await
+    }
+
+    async fn alerts_raw(&self, include_dismissed: Option<bool>, lookback_days: Option<i64>, as_of: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/alerts{}", query(&[("include_dismissed", qv(&include_dismissed)), ("lookback_days", qv(&lookback_days)), ("as_of", qv(&as_of))])), None::<&()>).await
+    }
+
+    async fn apply_rules_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/rules/apply".to_string(), None::<&()>).await
+    }
+
+    async fn bank_status_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/bank/status".to_string(), None::<&()>).await
+    }
+
+    async fn best_prices_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/prices/best".to_string(), None::<&()>).await
+    }
+
+    async fn budget_period_raw(&self, period: Option<PeriodChoice>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/budget/period{}", query(&[("period", qv(&period)), ("date", qv(&date))])), None::<&()>).await
+    }
+
+    async fn budget_status_raw(&self, year: Option<i32>, month: Option<i32>, period: Option<PeriodChoice>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/budget/status{}", query(&[("year", qv(&year)), ("month", qv(&month)), ("period", qv(&period)), ("date", qv(&date))])), None::<&()>).await
+    }
+
+    async fn cancel_connection_raw(&self, name: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/bank/connections/{}/cancel", encode(&name.to_string())), None::<&()>).await
+    }
+
+    async fn catalog_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/catalog".to_string(), None::<&()>).await
+    }
+
+    async fn categorize_unknown_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/transactions/categorize-unknown".to_string(), None::<&()>).await
+    }
+
+    async fn confirm_sync_raw(&self, id: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/bank/sync/{}/confirm", encode(&id.to_string())), None::<&()>).await
+    }
+
+    async fn create_backup_raw(&self, body: BackupCreateRequest) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/backup/create".to_string(), Some(&body)).await
+    }
+
+    async fn create_calendar_raw(&self, body: CalendarInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/calendar/calendars".to_string(), Some(&body)).await
+    }
+
+    async fn create_event_raw(&self, body: EventInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/calendar/events".to_string(), Some(&body)).await
+    }
+
+    async fn create_rule_raw(&self, body: RuleInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/rules".to_string(), Some(&body)).await
+    }
+
+    async fn delete_calendar_raw(&self, id: i64) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("DELETE", format!("/v1/calendar/calendars/{}", encode(&id.to_string())), None::<&()>).await
+    }
+
+    async fn delete_event_raw(&self, id: i64) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("DELETE", format!("/v1/calendar/events/{}", encode(&id.to_string())), None::<&()>).await
+    }
+
+    async fn delete_receipt_raw(&self, id: i64) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("DELETE", format!("/v1/receipts/{}", encode(&id.to_string())), None::<&()>).await
+    }
+
+    async fn delete_rule_raw(&self, id: i64) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("DELETE", format!("/v1/rules/{}", encode(&id.to_string())), None::<&()>).await
+    }
+
+    async fn delete_split_raw(&self, id: i64) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("DELETE", format!("/v1/transactions/{}/split", encode(&id.to_string())), None::<&()>).await
+    }
+
+    async fn disconnect_connection_raw(&self, name: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/bank/connections/{}/disconnect", encode(&name.to_string())), None::<&()>).await
+    }
+
+    async fn dismiss_alert_raw(&self, id: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/alerts/{}/dismiss", encode(&id.to_string())), None::<&()>).await
+    }
+
+    async fn disposable_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/budget/disposable".to_string(), None::<&()>).await
+    }
+
+    async fn ean_lookup_raw(&self, ean: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/prices/ean/{}", encode(&ean.to_string())), None::<&()>).await
+    }
+
+    async fn export_data_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/export".to_string(), None::<&()>).await
+    }
+
+    async fn forecast_raw(&self, date: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/forecast{}", query(&[("date", qv(&date))])), None::<&()>).await
+    }
+
+    async fn get_basket_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/basket".to_string(), None::<&()>).await
+    }
+
+    async fn get_config_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/server-config".to_string(), None::<&()>).await
+    }
+
+    async fn get_envelopes_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/budget/envelopes".to_string(), None::<&()>).await
+    }
+
+    async fn get_event_raw(&self, id: i64) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/calendar/events/{}", encode(&id.to_string())), None::<&()>).await
+    }
+
+    async fn get_meal_plan_raw(&self, week: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/meal-plan{}", query(&[("week", qv(&week))])), None::<&()>).await
+    }
+
+    async fn get_pantry_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/meal-plan/pantry".to_string(), None::<&()>).await
+    }
+
+    async fn get_settings_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/settings".to_string(), None::<&()>).await
+    }
+
+    async fn get_shopping_list_raw(&self, week: Option<String>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/meal-plan/shopping-list{}", query(&[("week", qv(&week)), ("date", qv(&date))])), None::<&()>).await
+    }
+
+    async fn import_data_raw(&self, body: ExportDto) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/import".to_string(), Some(&body)).await
+    }
+
+    async fn import_transactions_raw(&self, csv: Vec<u8>) -> Result<Vec<u8>, SdkError> {
+        self.caller.raw("POST", "/v1/transactions/import".to_string(), "text/csv", csv).await
+    }
+
+    async fn lidl_disconnect_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("DELETE", "/v1/receipts/lidl".to_string(), None::<&()>).await
+    }
+
+    async fn lidl_finish_raw(&self, body: LidlFinishRequest) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/receipts/lidl/finish".to_string(), Some(&body)).await
+    }
+
+    async fn lidl_start_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/receipts/lidl/start".to_string(), None::<&()>).await
+    }
+
+    async fn lidl_status_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/receipts/lidl/status".to_string(), None::<&()>).await
+    }
+
+    async fn list_calendars_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/calendar/calendars".to_string(), None::<&()>).await
+    }
+
+    async fn list_connections_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/bank/connections".to_string(), None::<&()>).await
+    }
+
+    async fn list_events_raw(&self, from: Option<String>, to: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/calendar/events{}", query(&[("from", qv(&from)), ("to", qv(&to))])), None::<&()>).await
+    }
+
+    async fn list_prices_raw(&self, item: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/prices{}", query(&[("item", qv(&item))])), None::<&()>).await
+    }
+
+    async fn list_receipts_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/receipts".to_string(), None::<&()>).await
+    }
+
+    async fn list_rules_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/rules".to_string(), None::<&()>).await
+    }
+
+    async fn list_sources_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/receipts/sources".to_string(), None::<&()>).await
+    }
+
+    async fn list_splits_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/transactions/splits".to_string(), None::<&()>).await
+    }
+
+    async fn list_transactions_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/transactions".to_string(), None::<&()>).await
+    }
+
+    async fn put_basket_raw(&self, body: Vec<BasketItemDto>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", "/v1/basket".to_string(), Some(&body)).await
+    }
+
+    async fn put_config_raw(&self, body: Change) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", "/v1/server-config".to_string(), Some(&body)).await
+    }
+
+    async fn put_envelopes_raw(&self, body: Vec<EnvelopeDto>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", "/v1/budget/envelopes".to_string(), Some(&body)).await
+    }
+
+    async fn put_meal_plan_raw(&self, week: Option<String>, body: MealPlanInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", format!("/v1/meal-plan{}", query(&[("week", qv(&week))])), Some(&body)).await
+    }
+
+    async fn put_pantry_raw(&self, body: PantryUpdate) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", "/v1/meal-plan/pantry".to_string(), Some(&body)).await
+    }
+
+    async fn put_settings_raw(&self, body: SettingsUpdate) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", "/v1/settings".to_string(), Some(&body)).await
+    }
+
+    async fn put_split_raw(&self, id: i64, body: SplitInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", format!("/v1/transactions/{}/split", encode(&id.to_string())), Some(&body)).await
+    }
+
+    async fn recipe_ideas_raw(&self, body: IdeasRequest) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/recipes/ideas".to_string(), Some(&body)).await
+    }
+
+    async fn recipes_raw(&self, budget_cents: Option<i64>, tag: Option<String>, limit: Option<u32>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/recipes{}", query(&[("budget_cents", qv(&budget_cents)), ("tag", qv(&tag)), ("limit", qv(&limit))])), None::<&()>).await
+    }
+
+    async fn recurring_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/recurring".to_string(), None::<&()>).await
+    }
+
+    async fn refresh_prices_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/prices/refresh".to_string(), None::<&()>).await
+    }
+
+    async fn reorder_rules_raw(&self, body: RuleOrder) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/rules/reorder".to_string(), Some(&body)).await
+    }
+
+    async fn restore_backup_raw(&self, body: BackupRestoreRequest) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/backup/restore".to_string(), Some(&body)).await
+    }
+
+    async fn safe_to_spend_raw(&self, date: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/budget/safe-to-spend{}", query(&[("date", qv(&date))])), None::<&()>).await
+    }
+
+    async fn scan_receipt_raw(&self, body: ReceiptScan) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/receipts/scan".to_string(), Some(&body)).await
+    }
+
+    async fn set_category_raw(&self, id: i64, body: CategoryChange) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", format!("/v1/transactions/{}/category", encode(&id.to_string())), Some(&body)).await
+    }
+
+    async fn start_sync_raw(&self, body: SyncRequest) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/bank/sync".to_string(), Some(&body)).await
+    }
+
+    async fn store_spending_raw(&self, period: Option<StoresPeriod>, n: Option<i32>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/spending/stores{}", query(&[("period", qv(&period)), ("n", qv(&n)), ("date", qv(&date))])), None::<&()>).await
+    }
+
+    async fn store_transactions_raw(&self, chain: String, period: Option<StoresPeriod>, n: Option<i32>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/spending/stores/{}/transactions{}", encode(&chain.to_string()), query(&[("period", qv(&period)), ("n", qv(&n)), ("date", qv(&date))])), None::<&()>).await
+    }
+
+    async fn subscriptions_raw(&self, days: Option<i64>, as_of: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/subscriptions{}", query(&[("days", qv(&days)), ("as_of", qv(&as_of))])), None::<&()>).await
+    }
+
+    async fn sync_connection_raw(&self, name: String, body: Option<SyncNowRequest>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/bank/connections/{}/sync", encode(&name.to_string())), body.as_ref()).await
+    }
+
+    async fn sync_now_raw(&self, body: Option<ReceiptSyncRequest>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/receipts/sync".to_string(), body.as_ref()).await
+    }
+
+    async fn update_calendar_raw(&self, id: i64, body: CalendarInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", format!("/v1/calendar/calendars/{}", encode(&id.to_string())), Some(&body)).await
+    }
+
+    async fn update_event_raw(&self, id: i64, body: EventInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", format!("/v1/calendar/events/{}", encode(&id.to_string())), Some(&body)).await
+    }
+
+    async fn update_rule_raw(&self, id: i64, body: RuleInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", format!("/v1/rules/{}", encode(&id.to_string())), Some(&body)).await
+    }
+
+    async fn upload_receipt_raw(&self, body: ReceiptUpload) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/receipts".to_string(), Some(&body)).await
+    }
+
+}
+
+impl FinanceSdk {
+    /// One call by operation id, its arguments as a JSON object (a path or query value by its name,
+    /// the request body as `body`, a CSV upload as the text `csv`), the answer as JSON text. This is
+    /// the one entry the apps use: it holds the contract, the paths and the encoding in Rust.
+    pub async fn dispatch(&self, op: &str, args: &str) -> Result<String, SdkError> {
+        match op {
+            "accept_suggestions" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: AcceptSuggestions,
+                }
+                let a: A = parse_args(args)?;
+                answer::<AcceptReport>(self.accept_suggestions_raw(a.body).await?)
+            }
+            "add_exception" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                    body: ExceptionInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<EventDto>(self.add_exception_raw(a.id, a.body).await?)
+            }
+            "affordability" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    budget_cents: Option<i64>,
+                    #[serde(default)]
+                    days_per_basket: Option<i32>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<AffordabilityDto>(self.affordability_raw(a.budget_cents, a.days_per_basket).await?)
+            }
+            "alerts" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    include_dismissed: Option<bool>,
+                    #[serde(default)]
+                    lookback_days: Option<i64>,
+                    #[serde(default)]
+                    as_of: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<AlertsDto>(self.alerts_raw(a.include_dismissed, a.lookback_days, a.as_of).await?)
+            }
+            "apply_rules" => {
+                answer::<ApplyReport>(self.apply_rules_raw().await?)
+            }
+            "bank_status" => {
+                answer::<BankStatus>(self.bank_status_raw().await?)
+            }
+            "best_prices" => {
+                answer::<Vec<PickDto>>(self.best_prices_raw().await?)
+            }
+            "budget_period" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    period: Option<PeriodChoice>,
+                    #[serde(default)]
+                    date: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<PeriodDto>(self.budget_period_raw(a.period, a.date).await?)
+            }
+            "budget_status" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    year: Option<i32>,
+                    #[serde(default)]
+                    month: Option<i32>,
+                    #[serde(default)]
+                    period: Option<PeriodChoice>,
+                    #[serde(default)]
+                    date: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<Vec<EnvelopeStatusDto>>(self.budget_status_raw(a.year, a.month, a.period, a.date).await?)
+            }
+            "cancel_connection" => {
+                #[derive(Deserialize)]
+                struct A {
+                    name: String,
+                }
+                let a: A = parse_args(args)?;
+                answer::<BankConnectionDto>(self.cancel_connection_raw(a.name).await?)
+            }
+            "catalog" => {
+                answer::<Vec<CatalogItemDto>>(self.catalog_raw().await?)
+            }
+            "categorize_unknown" => {
+                answer::<SuggestionsDto>(self.categorize_unknown_raw().await?)
+            }
+            "confirm_sync" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: String,
+                }
+                let a: A = parse_args(args)?;
+                answer::<SyncDone>(self.confirm_sync_raw(a.id).await?)
+            }
+            "create_backup" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: BackupCreateRequest,
+                }
+                let a: A = parse_args(args)?;
+                answer::<BackupDto>(self.create_backup_raw(a.body).await?)
+            }
+            "create_calendar" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: CalendarInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<CalendarDto>(self.create_calendar_raw(a.body).await?)
+            }
+            "create_event" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: EventInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<EventDto>(self.create_event_raw(a.body).await?)
+            }
+            "create_rule" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: RuleInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<RuleDto>(self.create_rule_raw(a.body).await?)
+            }
+            "delete_calendar" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                }
+                let a: A = parse_args(args)?;
+                self.delete_calendar_raw(a.id).await.map(|_| "null".to_string())
+            }
+            "delete_event" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                }
+                let a: A = parse_args(args)?;
+                self.delete_event_raw(a.id).await.map(|_| "null".to_string())
+            }
+            "delete_receipt" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                }
+                let a: A = parse_args(args)?;
+                self.delete_receipt_raw(a.id).await.map(|_| "null".to_string())
+            }
+            "delete_rule" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                }
+                let a: A = parse_args(args)?;
+                self.delete_rule_raw(a.id).await.map(|_| "null".to_string())
+            }
+            "delete_split" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                }
+                let a: A = parse_args(args)?;
+                self.delete_split_raw(a.id).await.map(|_| "null".to_string())
+            }
+            "disconnect_connection" => {
+                #[derive(Deserialize)]
+                struct A {
+                    name: String,
+                }
+                let a: A = parse_args(args)?;
+                answer::<BankConnectionDto>(self.disconnect_connection_raw(a.name).await?)
+            }
+            "dismiss_alert" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: String,
+                }
+                let a: A = parse_args(args)?;
+                answer::<AlertDismissedDto>(self.dismiss_alert_raw(a.id).await?)
+            }
+            "disposable" => {
+                answer::<DisposableDto>(self.disposable_raw().await?)
+            }
+            "ean_lookup" => {
+                #[derive(Deserialize)]
+                struct A {
+                    ean: String,
+                }
+                let a: A = parse_args(args)?;
+                answer::<EanLookupDto>(self.ean_lookup_raw(a.ean).await?)
+            }
+            "export_data" => {
+                answer::<ExportDto>(self.export_data_raw().await?)
+            }
+            "forecast" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    date: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ForecastDto>(self.forecast_raw(a.date).await?)
+            }
+            "get_basket" => {
+                answer::<BasketDto>(self.get_basket_raw().await?)
+            }
+            "get_config" => {
+                answer::<ConfigView>(self.get_config_raw().await?)
+            }
+            "get_envelopes" => {
+                answer::<Vec<EnvelopeDto>>(self.get_envelopes_raw().await?)
+            }
+            "get_event" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                }
+                let a: A = parse_args(args)?;
+                answer::<EventDto>(self.get_event_raw(a.id).await?)
+            }
+            "get_meal_plan" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    week: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<MealPlanDto>(self.get_meal_plan_raw(a.week).await?)
+            }
+            "get_pantry" => {
+                answer::<PantryDto>(self.get_pantry_raw().await?)
+            }
+            "get_settings" => {
+                answer::<SettingsDto>(self.get_settings_raw().await?)
+            }
+            "get_shopping_list" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    week: Option<String>,
+                    #[serde(default)]
+                    date: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ShoppingListDto>(self.get_shopping_list_raw(a.week, a.date).await?)
+            }
+            "import_data" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: ExportDto,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ImportReportDto>(self.import_data_raw(a.body).await?)
+            }
+            "import_transactions" => {
+                #[derive(Deserialize)]
+                struct A {
+                    csv: String,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ImportReport>(self.import_transactions_raw(a.csv.into_bytes()).await?)
+            }
+            "lidl_disconnect" => {
+                self.lidl_disconnect_raw().await.map(|_| "null".to_string())
+            }
+            "lidl_finish" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: LidlFinishRequest,
+                }
+                let a: A = parse_args(args)?;
+                answer::<LidlStatusDto>(self.lidl_finish_raw(a.body).await?)
+            }
+            "lidl_start" => {
+                answer::<LidlStartDto>(self.lidl_start_raw().await?)
+            }
+            "lidl_status" => {
+                answer::<LidlStatusDto>(self.lidl_status_raw().await?)
+            }
+            "list_calendars" => {
+                answer::<Vec<CalendarDto>>(self.list_calendars_raw().await?)
+            }
+            "list_connections" => {
+                answer::<Vec<BankConnectionDto>>(self.list_connections_raw().await?)
+            }
+            "list_events" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    from: Option<String>,
+                    #[serde(default)]
+                    to: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<Vec<EventDto>>(self.list_events_raw(a.from, a.to).await?)
+            }
+            "list_prices" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    item: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<Vec<PriceDto>>(self.list_prices_raw(a.item).await?)
+            }
+            "list_receipts" => {
+                answer::<Vec<ReceiptDto>>(self.list_receipts_raw().await?)
+            }
+            "list_rules" => {
+                answer::<Vec<RuleDto>>(self.list_rules_raw().await?)
+            }
+            "list_sources" => {
+                answer::<Vec<ReceiptSourceDto>>(self.list_sources_raw().await?)
+            }
+            "list_splits" => {
+                answer::<Vec<SplitDto>>(self.list_splits_raw().await?)
+            }
+            "list_transactions" => {
+                answer::<Vec<TransactionDto>>(self.list_transactions_raw().await?)
+            }
+            "put_basket" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: Vec<BasketItemDto>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<BasketDto>(self.put_basket_raw(a.body).await?)
+            }
+            "put_config" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: Change,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ConfigSaved>(self.put_config_raw(a.body).await?)
+            }
+            "put_envelopes" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: Vec<EnvelopeDto>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<Vec<EnvelopeDto>>(self.put_envelopes_raw(a.body).await?)
+            }
+            "put_meal_plan" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    week: Option<String>,
+                    body: MealPlanInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<MealPlanDto>(self.put_meal_plan_raw(a.week, a.body).await?)
+            }
+            "put_pantry" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: PantryUpdate,
+                }
+                let a: A = parse_args(args)?;
+                answer::<PantryDto>(self.put_pantry_raw(a.body).await?)
+            }
+            "put_settings" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: SettingsUpdate,
+                }
+                let a: A = parse_args(args)?;
+                answer::<SettingsDto>(self.put_settings_raw(a.body).await?)
+            }
+            "put_split" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                    body: SplitInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<SplitDto>(self.put_split_raw(a.id, a.body).await?)
+            }
+            "recipe_ideas" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: IdeasRequest,
+                }
+                let a: A = parse_args(args)?;
+                answer::<Vec<IdeaDto>>(self.recipe_ideas_raw(a.body).await?)
+            }
+            "recipes" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    budget_cents: Option<i64>,
+                    #[serde(default)]
+                    tag: Option<String>,
+                    #[serde(default)]
+                    limit: Option<u32>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<Vec<RecipeMatchDto>>(self.recipes_raw(a.budget_cents, a.tag, a.limit).await?)
+            }
+            "recurring" => {
+                answer::<Vec<RecurringDto>>(self.recurring_raw().await?)
+            }
+            "refresh_prices" => {
+                answer::<RefreshReportDto>(self.refresh_prices_raw().await?)
+            }
+            "reorder_rules" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: RuleOrder,
+                }
+                let a: A = parse_args(args)?;
+                answer::<Vec<RuleDto>>(self.reorder_rules_raw(a.body).await?)
+            }
+            "restore_backup" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: BackupRestoreRequest,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ImportReportDto>(self.restore_backup_raw(a.body).await?)
+            }
+            "safe_to_spend" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    date: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<SafeToSpendDto>(self.safe_to_spend_raw(a.date).await?)
+            }
+            "scan_receipt" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: ReceiptScan,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ScanDto>(self.scan_receipt_raw(a.body).await?)
+            }
+            "set_category" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                    body: CategoryChange,
+                }
+                let a: A = parse_args(args)?;
+                answer::<CategoryChanged>(self.set_category_raw(a.id, a.body).await?)
+            }
+            "start_sync" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: SyncRequest,
+                }
+                let a: A = parse_args(args)?;
+                answer::<SyncStarted>(self.start_sync_raw(a.body).await?)
+            }
+            "store_spending" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    period: Option<StoresPeriod>,
+                    #[serde(default)]
+                    n: Option<i32>,
+                    #[serde(default)]
+                    date: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<StoresDto>(self.store_spending_raw(a.period, a.n, a.date).await?)
+            }
+            "store_transactions" => {
+                #[derive(Deserialize)]
+                struct A {
+                    chain: String,
+                    #[serde(default)]
+                    period: Option<StoresPeriod>,
+                    #[serde(default)]
+                    n: Option<i32>,
+                    #[serde(default)]
+                    date: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<Vec<TransactionDto>>(self.store_transactions_raw(a.chain, a.period, a.n, a.date).await?)
+            }
+            "subscriptions" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    days: Option<i64>,
+                    #[serde(default)]
+                    as_of: Option<String>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<SubscriptionsDto>(self.subscriptions_raw(a.days, a.as_of).await?)
+            }
+            "sync_connection" => {
+                #[derive(Deserialize)]
+                struct A {
+                    name: String,
+                    #[serde(default)]
+                    body: Option<SyncNowRequest>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<BankConnectionDto>(self.sync_connection_raw(a.name, a.body).await?)
+            }
+            "sync_now" => {
+                #[derive(Deserialize)]
+                struct A {
+                    #[serde(default)]
+                    body: Option<ReceiptSyncRequest>,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ReceiptSyncDto>(self.sync_now_raw(a.body).await?)
+            }
+            "update_calendar" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                    body: CalendarInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<CalendarDto>(self.update_calendar_raw(a.id, a.body).await?)
+            }
+            "update_event" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                    body: EventInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<EventDto>(self.update_event_raw(a.id, a.body).await?)
+            }
+            "update_rule" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: i64,
+                    body: RuleInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<RuleDto>(self.update_rule_raw(a.id, a.body).await?)
+            }
+            "upload_receipt" => {
+                #[derive(Deserialize)]
+                struct A {
+                    body: ReceiptUpload,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ReceiptDto>(self.upload_receipt_raw(a.body).await?)
+            }
+            other => Err(SdkError::Decode { message: format!("unknown operation {other}") }),
+        }
     }
 }

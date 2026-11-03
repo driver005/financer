@@ -106,3 +106,28 @@ impl Caller {
         })
     }
 }
+
+/// The arguments of a [`dispatch`](crate::FinanceSdk::dispatch) call: a JSON object, or nothing.
+pub(crate) fn parse_args<T: DeserializeOwned>(args: &str) -> Result<T, SdkError> {
+    let args = if args.trim().is_empty() { "{}" } else { args };
+    serde_json::from_str(args).map_err(|e| SdkError::Decode {
+        message: format!("the arguments were not understood: {e}"),
+    })
+}
+
+/// The server's answer as it wrote it, after checking that it is what this SDK expects.
+pub(crate) fn answer<T: DeserializeOwned>(raw: Vec<u8>) -> Result<String, SdkError> {
+    serde_json::from_slice::<T>(&raw).map_err(|e| SdkError::Decode {
+        message: e.to_string(),
+    })?;
+    String::from_utf8(raw).map_err(|e| SdkError::Decode {
+        message: e.to_string(),
+    })
+}
+
+/// A typed answer as JSON text (the calls whose record types are the wire shape).
+pub(crate) fn to_json<T: Serialize>(value: &T) -> Result<String, SdkError> {
+    serde_json::to_string(value).map_err(|e| SdkError::Decode {
+        message: e.to_string(),
+    })
+}

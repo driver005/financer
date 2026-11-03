@@ -19,6 +19,7 @@ pub mod mail;
 pub mod raw;
 pub mod shop;
 pub mod transport;
+pub mod wire;
 
 pub use error::SdkError;
 pub use finance::FinanceSdk;
@@ -28,6 +29,7 @@ pub use shop::ShopSdk;
 #[cfg(feature = "http")]
 pub use transport::HttpTransport;
 pub use transport::{Request, Response, Transport};
+pub use wire::Wire;
 
 uniffi::setup_scaffolding!();
 

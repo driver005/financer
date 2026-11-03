@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::call::{encode, query, Caller};
+use crate::call::{encode, parse_args, query, to_json, Caller};
 use crate::error::SdkError;
 use crate::json::JsonValue;
 use crate::transport::Transport;
@@ -552,6 +552,28 @@ pub struct IndexReport {
 }
 
 // The server writes `unclaimed_labels` as [label, count] pairs.
+impl Serialize for IndexReport {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut st = s.serialize_struct("IndexReport", 9)?;
+        st.serialize_field("pages", &self.pages)?;
+        st.serialize_field("failed", &self.failed)?;
+        st.serialize_field("new_products", &self.new_products)?;
+        st.serialize_field("price_changes", &self.price_changes)?;
+        st.serialize_field("unchanged", &self.unchanged)?;
+        st.serialize_field("skipped", &self.skipped)?;
+        st.serialize_field("sources", &self.sources)?;
+        let pairs: Vec<(&str, u64)> = self
+            .unclaimed_labels
+            .iter()
+            .map(|l| (l.label.as_str(), l.count))
+            .collect();
+        st.serialize_field("unclaimed_labels", &pairs)?;
+        st.serialize_field("cancelled", &self.cancelled)?;
+        st.end()
+    }
+}
+
 impl<'de> Deserialize<'de> for IndexReport {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
@@ -589,7 +611,7 @@ impl<'de> Deserialize<'de> for IndexReport {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct JobView {
     pub id: String,
     pub query: String,
@@ -936,5 +958,195 @@ impl ShopSdk {
         }
         self.done("DELETE", "/push-tokens".into(), Some(&Body { token }))
             .await
+    }
+}
+
+// ---- one entry for the apps ----------------------------------------------------------------------
+
+impl ShopSdk {
+    /// One call by name, its arguments as a JSON object (named as the methods name them), the answer
+    /// as JSON text. The apps use this one entry: the contract and the paths stay in Rust.
+    pub async fn dispatch(&self, op: &str, args: &str) -> Result<String, SdkError> {
+        #[derive(Deserialize)]
+        struct Id {
+            id: String,
+        }
+        #[derive(Deserialize)]
+        struct Name {
+            name: String,
+        }
+        #[derive(Deserialize)]
+        struct Category {
+            category: String,
+        }
+        #[derive(Deserialize)]
+        struct Token {
+            token: String,
+        }
+        #[derive(Deserialize)]
+        struct Products {
+            category: Option<String>,
+            limit: Option<u32>,
+            offset: Option<u32>,
+        }
+        #[derive(Deserialize)]
+        struct Compare {
+            product_ids: Vec<String>,
+            profile: Option<Profile>,
+        }
+        #[derive(Deserialize)]
+        struct EditProduct {
+            id: String,
+            edit: ProductEdit,
+        }
+        #[derive(Deserialize)]
+        struct SaveProfile {
+            name: String,
+            profile: Profile,
+        }
+        #[derive(Deserialize)]
+        struct SavePlan {
+            category: String,
+            plan: MyPlan,
+        }
+        #[derive(Deserialize)]
+        struct WatchId {
+            id: i64,
+        }
+        #[derive(Deserialize)]
+        struct UpdateWatch {
+            id: i64,
+            watch: Watch,
+        }
+        #[derive(Deserialize)]
+        struct Deals {
+            category: Option<String>,
+            limit: Option<u32>,
+        }
+        #[derive(Deserialize)]
+        struct Notifs {
+            after: Option<i64>,
+            limit: Option<u32>,
+        }
+        #[derive(Deserialize)]
+        struct UpTo {
+            up_to: i64,
+        }
+        #[derive(Deserialize)]
+        struct One<T> {
+            body: T,
+        }
+        match op {
+            "info" => to_json(&self.info().await?),
+            "categories" => to_json(&self.categories().await?),
+            "category" => {
+                let a: Id = parse_args(args)?;
+                to_json(&self.category(a.id).await?)
+            }
+            "save_category" => {
+                let a: One<CategorySchema> = parse_args(args)?;
+                to_json(&self.save_category(a.body).await?)
+            }
+            "delete_category" => {
+                let a: Id = parse_args(args)?;
+                self.delete_category(a.id).await.map(|()| "null".into())
+            }
+            "search" => {
+                let a: One<SearchRequest> = parse_args(args)?;
+                to_json(&self.search(a.body).await?)
+            }
+            "compare" => {
+                let a: Compare = parse_args(args)?;
+                to_json(&self.compare(a.product_ids, a.profile).await?)
+            }
+            "products" => {
+                let a: Products = parse_args(args)?;
+                to_json(&self.products(a.category, a.limit, a.offset).await?)
+            }
+            "product" => {
+                let a: Id = parse_args(args)?;
+                to_json(&self.product(a.id).await?)
+            }
+            "edit_product" => {
+                let a: EditProduct = parse_args(args)?;
+                to_json(&self.edit_product(a.id, a.edit).await?)
+            }
+            "add_product" => {
+                let a: One<NewProduct> = parse_args(args)?;
+                to_json(&self.add_product(a.body).await?)
+            }
+            "delete_product" => {
+                let a: Id = parse_args(args)?;
+                self.delete_product(a.id).await.map(|()| "null".into())
+            }
+            "profiles" => to_json(&self.profiles().await?),
+            "save_profile" => {
+                let a: SaveProfile = parse_args(args)?;
+                to_json(&self.save_profile(a.name, a.profile).await?)
+            }
+            "delete_profile" => {
+                let a: Name = parse_args(args)?;
+                self.delete_profile(a.name).await.map(|()| "null".into())
+            }
+            "my_plan" => {
+                let a: Category = parse_args(args)?;
+                to_json(&self.my_plan(a.category).await?)
+            }
+            "save_my_plan" => {
+                let a: SavePlan = parse_args(args)?;
+                to_json(&self.save_my_plan(a.category, a.plan).await?)
+            }
+            "start_index" => {
+                let a: One<IndexRequest> = parse_args(args)?;
+                to_json(&self.start_index(a.body).await?)
+            }
+            "index_job" => {
+                let a: Id = parse_args(args)?;
+                to_json(&self.index_job(a.id).await?)
+            }
+            "cancel_index" => {
+                let a: Id = parse_args(args)?;
+                to_json(&self.cancel_index(a.id).await?)
+            }
+            "index_jobs" => to_json(&self.index_jobs().await?),
+            "watches" => to_json(&self.watches().await?),
+            "create_watch" => {
+                let a: One<Watch> = parse_args(args)?;
+                to_json(&self.create_watch(a.body).await?)
+            }
+            "update_watch" => {
+                let a: UpdateWatch = parse_args(args)?;
+                to_json(&self.update_watch(a.id, a.watch).await?)
+            }
+            "delete_watch" => {
+                let a: WatchId = parse_args(args)?;
+                self.delete_watch(a.id).await.map(|()| "null".into())
+            }
+            "deals" => {
+                let a: Deals = parse_args(args)?;
+                to_json(&self.deals(a.category, a.limit).await?)
+            }
+            "notifications" => {
+                let a: Notifs = parse_args(args)?;
+                to_json(&self.notifications(a.after, a.limit).await?)
+            }
+            "mark_read" => {
+                let a: UpTo = parse_args(args)?;
+                to_json(&self.mark_read(a.up_to).await?)
+            }
+            "add_push_token" => {
+                let a: Token = parse_args(args)?;
+                self.add_push_token(a.token).await.map(|()| "null".into())
+            }
+            "remove_push_token" => {
+                let a: Token = parse_args(args)?;
+                self.remove_push_token(a.token)
+                    .await
+                    .map(|()| "null".into())
+            }
+            other => Err(SdkError::Decode {
+                message: format!("unknown operation {other}"),
+            }),
+        }
     }
 }

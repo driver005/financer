@@ -465,6 +465,102 @@ impl MailSdk {
     }
 }
 
+impl MailSdk {
+    /// One call by name, its arguments as a JSON object (named as the methods name them; a request
+    /// record as `body`), the answer as JSON text. The apps use this one entry.
+    pub async fn dispatch(&self, op: &str, args: &str) -> Result<String, SdkError> {
+        use crate::call::{parse_args, to_json};
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct Key {
+            key: String,
+        }
+        #[derive(Deserialize)]
+        struct Id {
+            id: i64,
+        }
+        #[derive(Deserialize)]
+        struct Body<T> {
+            body: T,
+        }
+        #[derive(Deserialize)]
+        struct List {
+            by: Option<String>,
+            scope: Option<String>,
+            q: Option<String>,
+            limit: Option<u32>,
+        }
+        #[derive(Deserialize)]
+        struct Events {
+            from: Option<String>,
+            to: Option<String>,
+            #[serde(default)]
+            include_cancelled: bool,
+        }
+        match op {
+            "info" => to_json(&self.info().await?),
+            "sync" => to_json(&self.sync().await?),
+            "conversations" => {
+                let a: List = parse_args(args)?;
+                to_json(&self.conversations(a.by, a.scope, a.q, a.limit).await?)
+            }
+            "conversation" => {
+                let a: Key = parse_args(args)?;
+                to_json(&self.conversation(a.key).await?)
+            }
+            "mark_read" => {
+                let a: Key = parse_args(args)?;
+                to_json(&self.mark_read(a.key).await?)
+            }
+            "message" => {
+                let a: Id = parse_args(args)?;
+                to_json(&self.message(a.id).await?)
+            }
+            "templates" => to_json(&self.templates().await?),
+            "create_template" => {
+                let a: Body<Template> = parse_args(args)?;
+                to_json(&self.create_template(a.body).await?)
+            }
+            "update_template" => {
+                let a: Body<Template> = parse_args(args)?;
+                to_json(&self.update_template(a.body).await?)
+            }
+            "delete_template" => {
+                let a: Id = parse_args(args)?;
+                self.delete_template(a.id).await.map(|()| "null".into())
+            }
+            "preview" => {
+                let a: Body<PreviewRequest> = parse_args(args)?;
+                to_json(&self.preview(a.body).await?)
+            }
+            "send" => {
+                let a: Body<SendRequest> = parse_args(args)?;
+                to_json(&self.send(a.body).await?)
+            }
+            "events" => {
+                let a: Events = parse_args(args)?;
+                to_json(&self.events(a.from, a.to, a.include_cancelled).await?)
+            }
+            "create_event" => {
+                let a: Body<NewEvent> = parse_args(args)?;
+                to_json(&self.create_event(a.body).await?)
+            }
+            "remove_event" => {
+                let a: Id = parse_args(args)?;
+                self.remove_event(a.id).await.map(|()| "null".into())
+            }
+            "restore_event" => {
+                let a: Id = parse_args(args)?;
+                to_json(&self.restore_event(a.id).await?)
+            }
+            other => Err(SdkError::Decode {
+                message: format!("unknown operation {other}"),
+            }),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

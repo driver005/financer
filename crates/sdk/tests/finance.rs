@@ -310,3 +310,85 @@ async fn the_servers_reasons_and_path_values_that_need_escaping() {
         other => panic!("{other:?}"),
     }
 }
+
+#[tokio::test]
+async fn the_wire_entry_takes_json_and_answers_the_servers_own_text() {
+    use financer_sdk::Wire;
+    let app = Api::router(
+        AppState::new(Store::connect("sqlite::memory:").await.unwrap()),
+        TokenHash::new(TOKEN),
+    );
+    let wire = Wire::with_transport(Arc::new(InProcess(app)));
+    assert!(wire.health().await);
+
+    let csv = String::from_utf8(csv()).unwrap();
+    let report = wire
+        .call(
+            "finance".into(),
+            "import_transactions".into(),
+            serde_json::json!({ "csv": csv }).to_string(),
+        )
+        .await
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_str(&report).unwrap();
+    assert_eq!(report["imported"], 5);
+
+    // path and query values by name; the answer is what the server wrote
+    let status = wire
+        .call(
+            "finance".into(),
+            "budget_status".into(),
+            serde_json::json!({ "year": 2026, "month": 3 }).to_string(),
+        )
+        .await
+        .unwrap();
+    assert!(serde_json::from_str::<serde_json::Value>(&status)
+        .unwrap()
+        .is_array());
+
+    // a request body is `body`
+    let saved = wire
+        .call(
+            "finance".into(),
+            "put_envelopes".into(),
+            serde_json::json!({ "body": [{ "category": "groceries", "limit_cents": 40000 }] })
+                .to_string(),
+        )
+        .await
+        .unwrap();
+    assert!(saved.contains("40000"));
+
+    // a body of the wrong shape is refused before it leaves, an unknown call is named
+    let bad = wire
+        .call(
+            "finance".into(),
+            "put_envelopes".into(),
+            r#"{"body":[{"category":1}]}"#.into(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(bad, SdkError::Decode { .. }), "{bad:?}");
+    let unknown = wire
+        .call("finance".into(), "nope".into(), "{}".into())
+        .await
+        .unwrap_err();
+    assert!(unknown.to_string().contains("unknown operation nope"));
+    let app = wire
+        .call("garden".into(), "x".into(), "{}".into())
+        .await
+        .unwrap_err();
+    assert!(app.to_string().contains("unknown app"));
+
+    // a refusal keeps the server's words
+    let refused = wire
+        .call(
+            "finance".into(),
+            "budget_period".into(),
+            r#"{"date":"not-a-date"}"#.into(),
+        )
+        .await;
+    assert!(
+        matches!(refused, Err(SdkError::Api { status: 400, .. })),
+        "{refused:?}"
+    );
+}

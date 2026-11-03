@@ -401,3 +401,71 @@ async fn a_category_can_be_saved_and_deleted_and_a_bad_one_is_refused_with_reaso
         "{err:?}"
     );
 }
+
+#[tokio::test]
+async fn the_wire_entry_speaks_the_shops_json() {
+    use financer_sdk::Wire;
+    let sdk_ = indexed().await;
+    drop(sdk_);
+    // a Wire over the same kind of router
+    let wire = {
+        let http = Arc::new(FakeHttp::with(vec![(
+            "https://feed.test/phones.csv",
+            200,
+            PHONES,
+        )]));
+        let sources = parse_sources(
+            r#"[{"name":"phones","kind":"feed","feed_url":"https://feed.test/phones.csv","category":"smartphone","shop":"PhoneShop",
+               "mapping":{"title":"name","price":"price","url":"link","brand":"brand"}}]"#,
+        )
+        .unwrap();
+        let store = ShopStore::connect("sqlite::memory:").await.unwrap();
+        let registry = Arc::new(RwLock::new(Registry::builtin()));
+        let crawler = Crawler::new(http, registry.clone(), sources);
+        let state = ShopState::new(store, registry, crawler, ShopConfig::default());
+        Wire::with_transport(Arc::new(InProcess(
+            Router::new().nest("/v1/shop", ShopApi::router(state)),
+        )))
+    };
+    let info: serde_json::Value = serde_json::from_str(
+        &wire
+            .call("shop".into(), "info".into(), String::new())
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(info["mode"], "integrated");
+    assert!(info["last_error"].is_null(), "nulls stay nulls: {info}");
+
+    let added = wire
+        .call(
+            "shop".into(),
+            "add_product".into(),
+            json!({"body": {"category": "smartphone", "title": "Own", "attributes": {"ram_gb": 6}, "offers": [{"shop": "S", "url": "https://s.test/o", "price_cents": 1000}]}}).to_string(),
+        )
+        .await
+        .unwrap();
+    let added: serde_json::Value = serde_json::from_str(&added).unwrap();
+    assert_eq!(added["offers"][0]["currency"], "EUR");
+    let id = added["id"].as_str().unwrap();
+    let gone = wire
+        .call(
+            "shop".into(),
+            "delete_product".into(),
+            json!({ "id": id }).to_string(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(gone, "null");
+    let missing = wire
+        .call(
+            "shop".into(),
+            "product".into(),
+            json!({ "id": id }).to_string(),
+        )
+        .await;
+    assert!(
+        matches!(missing, Err(SdkError::Api { status: 404, .. })),
+        "{missing:?}"
+    );
+}
