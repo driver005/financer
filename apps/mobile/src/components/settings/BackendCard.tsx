@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
-import { Platform, View } from "react-native";
+import { Platform } from "react-native";
+import { Box, Button, ConfirmAction, Divider, Expandable, Note, Segmented, Text, TextField } from "@financer/ui";
 
 import { Api } from "@/api/client";
 import { useApi } from "@/api/config";
-import { TextInput } from "@/components/kit";
-import { ConfirmAction, FieldMessage, PanelDivider, PanelText, Segmented, SettingsPanel } from "@/components/settings/SettingsKit";
-import { Button } from "@/components/ui";
 import { validateServer } from "@/onboarding";
 import { connectionState, type ConnectionState } from "@/settingsPlan";
 
@@ -77,82 +75,38 @@ export function BackendCard({ settingsLoaded, settingsError }: { settingsLoaded:
   // wait for the stored address: the panel opens by itself only when there is none
   if (!loaded) return null;
   return (
-    <>
-      <SettingsPanel
-        icon={mode === "embedded" ? "cellphone-lock" : "server-network"}
-        title="Backend"
-        summary={`${conn.where} · ${conn.status}`}
-        defaultOpen={conn.tone === "off"}
-      >
-        <PanelText style={{ marginTop: 4 }}>Where does the backend run?</PanelText>
+    <Box>
+      <Expandable icon={mode === "embedded" ? "cellphone-lock" : "server-network"} title="Backend" summary={`${conn.where} · ${conn.status}`} defaultOpen={conn.tone === "off"}>
+        <Text variant="caption" tone="muted">Where does the backend run?</Text>
         <Segmented
-          style={{ marginTop: 8 }}
           value={mode}
-          onValueChange={(v) => setMode(v as "remote" | "embedded")}
-          buttons={[
-            { value: "remote", label: "Server", icon: "server-network" },
-            { value: "embedded", label: "This phone", icon: "cellphone" },
+          onChange={(v) => setMode(v)}
+          options={[
+            { value: "remote", label: "Server" },
+            { value: "embedded", label: "This phone" },
           ]}
         />
-        <PanelText>
-          {mode === "remote"
-            ? "A Financer server you host does the work and stores your data."
-            : "Everything runs inside this app and your data never leaves the phone. On iPhone it only works while the app is open."}
-        </PanelText>
-        <FieldMessage tone={conn.tone === "ok" ? "ok" : conn.tone === "bad" ? "error" : "info"}>
-          {conn.status}
-        </FieldMessage>
+        <Text variant="caption" tone="muted">
+          {mode === "remote" ? "A Financer server you host does the work and stores your data." : "Everything runs inside this app and your data never leaves the phone. On iPhone it only works while the app is open."}
+        </Text>
+        <Note tone={conn.tone === "ok" ? "ok" : conn.tone === "bad" ? "error" : "info"}>{conn.status}</Note>
         {mode === "embedded" && !embeddedAvailable ? (
-          <FieldMessage tone="error">
-            This build does not include the on-phone backend. It needs a custom build with the Rust library (see docs/EMBEDDED.md). Expo Go and the web build cannot run it.
-          </FieldMessage>
+          <Note tone="error">This build does not include the on-phone backend. It needs a custom build with the Rust library (see docs/EMBEDDED.md). Expo Go and the web build cannot run it.</Note>
         ) : null}
 
         {mode === "remote" ? (
           <>
-            <PanelDivider />
-            <TextInput
-              mode="outlined"
-              label="Address (use https://)"
-              value={baseUrl}
-              onChangeText={setBaseUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder="https://financer.example.com"
-              accessibilityLabel="Address (use https://)"
-              error={!!addressProblem}
-            />
-            {addressProblem ? <FieldMessage tone="error">{addressProblem}</FieldMessage> : null}
-            <View style={{ height: 8 }} />
-            <TextInput
-              mode="outlined"
-              label="API token"
-              value={token}
-              onChangeText={setToken}
-              onBlur={() => setTokenTouched(true)}
-              autoCapitalize="none"
-              autoCorrect={false}
-              secureTextEntry
-              accessibilityLabel="API token"
-              error={!!tokenProblem}
-            />
-            {tokenProblem ? <FieldMessage tone="error">{tokenProblem}</FieldMessage> : null}
-            {check.ok && check.warning ? <FieldMessage tone="error">{check.warning}</FieldMessage> : null}
-            <PanelText>The token stays on this device and is only sent to this address.</PanelText>
-            <View style={{ marginTop: 12 }}>
-              <Button
-                label={busy ? "Connecting…" : "Test and save"}
-                icon="server-network"
-                onPress={test}
-                disabled={busy || !baseUrl.trim() || !token.trim()}
-              />
-            </View>
-            {status ? <FieldMessage tone={status.ok ? "ok" : "error"}>{status.text}</FieldMessage> : null}
+            <Divider />
+            <TextField label="Address (use https://)" value={baseUrl} onChangeText={setBaseUrl} keyboardType="url" placeholder="https://financer.example.com" error={addressProblem ?? undefined} />
+            <TextField label="API token" value={token} onChangeText={setToken} secure error={tokenProblem ?? undefined} onBlur={() => setTokenTouched(true)} />
+            {check.ok && check.warning ? <Note tone="error">{check.warning}</Note> : null}
+            <Text variant="caption" tone="muted">The token stays on this device and is only sent to this address.</Text>
+            <Button label={busy ? "Connecting…" : "Test and save"} icon="server-network" onPress={test} disabled={busy || !baseUrl.trim() || !token.trim()} />
+            {status ? <Note tone={status.ok ? "ok" : "error"}>{status.text}</Note> : null}
             {config ? (
               <>
-                <PanelDivider />
-                <PanelText style={{ marginTop: 0, marginBottom: 8, fontWeight: "700" }}>Danger zone</PanelText>
+                <Divider />
+                <Text variant="bodyStrong">Danger zone</Text>
                 <ConfirmAction
                   label="Forget this server"
                   icon="server-remove"
@@ -171,23 +125,19 @@ export function BackendCard({ settingsLoaded, settingsError }: { settingsLoaded:
             ) : null}
           </>
         ) : null}
-      </SettingsPanel>
+      </Expandable>
 
       {mode === "embedded" && embeddedAvailable ? (
-        <SettingsPanel icon="key-chain-variant" title="On-phone settings" summary="API keys and sources, kept in secure storage">
-          <PanelText style={{ marginTop: 4 }}>With no server there is nowhere else to keep these, so they are stored in this phone's secure storage.</PanelText>
-          <View style={{ gap: 8, marginTop: 8 }}>
-            <TextInput mode="outlined" label="Claude API key" accessibilityLabel="Claude API key" value={emb.claudeApiKey} onChangeText={(v) => setEmb({ ...emb, claudeApiKey: v })} secureTextEntry autoCapitalize="none" autoCorrect={false} />
-            <TextInput mode="outlined" label="OpenAI API key" accessibilityLabel="OpenAI API key" value={emb.openaiApiKey} onChangeText={(v) => setEmb({ ...emb, openaiApiKey: v })} secureTextEntry autoCapitalize="none" autoCorrect={false} />
-            <TextInput mode="outlined" label="FinTS product ID" accessibilityLabel="FinTS product ID" value={emb.fintsProductId} onChangeText={(v) => setEmb({ ...emb, fintsProductId: v })} autoCapitalize="none" autoCorrect={false} />
-            <TextInput mode="outlined" label="Price sources (JSON)" accessibilityLabel="Price sources JSON" value={emb.priceSourcesJson} onChangeText={(v) => setEmb({ ...emb, priceSourcesJson: v })} multiline numberOfLines={4} autoCapitalize="none" autoCorrect={false} style={{ minHeight: 90 }} />
-          </View>
-          {embeddedError ? <FieldMessage tone="error">{embeddedError}</FieldMessage> : null}
-          <View style={{ marginTop: 12 }}>
-            <Button label="Save and restart backend" icon="content-save-outline" onPress={() => saveEmbedded(emb)} />
-          </View>
-        </SettingsPanel>
+        <Expandable icon="key-chain-variant" title="On-phone settings" summary="API keys and sources, kept in secure storage">
+          <Text variant="caption" tone="muted">With no server there is nowhere else to keep these, so they are stored in this phone's secure storage.</Text>
+          <TextField label="Claude API key" value={emb.claudeApiKey} onChangeText={(v) => setEmb({ ...emb, claudeApiKey: v })} secure />
+          <TextField label="OpenAI API key" value={emb.openaiApiKey} onChangeText={(v) => setEmb({ ...emb, openaiApiKey: v })} secure />
+          <TextField label="FinTS product ID" value={emb.fintsProductId} onChangeText={(v) => setEmb({ ...emb, fintsProductId: v })} />
+          <TextField label="Price sources (JSON)" value={emb.priceSourcesJson} onChangeText={(v) => setEmb({ ...emb, priceSourcesJson: v })} multiline />
+          {embeddedError ? <Note tone="error">{embeddedError}</Note> : null}
+          <Button label="Save and restart backend" icon="content-save-outline" onPress={() => saveEmbedded(emb)} />
+        </Expandable>
       ) : null}
-    </>
+    </Box>
   );
 }

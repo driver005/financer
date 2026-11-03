@@ -197,26 +197,6 @@ export function categoryShares(txs: Tx[], period: Span, limit = 5): { total: num
   return { total, shares: [...head.map(([c, v]) => row(c, v)), row("other", restCents)] };
 }
 
-export type Arc = { dash: string; offset: number };
-
-/**
- * Stroke settings for drawing each share as a full circle that shows only its part: pass `dash` as
- * `strokeDasharray` and `offset` as `strokeDashoffset` on a circle of radius `r`, rotated -90 degrees
- * so the first share starts at 12 o'clock. `gap` (in px) separates neighbours; a single share has none.
- */
-export function donutArcs(shares: number[], r: number, gap = 3): Arc[] {
-  const circumference = 2 * Math.PI * r;
-  const g = shares.length > 1 ? gap : 0;
-  let start = 0;
-  return shares.map((s) => {
-    const full = s * circumference;
-    const len = Math.max(0, full - g);
-    const arc = { dash: `${len.toFixed(2)} ${(circumference - len).toFixed(2)}`, offset: 0 - start };
-    start += full;
-    return arc;
-  });
-}
-
 /** One sentence for the donut. */
 export function sharesSummary(total: number, shares: Share[]): string {
   if (shares.length === 0) return "No spending in this period yet.";

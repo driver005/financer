@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Platform, View } from "react-native";
+import { Linking, Platform } from "react-native";
+import { Box, Button, Expandable, ListItem, Note, Text, ToggleRow } from "@financer/ui";
 
 import { useApi } from "@/api/config";
-import { FieldMessage, PanelText, RowNotes, SettingsPanel, SettingsRow, SettingsToggleRow } from "@/components/settings/SettingsKit";
-import { Button } from "@/components/ui";
 import { refreshBackgroundRegistration } from "@/native/background";
 import {
   getPrefs,
@@ -16,6 +15,7 @@ import {
 } from "@/native/notifications";
 import { DEFAULT_PREFS, type NotifyKind, type NotifyPrefs } from "@/notifyPlan";
 import { formatDate } from "@/format";
+import { asIcon } from "@/uiTone";
 
 const ROWS: { kind: NotifyKind; icon: string; title: string; hint: string }[] = [
   { kind: "evening", icon: "weather-night", title: "Evening check", hint: "Around 18:00: what is still safe to spend today." },
@@ -78,14 +78,11 @@ export function NotificationsCard() {
 
   if (!supported) {
     return (
-      <SettingsRow
+      <ListItem
         icon="bell-off-outline"
+        tile
         title="Notifications"
-        subtitle={
-          Platform.OS === "web"
-            ? "Reminders and price alerts need the phone app; the web version cannot show them."
-            : "This build does not include notifications."
-        }
+        subtitle={Platform.OS === "web" ? "Reminders and price alerts need the phone app; the web version cannot show them." : "This build does not include notifications."}
       />
     );
   }
@@ -98,36 +95,26 @@ export function NotificationsCard() {
         : undefined;
 
   return (
-    <>
+    <Box>
       {ROWS.map((row) => (
-        <SettingsToggleRow
-          key={row.kind}
-          icon={row.icon}
-          title={row.title}
-          subtitle={row.hint}
-          note={nextFor(row.kind)}
-          value={prefs[row.kind]}
-          onValueChange={(v) => !busy && void toggle(row.kind, v)}
-        />
+        <ToggleRow key={row.kind} icon={asIcon(row.icon)} title={row.title} subtitle={row.hint} note={nextFor(row.kind)} value={prefs[row.kind]} onChange={(v) => !busy && void toggle(row.kind, v)} />
       ))}
       {permission === "denied" || message ? (
-        <RowNotes>
+        <Box gap="sm" pb="md">
           {permission === "denied" ? (
-            <View style={{ marginTop: 4 }}>
-              <FieldMessage tone="error">Notifications are blocked for Financer in the phone's settings.</FieldMessage>
-              <View style={{ marginTop: 8 }}>
-                <Button label="Open phone settings" icon="cog-outline" mode="outlined" onPress={() => void Linking.openSettings()} />
-              </View>
-            </View>
+            <>
+              <Note tone="error">Notifications are blocked for Financer in the phone's settings.</Note>
+              <Button label="Open phone settings" icon="cog-outline" variant="outline" onPress={() => void Linking.openSettings()} />
+            </>
           ) : null}
-          {message ? <FieldMessage tone="info">{message}</FieldMessage> : null}
-        </RowNotes>
+          {message ? <Note>{message}</Note> : null}
+        </Box>
       ) : null}
-      <SettingsPanel icon="clock-outline" title="What to expect" summary="Your phone schedules these itself; no server sends anything.">
-        <PanelText style={{ marginTop: 4 }}>
+      <Expandable icon="clock-outline" title="What to expect" summary="Your phone schedules these itself; no server sends anything.">
+        <Text variant="caption" tone="muted">
           Amounts can show on the lock screen. The evening message and the payday reminder are set up in advance, with the numbers from the last time the app ran, so they can be a little behind and may arrive a few minutes off. Price drops are looked for when you open the app and when iOS or Android lets Financer run in the background. The system decides how often, and may not do it at all (for example in battery saver mode, or if you rarely open the app), so an alert can come late or be missed. Each drop is announced once.
-        </PanelText>
-      </SettingsPanel>
-    </>
+        </Text>
+      </Expandable>
+    </Box>
   );
 }

@@ -1,35 +1,14 @@
 import { useRouter } from "expo-router";
-import { Text as RNText, View } from "react-native";
+import { Badge, Group, ListItem, Section } from "@financer/ui";
 
 import { useApi } from "@/api/config";
-import { ListGroup, ListRow, SectionHeader } from "@/components/rows";
 import { useScreenData } from "@/hooks";
-import { radius, space, usePalette } from "@/theme";
 import { nextChargeText } from "@/watchdog";
 
-/** Small outlined label (price hike, duplicate, severity ...). */
-export function Badge({ text, tone = "muted" }: { text: string; tone?: "bad" | "warn" | "good" | "muted" }) {
-  const p = usePalette();
-  const edge = { bad: p.bad, warn: p.warn, good: p.good, muted: p.border }[tone];
-  return (
-    <View style={{ borderWidth: 1, borderColor: edge, borderRadius: radius.md, paddingHorizontal: space.sm, paddingVertical: 1, alignSelf: "flex-start" }}>
-      <RNText style={{ color: tone === "bad" ? p.bad : p.text, fontSize: 12, lineHeight: 16, fontWeight: "800" }}>{text}</RNText>
-    </View>
-  );
-}
-
-/** Round red counter, e.g. the number of unread alerts. */
-export function CountBubble({ count, label }: { count: number; label: string }) {
-  const p = usePalette();
+/** A round counter, e.g. the number of unread alerts. Nothing at zero. */
+export function CountBubble({ count }: { count: number }) {
   if (count <= 0) return null;
-  return (
-    <View
-      accessibilityLabel={label}
-      style={{ minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 6, alignItems: "center", justifyContent: "center", backgroundColor: p.bad }}
-    >
-      <RNText style={{ color: p.onBad, fontSize: 13, fontWeight: "800" }}>{count > 99 ? "99+" : count}</RNText>
-    </View>
-  );
+  return <Badge label={count > 99 ? "99+" : `${count}`} tone="danger" solid />;
 }
 
 /**
@@ -50,27 +29,27 @@ export function WatchdogCard() {
   const hikes = data.subs.price_hikes.length;
   const title = data.unread > 0 ? `${data.unread} unread alert${data.unread === 1 ? "" : "s"}` : "No alerts";
   return (
-    <>
-      <SectionHeader title="Watchdog" />
-      <ListGroup>
-        <ListRow
+    <Section title="Watchdog">
+      <Group>
+        <ListItem
           icon="shield-alert-outline"
-          iconTone={data.unread > 0 ? "bad" : "good"}
+          tile
+          tone={data.unread > 0 ? "danger" : "default"}
           title={title}
           subtitle={hikes > 0 ? `${hikes} price increase${hikes === 1 ? "" : "s"}` : "Nothing unusual in your bookings"}
-          value={<CountBubble count={data.unread} label={`${data.unread} unread alerts`} />}
+          trailing={<CountBubble count={data.unread} />}
           onPress={() => router.push("/alerts")}
-          accessibilityLabel={`${title}. Open alerts`}
+          label={`${title}. Open alerts`}
         />
-        <ListRow
+        <ListItem
           icon="calendar-sync-outline"
-          iconTone="blue"
+          tile
           title={next ?? "No charges due soon"}
           subtitle="Subscriptions"
           onPress={() => router.push("/subscriptions")}
-          accessibilityLabel={`${next ?? "No charges due soon"}. Open subscriptions`}
+          label={`${next ?? "No charges due soon"}. Open subscriptions`}
         />
-      </ListGroup>
-    </>
+      </Group>
+    </Section>
   );
 }

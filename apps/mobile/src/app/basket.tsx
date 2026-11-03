@@ -1,17 +1,13 @@
-import { SectionSwitch } from "@/components/SectionSwitch";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import { FlatList, Text as RNText, View } from "react-native";
+import { Box, Button, Card, Group, HeroCaption, HeroCard, HeroChip, HeroNumber, IconBadge, ListItem, Note, Row, SearchBar, Snackbar, Stepper, Text, VirtualList } from "@financer/ui";
 
 import type { BasketItem, CatalogItem } from "@/api/client";
 import { useApi } from "@/api/config";
-import { Avatar, EmptyState, Group, Panel, SectionLabel, SkeletonCards, Stepper, Subtitle, Tap, space } from "@/components/grocery/primitives";
-import { ChunkyButton, HelperText, Searchbar, Text } from "@/components/kit";
-import { Loading, NeedsSetup, Screen, Title } from "@/components/ui";
-import { HeroPanel, PanelCaption, PanelChip, PanelNumber } from "@/components/panel";
-import { initials, mealTint } from "@/groceryView";
+import { Page } from "@/components/Page";
+import { SectionSwitch } from "@/components/SectionSwitch";
+import { Empty, Loading, NeedsSetup } from "@/components/Status";
+import { initials, mealTone } from "@/groceryView";
 import { useScreenData } from "@/hooks";
-import { usePalette } from "@/theme";
 
 const SOURCE_NOTE: Record<string, string> = {
   manual: "Your own list.",
@@ -21,7 +17,6 @@ const SOURCE_NOTE: Record<string, string> = {
 
 export default function BasketScreen() {
   const { api, loaded } = useApi();
-  const p = usePalette();
   const { data, error, reload } = useScreenData(async (a) => ({ basket: await a.basket(), catalog: await a.catalog() }));
   const [items, setItems] = useState<BasketItem[]>([]);
   const [query, setQuery] = useState("");
@@ -65,97 +60,82 @@ export default function BasketScreen() {
     }
   }
 
-  if (!loaded) return <Screen><Loading /></Screen>;
+  if (!loaded) return <Page title="Usual items"><Loading /></Page>;
+  if (!api) return <Page title="Usual items"><SectionSwitch /><NeedsSetup /></Page>;
 
   const loading = !data && !error;
 
   return (
-    <Screen>
-      <Title>Usual items</Title>
-      <SectionSwitch />
-      {!api ? (
-        <NeedsSetup />
-      ) : (
-        <View style={{ flex: 1 }}>
-          <FlatList
-            data={items}
-            keyExtractor={(i) => i.item}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: space.lg }}
-            ListHeaderComponent={
-              <View>
-                {data ? (
-                  <HeroPanel label="Usual items" chip={<PanelChip icon="cart-outline" text="Compared across chains" />}>
-                    <PanelNumber value={`${items.length}`} suffix={items.length === 1 ? "item" : "items"} />
-                    <PanelCaption>{`${SOURCE_NOTE[data.basket.source]} Quantities are packs of the size shown.`}</PanelCaption>
-                  </HeroPanel>
-                ) : null}
-                <Searchbar placeholder="Add an item" accessibilityLabel="Search items to add" value={query} onChangeText={setQuery} />
-                {matches.length > 0 ? (
-                  <View style={{ marginTop: space.md }}>
-                    <Group>
-                      {matches.map((m) => (
-                        <Tap
-                          key={m.key}
-                          accessibilityLabel={`Add ${m.name}`}
-                          onPress={() => {
-                            setItems((l) => [...l, { item: m.key, quantity: 1 }]);
-                            setQuery("");
-                          }}
-                          style={{ flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.sm, minHeight: 56 }}
-                        >
-                          <MaterialCommunityIcons name="plus-circle" size={26} color={p.accent} />
-                          <View style={{ flex: 1 }}>
-                            <RNText style={{ color: p.text, fontSize: 16, fontWeight: "600" }}>{m.name}</RNText>
-                            <RNText style={{ color: p.muted, fontSize: 13 }}>{m.reference_pack}</RNText>
-                          </View>
-                        </Tap>
-                      ))}
-                    </Group>
-                  </View>
-                ) : null}
-                {error ? <HelperText type="error" visible>{error}</HelperText> : null}
-                {loading ? <SkeletonCards count={3} label="Loading your usual items" /> : null}
-                <View style={{ height: space.md }} />
-              </View>
-            }
-            ListEmptyComponent={
-              loading ? undefined : (
-                <EmptyState
-                  title="Nothing on your list yet"
-                  body="Search above for what you buy most. Financer compares these items across Aldi, Lidl, Kaufland and Rewe."
-                />
-              )
-            }
-            renderItem={({ item }) => (
-              <Panel padding={space.md} style={{ marginBottom: space.sm }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-                  <Avatar tint={mealTint(item.item)} label={initials(nameOf(item.item))} size={44} square />
-                  <View style={{ flex: 1 }}>
-                    <RNText style={{ color: p.text, fontSize: 16, fontWeight: "700" }} numberOfLines={2}>
-                      {nameOf(item.item)}
-                    </RNText>
-                    <RNText style={{ color: p.muted, fontSize: 13 }}>{packOf(item.item)}</RNText>
-                  </View>
-                  <Stepper
-                    value={item.quantity}
-                    minusIcon={item.quantity === 1 ? "delete-outline" : "minus"}
-                    onMinus={() => setQty(item.item, -1)}
-                    onPlus={() => setQty(item.item, 1)}
-                    minusLabel={item.quantity === 1 ? `Remove ${nameOf(item.item)}` : `Fewer ${nameOf(item.item)}`}
-                    plusLabel={`More ${nameOf(item.item)}`}
+    <Page
+      title="Usual items"
+      fixed
+      footer={
+        <Box p="lg" gap="sm" bg="surface">
+          <Button label={saving ? "Saving…" : "Save my list"} icon="content-save-outline" onPress={save} disabled={saving} />
+          {message && message !== "Saved" ? <Note tone="error">{message}</Note> : null}
+          <Snackbar visible={message === "Saved"} onDismiss={() => setMessage(null)}>Saved</Snackbar>
+        </Box>
+      }
+    >
+      <VirtualList
+        data={items}
+        keyExtractor={(i) => i.item}
+        header={
+          <Box gap="md">
+            <SectionSwitch />
+            {data ? (
+              <HeroCard label="Usual items" chip={<HeroChip icon="cart-outline" text="Compared across chains" />}>
+                <HeroNumber value={`${items.length}`} suffix={items.length === 1 ? "item" : "items"} />
+                <HeroCaption>{`${SOURCE_NOTE[data.basket.source]} Quantities are packs of the size shown.`}</HeroCaption>
+              </HeroCard>
+            ) : null}
+            <SearchBar placeholder="Add an item" value={query} onChangeText={setQuery} />
+            {matches.length > 0 ? (
+              <Group>
+                {matches.map((m) => (
+                  <ListItem
+                    key={m.key}
+                    icon="plus-circle"
+                    title={m.name}
+                    subtitle={m.reference_pack}
+                    label={`Add ${m.name}`}
+                    onPress={() => {
+                      setItems((l) => [...l, { item: m.key, quantity: 1 }]);
+                      setQuery("");
+                    }}
                   />
-                </View>
-              </Panel>
-            )}
-          />
-          <View style={{ paddingTop: space.sm, paddingBottom: space.sm }}>
-            <ChunkyButton label={saving ? "Saving…" : "Save my list"} icon="content-save-outline" onPress={save} disabled={saving} />
-            {message ? <HelperText type={message === "Saved" ? "info" : "error"} visible>{message}</HelperText> : null}
-          </View>
-        </View>
-      )}
-    </Screen>
+                ))}
+              </Group>
+            ) : null}
+            {error ? <Note tone="error">{error}</Note> : null}
+            {loading ? <Loading rows={3} /> : null}
+          </Box>
+        }
+        empty={
+          loading ? undefined : (
+            <Empty title="Nothing on your list yet" message="Search above for what you buy most. Financer compares these items across Aldi, Lidl, Kaufland and Rewe." />
+          )
+        }
+        renderItem={(item) => (
+          <Card>
+            <Row gap="md">
+              <IconBadge tone={mealTone(item.item)} text={initials(nameOf(item.item))} square />
+              <Box grow>
+                <Text variant="bodyStrong" numberOfLines={2}>{nameOf(item.item)}</Text>
+                <Text variant="caption" tone="muted">{packOf(item.item)}</Text>
+              </Box>
+              <Stepper
+                value={item.quantity}
+                remove={item.quantity === 1}
+                onMinus={() => setQty(item.item, -1)}
+                onPlus={() => setQty(item.item, 1)}
+                minusLabel={item.quantity === 1 ? `Remove ${nameOf(item.item)}` : `Fewer ${nameOf(item.item)}`}
+                plusLabel={`More ${nameOf(item.item)}`}
+              />
+            </Row>
+          </Card>
+        )}
+      />
+    </Page>
   );
 }

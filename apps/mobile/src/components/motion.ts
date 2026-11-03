@@ -2,19 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "react-native-reanimated";
 
 import { countUpValue } from "@/ring";
-import { motion } from "@/theme";
 
 /** `true` when the person asked the system for less motion. Every animation checks it and jumps to its end value instead. */
 export function useReduceMotion(): boolean {
   return useReducedMotion();
 }
 
+/** How long a number takes to count up, in milliseconds. */
+const COUNT_UP_MS = 900;
+
 /**
  * Counts a whole number up (or down) to `target` when it changes, easing out. The first value
  * counts up from 0; later changes start from what is on screen. With reduced motion the target
  * is returned at once.
  */
-export function useCountUp(target: number, duration: number = motion.countUp): number {
+export function useCountUp(target: number, duration: number = COUNT_UP_MS): number {
   const reduce = useReduceMotion();
   const [shown, setShown] = useState(reduce ? target : 0);
   const from = useRef(reduce ? target : 0);

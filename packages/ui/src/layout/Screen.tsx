@@ -18,13 +18,15 @@ export type ScreenProps = {
   fixed?: boolean;
   /** Open scrolled to the end and stay there as content is added (a chat). */
   startAtEnd?: boolean;
+  /** Keep the footer clear of the home indicator (a page without a bottom bar). */
+  safeBottom?: boolean;
 };
 
 /**
  * One page: safe areas, a scrolling content column that stays readable on a wide screen (it is
  * centred with a maximum width and grows its gutters), an optional header and footer.
  */
-export function Screen({ children, footer, header, maxW = "wide", fixed, startAtEnd }: ScreenProps) {
+export function Screen({ children, footer, header, maxW = "wide", fixed, startAtEnd, safeBottom }: ScreenProps) {
   const { colors } = useTheme();
   const scroller = useRef<ScrollViewInstance>(null);
   const column = (
@@ -33,7 +35,7 @@ export function Screen({ children, footer, header, maxW = "wide", fixed, startAt
     </Box>
   );
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={safeBottom ? ["top", "left", "right", "bottom"] : ["top", "left", "right"]} style={{ flex: 1, backgroundColor: colors.background }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         {header}
         {fixed ? (

@@ -1,23 +1,12 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, Text as RNText, View } from "react-native";
+import { Box, Button, Card, Chip, ChipRow, ConfirmAction, IconButton, Note, Row, Section, Segmented, Text, TextField, VirtualList } from "@financer/ui";
 
 import type { Rule } from "@/api/client";
 import { useApi } from "@/api/config";
-import { TextInput } from "@/components/kit";
-import {
-  ChoiceChips,
-  DangerButton,
-  EmptyState,
-  FieldMessage,
-  IconAction,
-  Segmented,
-  SectionHeader,
-  SettingsGroup,
-} from "@/components/settings/SettingsKit";
-import { Button, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
-import { ChunkyButton, Text } from "@/components/kit";
+import { categoryLabel } from "@/categoryIcons";
+import { Page } from "@/components/Page";
+import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import { useScreenData } from "@/hooks";
-import { usePalette } from "@/theme";
 import {
   CATEGORIES,
   EMPTY_DRAFT,
@@ -37,15 +26,12 @@ function fields(r: Rule): RuleFields {
 
 export default function Rules() {
   const { api, loaded } = useApi();
-  const p = usePalette();
   const { data: rules, error, reload } = useScreenData((a) => a.rules());
   const [draft, setDraft] = useState<RuleDraft | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // the rule whose delete is waiting for a second tap
-  const [deleting, setDeleting] = useState<number | null>(null);
 
   async function run(work: () => Promise<string | void>) {
     setBusy(true);
@@ -94,39 +80,30 @@ export default function Rules() {
     }
   }
 
-  if (!loaded) return <Screen><Loading /></Screen>;
+  if (!loaded) return <Page title="Rules"><Loading /></Page>;
+  if (!api) return <Page title="Rules"><NeedsSetup /></Page>;
 
   const ids = (rules ?? []).map((r) => r.id);
 
   return (
-    <Screen>
-      <Title>Rules</Title>
-      {!api ? (
-        <NeedsSetup />
-      ) : (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ paddingBottom: 32 }}>
-            <Text variant="bodyMedium" style={{ color: p.muted }}>
+    <Page title="Rules" fixed>
+      <VirtualList
+        data={rules ?? []}
+        keyExtractor={(r) => String(r.id)}
+        header={
+          <Box gap="lg">
+            <Text variant="label" tone="muted">
               Rules run from top to bottom; the first match wins and beats the built-in categories. They apply to new imports and syncs. Transactions you categorized by hand are never changed by rules.
             </Text>
-
             {draft ? (
-              <RuleForm
-                draft={draft}
-                onChange={setDraft}
-                onSave={save}
-                onCancel={() => setDraft(null)}
-                busy={busy}
-                error={formError}
-                isEdit={editing !== null}
-              />
+              <RuleForm draft={draft} onChange={setDraft} onSave={save} onCancel={() => setDraft(null)} busy={busy} error={formError} isEdit={editing !== null} />
             ) : (
-              <View style={{ gap: 8, marginTop: 16 }}>
+              <Box gap="sm">
                 <Button label="Add a rule" icon="plus" onPress={startAdd} />
                 <Button
                   label="Apply to existing transactions"
                   icon="refresh"
-                  mode="outlined"
+                  variant="outline"
                   disabled={busy}
                   onPress={() =>
                     run(async () => {
@@ -135,157 +112,89 @@ export default function Rules() {
                     })
                   }
                 />
-              </View>
+              </Box>
             )}
-
-            {message || error ? <FieldMessage tone={message ? (message.ok ? "ok" : "error") : "error"}>{message?.text ?? error}</FieldMessage> : null}
-
-            {rules === null ? (
-              <Loading />
-            ) : rules.length === 0 ? (
-              draft ? null : (
-                <EmptyState
-                  mood="happy"
-                  title="No rules yet"
-                  body={'A rule teaches me where a merchant belongs, for example everything from "rewe" is groceries. Add one above, or change a transaction\'s category and switch on "Remember for this merchant".'}
-                />
-              )
-            ) : (
-              <>
-                <SectionHeader title={`Your rules (${rules.length})`} />
-                <SettingsGroup>
-                  {rules.map((r, i) => (
-                    <View
-                      key={r.id}
-                      style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: p.border }}
-                    >
-                      <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
-                        <View
-                          accessibilityElementsHidden
-                          importantForAccessibility="no-hide-descendants"
-                          style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: p.surfaceAlt, alignItems: "center", justifyContent: "center" }}
-                        >
-                          <RNText style={{ color: p.accent, fontWeight: "800", fontSize: 14 }}>{i + 1}</RNText>
-                        </View>
-                        <RNText style={{ flex: 1, color: p.text, fontSize: 16, fontWeight: "700" }} accessibilityLabel={`Rule ${i + 1}: ${describeRule(fields(r))}`}>
-                          {describeRule(fields(r))}
-                        </RNText>
-                      </View>
-                      {deleting === r.id ? (
-                        <View accessibilityRole="alert" style={{ marginTop: 8, marginBottom: 8, gap: 4 }}>
-                          <RNText style={{ color: p.muted, fontSize: 14 }}>Delete this rule? Transactions it already categorized keep their category.</RNText>
-                          <DangerButton
-                            solid
-                            label="Yes, delete"
-                            icon="trash-can-outline"
-                            onPress={() => {
-                              setDeleting(null);
-                              void run(async () => void (await api.deleteRule(r.id)));
-                            }}
-                          />
-                          <ChunkyButton flat label="Cancel" onPress={() => setDeleting(null)} />
-                        </View>
-                      ) : (
-                        <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
-                          <IconAction icon="arrow-up" label="Move up (higher priority)" disabled={busy || i === 0} onPress={() => run(async () => void (await api.reorderRules(moveId(ids, i, -1))))} />
-                          <IconAction icon="arrow-down" label="Move down (lower priority)" disabled={busy || i === rules.length - 1} onPress={() => run(async () => void (await api.reorderRules(moveId(ids, i, 1))))} />
-                          <IconAction icon="pencil-outline" label="Edit rule" onPress={() => startEdit(r)} />
-                          <IconAction icon="trash-can-outline" label="Delete rule" tone="danger" onPress={() => setDeleting(r.id)} />
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </SettingsGroup>
-              </>
-            )}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      )}
-    </Screen>
+            {message || error ? <Note tone={message ? (message.ok ? "ok" : "error") : "error"}>{message?.text ?? error}</Note> : null}
+            {rules !== null && rules.length > 0 ? <Text variant="heading" level={2}>{`Your rules (${rules.length})`}</Text> : null}
+          </Box>
+        }
+        empty={
+          rules === null ? (
+            <Loading />
+          ) : draft ? null : (
+            <Empty mood="happy" title="No rules yet" message={'A rule teaches me where a merchant belongs, for example everything from "rewe" is groceries. Add one above, or change a transaction\'s category and switch on "Remember for this merchant".'} />
+          )
+        }
+        renderItem={(r, i) => (
+          <Card gap="sm">
+            <Row gap="md" align="start">
+              <Box dim="avatar-sm" radius="xl" bg="sunken" align="center" justify="center" shrink={false}>
+                <Text variant="label" tone="accent">{i + 1}</Text>
+              </Box>
+              <Box grow>
+                <Text variant="bodyStrong" accessibilityLabel={`Rule ${i + 1}: ${describeRule(fields(r))}`}>{describeRule(fields(r))}</Text>
+              </Box>
+            </Row>
+            <Row justify="end" gap="xs">
+              <IconButton icon="arrow-up" label="Move up (higher priority)" disabled={busy || i === 0} onPress={() => run(async () => void (await api.reorderRules(moveId(ids, i, -1))))} />
+              <IconButton icon="arrow-down" label="Move down (lower priority)" disabled={busy || i === (rules?.length ?? 1) - 1} onPress={() => run(async () => void (await api.reorderRules(moveId(ids, i, 1))))} />
+              <IconButton icon="pencil-outline" label="Edit rule" onPress={() => startEdit(r)} />
+            </Row>
+            <ConfirmAction
+              label="Delete rule"
+              icon="trash-can-outline"
+              question="Delete this rule?"
+              consequence="Transactions it already categorized keep their category."
+              confirmLabel="Yes, delete"
+              disabled={busy}
+              onConfirm={() => void run(async () => void (await api.deleteRule(r.id)))}
+            />
+          </Card>
+        )}
+      />
+    </Page>
   );
 }
 
-function RuleForm({
-  draft,
-  onChange,
-  onSave,
-  onCancel,
-  busy,
-  error,
-  isEdit,
-}: {
-  draft: RuleDraft;
-  onChange: (d: RuleDraft) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  busy: boolean;
-  error: string | null;
-  isEdit: boolean;
-}) {
-  const p = usePalette();
+function RuleForm({ draft, onChange, onSave, onCancel, busy, error, isEdit }: { draft: RuleDraft; onChange: (d: RuleDraft) => void; onSave: () => void; onCancel: () => void; busy: boolean; error: string | null; isEdit: boolean }) {
   const set = (patch: Partial<RuleDraft>) => onChange({ ...draft, ...patch });
-  const label = { color: p.muted, fontSize: 12, fontWeight: "800" as const, marginTop: 16, marginBottom: 8 };
+  const euro = <Text variant="label" tone="muted">€</Text>;
   return (
-    <Card style={{ marginTop: 16 }}>
-      <Text variant="titleMedium" accessibilityRole="header">{isEdit ? "Edit rule" : "New rule"}</Text>
-      <RNText style={label}>If the merchant name…</RNText>
+    <Section title={isEdit ? "Edit rule" : "New rule"} card>
+      <Text variant="label" tone="muted">If the merchant name…</Text>
       <Segmented<MatchKind>
         value={draft.kind}
-        onValueChange={(kind) => set({ kind })}
-        buttons={[
+        onChange={(kind) => set({ kind })}
+        options={[
           { value: "contains", label: "Contains" },
           { value: "equals", label: "Is" },
           { value: "starts_with", label: "Starts" },
         ]}
       />
-      <View style={{ marginTop: 8 }}>
-        <TextInput
-          mode="outlined"
-          label="Name"
-          value={draft.pattern}
-          onChangeText={(pattern) => set({ pattern })}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="e.g. kiosk"
-        />
-      </View>
-      <RNText style={label}>Only for…</RNText>
+      <TextField label="Name" value={draft.pattern} onChangeText={(pattern) => set({ pattern })} placeholder="e.g. kiosk" />
+      <Text variant="label" tone="muted">Only for…</Text>
       <Segmented<RuleDraft["sign"]>
         value={draft.sign}
-        onValueChange={(sign) => set({ sign })}
-        buttons={[
+        onChange={(sign) => set({ sign })}
+        options={[
           { value: "any", label: "Any" },
           { value: "expense", label: "Expenses" },
           { value: "income", label: "Income" },
         ]}
       />
-      <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-        <TextInput
-          mode="outlined"
-          label="From (optional)"
-          value={draft.min}
-          onChangeText={(min) => set({ min })}
-          keyboardType="decimal-pad"
-          right={<TextInput.Affix text="€" />}
-          style={{ flex: 1 }}
-        />
-        <TextInput
-          mode="outlined"
-          label="Up to (optional)"
-          value={draft.max}
-          onChangeText={(max) => set({ max })}
-          keyboardType="decimal-pad"
-          right={<TextInput.Affix text="€" />}
-          style={{ flex: 1 }}
-        />
-      </View>
-      <RNText style={label}>…use this category</RNText>
-      <ChoiceChips groupLabel="Category" options={CATEGORIES} value={draft.category} onChange={(category) => set({ category })} />
-      {error ? <FieldMessage tone="error">{error}</FieldMessage> : null}
-      <View style={{ marginTop: 16, gap: 4 }}>
-        <Button label="Save rule" icon="content-save-outline" onPress={onSave} disabled={busy} />
-        <Button label="Cancel" mode="text" onPress={onCancel} disabled={busy} />
-      </View>
-    </Card>
+      <Row gap="md" align="start">
+        <Box equal><TextField label="From (optional)" value={draft.min} onChangeText={(min) => set({ min })} keyboardType="decimal-pad" right={euro} /></Box>
+        <Box equal><TextField label="Up to (optional)" value={draft.max} onChangeText={(max) => set({ max })} keyboardType="decimal-pad" right={euro} /></Box>
+      </Row>
+      <Text variant="label" tone="muted">…use this category</Text>
+      <ChipRow>
+        {CATEGORIES.map((c) => (
+          <Chip key={c} label={categoryLabel(c)} selected={draft.category === c} onPress={() => set({ category: c })} />
+        ))}
+      </ChipRow>
+      {error ? <Note tone="error">{error}</Note> : null}
+      <Button label="Save rule" icon="content-save-outline" onPress={onSave} disabled={busy} />
+      <Button label="Cancel" variant="ghost" onPress={onCancel} disabled={busy} />
+    </Section>
   );
 }

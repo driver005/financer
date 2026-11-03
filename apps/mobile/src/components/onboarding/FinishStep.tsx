@@ -1,23 +1,18 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
-import { Text as RNText, View } from "react-native";
+import { Box, Button, Card, Divider, Icon, Note as Message, Row, Text } from "@financer/ui";
 
 import { useApi } from "@/api/config";
-import { ChunkyButton } from "@/components/kit";
-import { FieldMessage } from "@/components/settings/SettingsKit";
 import { FieldLabel, StepFrame } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
 import { celebrate } from "@/native/haptics";
 import { firstQuest, mascotFor, recapRows } from "@/onboarding";
 import { applyDraft } from "@/onboardingApply";
 import { localIsoDate } from "@/period";
-import { usePalette } from "@/theme";
 
 type Saved = { kind: "nothing" } | { kind: "waiting" } | { kind: "saving" } | { kind: "ok" } | { kind: "failed"; error: string };
 
 export function FinishStep({ ctx }: { ctx: StepCtx }) {
   const { api, mode } = useApi();
-  const p = usePalette();
   const [saved, setSaved] = useState<Saved>({ kind: "waiting" });
   const done = useRef(false);
   const quest = firstQuest(ctx.draft);
@@ -72,33 +67,34 @@ export function FinishStep({ ctx }: { ctx: StepCtx }) {
       {rows.length ? (
         <>
           <FieldLabel>Your choices</FieldLabel>
-          <View style={{ borderRadius: 12, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface, paddingHorizontal: 14, paddingVertical: 6 }}>
+          <Card gap="sm">
             {rows.map((r, i) => (
-              <View
-                key={r.label}
-                style={{ flexDirection: "row", justifyContent: "space-between", gap: 12, paddingVertical: 8, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: p.border }}
-                accessibilityLabel={`${r.label}: ${r.value}`}
-              >
-                <RNText style={{ color: p.muted, fontSize: 14 }}>{r.label}</RNText>
-                <RNText style={{ color: p.text, fontSize: 14, fontWeight: "800", flexShrink: 1, textAlign: "right" }}>{r.value}</RNText>
-              </View>
+              <Box key={r.label} gap="sm">
+                {i > 0 ? <Divider /> : null}
+                <Row justify="between" gap="md" accessible accessibilityLabel={`${r.label}: ${r.value}`}>
+                  <Text variant="label" tone="muted">{r.label}</Text>
+                  <Box shrink><Text variant="label" align="right">{r.value}</Text></Box>
+                </Row>
+              </Box>
             ))}
-          </View>
+          </Card>
         </>
       ) : (
-        <RNText style={{ color: p.muted, fontSize: 15 }}>You skipped every question. Nothing was changed, and you can set it all up later in Settings.</RNText>
+        <Text variant="body" tone="muted">You skipped every question. Nothing was changed, and you can set it all up later in Settings.</Text>
       )}
-      <FieldMessage tone={saved.kind === "failed" ? "error" : "info"}>{status}</FieldMessage>
-      {saved.kind === "failed" ? <ChunkyButton outline icon="refresh" label="Try saving again" onPress={() => void save()} /> : null}
+      <Message tone={saved.kind === "failed" ? "error" : "info"}>{status}</Message>
+      {saved.kind === "failed" ? <Button variant="outline" icon="refresh" label="Try saving again" onPress={() => void save()} /> : null}
 
       <FieldLabel>Your first quest</FieldLabel>
-      <View style={{ flexDirection: "row", gap: 12, alignItems: "center", padding: 14, borderRadius: 12, borderWidth: 1, borderColor: p.accent, backgroundColor: p.surfaceAlt }}>
-        <MaterialCommunityIcons name="flag-checkered" size={28} color={p.accent} />
-        <View style={{ flex: 1 }}>
-          <RNText style={{ color: p.text, fontSize: 16, fontWeight: "800" }}>{quest.title}</RNText>
-          <RNText style={{ color: p.muted, fontSize: 14 }}>{quest.hint}</RNText>
-        </View>
-      </View>
+      <Card tone="accent">
+        <Row gap="md">
+          <Icon name="flag-checkered" size="xl" tone="on-accent-soft" />
+          <Box grow>
+            <Text variant="bodyStrong" tone="on-accent-soft">{quest.title}</Text>
+            <Text variant="label" tone="on-accent-soft">{quest.hint}</Text>
+          </Box>
+        </Row>
+      </Card>
     </StepFrame>
   );
 }

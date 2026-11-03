@@ -1,10 +1,7 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text as RNText, View } from "react-native";
+import { Badge, Box, IconBadge, Row, Text } from "@financer/ui";
 
-import { Avatar, Badge, Money, space, radius, useTones } from "@/components/grocery/primitives";
-import { chainTint, initials } from "@/groceryView";
+import { chainTone, initials } from "@/groceryView";
 import { chainLabel } from "@/hooks";
-import { usePalette } from "@/theme";
 
 /**
  * One chain in a price comparison: avatar, name, what the price is for, and the price on the
@@ -32,47 +29,25 @@ export function ChainPriceRow({
   note?: string;
   accessibilityLabel: string;
 }) {
-  const p = usePalette();
-  const tones = useTones();
   const name = chainLabel(chain);
   return (
-    <View
-      accessible
-      accessibilityLabel={accessibilityLabel}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: space.md,
-        padding: space.md,
-        borderRadius: radius.md,
-        borderWidth: 1,
-        borderColor: isCheapest ? tones.good.border : "transparent",
-        backgroundColor: isCheapest ? tones.good.bg : p.surfaceAlt,
-      }}
-    >
-      <Avatar tint={chainTint(chain)} label={initials(name)} />
-      <View style={{ flex: 1, gap: 2 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm }}>
-          <RNText style={{ color: p.text, fontSize: 16, fontWeight: "700" }}>{name}</RNText>
-          {isCheapest ? <Badge tone="good" label="Cheapest" icon="star" /> : null}
-          {isOffer ? <Badge tone="offer" label="Offer" icon="tag" /> : null}
-        </View>
-        {detail ? (
-          <RNText style={{ color: p.muted, fontSize: 13 }} numberOfLines={2}>
-            {detail}
-          </RNText>
-        ) : null}
+    <Row bg={isCheapest ? "success-soft" : "sunken"} radius="2xl" p="md" gap="md" accessible accessibilityLabel={accessibilityLabel}>
+      <IconBadge tone={chainTone(chain)} text={initials(name)} />
+      <Box grow gap="2xs">
+        <Row gap="sm" wrap>
+          <Text variant="bodyStrong">{name}</Text>
+          {isCheapest ? <Badge tone="success" label="Cheapest" icon="star" /> : null}
+          {isOffer ? <Badge tone="warning" label="Offer" icon="tag" /> : null}
+        </Row>
+        {detail ? <Text variant="caption" tone="muted" numberOfLines={2}>{detail}</Text> : null}
         {note ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-            <MaterialCommunityIcons name="clock-outline" size={12} color={p.muted} />
-            <RNText style={{ color: p.muted, fontSize: 12, flexShrink: 1 }}>{note}</RNText>
-          </View>
+          <Text variant="caption" tone="muted">{note}</Text>
         ) : null}
-      </View>
-      <View style={{ alignItems: "flex-end" }}>
-        <Money text={priceText} size="lg" color={isCheapest ? tones.good.fg : p.text} />
-        {extraText ? <RNText style={{ color: p.muted, fontSize: 12, fontVariant: ["tabular-nums"] }}>{extraText}</RNText> : null}
-      </View>
-    </View>
+      </Box>
+      <Box align="end">
+        <Text variant="price" tone={isCheapest ? "on-success-soft" : "default"}>{priceText}</Text>
+        {extraText ? <Text variant="caption" tone="muted">{extraText}</Text> : null}
+      </Box>
+    </Row>
   );
 }

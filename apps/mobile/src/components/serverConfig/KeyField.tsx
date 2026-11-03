@@ -1,32 +1,17 @@
-import { useState } from "react";
-import { Text as RNText, View } from "react-native";
+import { useState, type ReactNode } from "react";
+import { Box, Button, Note, Row, Text } from "@financer/ui";
 
-import { ChunkyButton } from "@/components/kit";
 import { ChoiceControl, ListControl, TextControl, ToggleControl } from "@/components/serverConfig/Controls";
 import { TableControl } from "@/components/serverConfig/TableControl";
-import { FieldMessage } from "@/components/settings/SettingsKit";
-import {
-  editable,
-  isDirty,
-  sourceLabel,
-  sourceTone,
-  valueSummary,
-  type ConfigKey,
-  type Draft,
-  type EditorValue,
-  type Row,
-} from "@/serverConfig";
-import { usePalette } from "@/theme";
+import { editable, isDirty, sourceLabel, sourceTone, valueSummary, type ConfigKey, type Draft, type EditorValue, type Row as ConfigRow } from "@/serverConfig";
 
 /** "Set in the app", "From financer.toml", "Default: 24" or "Set by FINANCER_BIND on the server". */
 function SourcePill({ k }: { k: ConfigKey }) {
-  const p = usePalette();
   const tone = sourceTone(k);
-  const color = tone === "app" ? p.accent : tone === "locked" ? p.warn : p.muted;
   return (
-    <RNText style={{ color, fontSize: 12, marginTop: 2 }} accessibilityLabel={`Source: ${sourceLabel(k)}`}>
+    <Text variant="caption" tone={tone === "app" ? "accent" : tone === "locked" ? "warning" : "muted"} accessibilityLabel={`Source: ${sourceLabel(k)}`}>
       {sourceLabel(k)}
-    </RNText>
+    </Text>
   );
 }
 
@@ -54,50 +39,37 @@ export function KeyField({
   onReset: () => void;
   onUndo: () => void;
 }) {
-  const p = usePalette();
   const [replacing, setReplacing] = useState(false);
   const dirty = isDirty(k, draft);
   const resetting = draft.reset.includes(k.path);
   const cleared = draft.set[k.path] === null;
 
-  let control: React.ReactNode;
+  let control: ReactNode;
   if (!editable(k)) {
     control = (
-      <RNText style={{ color: p.text, fontSize: 15, marginTop: 6 }}>
-        {valueSummary(k)}
-        {"\n"}
-        <RNText style={{ color: p.muted, fontSize: 13 }}>Change it where {k.env} is set on the server.</RNText>
-      </RNText>
+      <Box gap="2xs">
+        <Text variant="body">{valueSummary(k)}</Text>
+        <Text variant="caption" tone="muted">{`Change it where ${k.env} is set on the server.`}</Text>
+      </Box>
     );
   } else if (resetting) {
-    control = <FieldMessage>Back to {k.source === "app" ? "the file or the default" : "the default"} once you save.</FieldMessage>;
+    control = <Note>{`Back to ${k.source === "app" ? "the file or the default" : "the default"} once you save.`}</Note>;
   } else if (k.kind === "secret") {
     const typed = typeof value === "string" ? value : "";
     if (cleared) {
-      control = <FieldMessage>It will be removed once you save.</FieldMessage>;
+      control = <Note>It will be removed once you save.</Note>;
     } else if (k.is_set && !replacing && typed === "") {
       control = (
-        <View style={{ marginTop: 6 }}>
-          <RNText style={{ color: p.text, fontSize: 15 }}>{k.preview ?? "Set (hidden)"}</RNText>
-          <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
-            <ChunkyButton compact outline label="Replace" icon="pencil-outline" onPress={() => setReplacing(true)} />
-            <ChunkyButton compact outline label="Remove" icon="delete-outline" onPress={onClear} />
-          </View>
-        </View>
+        <Box gap="sm">
+          <Text variant="body">{k.preview ?? "Set (hidden)"}</Text>
+          <Row gap="sm">
+            <Button size="sm" variant="outline" label="Replace" icon="pencil-outline" onPress={() => setReplacing(true)} />
+            <Button size="sm" variant="outline" label="Remove" icon="delete-outline" onPress={onClear} />
+          </Row>
+        </Box>
       );
     } else {
-      control = (
-        <TextControl
-          label={k.label}
-          value={typed}
-          onChange={onChange}
-          secure
-          showLabel={false}
-          placeholder={k.placeholder ?? (k.is_set ? "New value" : undefined)}
-          error={!!problem}
-          hint="Saved on the server and never shown again."
-        />
-      );
+      control = <TextControl label={k.label} value={typed} onChange={onChange} secure showLabel={false} placeholder={k.placeholder ?? (k.is_set ? "New value" : undefined)} error={problem} hint="Saved on the server and never shown again." />;
     }
   } else if (k.kind === "toggle") {
     control = <ToggleControl label={k.label} value={value === true} onChange={onChange} />;
@@ -106,39 +78,39 @@ export function KeyField({
   } else if (k.kind === "list") {
     control = <ListControl label={k.label} items={Array.isArray(value) ? (value as string[]) : []} onChange={onChange} placeholder={k.placeholder ?? undefined} />;
   } else if (k.kind === "table") {
-    control = <TableControl k={k} rows={Array.isArray(value) ? (value as Row[]) : []} onChange={onChange} />;
+    control = <TableControl k={k} rows={Array.isArray(value) ? (value as ConfigRow[]) : []} onChange={onChange} />;
   } else {
     const range = k.kind === "number" && k.min != null && k.max != null ? `${k.min} to ${k.max}` : undefined;
-    control = (
-      <TextControl
-        label={k.label}
-        value={typeof value === "string" ? value : ""}
-        onChange={onChange}
-        numeric={k.kind === "number"}
-        showLabel={false}
-        placeholder={k.placeholder ?? k.default ?? undefined}
-        error={!!problem}
-        hint={range}
-      />
-    );
+    control = <TextControl label={k.label} value={typeof value === "string" ? value : ""} onChange={onChange} numeric={k.kind === "number"} showLabel={false} placeholder={k.placeholder ?? k.default ?? undefined} error={problem} hint={range} />;
   }
 
   return (
-    <View style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: p.border }}>
-      <RNText accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: "700" }}>
-        {k.label}
-      </RNText>
-      <SourcePill k={k} />
-      {k.help ? <RNText style={{ color: p.muted, fontSize: 13, marginTop: 4 }}>{k.help}</RNText> : null}
+    <Box gap="sm" py="md">
+      <Box gap="2xs">
+        <Text variant="bodyStrong" level={3}>{k.label}</Text>
+        <SourcePill k={k} />
+      </Box>
+      {k.help ? <Text variant="caption" tone="muted">{k.help}</Text> : null}
       {control}
-      {problem ? <FieldMessage tone="error">{problem}</FieldMessage> : null}
-      {dirty && k.warning ? <FieldMessage tone="error">{k.warning}</FieldMessage> : null}
+      {problem && !(k.kind === "secret" || k.kind === "string" || k.kind === "number") ? <Note tone="error">{problem}</Note> : null}
+      {dirty && k.warning ? <Note tone="error">{k.warning}</Note> : null}
       {editable(k) ? (
-        <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
-          {dirty ? <ChunkyButton compact flat label="Undo" icon="undo" onPress={() => { setReplacing(false); onUndo(); }} /> : null}
-          {k.source === "app" && !dirty ? <ChunkyButton compact flat label="Reset" icon="restore" onPress={onReset} accessibilityLabel={`Reset ${k.label} to the file or the default`} /> : null}
-        </View>
+        <Row gap="sm">
+          {dirty ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              label="Undo"
+              icon="undo"
+              onPress={() => {
+                setReplacing(false);
+                onUndo();
+              }}
+            />
+          ) : null}
+          {k.source === "app" && !dirty ? <Button size="sm" variant="ghost" label="Reset" icon="restore" onPress={onReset} /> : null}
+        </Row>
       ) : null}
-    </View>
+    </Box>
   );
 }

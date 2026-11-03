@@ -37,6 +37,8 @@ export type ThemeColors = {
   /** A recessed fill: neutral chips, table stripes, tracks of meters, the track of a segmented control. */
   sunken: string;
   scrim: string;
+  /** Colours drawn over a photo or a camera picture (the same in both schemes): the ink, a dark chip behind text, the backdrop. */
+  media: { ink: string; chip: string; backdrop: string };
   text: { default: string; muted: string; subtle: string; inverse: string };
   border: { default: string; strong: string; focus: string };
   tones: Record<Tone, ToneColors>;
@@ -53,6 +55,7 @@ export const lightColors: ThemeColors = {
   thumb: p.white,
   sunken: L.fill,
   scrim: alpha.scrimLight,
+  media: { ink: p.white, chip: alpha.chip, backdrop: p.black },
   text: { default: L.text, muted: L.muted, subtle: L.subtle, inverse: p.snow },
   border: { default: L.border, strong: L.separator, focus: L.accent.text },
   tones: {
@@ -73,6 +76,7 @@ export const darkColors: ThemeColors = {
   thumb: p.snow,
   sunken: D.fill,
   scrim: alpha.scrimDark,
+  media: { ink: p.white, chip: alpha.chip, backdrop: p.black },
   text: { default: D.text, muted: D.muted, subtle: D.subtle, inverse: p.eclipse },
   border: { default: D.border, strong: D.separator, focus: D.accent.text },
   tones: {

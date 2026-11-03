@@ -5,6 +5,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@financer/ui": [
+        "../../packages/ui/src/index.ts"
       ]
     }
   },
@@ -12,7 +15,9 @@
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "../../packages/ui/src/**/*.ts",
+    "../../packages/ui/src/**/*.tsx"
   ],
   "exclude": [
     "node_modules",
