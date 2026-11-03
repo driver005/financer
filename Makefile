@@ -202,7 +202,7 @@ test: $(NPM_STAMP) ## Rust and app tests
 lint: $(NPM_STAMP) ## Formatting, clippy and the TypeScript check
 	cargo fmt --check
 	cargo clippy --workspace --all-targets -- -D warnings
-	cd $(MOBILE) && npx tsc --noEmit
+	cd $(MOBILE) && npm run typecheck
 
 fmt: ## Format the Rust code
 	cargo fmt

@@ -1,47 +1,35 @@
-import { Text as RNText, View } from "react-native";
+import { Box, Button, Card, IconButton, Row, Text } from "@financer/ui";
 
-import { ChunkyButton } from "@/components/kit";
 import { ChoiceControl, ListControl, TextControl, ToggleControl } from "@/components/serverConfig/Controls";
-import { IconAction } from "@/components/settings/SettingsKit";
-import {
-  emptyRow,
-  entryNoun,
-  entryTitle,
-  fieldVisible,
-  type ConfigField,
-  type ConfigKey,
-  type Row,
-} from "@/serverConfig";
-import { usePalette } from "@/theme";
+import { emptyRow, entryNoun, entryTitle, fieldVisible, type ConfigField, type ConfigKey, type Row as ConfigRow } from "@/serverConfig";
 
 /** One column of an entry, drawn by its kind. */
 function FieldControl({ field, value, onChange }: { field: ConfigField; value: string | boolean | string[]; onChange: (next: string | boolean | string[]) => void }) {
-  const p = usePalette();
   const hint = [field.help, field.kind === "number" && field.min != null && field.max != null ? `${field.min} to ${field.max}` : ""].filter(Boolean).join(" ");
   if (field.kind === "toggle") {
     return (
-      <View style={{ marginTop: 8 }}>
-        <RNText style={{ color: p.muted, fontSize: 13 }}>{field.label}</RNText>
-        {field.help ? <RNText style={{ color: p.muted, fontSize: 12, marginTop: 2 }}>{field.help}</RNText> : null}
+      <Box gap="xs">
+        <Text variant="label" tone="muted">{field.label}</Text>
+        {field.help ? <Text variant="caption" tone="muted">{field.help}</Text> : null}
         <ToggleControl label={field.label} value={value === true} onChange={onChange} />
-      </View>
+      </Box>
     );
   }
   if (field.kind === "choice") {
     return (
-      <View style={{ marginTop: 8 }}>
-        <RNText style={{ color: p.muted, fontSize: 13 }}>{field.label}</RNText>
+      <Box gap="xs">
+        <Text variant="label" tone="muted">{field.label}</Text>
         <ChoiceControl label={field.label} options={field.options} value={String(value)} onChange={onChange} />
-      </View>
+      </Box>
     );
   }
   if (field.kind === "list") {
     return (
-      <View style={{ marginTop: 8 }}>
-        <RNText style={{ color: p.muted, fontSize: 13 }}>{field.label}</RNText>
-        {field.help ? <RNText style={{ color: p.muted, fontSize: 12, marginTop: 2 }}>{field.help}</RNText> : null}
+      <Box gap="xs">
+        <Text variant="label" tone="muted">{field.label}</Text>
+        {field.help ? <Text variant="caption" tone="muted">{field.help}</Text> : null}
         <ListControl label={field.label} items={Array.isArray(value) ? value : []} onChange={onChange} placeholder={field.placeholder ?? undefined} />
-      </View>
+      </Box>
     );
   }
   return (
@@ -57,22 +45,16 @@ function FieldControl({ field, value, onChange }: { field: ConfigField; value: s
 }
 
 /** A list of entries (bank accounts, store names, senders): a card each, with Add and Remove. */
-export function TableControl({ k, rows, onChange }: { k: ConfigKey; rows: Row[]; onChange: (next: Row[]) => void }) {
-  const p = usePalette();
+export function TableControl({ k, rows, onChange }: { k: ConfigKey; rows: ConfigRow[]; onChange: (next: ConfigRow[]) => void }) {
   const noun = entryNoun(k);
   return (
-    <View style={{ marginTop: 8 }}>
+    <Box gap="md">
       {rows.map((row, i) => (
-        <View
-          key={i}
-          style={{ borderWidth: 1, borderColor: p.border, borderRadius: 14, padding: 12, marginBottom: 12, backgroundColor: p.surface }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <RNText accessibilityRole="header" style={{ flex: 1, color: p.text, fontSize: 15, fontWeight: "700" }}>
-              {entryTitle(k, row, i)}
-            </RNText>
-            <IconAction icon="delete-outline" tone="danger" label={`Remove ${noun} ${i + 1}`} onPress={() => onChange(rows.filter((_, j) => j !== i))} />
-          </View>
+        <Card key={i} variant="outline" gap="md">
+          <Row gap="sm">
+            <Box grow><Text variant="bodyStrong" level={4}>{entryTitle(k, row, i)}</Text></Box>
+            <IconButton icon="delete-outline" tone="danger" label={`Remove ${noun} ${i + 1}`} onPress={() => onChange(rows.filter((_, j) => j !== i))} />
+          </Row>
           {k.fields
             .filter((f) => fieldVisible(k, f, row))
             .map((f) => (
@@ -83,9 +65,9 @@ export function TableControl({ k, rows, onChange }: { k: ConfigKey; rows: Row[];
                 onChange={(v) => onChange(rows.map((r, j) => (j === i ? { ...r, [f.key]: v } : r)))}
               />
             ))}
-        </View>
+        </Card>
       ))}
-      <ChunkyButton compact outline icon="plus" label={`Add ${noun}`} onPress={() => onChange([...rows, emptyRow(k)])} style={{ alignSelf: "flex-start" }} />
-    </View>
+      <Row><Button size="sm" variant="outline" icon="plus" label={`Add ${noun}`} onPress={() => onChange([...rows, emptyRow(k)])} /></Row>
+    </Box>
   );
 }

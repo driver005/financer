@@ -103,7 +103,7 @@ jobs:
           # CI-only entry that starts the backend at app launch (read by the android-emulator job)
           FINANCER_SMOKE: "1"
       - name: Typecheck against the generated bindings
-        run: npx tsc --noEmit
+        run: npm run typecheck
       - name: Generate the native Android project
         run: npx expo prebuild --platform android --no-install
         env:
@@ -146,7 +146,7 @@ jobs:
       - name: Build the Rust library and generate the bindings
         run: scripts/enable-embedded.sh ios
       - name: Typecheck against the generated bindings
-        run: npx tsc --noEmit
+        run: npm run typecheck
       - name: Generate the native iOS project and install the pods
         run: npx expo prebuild --platform ios
         env:
@@ -190,7 +190,7 @@ jobs:
       - name: Build the Rust library and generate the bindings
         run: scripts/enable-embedded.sh android
       - name: Typecheck against the generated bindings
-        run: npx tsc --noEmit
+        run: npm run typecheck
       - name: Generate the native Android project
         run: npx expo prebuild --platform android --no-install
         env:
@@ -237,7 +237,7 @@ jobs:
       - name: Build the Rust library and generate the bindings
         run: scripts/enable-embedded.sh ios
       - name: Typecheck against the generated bindings
-        run: npx tsc --noEmit
+        run: npm run typecheck
       - name: Generate the native iOS project and install the pods
         run: npx expo prebuild --platform ios
         env:

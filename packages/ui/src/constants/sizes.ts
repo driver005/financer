@@ -13,9 +13,11 @@ export const size = {
   /** The switch: HeroUI's 48 x 24 track and 28 x 20 thumb, inset 2. */
   switch: { width: spacing[12], height: spacing[6], thumbWidth: spacing[7], thumbHeight: spacing[5], inset: spacing[0.5], travel: spacing[12] - spacing[7] - spacing[0.5] - spacing[0.5] },
   icon: { xs: spacing[3.5], sm: spacing[4], md: spacing[5], lg: spacing[6], xl: spacing[8] },
-  avatar: { sm: spacing[8], md: spacing[10], lg: spacing[14] },
+  avatar: { sm: spacing[8], md: spacing[10], lg: spacing[14], xl: spacing[20] },
   thumb: { sm: spacing[16], md: spacing[24], lg: spacing[40] },
-  ring: { sm: spacing[10], md: spacing[14], lg: spacing[24] },
+  ring: { sm: spacing[10], md: spacing[14], lg: spacing[24], xl: spacing[48] },
+  /** Line widths of rings and charts. */
+  stroke: { hair: spacing.px, sm: spacing[0.5], md: spacing[1], lg: spacing[2], xl: spacing[4] },
   bar: { sm: spacing[1.5], md: spacing[2], lg: spacing[3] },
   chart: { sm: spacing[10], md: spacing[16], lg: spacing[24] },
   nav: { bottomBar: spacing[16], rail: spacing[20], sidebar: spacing[64] },

@@ -9,7 +9,7 @@ import { Text } from "../primitives/Text";
 
 /** A titled block of a page, with an optional link-style action on the right. */
 export function Section({
-  title, description, tag, aside, action, card, children,
+  title, description, tag, aside, action, card, quiet, children,
 }: {
   title?: string;
   description?: string;
@@ -20,6 +20,8 @@ export function Section({
   action?: { label: string; onPress: () => void };
   /** Put the content in one white card (a form, a group of settings). */
   card?: boolean;
+  /** A small muted heading (the groups of the settings), not a page heading. */
+  quiet?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -29,7 +31,7 @@ export function Section({
           <Box grow gap="2xs">
             {title ? (
               <Row gap="sm" align="center" wrap>
-                <Text variant="heading" level={2}>{title}</Text>
+                <Text variant={quiet ? "label" : "heading"} tone={quiet ? "muted" : "default"} level={2}>{title}</Text>
                 {tag ? <Badge label={tag.label} tone={tag.tone ?? "success"} /> : null}
               </Row>
             ) : null}

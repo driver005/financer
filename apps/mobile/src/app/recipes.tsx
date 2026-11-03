@@ -1,33 +1,26 @@
-import { SectionSwitch } from "@/components/SectionSwitch";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { FlatList, ScrollView, Text as RNText, View } from "react-native";
+import { Badge, Box, Card, Chip, ChipRow, Expandable, HeroCaption, HeroCard, HeroChip, HeroNumber, IconBadge, IconButton, Icon, Note, ProgressRing, Row, Text, TextField, VirtualList } from "@financer/ui";
 
 import type { Idea, RecipeMatch } from "@/api/client";
 import { useApi } from "@/api/config";
-import { Avatar, Badge, EmptyState, FilterChip, MatchRing, Money, Panel, SkeletonCards, Subtitle, space } from "@/components/grocery/primitives";
-import { HelperText, List, Text, TextInput } from "@/components/kit";
-import { HeaderAction, Loading, NeedsSetup, Screen, Title, useColors } from "@/components/ui";
-import { HeroPanel, PanelCaption, PanelChip, PanelNumber } from "@/components/panel";
+import { Page } from "@/components/Page";
+import { SectionSwitch } from "@/components/SectionSwitch";
+import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import { formatCents, parseEuroInput, servingsText } from "@/format";
-import { costPerServing, initials, mealTint, shortList } from "@/groceryView";
+import { costPerServing, initials, mealTone, shortList } from "@/groceryView";
 import { useScreenData } from "@/hooks";
-import { usePalette } from "@/theme";
 
 const TAGS = ["vegetarisch", "vegan", "günstig", "schnell", "fleisch", "fisch"];
 
 export default function Recipes() {
   const { api, loaded } = useApi();
-  const c = useColors();
   const router = useRouter();
   const [tag, setTag] = useState<string | undefined>();
   const [budgetText, setBudgetText] = useState("");
   const budget = budgetText.trim() ? parseEuroInput(budgetText) : null;
 
-  const { data, error, busy } = useScreenData(
-    useCallback((a) => a.recipes({ tag, budgetCents: budget ?? undefined, limit: 20 }), [tag, budget]),
-  );
+  const { data, error, busy } = useScreenData(useCallback((a) => a.recipes({ tag, budgetCents: budget ?? undefined, limit: 20 }), [tag, budget]));
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [ideaMessage, setIdeaMessage] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
@@ -45,204 +38,189 @@ export default function Recipes() {
     }
   }, [api, tag, budget]);
 
-  if (!loaded) return <Screen><Loading /></Screen>;
+  if (!loaded) return <Page title="Recipes"><Loading /></Page>;
+  if (!api) return <Page title="Recipes"><SectionSwitch /><NeedsSetup /></Page>;
 
   const loading = busy && !data;
 
   return (
-    <Screen>
-      <Title
-        right={
-          <View style={{ flexDirection: "row", gap: space.sm }}>
-            <HeaderAction icon="calendar-week" label="Plan my week" onPress={() => router.push("/mealplan")} />
-            <HeaderAction icon="creation" label={asking ? "Thinking of ideas" : "Surprise me with new ideas"} onPress={askForIdeas} disabled={asking} />
-          </View>
+    <Page
+      title="Recipes"
+      fixed
+      actions={
+        <>
+          <IconButton icon="calendar-week" label="Plan my week" onPress={() => router.push("/mealplan")} />
+          <IconButton icon="creation" label={asking ? "Thinking of ideas" : "Surprise me with new ideas"} onPress={askForIdeas} disabled={asking} />
+        </>
+      }
+    >
+      <VirtualList
+        data={data ?? []}
+        keyExtractor={(r) => r.id}
+        gap="md"
+        header={
+          <Box gap="md">
+            <SectionSwitch />
+            {data && data.length > 0 ? (
+              <HeroCard label="Recipes for you" chip={tag ? <HeroChip icon="filter-variant" text={tag} /> : null}>
+                <HeroNumber value={`${data.length}`} suffix={data.length === 1 ? "recipe" : "recipes"} />
+                <HeroCaption>Matched against your usual items and today's prices.</HeroCaption>
+              </HeroCard>
+            ) : null}
+            <ChipRow>
+              <Chip label="All" selected={!tag} onPress={() => setTag(undefined)} />
+              {TAGS.map((t) => (
+                <Chip key={t} label={t} selected={tag === t} onPress={() => setTag(tag === t ? undefined : t)} />
+              ))}
+            </ChipRow>
+            <TextField
+              label="Max. cost of missing ingredients"
+              value={budgetText}
+              onChangeText={setBudgetText}
+              keyboardType="decimal-pad"
+              right={<Text variant="label" tone="muted">€</Text>}
+              error={budgetText.trim() !== "" && budget === null ? "Enter an amount like 5 or 5,50." : undefined}
+            />
+            {ideaMessage ? <Note tone="error">{ideaMessage}</Note> : null}
+            {ideas.map((idea) => (
+              <IdeaCard key={idea.title} idea={idea} />
+            ))}
+            {error ? <Note tone="error">{error}</Note> : null}
+            {loading ? <Loading rows={3} /> : null}
+          </Box>
         }
-      >
-        Recipes
-      </Title>
-      <SectionSwitch />
-      {!api ? (
-        <NeedsSetup />
-      ) : (
-        <FlatList
-          data={data ?? []}
-          keyExtractor={(r) => r.id}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: space.xl }}
-          ListHeaderComponent={
-            <View style={{ marginBottom: space.sm }}>
-              {data && data.length > 0 ? (
-                <HeroPanel label="Recipes for you" chip={tag ? <PanelChip icon="filter-variant" text={tag} /> : null}>
-                  <PanelNumber value={`${data.length}`} suffix={data.length === 1 ? "recipe" : "recipes"} />
-                  <PanelCaption>Matched against your usual items and today's prices.</PanelCaption>
-                </HeroPanel>
-              ) : null}
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingVertical: space.xs }}>
-                <FilterChip label="All" selected={!tag} onPress={() => setTag(undefined)} />
-                {TAGS.map((t) => (
-                  <FilterChip key={t} label={t} selected={tag === t} onPress={() => setTag(tag === t ? undefined : t)} />
-                ))}
-              </View>
-              <TextInput
-                mode="outlined"
-                dense
-                label="Max. cost of missing ingredients"
-                accessibilityLabel="Max. cost of missing ingredients in euro"
-                value={budgetText}
-                onChangeText={setBudgetText}
-                keyboardType="decimal-pad"
-                right={<TextInput.Affix text="€" />}
-                style={{ marginTop: space.md }}
-                error={budgetText.trim() !== "" && budget === null}
-              />
-              {ideaMessage ? <HelperText type="error" visible>{ideaMessage}</HelperText> : null}
-              {ideas.length > 0 ? (
-                <View style={{ marginTop: space.lg }}>
-                  {ideas.map((idea) => (
-                    <IdeaCard key={idea.title} idea={idea} />
-                  ))}
-                </View>
-              ) : null}
-              {error ? <HelperText type="error" visible>{error}</HelperText> : null}
-              {loading ? (
-                <View style={{ marginTop: space.lg }}>
-                  <SkeletonCards count={3} label="Loading recipes" />
-                </View>
-              ) : null}
-            </View>
-          }
-          ListEmptyComponent={
-            busy ? undefined : (
-              <EmptyState
-                mood="worried"
-                title="No recipe fits these filters"
-                body="Try another diet or a higher limit for the missing ingredients."
-                actionLabel={tag || budgetText ? "Clear filters" : undefined}
-                actionIcon="filter-remove-outline"
-                onAction={
-                  tag || budgetText
-                    ? () => {
-                        setTag(undefined);
-                        setBudgetText("");
-                      }
-                    : undefined
-                }
-              />
-            )
-          }
-          renderItem={({ item, index }) => <RecipeCard recipe={item} best={index === 0} />}
-        />
-      )}
-    </Screen>
+        empty={
+          busy ? undefined : (
+            <Empty
+              mood="worried"
+              title="No recipe fits these filters"
+              message="Try another diet or a higher limit for the missing ingredients."
+              actionLabel={tag || budgetText ? "Clear filters" : undefined}
+              actionIcon="filter-remove-outline"
+              onAction={
+                tag || budgetText
+                  ? () => {
+                      setTag(undefined);
+                      setBudgetText("");
+                    }
+                  : undefined
+              }
+            />
+          )
+        }
+        renderItem={(item, index) => <RecipeCard recipe={item} best={index === 0} />}
+      />
+    </Page>
   );
 }
 
-function Meta({ icon, text }: { icon: string; text: string }) {
-  const p = usePalette();
+function Meta({ icon, text }: { icon: "clock-outline" | "account-multiple-outline"; text: string }) {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-      <MaterialCommunityIcons name={icon as never} size={14} color={p.muted} />
-      <RNText style={{ color: p.muted, fontSize: 13 }}>{text}</RNText>
-    </View>
+    <Row gap="xs">
+      <Icon name={icon} size="sm" tone="muted" />
+      <Text variant="caption" tone="muted">{text}</Text>
+    </Row>
   );
 }
 
 function RecipeCard({ recipe: r, best }: { recipe: RecipeMatch; best: boolean }) {
-  const p = usePalette();
   const names = new Map(r.ingredients.map((i) => [i.item, i.name]));
   const nameOf = (k: string) => names.get(k) ?? k;
   const perServing = costPerServing(r);
   const missing = shortList(r.missing.map((k) => nameOf(k) + (r.unpriced.includes(k) ? " (no price yet)" : "")), 2);
   const offers = shortList(r.on_offer.map(nameOf), 2);
   return (
-    <Panel>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-        <Avatar tint={mealTint(r.id)} label={initials(r.title)} size={48} square />
-        <View style={{ flex: 1, gap: 2 }}>
-          {best ? <Badge tone="good" label="Best match" icon="star" /> : null}
-          <Text variant="titleMedium" accessibilityRole="header">{r.title}</Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: space.md }}>
+    <Card gap="md">
+      <Row gap="md">
+        <IconBadge tone={mealTone(r.id)} text={initials(r.title)} square />
+        <Box grow gap="2xs">
+          {best ? <Row><Badge tone="success" label="Best match" icon="star" /></Row> : null}
+          <Text variant="subheading" level={3}>{r.title}</Text>
+          <Row gap="md" wrap>
             <Meta icon="clock-outline" text={`${r.minutes} min`} />
             <Meta icon="account-multiple-outline" text={servingsText(r.servings)} />
-          </View>
-        </View>
-        <MatchRing percent={r.coverage_percent} label={`You already buy ${r.coverage_percent} percent of the ingredients`} />
-      </View>
+          </Row>
+        </Box>
+        <ProgressRing progress={r.coverage_percent / 100} box="md" stroke="lg" label={`You already buy ${r.coverage_percent} percent of the ingredients`}>
+          <Text variant="number">{`${r.coverage_percent}%`}</Text>
+        </ProgressRing>
+      </Row>
 
       {r.tags.length > 0 ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginTop: space.md }}>
+        <Row gap="sm" wrap>
           {r.tags.map((t) => (
-            <Badge key={t} tone="muted" label={t} />
+            <Badge key={t} label={t} />
           ))}
-        </View>
+        </Row>
       ) : null}
 
-      <View style={{ marginTop: space.md, flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
+      <Row gap="sm" wrap>
         {perServing !== null ? (
           <>
-            <Money text={perServing === 0 ? "no price yet" : formatCents(perServing)} size="lg" />
-            {perServing !== 0 ? <RNText style={{ color: p.muted, fontSize: 14 }}>to buy per serving</RNText> : null}
+            <Text variant="price">{perServing === 0 ? "no price yet" : formatCents(perServing)}</Text>
+            {perServing !== 0 ? <Text variant="label" tone="muted">to buy per serving</Text> : null}
           </>
         ) : (
-          <Badge tone="good" label="Nothing to buy" icon="check-circle-outline" />
+          <Badge tone="success" label="Nothing to buy" icon="check-circle-outline" />
         )}
-      </View>
+      </Row>
 
       {r.missing.length ? (
-        <Text variant="bodyMedium" style={{ marginTop: space.sm }}>
-          <RNText style={{ fontWeight: "700" }}>Missing: </RNText>
-          {missing.shown.join(", ")}
-          {missing.more ? ` +${missing.more} more` : ""}
-          {r.missing_cost_cents > 0 ? ` · about ${formatCents(r.missing_cost_cents)} in all for the priced ones` : ""}
+        <Text variant="label">
+          {`Missing: ${missing.shown.join(", ")}${missing.more ? ` +${missing.more} more` : ""}${r.missing_cost_cents > 0 ? ` · about ${formatCents(r.missing_cost_cents)} in all for the priced ones` : ""}`}
         </Text>
       ) : null}
 
       {r.on_offer.length ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm, marginTop: space.sm }}>
+        <Row gap="sm" wrap>
           {offers.shown.map((n) => (
-            <Badge key={n} tone="offer" label={`On offer: ${n}`} icon="tag" />
+            <Badge key={n} tone="warning" label={`On offer: ${n}`} icon="tag" />
           ))}
-          {offers.more ? <Badge tone="offer" label={`+${offers.more}`} /> : null}
-        </View>
+          {offers.more ? <Badge tone="warning" label={`+${offers.more}`} /> : null}
+        </Row>
       ) : null}
 
-      <List.Accordion title="Ingredients and steps">
+      <Expandable title="Ingredients and steps">
         {r.ingredients.map((i) => (
-          <List.Item key={i.item} title={i.name} description={i.amount} />
+          <Row key={i.item} justify="between" gap="md">
+            <Box grow><Text variant="label">{i.name}</Text></Box>
+            <Text variant="caption" tone="muted">{i.amount}</Text>
+          </Row>
         ))}
         {r.steps.map((s, n) => (
-          <List.Item key={n} title={`${n + 1}. ${s}`} titleNumberOfLines={6} />
+          <Text key={n} variant="label">{`${n + 1}. ${s}`}</Text>
         ))}
-      </List.Accordion>
-    </Panel>
+      </Expandable>
+    </Card>
   );
 }
 
 function IdeaCard({ idea }: { idea: Idea }) {
   return (
-    <Panel tone="accent">
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-        <Avatar tint={mealTint(idea.title)} label={initials(idea.title)} size={48} square />
-        <View style={{ flex: 1, gap: 2 }}>
-          <Badge tone="accent" label="New idea" icon="creation" />
-          <Text variant="titleMedium">{idea.title}</Text>
-        </View>
-      </View>
-      <Text variant="bodyMedium" style={{ marginTop: space.sm }}>{idea.summary}</Text>
-      <View style={{ flexDirection: "row", columnGap: space.md, marginTop: space.sm }}>
+    <Card tone="accent" gap="md">
+      <Row gap="md">
+        <IconBadge tone={mealTone(idea.title)} text={initials(idea.title)} square />
+        <Box grow gap="2xs">
+          <Row><Badge tone="accent" label="New idea" icon="creation" /></Row>
+          <Text variant="subheading" level={3}>{idea.title}</Text>
+        </Box>
+      </Row>
+      <Text variant="label">{idea.summary}</Text>
+      <Row gap="md">
         <Meta icon="clock-outline" text={`${idea.minutes} min`} />
         <Meta icon="account-multiple-outline" text={servingsText(idea.servings)} />
-      </View>
-      <List.Accordion title="Ingredients and steps">
+      </Row>
+      <Expandable title="Ingredients and steps">
         {idea.ingredients.map((i, n) => (
-          <List.Item key={`${i.name}-${n}`} title={i.name} description={i.amount} />
+          <Row key={`${i.name}-${n}`} justify="between" gap="md">
+            <Box grow><Text variant="label">{i.name}</Text></Box>
+            <Text variant="caption" tone="muted">{i.amount}</Text>
+          </Row>
         ))}
         {idea.steps.map((s, n) => (
-          <List.Item key={n} title={`${n + 1}. ${s}`} titleNumberOfLines={6} />
+          <Text key={n} variant="label">{`${n + 1}. ${s}`}</Text>
         ))}
-      </List.Accordion>
-    </Panel>
+      </Expandable>
+    </Card>
   );
 }

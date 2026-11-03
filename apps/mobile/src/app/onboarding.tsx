@@ -12,7 +12,7 @@ import { RhythmStep } from "@/components/onboarding/RhythmStep";
 import { SafetyStep } from "@/components/onboarding/SafetyStep";
 import type { StepCtx } from "@/components/onboarding/types";
 import { WelcomeStep } from "@/components/onboarding/WelcomeStep";
-import { Loading, Page } from "@/components/ui";
+import { Screen, Spinner } from "@financer/ui";
 import { loadOnboarding, markOnboardingDone, saveOnboardingState, saveProfile } from "@/native/onboardingStore";
 import {
   newState,
@@ -117,9 +117,9 @@ export default function Onboarding() {
 
   if (!state) {
     return (
-      <Page edges={["top", "left", "right", "bottom"]}>
-        <Loading />
-      </Page>
+      <Screen safeBottom>
+        <Spinner large />
+      </Screen>
     );
   }
 

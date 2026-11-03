@@ -1,45 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { areaPath, barRects, compareSummary, linePath, peakText, sparkPoints, spendingTrend, topCategories, trendSummary } from "../src/charts";
+import { compareSummary, peakText, spendingTrend, topCategories, trendSummary } from "../src/charts";
 import { categoryIcon, categoryLabel } from "../src/categoryIcons";
-
-describe("sparkPoints", () => {
-  it("scales from 0 to the maximum inside the padding", () => {
-    const pts = sparkPoints([0, 50, 100], 100, 40, 2);
-    assert.deepEqual(pts[0], { x: 2, y: 38 });
-    assert.deepEqual(pts[2], { x: 98, y: 2 });
-    assert.equal(pts[1].y, 20);
-  });
-  it("handles empty, single and all-zero input", () => {
-    assert.deepEqual(sparkPoints([], 100, 40), []);
-    assert.equal(sparkPoints([5], 100, 40)[0].x, 50);
-    assert.ok(sparkPoints([0, 0], 100, 40).every((p) => p.y === 38));
-  });
-  it("draws a line and a closed area", () => {
-    const pts = sparkPoints([1, 2], 10, 10, 0);
-    assert.equal(linePath(pts), "M0.0 5.0 L10.0 0.0");
-    assert.ok(areaPath(pts, 10, 0).endsWith("Z"));
-    assert.equal(linePath([]), "");
-    assert.equal(areaPath([], 10), "");
-  });
-});
-
-describe("barRects", () => {
-  it("fills the width and keeps tiny values visible", () => {
-    const bars = barRects([100, 1, 0], 100, 50, 5);
-    assert.equal(bars.length, 3);
-    assert.equal(bars[0].height, 50);
-    assert.equal(bars[1].height, 2);
-    assert.equal(bars[2].height, 0);
-    const last = bars[2];
-    assert.ok(Math.abs(last.x + last.width - 100) < 1e-9);
-  });
-  it("shares a scale when a max is given", () => {
-    assert.equal(barRects([50], 10, 100, 0, 100)[0].height, 50);
-    assert.deepEqual(barRects([], 10, 10), []);
-  });
-});
 
 const txs = [
   { booking_date: "2026-10-12", amount_cents: -2000 },

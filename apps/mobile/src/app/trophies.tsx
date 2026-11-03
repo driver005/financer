@@ -1,24 +1,17 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { RefreshControl, ScrollView, Text as RNText, View } from "react-native";
+import { Badge, Box, Button, Card, Group, HeroCard, HeroChip, HeroNumber, HeroProgress, ListItem, Mascot, Meter, Money, Note, Row, Section, Text, TextField } from "@financer/ui";
 
 import type { Api } from "@/api/client";
 import { useApi } from "@/api/config";
-import { Mascot } from "@/components/Mascot";
+import { Page } from "@/components/Page";
+import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import { BadgeIcon, FreezeRow } from "@/components/TrophiesCard";
-import { EmptyState } from "@/components/EmptyState";
-import { ChunkyButton, HelperText, TextInput } from "@/components/kit";
-import { Money } from "@/components/Money";
-import { HeroPanel, PanelChip, PanelNumber, PanelProgress } from "@/components/panel";
-import { ListGroup, ListRow, SectionHeader, StatusPill } from "@/components/rows";
-import { SkeletonHero, SkeletonList } from "@/components/Skeleton";
-import { Bar, Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
 import { formatDate, formatMoney, parseEuroInput } from "@/format";
 import { FREEZE_EVERY, MAX_FREEZES, computeRewards, savedThisPeriod, trophyMessage, trophyMood } from "@/game";
 import { useScreenData } from "@/hooks";
 import { localIsoDate } from "@/period";
 import { getSavingsGoal, setSavingsGoal } from "@/savingsGoal";
-import { space, typography, usePalette } from "@/theme";
 
 async function load(a: Api) {
   const [txs, envelopes, basket, prices, receipts, safe, savingsGoal] = await Promise.all([
@@ -45,33 +38,19 @@ async function load(a: Api) {
   };
 }
 
-function Label({ children }: { children: string }) {
-  const p = usePalette();
-  return <RNText style={[typography.overline, { color: p.muted }]}>{children}</RNText>;
-}
-
 /** Streak freezes, badges, personal bests and the savings goal. Everything is derived from the bookings. */
 export default function Trophies() {
   const { api, loaded } = useApi();
   const router = useRouter();
-  const p = usePalette();
-  const { data, error, busy, reload } = useScreenData(load);
+  const { data, error, reload } = useScreenData(load);
   const [goalText, setGoalText] = useState("");
   const [goalMessage, setGoalMessage] = useState<string | null>(null);
 
-  if (!loaded) return <Screen><Loading /></Screen>;
+  if (!loaded) return <Page title="Trophies"><Loading /></Page>;
+  if (!api) return <Page title="Trophies"><NeedsSetup /></Page>;
 
   const today = localIsoDate();
-  const r = data
-    ? computeRewards({
-        txs: data.txs,
-        groceryLimit: data.groceryLimit,
-        savingsGoal: data.savingsGoal,
-        today,
-        payday: data.payday,
-        progress: data.progress,
-      })
-    : null;
+  const r = data ? computeRewards({ txs: data.txs, groceryLimit: data.groceryLimit, savingsGoal: data.savingsGoal, today, payday: data.payday, progress: data.progress }) : null;
   const saved = data ? savedThisPeriod(data.txs, today, data.payday) : 0;
 
   async function saveGoal() {
@@ -92,141 +71,88 @@ export default function Trophies() {
 
   const earned = r ? r.badges.filter((b) => b.earned).length : 0;
 
+  if (!data || !r) {
+    return (
+      <Page title="Trophies">
+        {error ? <Empty title="Could not load your trophies" message={error} mood="worried" actionLabel="Try again" actionIcon="refresh" onAction={() => void reload()} /> : <Loading rows={4} />}
+      </Page>
+    );
+  }
+
   return (
-    <Screen>
-      <Title subtitle={r ? `${earned} of ${r.badges.length} badges earned` : undefined}>Trophies</Title>
-      {!api ? (
-        <NeedsSetup />
-      ) : !data || !r ? (
-        error ? (
-          <EmptyState title="Could not load your trophies" message={error} mood="worried" actionLabel="Try again" actionIcon="refresh" onAction={() => void reload()} />
-        ) : (
-          <View style={{ gap: space.md }}>
-            <SkeletonHero />
-            <SkeletonList rows={3} />
-          </View>
-        )
-      ) : (
-        <ScrollView
-          contentContainerStyle={{ paddingBottom: space.xl }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void reload()} tintColor={p.accent} />}
-        >
-          <HeroPanel label="Badges earned" chip={<PanelChip icon="trophy-outline" text={`${earned} / ${r.badges.length}`} />}>
-            <PanelNumber value={`${earned}`} suffix={`of ${r.badges.length}`} label={`${earned} of ${r.badges.length} badges earned`} />
-            <PanelProgress progress={r.badges.length > 0 ? earned / r.badges.length : 0} label={`${earned} of ${r.badges.length} badges earned`} />
-          </HeroPanel>
+    <Page title="Trophies" subtitle={`${earned} of ${r.badges.length} badges earned`}>
+      <HeroCard label="Badges earned" chip={<HeroChip icon="trophy-outline" text={`${earned} / ${r.badges.length}`} />}>
+        <HeroNumber value={`${earned}`} suffix={`of ${r.badges.length}`} label={`${earned} of ${r.badges.length} badges earned`} />
+        <HeroProgress progress={r.badges.length > 0 ? earned / r.badges.length : 0} label={`${earned} of ${r.badges.length} badges earned`} />
+      </HeroCard>
 
-          <Card>
-            <Mascot mood={trophyMood(r, false)} message={trophyMessage(r)} />
-          </Card>
+      <Mascot mood={trophyMood(r, false)} message={trophyMessage(r)} />
 
-          <Card>
-            <Label>Streak freezes</Label>
-            <View style={{ marginTop: space.md }}>
-              <FreezeRow streak={r.streak} />
-            </View>
-            <RNText style={[typography.caption, { color: p.muted, marginTop: space.md }]}>
-              Every {FREEZE_EVERY}th day in a row inside your daily grocery goal earns a freeze (you can keep {MAX_FREEZES}). On a day you go over, a freeze is
-              used automatically and your streak stays alive.
-              {r.streak.usedOn.length > 0 ? ` Used ${r.streak.usedOn.length} time${r.streak.usedOn.length === 1 ? "" : "s"} so far.` : ""}
-            </RNText>
-            {data.groceryLimit <= 0 ? <HelperText type="info">Set a grocery limit to start a streak.</HelperText> : null}
-          </Card>
+      <Card gap="md">
+        <Text variant="label" tone="muted">Streak freezes</Text>
+        <FreezeRow streak={r.streak} />
+        <Text variant="caption" tone="muted">
+          {`Every ${FREEZE_EVERY}th day in a row inside your daily grocery goal earns a freeze (you can keep ${MAX_FREEZES}). On a day you go over, a freeze is used automatically and your streak stays alive.${
+            r.streak.usedOn.length > 0 ? ` Used ${r.streak.usedOn.length} time${r.streak.usedOn.length === 1 ? "" : "s"} so far.` : ""
+          }`}
+        </Text>
+        {data.groceryLimit <= 0 ? <Note>Set a grocery limit to start a streak.</Note> : null}
+      </Card>
 
-          <SectionHeader title="Personal bests" />
-          <ListGroup>
-            <ListRow
-              leading={<IconEmoji emoji="🔥" />}
-              title={`${r.bests.longestStreak} ${r.bests.longestStreak === 1 ? "day" : "days"}`}
-              subtitle={`Longest streak${r.bests.longestStreakEndedOn ? `, ended ${formatDate(r.bests.longestStreakEndedOn)}` : ""}${
-                r.streak.days > 0 && r.streak.days === r.bests.longestStreak ? " (that is now!)" : ""
-              }`}
-              accessibilityLabel={`Longest streak: ${r.bests.longestStreak} days`}
+      <Section title="Personal bests">
+        <Group>
+          <ListItem
+            leading={<Text variant="title">🔥</Text>}
+            title={`${r.bests.longestStreak} ${r.bests.longestStreak === 1 ? "day" : "days"}`}
+            subtitle={`Longest streak${r.bests.longestStreakEndedOn ? `, ended ${formatDate(r.bests.longestStreakEndedOn)}` : ""}${r.streak.days > 0 && r.streak.days === r.bests.longestStreak ? " (that is now!)" : ""}`}
+            label={`Longest streak: ${r.bests.longestStreak} days`}
+          />
+          {r.bests.bestWeek ? (
+            <ListItem
+              leading={<Text variant="title">🛒</Text>}
+              title="Best grocery week"
+              subtitle={`${formatDate(r.bests.bestWeek.start)} to ${formatDate(r.bests.bestWeek.end)}. This week so far: ${formatMoney(r.bests.thisWeekCents)}${r.bests.thisWeekCents < r.bests.bestWeek.spentCents ? " (on track to beat it)" : ""}`}
+              trailing={<Money cents={r.bests.bestWeek.spentCents} variant="bodyStrong" tone="plain" />}
+              label={`Best grocery week: ${formatMoney(r.bests.bestWeek.spentCents)}`}
             />
-            {r.bests.bestWeek ? (
-              <ListRow
-                leading={<IconEmoji emoji="🛒" />}
-                title="Best grocery week"
-                subtitleLines={4}
-                subtitle={`${formatDate(r.bests.bestWeek.start)} to ${formatDate(r.bests.bestWeek.end)}. This week so far: ${formatMoney(r.bests.thisWeekCents)}${
-                  r.bests.thisWeekCents < r.bests.bestWeek.spentCents ? " (on track to beat it)" : ""
-                }`}
-                value={<Money cents={r.bests.bestWeek.spentCents} variant="bodyStrong" tone="plain" />}
-                accessibilityLabel={`Best grocery week: ${formatMoney(r.bests.bestWeek.spentCents)}`}
-              />
-            ) : (
-              <ListRow
-                leading={<IconEmoji emoji="🛒" />}
-                title="No best grocery week yet"
-                subtitleLines={4}
-                subtitle="It shows up after the first full week (Monday to Sunday) of bookings."
-                accessibilityLabel="No best grocery week yet"
-              />
-            )}
-          </ListGroup>
+          ) : (
+            <ListItem leading={<Text variant="title">🛒</Text>} title="No best grocery week yet" subtitle="It shows up after the first full week (Monday to Sunday) of bookings." />
+          )}
+        </Group>
+      </Section>
 
-          <SectionHeader title="Badges" />
-          <ListGroup>
-            {r.badges.map((b) => (
-              <ListRow
-                key={b.id}
-                leading={<BadgeIcon badge={b} size={44} />}
-                title={b.title}
-                subtitle={b.rule}
-                subtitleLines={8}
-                value={b.earned ? <StatusPill tone="good" icon="check" label={b.earnedOn ? formatDate(b.earnedOn) : "Earned"} accessibilityLabel={b.earnedOn ? `Earned ${formatDate(b.earnedOn)}` : "Earned"} /> : undefined}
-                accessibilityLabel={`${b.title}: ${b.earned ? "earned" : "not yet"}. ${b.rule}`}
-              />
-            ))}
-          </ListGroup>
+      <Section title="Badges">
+        <Group>
+          {r.badges.map((b) => (
+            <ListItem
+              key={b.id}
+              leading={<BadgeIcon badge={b} />}
+              title={b.title}
+              subtitle={b.rule}
+              trailing={b.earned ? <Badge tone="success" icon="check" label={b.earnedOn ? formatDate(b.earnedOn) : "Earned"} /> : undefined}
+              label={`${b.title}: ${b.earned ? "earned" : "not yet"}. ${b.rule}`}
+            />
+          ))}
+        </Group>
+      </Section>
 
-          <Card>
-            <Label>Savings goal</Label>
-            <RNText style={[typography.caption, { color: p.muted, marginTop: space.sm }]}>
-              How much to put aside per budget period. Transfers booked in the category Savings count towards it. The goal is stored on this device only.
-            </RNText>
-            {data.savingsGoal > 0 ? (
-              <>
-                <View style={{ flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", gap: space.xs, marginTop: space.md }}>
-                  <Money cents={saved} variant="heading" tone={saved >= data.savingsGoal ? "good" : "plain"} />
-                  <RNText style={[typography.label, { color: p.muted }]}>of {formatMoney(data.savingsGoal)} this period</RNText>
-                </View>
-                <Bar progress={saved / data.savingsGoal} color={saved >= data.savingsGoal ? p.good : p.fill} accessibilityLabel="Savings goal progress" />
-              </>
-            ) : null}
-            <View style={{ marginTop: space.lg }}>
-              <TextInput
-                label="Goal per period (€)"
-                value={goalText}
-                onChangeText={setGoalText}
-                keyboardType="decimal-pad"
-                placeholder={data.savingsGoal > 0 ? String(data.savingsGoal / 100).replace(".", ",") : "e.g. 150"}
-              />
-            </View>
-            {goalMessage ? <HelperText type="info">{goalMessage}</HelperText> : null}
-            <View style={{ marginTop: space.lg }}>
-              <ChunkyButton compact label="Save goal" onPress={() => void saveGoal()} />
-            </View>
-          </Card>
+      <Section title="Savings goal" card>
+        <Text variant="caption" tone="muted">How much to put aside per budget period. Transfers booked in the category Savings count towards it. The goal is stored on this device only.</Text>
+        {data.savingsGoal > 0 ? (
+          <Box gap="sm">
+            <Row gap="xs" align="baseline" wrap>
+              <Money cents={saved} variant="heading" tone={saved >= data.savingsGoal ? "good" : "plain"} />
+              <Text variant="label" tone="muted">{`of ${formatMoney(data.savingsGoal)} this period`}</Text>
+            </Row>
+            <Meter value={saved / data.savingsGoal} tone={saved >= data.savingsGoal ? "success" : "accent"} label="Savings goal progress" />
+          </Box>
+        ) : null}
+        <TextField label="Goal per period (€)" value={goalText} onChangeText={setGoalText} keyboardType="decimal-pad" placeholder={data.savingsGoal > 0 ? String(data.savingsGoal / 100).replace(".", ",") : "e.g. 150"} />
+        {goalMessage ? <Note>{goalMessage}</Note> : null}
+        <Button label="Save goal" onPress={() => void saveGoal()} />
+      </Section>
 
-          <ChunkyButton outline icon="home-variant-outline" label="Back to Today" onPress={() => router.push("/")} />
-        </ScrollView>
-      )}
-    </Screen>
-  );
-}
-
-/** A big emoji in a soft round badge, for rows that have no category icon. */
-function IconEmoji({ emoji }: { emoji: string }) {
-  const p = usePalette();
-  return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.accentSoft, alignItems: "center", justifyContent: "center" }}
-    >
-      <RNText style={{ fontSize: 22 }}>{emoji}</RNText>
-    </View>
+      <Button variant="outline" icon="home-variant-outline" label="Back to Today" onPress={() => router.push("/")} />
+    </Page>
   );
 }

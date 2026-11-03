@@ -1,15 +1,12 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, Text as RNText, View, type ScrollViewInstance } from "react-native";
+import { useCallback, useState } from "react";
+import { Banner, Box, Button, Expandable, Group, Note, Text } from "@financer/ui";
 
 import { Api, ApiError } from "@/api/client";
 import { useApi } from "@/api/config";
-import { EmptyState } from "@/components/EmptyState";
-import { ChunkyButton } from "@/components/kit";
+import { Page } from "@/components/Page";
 import { KeyField } from "@/components/serverConfig/KeyField";
-import { FieldMessage, PanelText, SettingsGroup, SettingsPanel } from "@/components/settings/SettingsKit";
-import { SkeletonList } from "@/components/Skeleton";
-import { Card, Loading, NeedsSetup, Screen, Title } from "@/components/ui";
+import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import {
   EMPTY_DRAFT,
   changeCount,
@@ -30,7 +27,6 @@ import {
   type ConfigView,
   type Draft,
 } from "@/serverConfig";
-import { space, usePalette } from "@/theme";
 
 type Message = { tone: "error" | "ok" | "info"; lines: string[] };
 type Phase = "idle" | "saving" | "restarting";
@@ -45,20 +41,15 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  */
 export default function ServerConfigScreen() {
   const { api, config, mode, loaded, save: saveConnection } = useApi();
-  const p = usePalette();
   const [view, setView] = useState<ConfigView | null>(null);
   const [loadError, setLoadError] = useState<{ status: number; text: string } | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [phase, setPhase] = useState<Phase>("idle");
   const [message, setMessage] = useState<Message | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const scroller = useRef<ScrollViewInstance>(null);
 
-  /** The result of a save is at the top; bring it into view. */
-  const show = useCallback((next: Message) => {
-    setMessage(next);
-    scroller.current?.scrollTo({ y: 0, animated: true });
-  }, []);
+  /** The result of a save is shown in the bar at the foot of the page, so it is in view. */
+  const show = useCallback((next: Message) => setMessage(next), []);
 
   const load = useCallback(async () => {
     if (!api) return;
@@ -141,150 +132,102 @@ export default function ServerConfigScreen() {
     void apply();
   }
 
-  if (!loaded) {
-    return (
-      <Screen>
-        <Loading />
-      </Screen>
-    );
-  }
+  if (!loaded) return <Page title="Server settings"><Loading /></Page>;
   if (mode === "embedded") {
     return (
-      <Screen>
-        <Title>Server settings</Title>
-        <EmptyState
-          title="This is for a server"
-          message="The backend runs inside this app, so there is no financer.toml. Its few settings are under Settings > Backend."
-          mood="happy"
-        />
-      </Screen>
+      <Page title="Server settings">
+        <Empty title="This is for a server" message="The backend runs inside this app, so there is no financer.toml. Its few settings are under Settings > Backend." mood="happy" />
+      </Page>
     );
   }
-  if (!api) {
-    return (
-      <Screen>
-        <Title>Server settings</Title>
-        <NeedsSetup />
-      </Screen>
-    );
-  }
+  if (!api) return <Page title="Server settings"><NeedsSetup /></Page>;
   const tooOld = loadError !== null && (loadError.status === 404 || /not found/i.test(loadError.text));
+  const blocked = Object.keys(problems).length > 0;
 
   return (
-    <Screen>
-      <Title subtitle="What the server's financer.toml can hold, kept on the server">Server settings</Title>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView ref={scroller} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ paddingBottom: space.xxl }}>
-          {tooOld ? (
-            <EmptyState title="This server cannot do that yet" message="Update the server to a newer version to change its settings from the app." mood="worried" />
-          ) : loadError && !view ? (
-            <EmptyState title="Could not load the settings" message={loadError.text} actionLabel="Try again" actionIcon="refresh" onAction={() => void load()} mood="worried" />
-          ) : null}
-          {!view && !loadError ? <SkeletonList rows={4} label="Loading the server settings" /> : null}
-
-          {view ? (
-            <>
-              {phase === "restarting" ? (
-                <Card>
-                  <FieldMessage>Restarting the server. This takes a few seconds, and this screen waits for it.</FieldMessage>
-                </Card>
-              ) : null}
-              {view.state === "rolled_back" && view.message && !message ? (
-                <FieldMessage tone="error">{view.message}</FieldMessage>
-              ) : null}
-              {!view.writable ? (
-                <FieldMessage tone="error">
-                  The server cannot write its settings file ({view.settings_file}). Set FINANCER_SETTINGS_FILE on the server to a place it can write, such as the folder of its database.
-                </FieldMessage>
-              ) : null}
-              {view.problems.map((problem) => (
-                <FieldMessage key={problem} tone="error">
-                  {problem}
-                </FieldMessage>
-              ))}
-              {view.warnings.map((warning) => (
-                <FieldMessage key={warning}>{warning}</FieldMessage>
-              ))}
-              {message ? (
-                <View style={{ marginTop: space.sm }}>
-                  {message.lines.map((line, i) => (
-                    <FieldMessage key={i} tone={message.tone}>
-                      {line}
-                    </FieldMessage>
-                  ))}
-                </View>
-              ) : null}
-
-              <PanelText style={{ paddingHorizontal: space.xs, marginTop: space.xs }}>
-                Changes are saved on the server and applied by restarting it. A value set by an environment variable is locked.
-              </PanelText>
-
-              <View style={{ marginTop: space.md }} pointerEvents={phase === "idle" ? "auto" : "none"}>
-                <SettingsGroup>
-                  {view.groups.map((group) => (
-                    <SettingsPanel key={group.id} icon={group.icon} title={group.title} summary={groupSummary(group, draft)}>
-                      <PanelText style={{ marginTop: 4 }}>{group.hint}</PanelText>
-                      {group.keys.map((k) => (
-                        <KeyField
-                          key={k.path}
-                          k={k}
-                          draft={draft}
-                          value={editorValue(k, draft)}
-                          problem={problems[k.path]}
-                          onChange={(next) => setDraft((d) => setValue(d, k, next))}
-                          onClear={() => setDraft((d) => clearSecret(d, k))}
-                          onReset={() => setDraft((d) => resetKey(d, k))}
-                          onUndo={() => setDraft((d) => discardKey(d, k))}
-                        />
-                      ))}
-                    </SettingsPanel>
-                  ))}
-                </SettingsGroup>
-              </View>
-              <PanelText style={{ paddingHorizontal: space.xs }}>
-                Kept in {view.settings_file}, secrets included, readable by the server's user only. It ranks after financer.toml and before the environment.
-              </PanelText>
-            </>
-          ) : null}
-        </ScrollView>
-
-        {view && count > 0 ? (
-          <View
-            accessibilityLiveRegion="polite"
-            style={{ borderTopWidth: 1, borderTopColor: p.border, backgroundColor: p.surface, paddingHorizontal: space.lg, paddingVertical: space.md, gap: space.sm }}
-          >
-            <RNText style={{ color: p.text, fontSize: 14, fontWeight: "700" }}>{saveSummary(draft)}</RNText>
-            {confirming ? (
-              <View style={{ gap: space.xs }}>
-                {warnings.map((w) => (
-                  <FieldMessage key={w.label} tone="error">
-                    {w.label}: {w.warning}
-                  </FieldMessage>
-                ))}
-              </View>
+    <Page
+      title="Server settings"
+      subtitle="What the server's financer.toml can hold, kept on the server"
+      footer={
+        view && (count > 0 || message) ? (
+          <Box bg="surface" p="lg" gap="sm" accessibilityRole="alert">
+            {message ? message.lines.map((line, i) => <Note key={i} tone={message.tone}>{line}</Note>) : null}
+            {count > 0 ? (
+              <>
+                <Text variant="bodyStrong">{saveSummary(draft)}</Text>
+                {confirming ? warnings.map((w) => <Note key={w.label} tone="error">{`${w.label}: ${w.warning}`}</Note>) : null}
+                {blocked ? <Note tone="error">Fix the marked fields first.</Note> : null}
+                <Button
+                  label={phase === "saving" ? "Saving…" : phase === "restarting" ? "Restarting…" : confirming ? "Save anyway" : "Save and restart"}
+                  icon="content-save-outline"
+                  onPress={save}
+                  disabled={phase !== "idle" || blocked || !view.writable}
+                />
+                <Button
+                  variant="outline"
+                  label="Discard"
+                  onPress={() => {
+                    setDraft(EMPTY_DRAFT);
+                    setConfirming(false);
+                  }}
+                  disabled={phase !== "idle"}
+                />
+              </>
             ) : null}
-            {Object.keys(problems).length > 0 ? <FieldMessage tone="error">Fix the marked fields first.</FieldMessage> : null}
-            <View style={{ flexDirection: "row", gap: space.sm }}>
-              <ChunkyButton
-                label={phase === "saving" ? "Saving…" : phase === "restarting" ? "Restarting…" : confirming ? "Save anyway" : "Save and restart"}
-                icon="content-save-outline"
-                onPress={save}
-                disabled={phase !== "idle" || Object.keys(problems).length > 0 || !view.writable}
-                style={{ flex: 1 }}
-              />
-              <ChunkyButton
-                outline
-                label="Discard"
-                onPress={() => {
-                  setDraft(EMPTY_DRAFT);
-                  setConfirming(false);
-                }}
-                disabled={phase !== "idle"}
-              />
-            </View>
-          </View>
-        ) : null}
-      </KeyboardAvoidingView>
-    </Screen>
+          </Box>
+        ) : null
+      }
+    >
+      {tooOld ? (
+        <Empty title="This server cannot do that yet" message="Update the server to a newer version to change its settings from the app." mood="worried" />
+      ) : loadError && !view ? (
+        <Empty title="Could not load the settings" message={loadError.text} actionLabel="Try again" actionIcon="refresh" onAction={() => void load()} mood="worried" />
+      ) : null}
+      {!view && !loadError ? <Loading rows={4} /> : null}
+
+      {view ? (
+        <>
+          {phase === "restarting" ? <Banner tone="info">Restarting the server. This takes a few seconds, and this screen waits for it.</Banner> : null}
+          {view.state === "rolled_back" && view.message && !message ? <Note tone="error">{view.message}</Note> : null}
+          {!view.writable ? (
+            <Note tone="error">
+              {`The server cannot write its settings file (${view.settings_file}). Set FINANCER_SETTINGS_FILE on the server to a place it can write, such as the folder of its database.`}
+            </Note>
+          ) : null}
+          {view.problems.map((problem) => (
+            <Note key={problem} tone="error">{problem}</Note>
+          ))}
+          {view.warnings.map((warning) => (
+            <Note key={warning}>{warning}</Note>
+          ))}
+
+          <Text variant="caption" tone="muted">Changes are saved on the server and applied by restarting it. A value set by an environment variable is locked.</Text>
+
+          <Box pointerEvents={phase === "idle" ? "auto" : "none"}>
+            <Group>
+              {view.groups.map((group) => (
+                <Expandable key={group.id} icon={group.icon as never} title={group.title} summary={groupSummary(group, draft)}>
+                  <Text variant="caption" tone="muted">{group.hint}</Text>
+                  {group.keys.map((k) => (
+                    <KeyField
+                      key={k.path}
+                      k={k}
+                      draft={draft}
+                      value={editorValue(k, draft)}
+                      problem={problems[k.path]}
+                      onChange={(next) => setDraft((d) => setValue(d, k, next))}
+                      onClear={() => setDraft((d) => clearSecret(d, k))}
+                      onReset={() => setDraft((d) => resetKey(d, k))}
+                      onUndo={() => setDraft((d) => discardKey(d, k))}
+                    />
+                  ))}
+                </Expandable>
+              ))}
+            </Group>
+          </Box>
+          <Text variant="caption" tone="muted">{`Kept in ${view.settings_file}, secrets included, readable by the server's user only. It ranks after financer.toml and before the environment.`}</Text>
+        </>
+      ) : null}
+    </Page>
   );
 }

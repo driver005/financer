@@ -4,6 +4,7 @@ import { Platform, Text as RNText, type TextStyle } from "react-native";
 import type { Tone } from "../constants/colors";
 import { fontFamilyWeb, fontSize, fontWeight, letterSpacing, lineHeight, textVariants, type TextVariant } from "../constants/typography";
 import { useTheme } from "../theme/ThemeProvider";
+import { fitScale } from "../constants/misc";
 import type { Mutable } from "./boxStyle";
 
 /** Text colours: the plain roles, a tone on the surface, or the text that goes on a tone's solid or soft fill. */
@@ -20,6 +21,8 @@ export type TextProps = {
   /** Heading level for assistive technology and the web (1 to 6). */
   level?: 1 | 2 | 3 | 4 | 5 | 6;
   selectable?: boolean;
+  /** One line that shrinks to fit its box (an amount in a hero card). */
+  fit?: boolean;
   testID?: string;
   accessibilityLabel?: string;
 };
@@ -36,7 +39,7 @@ export function useTextColor() {
   };
 }
 
-export function Text({ children, variant = "body", tone = "default", align, numberOfLines, strike, level, selectable, testID, accessibilityLabel }: TextProps) {
+export function Text({ children, variant = "body", tone = "default", align, numberOfLines, strike, level, selectable, fit, testID, accessibilityLabel }: TextProps) {
   const color = useTextColor()(tone);
   const v = textVariants[variant];
   const style: Mutable<TextStyle> = {
@@ -53,7 +56,10 @@ export function Text({ children, variant = "body", tone = "default", align, numb
   return (
     <RNText
       style={style}
-      numberOfLines={numberOfLines}
+      numberOfLines={fit ? 1 : numberOfLines}
+      adjustsFontSizeToFit={fit}
+      minimumFontScale={fit ? fitScale.min : undefined}
+      maxFontSizeMultiplier={fit ? fitScale.max : undefined}
       selectable={selectable}
       testID={testID}
       accessibilityLabel={accessibilityLabel}

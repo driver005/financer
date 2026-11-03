@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Platform, View } from "react-native";
+import { Platform } from "react-native";
+import { Box, Button, ConfirmAction, Divider, Expandable, Note, Segmented, Text, TextField } from "@financer/ui";
 
 import { useApi } from "@/api/config";
 import { manualBackupName, passphraseProblem, type BackupSchedule, type BackupSettings } from "@/backupPlan";
-import { TextInput } from "@/components/kit";
-import { ConfirmAction, FieldMessage, PanelDivider, PanelText, Segmented, SettingsPanel } from "@/components/settings/SettingsKit";
-import { Button } from "@/components/ui";
 import {
   canKeepBackupsOnDevice,
   canPickBackupFolder,
@@ -161,101 +159,71 @@ export function BackupCard() {
   const scheduleLabel = { off: "Automatic backups off", daily: "Automatic: daily", weekly: "Automatic: weekly" }[settings.schedule];
 
   return (
-    <SettingsPanel icon="shield-lock-outline" title="Encrypted backup" summary={canKeepBackupsOnDevice ? scheduleLabel : "Create and restore a protected file"}>
-      <PanelText style={{ marginTop: 4 }}>
+    <Expandable icon="shield-lock-outline" title="Encrypted backup" summary={canKeepBackupsOnDevice ? scheduleLabel : "Create and restore a protected file"}>
+      <Text variant="caption" tone="muted">
         An encrypted file with all your data. Only the passphrase opens it, and nobody can recover it for you. A copy that stays inside the app does not survive losing or resetting the phone, so send the file somewhere else too (cloud storage, another device).
-      </PanelText>
-      <View style={{ gap: 8, marginTop: 12 }}>
-        <TextInput
-          mode="outlined"
-          label="Passphrase (at least 8 characters)"
-          accessibilityLabel="Backup passphrase"
-          value={passphrase}
-          onChangeText={setPassphrase}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <TextInput
-          mode="outlined"
-          label="Repeat passphrase (to create)"
-          accessibilityLabel="Repeat backup passphrase"
-          value={confirm}
-          onChangeText={setConfirm}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          error={passphrase.length > 0 && confirm.length > 0 && createProblem !== null}
-        />
-      </View>
-      {passphrase.length > 0 && confirm.length > 0 && createProblem ? <FieldMessage tone="error">{createProblem}</FieldMessage> : null}
-      <View style={{ gap: 8, marginTop: 12 }}>
-        <Button
-          label={busy ? "Working…" : isWeb ? "Create and download" : "Create and share"}
-          icon="shield-lock-outline"
-          onPress={create}
-          disabled={busy || createProblem !== null}
-        />
-        <Button label="Restore from a file" icon="backup-restore" mode="outlined" onPress={restore} disabled={busy || passphrase === ""} />
-      </View>
-      <PanelText>Restore adds the data from a backup file to what is here (type its passphrase first). Restoring twice changes nothing.</PanelText>
+      </Text>
+      <TextField label="Passphrase (at least 8 characters)" value={passphrase} onChangeText={setPassphrase} secure />
+      <TextField
+        label="Repeat passphrase (to create)"
+        value={confirm}
+        onChangeText={setConfirm}
+        secure
+        error={passphrase.length > 0 && confirm.length > 0 && createProblem ? createProblem : undefined}
+      />
+      <Box gap="sm">
+        <Button label={busy ? "Working…" : isWeb ? "Create and download" : "Create and share"} icon="shield-lock-outline" onPress={create} disabled={busy || createProblem !== null} />
+        <Button label="Restore from a file" icon="backup-restore" variant="outline" onPress={restore} disabled={busy || passphrase === ""} />
+      </Box>
+      <Text variant="caption" tone="muted">Restore adds the data from a backup file to what is here (type its passphrase first). Restoring twice changes nothing.</Text>
 
       {canKeepBackupsOnDevice ? (
         <>
-          <PanelDivider />
-          <PanelText style={{ marginTop: 0, fontWeight: "700" }}>Automatic backups</PanelText>
-          <PanelText style={{ marginTop: 4 }}>
+          <Divider />
+          <Text variant="bodyStrong">Automatic backups</Text>
+          <Text variant="caption" tone="muted">
             When you open the app and the newest automatic backup is older than the interval, a new one is saved in the app's backup folder (the last 3 are kept). To do that without asking, the phone has to remember the passphrase: it is kept in this phone's secure storage, only if you choose so below.
-          </PanelText>
+          </Text>
           <Segmented
-            style={{ marginTop: 12 }}
             value={settings.schedule}
-            onValueChange={(v) => saved && !busy && void setSchedule(v as BackupSchedule)}
-            buttons={[
+            onChange={(v) => saved && !busy && void setSchedule(v)}
+            options={[
               { value: "off", label: "Off" },
               { value: "daily", label: "Daily" },
               { value: "weekly", label: "Weekly" },
             ]}
           />
           {!saved ? (
-            <FieldMessage tone="info">Type a passphrase above and save it to turn automatic backups on.</FieldMessage>
+            <Note>Type a passphrase above and save it to turn automatic backups on.</Note>
           ) : settings.schedule !== "off" ? (
-            <FieldMessage tone="info">{last ? `Latest automatic backup: ${new Date(last).toLocaleString()}.` : "No automatic backup yet."}</FieldMessage>
+            <Note>{last ? `Latest automatic backup: ${new Date(last).toLocaleString()}.` : "No automatic backup yet."}</Note>
           ) : null}
-          <View style={{ marginTop: 12 }}>
-            {saved ? (
-              <ConfirmAction
-                label="Forget the saved passphrase"
-                icon="key-remove"
-                question="Forget the saved passphrase?"
-                consequence="Automatic backups switch off. Backups you already made still open with the passphrase, so keep it somewhere safe."
-                confirmLabel="Yes, forget it"
-                onConfirm={() => void forget()}
-                disabled={busy}
-              />
-            ) : (
-              <Button
-                label="Remember passphrase on this phone"
-                icon="key-outline"
-                mode="outlined"
-                onPress={remember}
-                disabled={busy || passphrase === ""}
-              />
-            )}
-          </View>
+          {saved ? (
+            <ConfirmAction
+              label="Forget the saved passphrase"
+              icon="key-remove"
+              question="Forget the saved passphrase?"
+              consequence="Automatic backups switch off. Backups you already made still open with the passphrase, so keep it somewhere safe."
+              confirmLabel="Yes, forget it"
+              onConfirm={() => void forget()}
+              disabled={busy}
+            />
+          ) : (
+            <Button label="Remember passphrase on this phone" icon="key-outline" variant="outline" onPress={remember} disabled={busy || passphrase === ""} />
+          )}
           {canPickBackupFolder ? (
-            <View style={{ marginTop: 8 }}>
+            <Box gap="xs">
               {settings.folderUri ? (
-                <Button label="Stop writing to my folder" icon="folder-remove-outline" mode="text" onPress={clearFolder} disabled={busy} />
+                <Button label="Stop writing to my folder" icon="folder-remove-outline" variant="ghost" onPress={clearFolder} disabled={busy} />
               ) : (
-                <Button label="Also write to a folder I choose" icon="folder-outline" mode="outlined" onPress={pickFolder} disabled={busy} />
+                <Button label="Also write to a folder I choose" icon="folder-outline" variant="outline" onPress={pickFolder} disabled={busy} />
               )}
-              <PanelText>A folder that a cloud app syncs makes the backup survive losing the phone.</PanelText>
-            </View>
+              <Text variant="caption" tone="muted">A folder that a cloud app syncs makes the backup survive losing the phone.</Text>
+            </Box>
           ) : null}
         </>
       ) : null}
-      {status ? <FieldMessage tone={status.error ? "error" : "ok"}>{status.text}</FieldMessage> : null}
-    </SettingsPanel>
+      {status ? <Note tone={status.error ? "error" : "ok"}>{status.text}</Note> : null}
+    </Expandable>
   );
 }

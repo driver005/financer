@@ -1,9 +1,7 @@
 import { useEffect } from "react";
-import { Linking, Platform, View } from "react-native";
+import { Linking, Platform } from "react-native";
+import { Box, Button, ScanFrame, Spinner, Text } from "@financer/ui";
 
-import { ScanFrame } from "@/components/grocery/ScanFrame";
-import { ActivityIndicator, Text } from "@/components/kit";
-import { Body, Button, useColors } from "@/components/ui";
 import { loadCamera } from "@/native/camera";
 import { BARCODE_TYPES } from "@/scan";
 
@@ -26,7 +24,6 @@ export function BarcodeScanner({ onCode }: { onCode: (data: string) => void }) {
 }
 
 function Scanner({ cam, onCode }: { cam: CameraModule; onCode: (data: string) => void }) {
-  const c = useColors();
   const [permission, request] = cam.useCameraPermissions();
 
   useEffect(() => {
@@ -36,13 +33,13 @@ function Scanner({ cam, onCode }: { cam: CameraModule; onCode: (data: string) =>
     }
   }, [permission, request]);
 
-  if (!permission) return <ActivityIndicator accessibilityLabel="Checking camera access" />;
+  if (!permission) return <Spinner />;
 
   if (!permission.granted) {
     return (
-      <View style={{ gap: 8 }}>
-        <Body bold>Camera access is off</Body>
-        <Text variant="bodyMedium" style={{ color: c.muted }}>
+      <Box gap="sm">
+        <Text variant="bodyStrong">Camera access is off</Text>
+        <Text variant="label" tone="muted">
           {permission.canAskAgain
             ? "Financer needs the camera to read barcodes. Nothing is recorded or uploaded; only the number is looked up."
             : "You turned camera access off for Financer. Turn it on in the system settings, or type the number under the barcode."}
@@ -50,22 +47,24 @@ function Scanner({ cam, onCode }: { cam: CameraModule; onCode: (data: string) =>
         {permission.canAskAgain ? (
           <Button label="Allow camera" icon="camera" onPress={() => void request()} />
         ) : Platform.OS !== "web" ? (
-          <Button label="Open system settings" icon="cog-outline" mode="outlined" onPress={() => void Linking.openSettings()} />
+          <Button label="Open system settings" icon="cog-outline" variant="outline" onPress={() => void Linking.openSettings()} />
         ) : null}
-      </View>
+      </Box>
     );
   }
 
-  const { CameraView } = cam;
   return (
-    <ScanFrame live hint="Hold the barcode inside the frame" height={280}>
-      <CameraView
-        style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
-        facing="back"
-        barcodeScannerSettings={{ barcodeTypes: [...BARCODE_TYPES] }}
-        onBarcodeScanned={(e) => onCode(e.data)}
-        accessibilityLabel="Camera view for scanning a barcode"
-      />
-    </ScanFrame>
+    <ScanFrame
+      live
+      tall
+      hint="Hold the barcode inside the frame"
+      camera={cam.CameraView as never}
+      cameraProps={{
+        facing: "back",
+        barcodeScannerSettings: { barcodeTypes: [...BARCODE_TYPES] },
+        onBarcodeScanned: (e: { data: string }) => onCode(e.data),
+        accessibilityLabel: "Camera view for scanning a barcode",
+      }}
+    />
   );
 }

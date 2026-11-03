@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { categoryShares, curveGeometry, curveSummary, donutArcs, isSpend, lastWeek, periodCurve, sharesSummary, spendComparison, weekSummary } from "../src/todayCharts";
+import { categoryShares, curveGeometry, curveSummary, isSpend, lastWeek, periodCurve, sharesSummary, spendComparison, weekSummary } from "../src/todayCharts";
 
 const tx = (booking_date: string, amount_cents: number, category: string | null = "groceries") => ({ booking_date, amount_cents, category });
 const period = { start: "2026-10-01", end: "2026-10-31" };
@@ -116,27 +116,6 @@ describe("categoryShares", () => {
     const r = categoryShares([tx("2026-10-02", -750, "groceries"), tx("2026-10-02", -250, "dining")], p);
     assert.match(sharesSummary(r.total, r.shares), /Groceries 75 %, Dining 25 %/);
     assert.equal(sharesSummary(0, []), "No spending in this period yet.");
-  });
-});
-
-describe("donutArcs", () => {
-  const r = 50;
-  const circ = 2 * Math.PI * r;
-  it("lays the shares end to end around the circle", () => {
-    const arcs = donutArcs([0.5, 0.25, 0.25], r, 0);
-    assert.equal(arcs[0].offset, 0);
-    assert.ok(Math.abs(arcs[1].offset + circ * 0.5) < 1e-9);
-    assert.ok(Math.abs(arcs[2].offset + circ * 0.75) < 1e-9);
-    assert.equal(arcs[0].dash, `${(circ * 0.5).toFixed(2)} ${(circ * 0.5).toFixed(2)}`);
-  });
-  it("leaves a gap between neighbours but none for a single share", () => {
-    const [a, b] = donutArcs([0.5, 0.5], r, 4);
-    assert.equal(Number(a.dash.split(" ")[0]), Number((circ * 0.5 - 4).toFixed(2)));
-    assert.ok(b.offset < a.offset);
-    assert.equal(donutArcs([1], r, 4)[0].dash.split(" ")[0], circ.toFixed(2));
-  });
-  it("never goes negative for a sliver", () => {
-    assert.ok(donutArcs([0.0001, 0.9999], r, 6).every((a) => Number(a.dash.split(" ")[0]) >= 0));
   });
 });
 

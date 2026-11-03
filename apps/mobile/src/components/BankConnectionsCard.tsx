@@ -1,6 +1,7 @@
 import { Link, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Text as RNText, View } from "react-native";
+import { Linking } from "react-native";
+import { Badge, Box, Button, Card, Divider, Expandable, Note, Row, Spinner, Text, TextField } from "@financer/ui";
 
 import type { BankConnection } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -23,11 +24,8 @@ import {
   stateTone,
   syncButtonLabel,
 } from "@/bankConnections";
-import { ActivityIndicator, HelperText, Text, TextInput } from "@/components/kit";
-import { Badge } from "@/components/Watchdog";
-import { SettingsPanel } from "@/components/settings/SettingsKit";
-import { Body, Button, useColors } from "@/components/ui";
 import { formatCents, formatDate } from "@/format";
+import { toTone } from "@/uiTone";
 
 /**
  * Settings card: the bank connections that are set up in the server's financer.toml, from either
@@ -39,7 +37,6 @@ import { formatCents, formatDate } from "@/format";
  */
 export function BankConnectionsCard() {
   const { api, mode } = useApi();
-  const c = useColors();
   const [list, setList] = useState<BankConnection[] | null>(null);
   const [unreadable, setUnreadable] = useState(false);
   const [pins, setPins] = useState<Record<string, string>>({});
@@ -158,10 +155,10 @@ export function BankConnectionsCard() {
         ? `${first.name} · ${stateLabel(first)}`
         : `${list.length} accounts${attention ? ` · ${attention.name}: ${stateLabel(attention)}` : ""}`;
   return (
-    <SettingsPanel icon="bank-transfer" title="Bank connections" summary={summary} defaultOpen={attention !== undefined}>
+    <Expandable icon="bank-transfer" title="Bank connections" summary={summary} defaultOpen={attention !== undefined}>
       {list.length === 0 ? (
         <>
-          <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
+          <Text variant="caption" tone="muted">
             {embedded
               ? "The on-phone backend does not read a financer.toml, so no connection can be set up here."
               : unreadable
@@ -169,21 +166,17 @@ export function BankConnectionsCard() {
                 : "No bank connection is set up in financer.toml on your server."}{" "}
             With one, the server can sync by itself on a schedule and you only approve in your banking app. See docs/CONFIG.md.
           </Text>
-          <Text variant="bodySmall" style={{ color: c.muted, marginTop: 8 }}>
-            You can still sync by hand, entering your bank details each time:
-          </Text>
+          <Text variant="caption" tone="muted">You can still sync by hand, entering your bank details each time:</Text>
           <Link href="/sync" asChild>
-            <Button label="Sync with Sparkasse" icon="bank-transfer" mode="outlined" onPress={() => {}} />
+            <Button label="Sync with Sparkasse" icon="bank-transfer" variant="outline" onPress={() => {}} />
           </Link>
         </>
       ) : (
         <>
-          <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
-            These connections are set up under Server settings, Bank accounts (or in financer.toml on the server). A bank (FinTS) connection never
-            stores your PIN: it comes from the server's environment or you type it here, and every login needs your approval in
-            the banking app. A Plaid connection needs neither: you sign in to your bank once on Plaid's page.
+          <Text variant="caption" tone="muted">
+            These connections are set up under Server settings, Bank accounts (or in financer.toml on the server). A bank (FinTS) connection never stores your PIN: it comes from the server's environment or you type it here, and every login needs your approval in the banking app. A Plaid connection needs neither: you sign in to your bank once on Plaid's page.
           </Text>
-          {list.map((conn) => {
+          {list.map((conn, index) => {
             const key = connectionKey(conn);
             const pin = pins[key] ?? "";
             const waiting = conn.state === "needs_approval";
@@ -193,114 +186,82 @@ export function BankConnectionsCard() {
             const next = nextSyncText(conn, now);
             const left = approvalLeftText(conn, now);
             return (
-              <View key={key} style={{ marginTop: 16, borderTopWidth: 2, borderTopColor: c.border, paddingTop: 12 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <View style={{ flex: 1 }}>
-                    <Body bold>{conn.name}</Body>
-                    <RNText style={{ color: c.muted, fontSize: 13 }}>{connectionSubtitle(conn)}</RNText>
-                  </View>
-                  <Badge text={stateLabel(conn)} tone={stateTone(conn)} />
-                </View>
+              <Box key={key} gap="sm">
+                {index > 0 ? <Divider /> : null}
+                <Row justify="between" gap="sm">
+                  <Box grow>
+                    <Text variant="bodyStrong">{conn.name}</Text>
+                    <Text variant="caption" tone="muted">{connectionSubtitle(conn)}</Text>
+                  </Box>
+                  <Badge label={stateLabel(conn)} tone={toTone(stateTone(conn))} />
+                </Row>
 
                 {waiting ? (
-                  <View
-                    accessibilityLiveRegion="polite"
-                    style={{ marginTop: 10, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: c.accent }}
-                  >
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                      <ActivityIndicator />
-                      <RNText style={{ color: c.text, fontSize: 15, fontWeight: "700", flex: 1 }}>
-                        Approve the login in your banking app
-                      </RNText>
-                    </View>
-                    {conn.message ? <RNText style={{ color: c.text, marginTop: 6 }}>{conn.message}</RNText> : null}
-                    <RNText style={{ color: c.muted, fontSize: 13, marginTop: 6 }}>
-                      You can close this screen: the server imports as soon as you approve. {left ?? ""}
-                    </RNText>
-                    <Button mode="text" label="Cancel" onPress={() => void cancel(conn)} />
-                  </View>
+                  <Card variant="outline" gap="sm">
+                    <Box accessibilityRole="alert" gap="sm">
+                      <Row gap="md">
+                        <Spinner />
+                        <Box grow><Text variant="bodyStrong">Approve the login in your banking app</Text></Box>
+                      </Row>
+                      {conn.message ? <Text variant="body">{conn.message}</Text> : null}
+                      <Text variant="caption" tone="muted">{`You can close this screen: the server imports as soon as you approve. ${left ?? ""}`}</Text>
+                    </Box>
+                    <Button variant="ghost" label="Cancel" onPress={() => void cancel(conn)} />
+                  </Card>
                 ) : null}
                 {signingIn ? (
-                  <View
-                    accessibilityLiveRegion="polite"
-                    style={{ marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: c.accent }}
-                  >
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                      <ActivityIndicator />
-                      <RNText style={{ color: c.text, fontSize: 15, fontWeight: "700", flex: 1 }}>
-                        Sign in to your bank on Plaid's page
-                      </RNText>
-                    </View>
-                    <RNText style={{ color: c.text, marginTop: 6 }}>
-                      Your bank login goes to Plaid, not to this app. When you are done, this screen updates and the first
-                      sync starts by itself. {left ?? ""}
-                    </RNText>
-                    <Button label="Open the sign-in page" icon="open-in-new" mode="outlined" onPress={() => void openLink(conn, key)} />
-                    <Button mode="text" label="Cancel" onPress={() => void cancel(conn)} />
-                  </View>
+                  <Card variant="outline" gap="sm">
+                    <Box accessibilityRole="alert" gap="sm">
+                      <Row gap="md">
+                        <Spinner />
+                        <Box grow><Text variant="bodyStrong">Sign in to your bank on Plaid's page</Text></Box>
+                      </Row>
+                      <Text variant="body">{`Your bank login goes to Plaid, not to this app. When you are done, this screen updates and the first sync starts by itself. ${left ?? ""}`}</Text>
+                    </Box>
+                    <Button label="Open the sign-in page" icon="open-in-new" variant="outline" onPress={() => void openLink(conn, key)} />
+                    <Button variant="ghost" label="Cancel" onPress={() => void cancel(conn)} />
+                  </Card>
                 ) : null}
                 {conn.state === "syncing" ? (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
-                    <ActivityIndicator />
-                    <RNText style={{ color: c.text, flex: 1 }}>
-                      {isPlaid(conn) ? "Reading transactions from Plaid…" : "Logging in or fetching transactions…"}
-                    </RNText>
-                  </View>
+                  <Row gap="md">
+                    <Spinner />
+                    <Box grow><Text variant="body">{isPlaid(conn) ? "Reading transactions from Plaid…" : "Logging in or fetching transactions…"}</Text></Box>
+                  </Row>
                 ) : null}
-                {conn.state === "error" && conn.message ? <HelperText type="error" visible>{conn.message}</HelperText> : null}
-                {errors[key] ? <HelperText type="error" visible>{errors[key]}</HelperText> : null}
+                {conn.state === "error" && conn.message ? <Note tone="error">{conn.message}</Note> : null}
+                {errors[key] ? <Note tone="error">{errors[key]}</Note> : null}
 
                 {conn.balance_cents != null ? (
-                  <RNText style={{ color: c.muted, fontSize: 13, marginTop: 6 }}>
-                    Balance {formatCents(conn.balance_cents)}
-                    {conn.balance_date ? ` (${formatDate(conn.balance_date)})` : ""}
-                  </RNText>
+                  <Text variant="caption" tone="muted">{`Balance ${formatCents(conn.balance_cents)}${conn.balance_date ? ` (${formatDate(conn.balance_date)})` : ""}`}</Text>
                 ) : null}
-                {accounts ? <RNText style={{ color: c.muted, fontSize: 13, marginTop: 4 }}>Accounts: {accounts}</RNText> : null}
-                {last ? <RNText style={{ color: c.muted, fontSize: 13, marginTop: 4 }}>{last}</RNText> : null}
-                {next ? <RNText style={{ color: c.muted, fontSize: 13, marginTop: 4 }}>{next}</RNText> : null}
+                {accounts ? <Text variant="caption" tone="muted">{`Accounts: ${accounts}`}</Text> : null}
+                {last ? <Text variant="caption" tone="muted">{last}</Text> : null}
+                {next ? <Text variant="caption" tone="muted">{next}</Text> : null}
 
                 {!isBusy(conn) ? (
-                  <View style={{ marginTop: 10 }}>
-                    {needsTypedPin(conn) ? (
-                      <TextInput
-                        mode="outlined"
-                        label="PIN (used for this sync only)"
-                        accessibilityLabel={`PIN for ${conn.name}`}
-                        value={pin}
-                        onChangeText={(v) => setPins((cur) => ({ ...cur, [key]: v }))}
-                        secureTextEntry
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        style={{ marginBottom: 8 }}
-                      />
-                    ) : null}
+                  <Box gap="sm">
+                    {needsTypedPin(conn) ? <TextField label="PIN (used for this sync only)" value={pin} onChangeText={(v) => setPins((cur) => ({ ...cur, [key]: v }))} secure /> : null}
                     <Button
                       label={syncButtonLabel(conn, starting === key)}
                       icon={needsLinking(conn) ? "link-variant" : "bank-transfer"}
                       onPress={() => void sync(conn)}
                       disabled={starting !== null || !canSync(conn, pin)}
                     />
-                    {isPlaid(conn) && conn.linked && confirming !== key ? (
-                      <Button mode="text" label="Disconnect" icon="link-variant-off" onPress={() => setConfirming(key)} />
-                    ) : null}
+                    {isPlaid(conn) && conn.linked && confirming !== key ? <Button variant="ghost" label="Disconnect" icon="link-variant-off" onPress={() => setConfirming(key)} /> : null}
                     {confirming === key ? (
-                      <View accessibilityLiveRegion="polite" style={{ marginTop: 8 }}>
-                        <RNText style={{ color: c.text }}>
-                          Plaid is told to forget this connection and its access is deleted here. The transactions you already have
-                          stay. You sign in again to reconnect.
-                        </RNText>
-                        <Button label="Disconnect" icon="link-variant-off" mode="outlined" onPress={() => disconnect(conn)} />
-                        <Button mode="text" label="Keep it" onPress={() => setConfirming(null)} />
-                      </View>
+                      <Box gap="sm" accessibilityRole="alert">
+                        <Text variant="body">Plaid is told to forget this connection and its access is deleted here. The transactions you already have stay. You sign in again to reconnect.</Text>
+                        <Button label="Disconnect" icon="link-variant-off" variant="outline" tone="danger" onPress={() => disconnect(conn)} />
+                        <Button variant="ghost" label="Keep it" onPress={() => setConfirming(null)} />
+                      </Box>
                     ) : null}
-                  </View>
+                  </Box>
                 ) : null}
-              </View>
+              </Box>
             );
           })}
         </>
       )}
-    </SettingsPanel>
+    </Expandable>
   );
 }
