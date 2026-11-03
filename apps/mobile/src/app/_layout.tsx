@@ -1,4 +1,6 @@
+import { ShareIntentProvider } from "expo-share-intent";
 import { Tabs } from "expo-router";
+import { Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ThemeProvider, fill } from "@financer/ui";
@@ -10,15 +12,18 @@ import { BackupOnOpen } from "@/components/BackupOnOpen";
 import "@/native/background"; // defines the background task at startup
 import { NotificationSync } from "@/components/NotificationSync";
 import { OnboardingGate } from "@/components/OnboardingGate";
+import { ShareRedirect } from "@/components/ShareRedirect";
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView {...fill}>
+      <ShareIntentProvider options={{ disabled: Platform.OS === "web" }}>
       <ThemeProvider>
       <ApiProvider>
         {/* dark icons on the light theme, light icons on the dark one (the default left white ones on white) */}
         <StatusBar style="auto" />
         <NotificationSync />
+        <ShareRedirect />
         <OnboardingGate />
         <AppFrame>
         <Tabs screenOptions={{ headerShown: false }} tabBar={() => null}>
@@ -36,6 +41,7 @@ export default function RootLayout() {
           <Tabs.Screen name="receipt-sources" options={{ title: "Receipt sources" }} />
           <Tabs.Screen name="rewe-sync" options={{ title: "REWE receipts" }} />
           <Tabs.Screen name="orders-import" options={{ title: "Online orders" }} />
+          <Tabs.Screen name="share" options={{ title: "Shared with Financer" }} />
           <Tabs.Screen name="server-config" options={{ title: "Server settings" }} />
           <Tabs.Screen name="sync" options={{ title: "Sync with Sparkasse" }} />
           <Tabs.Screen name="rules" options={{ title: "Rules" }} />
@@ -54,6 +60,7 @@ export default function RootLayout() {
         <AppLockOverlay />
       </ApiProvider>
       </ThemeProvider>
+      </ShareIntentProvider>
     </GestureHandlerRootView>
   );
 }

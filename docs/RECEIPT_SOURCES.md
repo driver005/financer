@@ -332,3 +332,43 @@ the same purchase.
   flagged as not adding up to its total.
 - It needs a new build of the phone app, because `react-native-webview` is a native module. It may break at any
   change of REWE's web shop and may go against REWE's terms of use.
+
+## The other supermarkets and online shops
+
+Looked up on 2026-11-03 (what the shops and the press say; none of it tried with an account):
+
+| Shop | What exists | What works in Financer |
+| --- | --- | --- |
+| dm | digital receipt in the "Mein dm" app since 2021 | in-app only; **share** it to Financer (below) |
+| Rossmann | digital receipt in the Rossmann app since May 2025 (technology: anybill, which can also save a receipt as a PDF) | **share** the PDF or a screenshot |
+| Penny | eBon in the PENNY app since April 2026 (off until switched on) | **share** |
+| Edeka, Netto | receipts inside the Edeka app; Netto unclear | **share** |
+| Aldi | no digital receipt found | photograph the paper receipt |
+| Amazon | no connection for private customers: "Login with Amazon" only gives name, e-mail and postal code; the official way to the order history is "request your data" (a CSV after a few days to about a month) | **Online orders** import below |
+| eBay | no buyer export; the API only returns what you won in the last 60 days; the official data request exists | the same CSV import, if the file has the usual columns |
+
+From 1 January 2028 a draft law makes the digital receipt the standard (a QR code at the till, e-mail or app, no
+shop app needed). Nothing is known about the format yet.
+
+### Online orders from a file (Settings > Receipt sources > Online orders)
+
+Pick the CSV, see what was found, import. The columns are found by their **heading**, not their place (Amazon renamed
+"Total Amount" to "Total Owed" between versions), English or German: order number, order date, product name, quantity
+and an amount (the total, or the unit price times the quantity). Rows with the same order number become one order;
+cancelled rows, other currencies, rows without an amount or a readable date are left out and counted in the preview.
+A file whose columns are not found is refused with the headings it has. The orders are stored as receipts of the shop
+(`orders_file`), once per shop and order number, and matched to bank payments. The file is read on the phone; the server
+only receives the orders (`POST /v1/receipts/orders/import`, at most 200 orders of 200 lines).
+
+It was tested with files shaped like the documented Amazon export and run end to end in a desktop browser against the
+real server; **it was not tried with a real Amazon file**, whose exact columns differ between versions.
+
+### Share to Financer (phone app only)
+
+The share menu of the phone gets a Financer entry (`expo-share-intent`): share a receipt (PDF, JPEG, PNG or text)
+from the dm, Rossmann, Edeka, Netto or Penny app, a PDF invoice, or an order CSV. The Share screen says what it is and
+reads it only after you tap the button: a receipt goes through the same reading as a scanned one (your configured AI
+provider, the items stored once), a CSV opens the order import. A link cannot be read, and HEIC photos are refused with
+the reason. iOS gets a share extension (a second target in the Xcode project); Android gets intent filters for PDF,
+images and text. **It needs a new native build, was never run on a phone**, and the iOS extension may need extra signing
+setup for device builds.

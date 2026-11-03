@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Banner, Box, Button, Card, Stack, Text, TextField } from "@financer/ui";
 
 import { BATCH, previewText, readOrders, type OrderFile } from "@/orderCsv";
@@ -8,6 +8,7 @@ import { Page } from "@/components/Page";
 import { NeedsSetup } from "@/components/Status";
 import { pickTextFile } from "@/native/files";
 import { runText } from "@/reweSync";
+import { takeCsv } from "@/shareImport";
 
 /**
  * Online orders from a file the shop produced: Amazon's "request your data" gives the order history
@@ -21,6 +22,20 @@ export default function OrdersImport() {
   const [shop, setShop] = useState("");
   const [message, setMessage] = useState<{ tone: "info" | "danger" | "success"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // a CSV shared to Financer from another app waits here
+  useEffect(() => {
+    const held = takeCsv();
+    if (!held) return;
+    const r = readOrders(held.text);
+    if (!r.ok) {
+      setMessage({ tone: "danger", text: r.reason });
+      return;
+    }
+    setFile(r.file);
+    setShop(r.file.shop ?? "");
+    setMessage({ tone: "info", text: `${held.name}: ${previewText(r.file)}` });
+  }, []);
 
   if (loaded && !api) {
     return (
