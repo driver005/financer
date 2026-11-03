@@ -17,12 +17,14 @@ pub mod finance;
 pub mod json;
 pub mod mail;
 pub mod raw;
+pub mod shop;
 pub mod transport;
 
 pub use error::SdkError;
 pub use finance::FinanceSdk;
 pub use mail::MailSdk;
 pub use raw::{ApiClient, RawRequest, RawResponse};
+pub use shop::ShopSdk;
 #[cfg(feature = "http")]
 pub use transport::HttpTransport;
 pub use transport::{Request, Response, Transport};
