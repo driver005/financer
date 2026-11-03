@@ -410,6 +410,25 @@ export class Api {
 
   // ---- categorization: rules, corrections, splits, AI suggestions ----
 
+  /**
+   * Where the shopping assistant's current subscription plans end (a phone or internet contract).
+   * The assistant runs under `/v1/shop` on the same server when the build has it; without it, or
+   * without a plan, the answer is an empty list.
+   */
+  async shopContracts(): Promise<{ category: string; name: string; plan: string | null; endsOn: string }[]> {
+    try {
+      const categories = await this.request<{ id: string; name: string; kind: string }[]>("/v1/shop/categories");
+      const out: { category: string; name: string; plan: string | null; endsOn: string }[] = [];
+      for (const c of categories.filter((x) => x.kind === "subscription")) {
+        const plan = await this.request<{ name?: string | null; ends_on?: string | null } | null>(`/v1/shop/my/${encodeURIComponent(c.id)}`);
+        if (plan?.ends_on) out.push({ category: c.id, name: c.name, plan: plan.name ?? null, endsOn: plan.ends_on });
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
   // ---- calendar ----
 
   calendars() {
