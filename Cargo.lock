@@ -1761,6 +1761,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "financer-mail-store"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "financer-mail-core",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+]
+
+[[package]]
 name = "financer-plaid"
 version = "0.1.0"
 dependencies = [
