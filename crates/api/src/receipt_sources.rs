@@ -545,3 +545,218 @@ pub async fn kaufland_status(state: State<AppState>) -> Result<Json<LidlStatusDt
 pub async fn kaufland_disconnect(state: State<AppState>) -> Result<StatusCode, ApiError> {
     ReceiptSourceRoutes::kaufland_disconnect(state).await
 }
+
+// ---- REWE receipts the app fetched in its own browser window ----
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ReweKnownRequest {
+    /// REWE's receipt ids the app has just listed.
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ReweKnownDto {
+    /// The ids that are not stored yet: fetch and push only these.
+    pub unknown: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ReweLineInput {
+    pub name: String,
+    /// 1 to 99.
+    pub quantity: u32,
+    /// What the line cost in cents (negative for a refund).
+    pub total_cents: i64,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ReweReceiptInput {
+    /// REWE's id of the receipt.
+    pub id: String,
+    /// Local day of the purchase, `YYYY-MM-DD`.
+    #[schema(example = "2026-03-02")]
+    pub date: String,
+    /// Local time, `HH:MM`.
+    pub time: Option<String>,
+    pub store: Option<String>,
+    /// The printed total in cents; the sum of the lines when absent.
+    pub total_cents: Option<i64>,
+    pub lines: Vec<ReweLineInput>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ReweImportRequest {
+    /// At most 100 receipts.
+    pub receipts: Vec<ReweReceiptInput>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ReweImportDto {
+    pub imported: u32,
+    pub duplicates: u32,
+    pub skipped: u32,
+    /// Receipts matched to a bank payment by this import.
+    pub linked: u64,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ReweStatusDto {
+    /// Unix seconds of the last push.
+    pub last_import: Option<i64>,
+    /// Receipts that came this way.
+    pub receipts: u64,
+}
+
+const MAX_CENTS: i64 = 100_000_000;
+
+fn bad(msg: impl Into<String>) -> ApiError {
+    ApiError::BadRequest(msg.into())
+}
+
+fn rewe_id_ok(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 100
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':' | b'.'))
+}
+
+fn rewe_receipt(
+    r: &ReweReceiptInput,
+) -> Result<financer_receipt_sources::rewe::ImportReceipt, ApiError> {
+    use financer_core::Money;
+    use financer_receipt_sources::rewe::{ImportLine, ImportReceipt, MAX_LINES};
+    if !rewe_id_ok(&r.id) {
+        return Err(bad("a receipt id is empty, too long or has odd characters"));
+    }
+    let date = time::Date::parse(
+        &r.date,
+        time::macros::format_description!("[year]-[month]-[day]"),
+    )
+    .map_err(|_| bad("date must be YYYY-MM-DD"))?;
+    let time = match r.time.as_deref() {
+        None | Some("") => None,
+        Some(t) => {
+            let ok = t.len() == 5
+                && t.as_bytes()[2] == b':'
+                && t[..2].parse::<u8>().is_ok_and(|h| h < 24)
+                && t[3..].parse::<u8>().is_ok_and(|m| m < 60);
+            if !ok {
+                return Err(bad("time must be HH:MM"));
+            }
+            Some(t.to_string())
+        }
+    };
+    if r.lines.len() > MAX_LINES {
+        return Err(bad("a receipt has too many lines"));
+    }
+    let cents_ok = |c: i64| c.abs() <= MAX_CENTS;
+    if r.total_cents.is_some_and(|c| !cents_ok(c)) {
+        return Err(bad("an amount is out of range"));
+    }
+    let mut lines = Vec::new();
+    for l in &r.lines {
+        let name = l.name.trim();
+        if name.is_empty() || name.chars().count() > 200 {
+            return Err(bad("a line has no name or a name over 200 characters"));
+        }
+        if !(1..=99).contains(&l.quantity) || !cents_ok(l.total_cents) {
+            return Err(bad("a line has a quantity or an amount out of range"));
+        }
+        lines.push(ImportLine {
+            name: name.to_string(),
+            quantity: l.quantity,
+            total: Money::from_cents(l.total_cents),
+        });
+    }
+    Ok(ImportReceipt {
+        id: r.id.clone(),
+        date,
+        time,
+        store: r
+            .store
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.chars().take(80).collect()),
+        total: r.total_cents.map(Money::from_cents),
+        lines,
+    })
+}
+
+/// Which of REWE's receipt ids are not stored yet. The app calls it with the list it just read, so
+/// that it fetches the details of the new ones only.
+#[utoipa::path(post, path = "/v1/receipts/rewe/known", request_body = ReweKnownRequest, responses(
+    (status = 200, body = ReweKnownDto),
+    (status = 400, description = "Too many ids or an odd id", body = ErrorBody)),
+    security(("bearer" = [])))]
+pub async fn rewe_known(
+    State(state): State<AppState>,
+    Json(req): Json<ReweKnownRequest>,
+) -> Result<Json<ReweKnownDto>, ApiError> {
+    if req.ids.len() > 1000 || req.ids.iter().any(|i| !rewe_id_ok(i)) {
+        return Err(bad("too many ids, or an id with odd characters"));
+    }
+    let unknown = financer_receipt_sources::rewe::unknown_ids(&state.store, &req.ids)
+        .await
+        .map_err(sync_error)?;
+    Ok(Json(ReweKnownDto { unknown }))
+}
+
+/// Store receipts the app read from REWE's web shop, once each, and match them to bank payments.
+/// Experimental: see docs/RECEIPT_SOURCES.md.
+#[utoipa::path(post, path = "/v1/receipts/rewe/import", request_body = ReweImportRequest, responses(
+    (status = 200, body = ReweImportDto),
+    (status = 400, description = "A receipt is malformed or there are too many", body = ErrorBody)),
+    security(("bearer" = [])))]
+pub async fn rewe_import(
+    State(state): State<AppState>,
+    Json(req): Json<ReweImportRequest>,
+) -> Result<Json<ReweImportDto>, ApiError> {
+    if req.receipts.len() > financer_receipt_sources::rewe::MAX_RECEIPTS {
+        return Err(bad("too many receipts in one call (at most 100)"));
+    }
+    let receipts = req
+        .receipts
+        .iter()
+        .map(rewe_receipt)
+        .collect::<Result<Vec<_>, _>>()?;
+    let summary = financer_receipt_sources::rewe::import(&state.store, &receipts)
+        .await
+        .map_err(sync_error)?;
+    let matcher = financer_core::StoreMatcher::with_aliases(&[]);
+    let linked = financer_receipt_sources::Linker::run(&state.store, &matcher)
+        .await
+        .map_err(sync_error)?;
+    Ok(Json(ReweImportDto {
+        imported: summary.imported,
+        duplicates: summary.duplicates,
+        skipped: summary.skipped,
+        linked: linked as u64,
+        notes: summary.notes,
+    }))
+}
+
+/// When the app last pushed REWE receipts and how many came this way.
+#[utoipa::path(get, path = "/v1/receipts/rewe/status", responses(
+    (status = 200, body = ReweStatusDto)), security(("bearer" = [])))]
+pub async fn rewe_status(State(state): State<AppState>) -> Result<Json<ReweStatusDto>, ApiError> {
+    let (last_import, receipts) = financer_receipt_sources::rewe::status(&state.store)
+        .await
+        .map_err(sync_error)?;
+    Ok(Json(ReweStatusDto {
+        last_import,
+        receipts,
+    }))
+}
+
+/// Forget when the app last pushed. Receipts already stored stay.
+#[utoipa::path(delete, path = "/v1/receipts/rewe", responses(
+    (status = 204, description = "Forgotten")), security(("bearer" = [])))]
+pub async fn rewe_forget(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+    financer_receipt_sources::rewe::forget(&state.store)
+        .await
+        .map_err(sync_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}

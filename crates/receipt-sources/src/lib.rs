@@ -19,6 +19,7 @@ pub mod mail;
 pub mod matching;
 pub mod message;
 pub mod reader;
+pub mod rewe;
 pub mod secret;
 pub mod summary;
 pub mod syncer;

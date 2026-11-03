@@ -246,6 +246,10 @@ async fn every_route_needs_the_token() {
         (Method::POST, "/v1/receipts/kaufland/finish"),
         (Method::GET, "/v1/receipts/kaufland/status"),
         (Method::DELETE, "/v1/receipts/kaufland"),
+        (Method::POST, "/v1/receipts/rewe/known"),
+        (Method::POST, "/v1/receipts/rewe/import"),
+        (Method::GET, "/v1/receipts/rewe/status"),
+        (Method::DELETE, "/v1/receipts/rewe"),
     ] {
         let (status, _) = f.send(method.clone(), uri, None, false).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {uri}");
@@ -536,4 +540,110 @@ async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect(
         .await
         .unwrap()
         .is_none());
+}
+
+#[tokio::test]
+async fn rewe_receipts_pushed_by_the_app_are_stored_once_and_linked() {
+    let store = Store::connect("sqlite::memory:").await.unwrap();
+    let f = Fixture {
+        app: Api::router(AppState::new(store.clone()), TokenHash::new(TOKEN)),
+        store: store.clone(),
+        mailbox: FakeMailbox::new(1),
+        http: Arc::new(FakeLidlHttp::default()),
+        dir: std::env::temp_dir().join("financer-api-receipts-rewe"),
+    };
+    let (status, st) = f.get("/v1/receipts/rewe/status").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        (st["last_import"].is_null(), st["receipts"].as_i64()),
+        (true, Some(0))
+    );
+
+    let ids = json!({"ids": ["r1", "r2"]});
+    let (status, known) = f.post("/v1/receipts/rewe/known", Some(ids.clone())).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(known["unknown"], json!(["r1", "r2"]));
+
+    let body = json!({"receipts": [{
+        "id": "r1", "date": "2026-03-02", "time": "17:05", "store": "Köln-Ehrenfeld", "total_cents": 367,
+        "lines": [
+            {"name": "Vollmilch 3,5%", "quantity": 2, "total_cents": 218},
+            {"name": "Bio Bananen", "quantity": 1, "total_cents": 149}
+        ]
+    }]});
+    let (status, r) = f.post("/v1/receipts/rewe/import", Some(body.clone())).await;
+    assert_eq!(status, StatusCode::OK, "{r}");
+    assert_eq!(
+        (r["imported"].as_i64(), r["duplicates"].as_i64()),
+        (Some(1), Some(0))
+    );
+    let (_, again) = f.post("/v1/receipts/rewe/import", Some(body)).await;
+    assert_eq!(
+        (again["imported"].as_i64(), again["duplicates"].as_i64()),
+        (Some(0), Some(1))
+    );
+
+    let (_, known) = f.post("/v1/receipts/rewe/known", Some(ids)).await;
+    assert_eq!(known["unknown"], json!(["r2"]));
+    let (_, st) = f.get("/v1/receipts/rewe/status").await;
+    assert_eq!(
+        (st["receipts"].as_i64(), st["last_import"].is_null()),
+        (Some(1), false)
+    );
+    let (_, receipts) = f.get("/v1/receipts").await;
+    assert!(receipts
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|r| r["source"] == "rewe_app" && r["chain"] == "rewe"));
+
+    let (status, _) = f
+        .send(Method::DELETE, "/v1/receipts/rewe", None, true)
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, st) = f.get("/v1/receipts/rewe/status").await;
+    assert!(st["last_import"].is_null());
+}
+
+#[tokio::test]
+async fn rewe_pushes_are_checked() {
+    let store = Store::connect("sqlite::memory:").await.unwrap();
+    let f = Fixture {
+        app: Api::router(AppState::new(store.clone()), TokenHash::new(TOKEN)),
+        store,
+        mailbox: FakeMailbox::new(1),
+        http: Arc::new(FakeLidlHttp::default()),
+        dir: std::env::temp_dir().join("financer-api-receipts-rewe2"),
+    };
+    let line = json!({"name": "Butter", "quantity": 1, "total_cents": 299});
+    let one = |patch: Value| {
+        let mut r = json!({"id": "r1", "date": "2026-03-02", "lines": [line.clone()]});
+        for (k, v) in patch.as_object().unwrap() {
+            r[k] = v.clone();
+        }
+        json!({"receipts": [r]})
+    };
+    for bad in [
+        one(json!({"id": ""})),
+        one(json!({"id": "../x"})),
+        one(json!({"date": "02.03.2026"})),
+        one(json!({"time": "25:00"})),
+        one(json!({"total_cents": 1_000_000_000_000_i64})),
+        one(json!({"lines": [{"name": " ", "quantity": 1, "total_cents": 1}]})),
+        one(json!({"lines": [{"name": "x", "quantity": 0, "total_cents": 1}]})),
+    ] {
+        let (status, _) = f.post("/v1/receipts/rewe/import", Some(bad.clone())).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let many: Vec<Value> = (0..101)
+        .map(|i| json!({"id": format!("r{i}"), "date": "2026-03-02", "lines": [line.clone()]}))
+        .collect();
+    let (status, _) = f
+        .post("/v1/receipts/rewe/import", Some(json!({"receipts": many})))
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = f
+        .post("/v1/receipts/rewe/known", Some(json!({"ids": ["a b"]})))
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }

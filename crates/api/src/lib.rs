@@ -301,6 +301,10 @@ impl AppState {
         receipt_sources::kaufland_finish,
         receipt_sources::kaufland_status,
         receipt_sources::kaufland_disconnect,
+        receipt_sources::rewe_known,
+        receipt_sources::rewe_import,
+        receipt_sources::rewe_status,
+        receipt_sources::rewe_forget,
         grocery::affordability,
         grocery::recipes,
         grocery::recipe_ideas,
@@ -397,6 +401,13 @@ impl AppState {
         receipt_sources::LidlStartDto,
         receipt_sources::LidlFinishRequest,
         receipt_sources::LidlStatusDto,
+        receipt_sources::ReweKnownRequest,
+        receipt_sources::ReweKnownDto,
+        receipt_sources::ReweLineInput,
+        receipt_sources::ReweReceiptInput,
+        receipt_sources::ReweImportRequest,
+        receipt_sources::ReweImportDto,
+        receipt_sources::ReweStatusDto,
         dto::ScanDto,
         dto::ChainAffordabilityDto,
         dto::StapleDto,
@@ -568,6 +579,10 @@ impl Api {
                 "/receipts/kaufland",
                 delete(receipt_sources::kaufland_disconnect),
             )
+            .route("/receipts/rewe/known", post(receipt_sources::rewe_known))
+            .route("/receipts/rewe/import", post(receipt_sources::rewe_import))
+            .route("/receipts/rewe/status", get(receipt_sources::rewe_status))
+            .route("/receipts/rewe", delete(receipt_sources::rewe_forget))
             .route("/affordability", get(grocery::affordability))
             .route("/recipes", get(grocery::recipes))
             .route("/recipes/ideas", post(grocery::recipe_ideas))
