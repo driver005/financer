@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Badge, Box, Button, Card, Expandable, Group, ListItem, Note, Text, VirtualList } from "@financer/ui";
+import { Badge, Box, Button, Card, Expandable, Group, ListItem, Note, Section, Text, VirtualList } from "@financer/ui";
 
 import type { Api, LidlStatus, ReceiptSource } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -15,6 +15,7 @@ import {
   lastSyncText,
   nextRunText,
   noSourceText,
+  SHOP_GUIDES,
   setupSteps,
   sourceBlurb,
   sourceIcon,
@@ -90,9 +91,22 @@ export default function ReceiptSources() {
         }
         footer={
           data ? (
+            <Box gap="lg">
+              <Section title="REWE, Kaufland, Penny, ALDI" description="These shops have no public interface for receipts, so Financer cannot sign in to their apps. This is what works for each.">
+                <Card gap="sm">
+                  {SHOP_GUIDES.map((g) => (
+                    <Expandable key={g.shop} icon="storefront-outline" title={g.shop} summary={g.summary}>
+                      {g.steps.map((step, i) => (
+                        <Text key={i} variant="caption" tone="muted">{`${i + 1}. ${step}`}</Text>
+                      ))}
+                    </Expandable>
+                  ))}
+                </Card>
+              </Section>
             <Text variant="caption" tone="muted">
               New receipts are matched to your bank payments when the shop, the amount (within a cent) and the date (within three days) fit and nothing else does. Passwords are never stored in the app or the config file.
             </Text>
+            </Box>
           ) : null
         }
         renderItem={(s) =>

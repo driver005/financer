@@ -254,3 +254,20 @@ pure helpers of the screen.
   documentation was not reachable either, so the behaviour of the authentication session on iOS with
   a custom callback scheme, and the Android intent filter, are taken from the package's own type
   definitions and general knowledge, not from a run.
+
+## REWE, Kaufland, Penny and ALDI
+
+None of the four has a public interface for receipts, and Financer does not sign in to their apps. Looked up on
+2026-11-03 from what the shops and press say, not tried with accounts:
+
+| Shop | What the shop offers | What works in Financer |
+| --- | --- | --- |
+| REWE | eBon in the REWE app or account; the PDF is mailed to the account's address and kept under "Meine Einkäufe" | the **Email** source reads the PDF. The REWE app's own interface is protected (Cloudflare mutual TLS since March 2024, certificates from the APK), so an app sign-in is not an option |
+| Kaufland | digital receipt in the Kaufland app with the Kaufland Card ("Papierbon sparen") | screenshot of the receipt, scanned under Receipts; the Email source picks up any receipt mail that does arrive |
+| Penny | eBon in the PENNY app (off until switched on) | same as Kaufland |
+| ALDI | no digital receipt found | photograph the paper receipt |
+
+An unofficial sign-in like the Lidl Plus one would need the app's real traffic (captured with your own account)
+to build and test; I found no public project that has worked this out for Kaufland or Penny. If you capture it
+(for example with mitmproxy) a sign-in can be added behind a switch, off by default, like Lidl Plus. The same
+applies to the terms of use of each shop. The guide in Settings > Receipt sources shows the table above.
