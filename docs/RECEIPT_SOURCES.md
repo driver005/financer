@@ -267,7 +267,19 @@ None of the four has a public interface for receipts, and Financer does not sign
 | Penny | eBon in the PENNY app (off until switched on) | same as Kaufland |
 | ALDI | no digital receipt found | photograph the paper receipt |
 
-An unofficial sign-in like the Lidl Plus one would need the app's real traffic (captured with your own account)
-to build and test; I found no public project that has worked this out for Kaufland or Penny. If you capture it
-(for example with mitmproxy) a sign-in can be added behind a switch, off by default, like Lidl Plus. The same
-applies to the terms of use of each shop. The guide in Settings > Receipt sources shows the table above.
+What other people have worked out (read in their public code on 2026-11-03, none of it run by me):
+
+- **Kaufland**: the Bonfire project (`Naxter/bonfire`, pull request 26, file `backend/app/kaufland.py`) signs in through
+  Kaufland's own account page (OAuth with PKCE, `account.kaufland.com`, the redirect goes to the app's own
+  address) and reads the receipt history from a private API of the Schwarz group (`p.crm-dynamics.schwarz`,
+  `/api/v2/customers/{user}/transactions`), sending the app's client id and version. Its author says the API is
+  made for the app, is not stable, and was only tested with fake answers. A second project (`receipt-radar`) says
+  the receipt host is certificate-pinned, which a program written like the app's own client would meet too. This is
+  the same family of sign-in as Lidl Plus, so Financer could follow the Lidl Plus module.
+- **REWE**: `grocy-rewe-connect` reads `shop.rewe.de/api/receipts/` with the `rstp` session cookie copied from a
+  browser that is signed in to the REWE account (it expires and cannot be refreshed by a program). The app's own
+  API is behind client certificates (see above) and no project covers receipts there.
+- **Penny and ALDI**: nothing found.
+
+None of this is an official interface; it can stop working at any app update and may go against the shops' terms
+of use. Nothing of it is built into Financer yet. The guide in Settings > Receipt sources shows the table above.
