@@ -254,7 +254,7 @@ describe("shop guides", () => {
   });
 });
 
-import { SOURCE_ORDER, signInPromises, signInStateText, sourceBlurb, sourceTitle, setupSteps as steps } from "../src/receiptSources";
+import { signInPromises, signInStateText } from "../src/receiptSources";
 
 describe("the Kaufland Card source", () => {
   it("is one of the sources, between Lidl Plus and the folder", () => {
@@ -276,7 +276,7 @@ describe("the Kaufland Card source", () => {
     assert.equal(signInStateText("Kaufland", "disabled", null, 0, true), "Switched off on this phone");
   });
   it("has setup steps on a server and on the phone", () => {
-    assert.ok(steps("kaufland_card", false)[0].includes("[receipts.kaufland]"));
-    assert.ok(steps("kaufland_card", true)[0].includes("this phone"));
+    assert.ok(setupSteps("kaufland_card", false)[0].includes("[receipts.kaufland]"));
+    assert.ok(setupSteps("kaufland_card", true)[0].includes("this phone"));
   });
 });

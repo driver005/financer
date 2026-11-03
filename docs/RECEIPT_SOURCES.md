@@ -9,6 +9,7 @@ sources, each **off until you configure it**:
 | **Email** | receipt mails (REWE eBon as PDF, other shops' mails) from your mailbox over IMAP | the main route |
 | **Folder** | PDF, text, HTML or `.eml` files dropped into a folder on the server | simple and robust |
 | **Lidl Plus** | your Lidl Plus receipts, after you sign in on Lidl's own page | **experimental and unofficial** |
+| **Kaufland Card** | digital receipts of your Kaufland Card, after you sign in on Kaufland's own page | experimental and unofficial, see below |
 
 All three feed the same receipts list as the manual ones, so the usual-items learning, the
 receipts screen and the matching below treat them alike. A receipt knows where it came from
@@ -263,7 +264,7 @@ None of the four has a public interface for receipts, and Financer does not sign
 | Shop | What the shop offers | What works in Financer |
 | --- | --- | --- |
 | REWE | eBon in the REWE app or account; the PDF is mailed to the account's address and kept under "Meine Einkäufe" | the **Email** source reads the PDF. The REWE app's own interface is protected (Cloudflare mutual TLS since March 2024, certificates from the APK), so an app sign-in is not an option |
-| Kaufland | digital receipt in the Kaufland app with the Kaufland Card ("Papierbon sparen") | screenshot of the receipt, scanned under Receipts; the Email source picks up any receipt mail that does arrive |
+| Kaufland | digital receipt in the Kaufland app with the Kaufland Card ("Papierbon sparen") | the **Kaufland Card** source below (unofficial sign-in); or a screenshot of the receipt, scanned under Receipts |
 | Penny | eBon in the PENNY app (off until switched on) | same as Kaufland |
 | ALDI | no digital receipt found | photograph the paper receipt |
 
@@ -282,4 +283,24 @@ What other people have worked out (read in their public code on 2026-11-03, none
 - **Penny and ALDI**: nothing found.
 
 None of this is an official interface; it can stop working at any app update and may go against the shops' terms
-of use. Nothing of it is built into Financer yet. The guide in Settings > Receipt sources shows the table above.
+of use. The Kaufland sign-in is built into Financer (below); REWE's cookie way is not. The guide in Settings > Receipt sources shows the table above.
+
+## Kaufland Card (experimental, unofficial, off by default)
+
+Works like Lidl Plus: switch it on (`[receipts.kaufland] enabled = true` or `FINANCER_RECEIPTS_KAUFLAND=1` on a
+server; a switch in the card on the phone), tap Connect in Settings > Receipt sources and sign in on Kaufland's own
+page (`account.kaufland.com`). The password never reaches Financer; only the refresh token is kept, encrypted with
+the same key as the Lidl Plus one, together with your customer id. New receipts are read from
+`p.crm-dynamics.schwarz/api/v2/customers/{user}/transactions` (20 per page, newest first; a page of known receipts
+ends the run; at most 200 new ones per run) every 12 hours (`poll_hours`).
+
+- Every address, client id and the app version are in `crates/receipt-sources/src/kaufland/consts.rs` and can be
+  overridden under `[receipts.kaufland]` (Settings > Server settings shows the keys).
+- The protocol is taken from the public project Bonfire (see above); it is **not** an official interface, **was not
+  run against a real Kaufland account** (only against fake answers shaped like Bonfire's description), and the
+  receipt host is said to be certificate-pinned for the real app, which may keep a program like this out. Amounts are
+  read as whole cents, as Bonfire documents; refunds become negative lines. If a receipt cannot be read it is noted
+  and not tried again.
+- Only receipts you get digitally exist (the "Papierbon sparen" switch in the Kaufland app).
+- It may break at any app update and may go against Kaufland's terms of use. Switch it off or disconnect any time;
+  disconnecting deletes the token and keeps the receipts already imported.

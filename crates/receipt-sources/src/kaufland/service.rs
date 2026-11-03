@@ -483,8 +483,7 @@ mod tests {
             .http
             .requests()
             .into_iter()
-            .filter(|q| q.url.contains("/token-srv/token"))
-            .last()
+            .rfind(|q| q.url.contains("/token-srv/token"))
             .unwrap();
         let form: std::collections::HashMap<_, _> = used.form.iter().cloned().collect();
         assert_eq!(form["grant_type"], "refresh_token");

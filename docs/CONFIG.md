@@ -135,7 +135,7 @@ Unknown keys are an error that names the key (to catch typos), everywhere, `[rec
 | `[bank.plaid] client_id`, `secret`, `environment`, `country_codes`, `language`, `redirect_uri` | `FINANCER_PLAID_CLIENT_ID`, `FINANCER_PLAID_SECRET`, `FINANCER_PLAID_ENV` | sandbox, DE, de | Plaid keys for `kind = "plaid"` connections, see `docs/BANK_PROVIDERS.md` |
 | `[[bank.accounts]]` | | none | connections to sync, below |
 | `[[stores]]` | | none | your own supermarket spellings, below |
-| `[receipts.email]`, `[receipts.lidl_plus]`, `[receipts.folder]` | `FINANCER_RECEIPTS_*` | all off | automatic receipt import, below |
+| `[receipts.email]`, `[receipts.lidl_plus]`, `[receipts.kaufland]`, `[receipts.folder]` | `FINANCER_RECEIPTS_*` | all off | automatic receipt import, below |
 
 `FINANCER_CONFIG` (path of the file) is the only variable without a key. `RUST_LOG` is unchanged.
 
@@ -213,6 +213,9 @@ password_env = "FINANCER_IMAP_PASSWORD"   # the NAME of the variable that holds 
 [receipts.lidl_plus]              # experimental, unofficial
 enabled = true                    # default false; country = "DE", language = "de", poll_hours = 12
 
+[receipts.kaufland]               # experimental, unofficial; same keys as lidl_plus
+enabled = true
+
 [receipts.folder]
 path = "/data/receipts"           # relative paths are relative to the file; poll_seconds = 60
 # on_done = "keep"                # or "move" (to done/)
@@ -223,12 +226,13 @@ Environment variables (they win over the file, value by value; a blank one count
 `_POLL_MINUTES`, `_MARK_SEEN`, `_MAX_AGE_DAYS`, `_ENABLED`, `_PASSWORD_ENV`, `_SENDERS`
 (`rewe=rewe.de,rewe-group.com;lidl=lidl.de`); `FINANCER_RECEIPTS_LIDL_PLUS` (`1` or `0`),
 `FINANCER_RECEIPTS_LIDL_COUNTRY`, `_LIDL_LANGUAGE`, `_LIDL_POLL_HOURS`;
+`FINANCER_RECEIPTS_KAUFLAND` (`1` or `0`), `_KAUFLAND_COUNTRY`, `_KAUFLAND_LANGUAGE`, `_KAUFLAND_POLL_HOURS`;
 `FINANCER_RECEIPTS_FOLDER` (also creates the section), `_FOLDER_POLL_SECONDS`, `_FOLDER_ON_DONE`.
 The mailbox password is read from the variable named by `password_env` (default
 `FINANCER_IMAP_PASSWORD`), unless a password was typed into the app (Settings > Server settings,
 Receipts: mailbox), which keeps it in the server's settings file and uses it first. It is not a key
 to write in `financer.toml`. `FINANCER_SECRET_KEY` (16+ characters) encrypts the stored
-Lidl Plus token; without it the API token is used.
+Lidl Plus and Kaufland Card tokens; without it the API token is used.
 
 `--print-config` shows the section with the mail login masked (`j***@example.org`) and only the
 *name* of the password variable. `--check-config` fails on an empty host, username or folder path and
