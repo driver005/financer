@@ -47,7 +47,11 @@ impl Request {
         }
     }
 
-    pub fn post_json(url: impl Into<String>, bearer: Option<&str>, body: serde_json::Value) -> Self {
+    pub fn post_json(
+        url: impl Into<String>,
+        bearer: Option<&str>,
+        body: serde_json::Value,
+    ) -> Self {
         Self {
             method: Method::Post,
             url: url.into(),

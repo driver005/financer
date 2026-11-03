@@ -384,7 +384,7 @@
         "tags": [
           "bank_connections"
         ],
-        "summary": "Plaid: forget the connection. Tells Plaid to drop it and deletes the stored access token, so\nthe next sync starts with signing in again. The imported transactions stay.",
+        "summary": "Plaid, GoCardless, finAPI: forget the connection. Tells the provider to drop it and deletes\nthe stored access, so the next sync starts with signing in again. The imported transactions stay.",
         "operationId": "disconnect_connection",
         "parameters": [
           {
@@ -408,7 +408,7 @@
             }
           },
           "400": {
-            "description": "Not a Plaid connection",
+            "description": "A FinTS connection has nothing to forget",
             "content": {
               "application/json": {
                 "schema": {
@@ -4380,7 +4380,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "`fints` or `plaid`."
+            "description": "`fints`, `plaid`, `gocardless` or `finapi`."
           },
           "last_result": {
             "oneOf": [

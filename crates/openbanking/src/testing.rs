@@ -107,7 +107,11 @@ impl OpenHttp for FakeHttp {
         let exact = format!("{method} {path}");
         let bare = format!("{method} {}", path.split('?').next().unwrap_or(&path));
         let mut script = self.script.lock().expect("fake lock");
-        let key = if script.contains_key(&exact) { exact } else { bare };
+        let key = if script.contains_key(&exact) {
+            exact
+        } else {
+            bare
+        };
         let queue = script
             .get_mut(&key)
             .ok_or_else(|| format!("the fake has no answer for {key}"))?;

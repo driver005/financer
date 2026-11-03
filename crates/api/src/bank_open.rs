@@ -357,7 +357,10 @@ impl BankOpen {
                 state,
                 conn,
                 run,
-                Err((format!("{} is not configured", Self::label(conn.kind)), false)),
+                Err((
+                    format!("{} is not configured", Self::label(conn.kind)),
+                    false,
+                )),
             )
             .await;
             return;
@@ -415,7 +418,10 @@ impl BankOpen {
     }
 
     /// Forget the connection: tell the provider, delete the credential, stop anything running.
-    pub(crate) async fn disconnect(state: &AppState, conn: &BankConnection) -> Result<(), ApiError> {
+    pub(crate) async fn disconnect(
+        state: &AppState,
+        conn: &BankConnection,
+    ) -> Result<(), ApiError> {
         {
             let mut map = state.bank_connections.runtime.lock().await;
             if let Some(rt) = map.get_mut(&conn.name.to_lowercase()) {
@@ -429,9 +435,10 @@ impl BankOpen {
                 rt.link_url = None;
             }
         }
-        if let (Some(credential), Some(setup)) =
-            (Self::credential(state, conn).await, Self::setup(state, conn.kind))
-        {
+        if let (Some(credential), Some(setup)) = (
+            Self::credential(state, conn).await,
+            Self::setup(state, conn.kind),
+        ) {
             if let Err(e) = setup.provider.revoke(&credential).await {
                 // still forget it here: the provider drops unused access on its own
                 tracing::warn!(connection = %conn.name, "{} did not confirm removing the access: {e}", Self::label(conn.kind));

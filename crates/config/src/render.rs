@@ -118,6 +118,7 @@ impl Renderer {
             &c.bank.fints_product_id,
         );
         Self::plaid(&mut out, c);
+        Self::open_banking(&mut out, c);
         Self::accounts(&mut out, c);
         Self::stores(&mut out, c);
         Self::receipts(&mut out, c);
@@ -315,12 +316,68 @@ impl Renderer {
         let _ = writeln!(out, "language = {}", Self::q(&p.language));
     }
 
+    /// `[bank.gocardless]` and `[bank.finapi]`: shown only when something about them is set. The
+    /// keys are never printed.
+    fn open_banking(out: &mut String, c: &Config) {
+        let g = &c.bank.gocardless;
+        if g.configured()
+            || g.secret_id.value.is_some()
+            || g.secret_key.value.is_some()
+            || c.bank.accounts.iter().any(|a| a.kind == "gocardless")
+        {
+            let _ = writeln!(out, "\n[bank.gocardless]");
+            Self::line(
+                out,
+                "secret_id",
+                Self::secret(&g.secret_id.value),
+                &g.secret_id,
+            );
+            Self::line(
+                out,
+                "secret_key",
+                Self::secret(&g.secret_key.value),
+                &g.secret_key,
+            );
+            let _ = writeln!(out, "language = {}", Self::q(&g.language));
+        }
+        let f = &c.bank.finapi;
+        if f.configured()
+            || f.client_id.value.is_some()
+            || f.client_secret.value.is_some()
+            || c.bank.accounts.iter().any(|a| a.kind == "finapi")
+        {
+            let _ = writeln!(out, "\n[bank.finapi]");
+            Self::line(
+                out,
+                "client_id",
+                Self::secret(&f.client_id.value),
+                &f.client_id,
+            );
+            Self::line(
+                out,
+                "client_secret",
+                Self::secret(&f.client_secret.value),
+                &f.client_secret,
+            );
+            Self::line(
+                out,
+                "environment",
+                Self::q(&f.environment.value),
+                &f.environment,
+            );
+        }
+    }
+
     fn accounts(out: &mut String, c: &Config) {
         for a in &c.bank.accounts {
             let _ = writeln!(out, "\n[[bank.accounts]]   # {}", c.bank.accounts_source);
             let _ = writeln!(out, "name = {}", Self::q(&a.name));
             let _ = writeln!(out, "kind = {}", Self::q(&a.kind));
-            if a.kind == "plaid" {
+            if a.kind != "fints" {
+                if let Some(institution) = a.institution.as_deref().filter(|i| !i.trim().is_empty())
+                {
+                    let _ = writeln!(out, "institution = {}", Self::q(institution));
+                }
                 if !a.account_ids.is_empty() {
                     let _ = writeln!(
                         out,

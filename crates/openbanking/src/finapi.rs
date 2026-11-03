@@ -23,7 +23,9 @@ use zeroize::Zeroizing;
 
 use crate::error::{ApiError, OpenError};
 use crate::http::{Answer, OpenHttp, Request};
-use crate::types::{mask_of, FetchRequest, Fetched, LinkPoll, LinkRequest, LinkStart, LinkedAccount};
+use crate::types::{
+    mask_of, FetchRequest, Fetched, LinkPoll, LinkRequest, LinkStart, LinkedAccount,
+};
 use crate::{cents_of, date_text, parse_date, LinkProvider};
 
 const NAME: &str = "finAPI";
@@ -196,9 +198,16 @@ impl Finapi {
         })
     }
 
-    async fn token(&self, mut fields: Vec<(String, String)>, keys: bool) -> Result<Zeroizing<String>, OpenError> {
+    async fn token(
+        &self,
+        mut fields: Vec<(String, String)>,
+        keys: bool,
+    ) -> Result<Zeroizing<String>, OpenError> {
         fields.push(("client_id".into(), self.cfg.client_id.clone()));
-        fields.push(("client_secret".into(), self.cfg.client_secret.as_str().to_string()));
+        fields.push((
+            "client_secret".into(),
+            self.cfg.client_secret.as_str().to_string(),
+        ));
         let answer = self
             .send(Request::post_form(self.api("/api/v2/oauth/token"), fields))
             .await?;
@@ -214,8 +223,11 @@ impl Finapi {
     }
 
     async fn client_token(&self) -> Result<Zeroizing<String>, OpenError> {
-        self.token(vec![("grant_type".into(), "client_credentials".into())], true)
-            .await
+        self.token(
+            vec![("grant_type".into(), "client_credentials".into())],
+            true,
+        )
+        .await
     }
 
     async fn user_token(&self, user: &User) -> Result<Zeroizing<String>, OpenError> {
@@ -236,8 +248,12 @@ impl Finapi {
         if answer.status != 200 {
             return Err(Self::api_error(&answer, false));
         }
-        serde_json::from_str(&answer.body)
-            .map_err(|e| OpenError::unreadable(NAME, format!("{}: {e}", url.split('?').next().unwrap_or(""))))
+        serde_json::from_str(&answer.body).map_err(|e| {
+            OpenError::unreadable(
+                NAME,
+                format!("{}: {e}", url.split('?').next().unwrap_or("")),
+            )
+        })
     }
 }
 
@@ -251,7 +267,11 @@ impl LinkProvider for Finapi {
         let client = self.client_token().await?;
         let user = User {
             id: format!("financer-{}", uuid::Uuid::new_v4().simple()),
-            password: format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple()),
+            password: format!(
+                "{}{}",
+                uuid::Uuid::new_v4().simple(),
+                uuid::Uuid::new_v4().simple()
+            ),
         };
         let created = self
             .send(Request::post_json(
@@ -287,10 +307,8 @@ impl LinkProvider for Finapi {
                 .find_map(|k| v.get(*k).and_then(Value::as_str))
                 .map(str::to_string)
         };
-        let (Some(url), Some(form)) = (
-            text(&["url", "webFormUrl"]),
-            text(&["id", "webFormId"]),
-        ) else {
+        let (Some(url), Some(form)) = (text(&["url", "webFormUrl"]), text(&["id", "webFormId"]))
+        else {
             let _ = self.delete_user(&user).await;
             return Err(OpenError::unreadable(NAME, "web form: no id or url"));
         };
@@ -352,7 +370,12 @@ impl LinkProvider for Finapi {
             if !req.account_ids.is_empty() && !req.account_ids.contains(&id_text) {
                 continue;
             }
-            let text = |k: &str| a.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+            let text = |k: &str| {
+                a.get(k)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+            };
             let number = text("iban").or_else(|| text("accountNumber"));
             out.accounts.push(LinkedAccount {
                 id: id_text,
@@ -403,7 +426,10 @@ impl LinkProvider for Finapi {
                     None => out.skipped += 1,
                 }
             }
-            let pages = v.pointer("/paging/pageCount").and_then(Value::as_u64).unwrap_or(1);
+            let pages = v
+                .pointer("/paging/pageCount")
+                .and_then(Value::as_u64)
+                .unwrap_or(1);
             if u64::from(page) >= pages {
                 break;
             }
@@ -422,7 +448,10 @@ impl Finapi {
     async fn delete_user(&self, user: &User) -> Result<(), OpenError> {
         let token = self.user_token(user).await?;
         let answer = self
-            .send(Request::delete(self.api("/api/v2/users"), Some(token.as_str())))
+            .send(Request::delete(
+                self.api("/api/v2/users"),
+                Some(token.as_str()),
+            ))
             .await?;
         if (200..300).contains(&answer.status) || answer.status == 404 {
             Ok(())
@@ -441,7 +470,12 @@ impl Finapi {
         let date = ["bankBookingDate", "finapiBookingDate", "valueDate"]
             .iter()
             .find_map(|k| raw.get(*k).and_then(Value::as_str).and_then(parse_date))?;
-        let text = |k: &str| raw.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+        let text = |k: &str| {
+            raw.get(k)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        };
         let purpose = text("purpose").unwrap_or_default().to_string();
         Some(Transaction {
             booking_date: date,
@@ -506,11 +540,25 @@ mod tests {
         assert_eq!(session.form, "wf-1");
         assert!(session.user.id.starts_with("financer-"));
         // the user is created with the client token and with credentials the server invented
-        let created = fake.keys().iter().position(|k| k == "POST /api/v2/users").unwrap();
+        let created = fake
+            .keys()
+            .iter()
+            .position(|k| k == "POST /api/v2/users")
+            .unwrap();
         assert!(fake.call(created).bearer);
-        assert!(fake.call(created).body.get("password").is_none(), "the fake hides it");
-        let form = fake.keys().iter().position(|k| k.contains("webForms")).unwrap();
-        assert_eq!(fake.call(form).body["redirectUrl"], "https://example.org/done");
+        assert!(
+            fake.call(created).body.get("password").is_none(),
+            "the fake hides it"
+        );
+        let form = fake
+            .keys()
+            .iter()
+            .position(|k| k.contains("webForms"))
+            .unwrap();
+        assert_eq!(
+            fake.call(form).body["redirectUrl"],
+            "https://example.org/done"
+        );
         // client token, user, user token, web form
         assert_eq!(fake.count("POST /api/v2/oauth/token"), 2);
     }
@@ -532,7 +580,11 @@ mod tests {
             FakeHttp::new()
                 .answer("POST /api/v2/oauth/token", 200, TOKEN)
                 .answer("POST /api/v2/users", 201, "{}")
-                .answer("POST /api/webForms/bankConnectionImport", 400, r#"{"errors":[{"message":"Not allowed","code":"BAD"}]}"#)
+                .answer(
+                    "POST /api/webForms/bankConnectionImport",
+                    400,
+                    r#"{"errors":[{"message":"Not allowed","code":"BAD"}]}"#,
+                )
                 .answer("DELETE /api/v2/users", 200, "{}"),
         );
         assert!(c.begin(&req()).await.is_err());
@@ -542,15 +594,27 @@ mod tests {
     #[tokio::test]
     async fn poll_follows_the_form_status() {
         let session = serde_json::to_string(&Session {
-            user: User { id: "u1".into(), password: "pw".into() },
+            user: User {
+                id: "u1".into(),
+                password: "pw".into(),
+            },
             form: "wf-1".into(),
         })
         .unwrap();
-        for (status, expect) in [("COMPLETED", "done"), ("NOT_YET_OPENED", "wait"), ("IN_PROGRESS", "wait"), ("ABORTED", "fail")] {
+        for (status, expect) in [
+            ("COMPLETED", "done"),
+            ("NOT_YET_OPENED", "wait"),
+            ("IN_PROGRESS", "wait"),
+            ("ABORTED", "fail"),
+        ] {
             let (c, _) = client(
                 FakeHttp::new()
                     .answer("POST /api/v2/oauth/token", 200, TOKEN)
-                    .answer("GET /api/webForms/wf-1", 200, &format!(r#"{{"status":"{status}"}}"#))
+                    .answer(
+                        "GET /api/webForms/wf-1",
+                        200,
+                        &format!(r#"{{"status":"{status}"}}"#),
+                    )
                     .answer("DELETE /api/v2/users", 200, "{}"),
             );
             let got = c.poll(&session).await;

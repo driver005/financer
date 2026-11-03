@@ -34,7 +34,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use financer_api::{
-    Api, AppState, BankConnection, BankProvider, LlmKeys, PlaidSetup, PriceSourceConfig, TokenHash,
+    Api, AppState, BankConnection, BankProvider, LlmKeys, OpenSetup, PlaidSetup, PriceSourceConfig,
+    TokenHash,
 };
 use financer_config::{
     Admin, Config, Loaded, Loader, Overlay, ProcessEnv, ProviderChoice, Renderer, SettingsFile,
@@ -296,11 +297,12 @@ impl Server {
             .iter()
             .map(|a| BankConnection {
                 name: a.name.trim().to_string(),
-                kind: if a.kind == "plaid" {
-                    BankProvider::Plaid
-                } else {
-                    BankProvider::Fints
-                },
+                kind: BankProvider::parse(&a.kind).unwrap_or(BankProvider::Fints),
+                institution: a
+                    .institution
+                    .as_ref()
+                    .map(|i| i.trim().to_string())
+                    .filter(|i| !i.is_empty()),
                 account_ids: a
                     .account_ids
                     .iter()
@@ -409,6 +411,76 @@ impl Server {
             );
         }
 
+        // GoCardless and finAPI work like Plaid for the app (sign in once, then sync by itself) and
+        // keep their access sealed the same way
+        let gocardless_wanted = config.bank.accounts.iter().any(|a| a.kind == "gocardless");
+        let finapi_wanted = config.bank.accounts.iter().any(|a| a.kind == "finapi");
+        if config.bank.gocardless.configured() || config.bank.finapi.configured() {
+            let secret = std::env::var("FINANCER_SECRET_KEY")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| token.clone());
+            state = state.with_secret_box(
+                financer_receipt_sources::SecretBox::new(&secret)
+                    .map_err(|e| format!("cannot keep the bank access safe: {e}"))?,
+            );
+        }
+        if config.bank.gocardless.configured() {
+            let http = financer_openbanking::ReqwestHttp::new()
+                .map_err(|e| format!("cannot start the GoCardless client: {e}"))?;
+            let provider = financer_openbanking::GoCardless::new(
+                financer_openbanking::GoCardlessConfig::new(
+                    Self::secret(&config.bank.gocardless.secret_id).unwrap_or_default(),
+                    Self::secret(&config.bank.gocardless.secret_key).unwrap_or_default(),
+                ),
+                Arc::new(http),
+            );
+            state = state.with_gocardless(OpenSetup {
+                provider: Arc::new(provider),
+                language: config.bank.gocardless.language.clone(),
+                redirect_uri: config.bank.gocardless.redirect_uri.clone(),
+            });
+            tracing::info!("GoCardless enabled");
+        } else if gocardless_wanted {
+            tracing::warn!(
+                "bank accounts with kind \"gocardless\" are configured but bank.gocardless is not, so they cannot sync"
+            );
+        }
+        if config.bank.finapi.configured() {
+            let environment = financer_openbanking::FinapiEnvironment::parse(
+                &config.bank.finapi.environment.value,
+            )
+            .ok_or("bank.finapi.environment is not known")?;
+            let http = financer_openbanking::ReqwestHttp::new()
+                .map_err(|e| format!("cannot start the finAPI client: {e}"))?;
+            let provider = financer_openbanking::Finapi::new(
+                financer_openbanking::FinapiConfig::new(
+                    Self::secret(&config.bank.finapi.client_id).unwrap_or_default(),
+                    Self::secret(&config.bank.finapi.client_secret).unwrap_or_default(),
+                    environment,
+                ),
+                Arc::new(http),
+            );
+            state = state.with_finapi(OpenSetup {
+                provider: Arc::new(provider),
+                language: "de".to_string(),
+                redirect_uri: config.bank.finapi.redirect_uri.clone(),
+            });
+            tracing::info!(
+                "finAPI enabled ({}){}",
+                environment.name(),
+                if environment == financer_openbanking::FinapiEnvironment::Sandbox {
+                    ": test banks only"
+                } else {
+                    ""
+                }
+            );
+        } else if finapi_wanted {
+            tracing::warn!(
+                "bank accounts with kind \"finapi\" are configured but bank.finapi is not, so they cannot sync"
+            );
+        }
+
         // automatic receipt import (mailbox, Lidl Plus, watched folder) from [receipts]
         match financer_receipt_sources::ReceiptSyncer::live(
             receipt_store,
@@ -432,9 +504,13 @@ impl Server {
                     "bank accounts with kind \"fints\" are configured but there is no FinTS product id, so they cannot sync"
                 );
             }
-            if (fints_wanted && fints_ready) || (plaid_wanted && config.bank.plaid.configured()) {
+            if (fints_wanted && fints_ready)
+                || (plaid_wanted && config.bank.plaid.configured())
+                || (gocardless_wanted && config.bank.gocardless.configured())
+                || (finapi_wanted && config.bank.finapi.configured())
+            {
                 tracing::info!(
-                    "{} bank connection(s) from the config file; FinTS syncs wait for your approval in the banking app, Plaid syncs run by themselves once linked",
+                    "{} bank connection(s) from the config file; FinTS syncs wait for your approval in the banking app, Plaid, GoCardless and finAPI syncs run by themselves once linked",
                     config.bank.accounts.len()
                 );
                 tokio::spawn(Api::run_bank_scheduler(state.clone()));

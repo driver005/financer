@@ -24,8 +24,7 @@ const SERVER_SECRET: &str = "0123456789abcdef-server-secret";
 const GC_KEY: &str = "gocardless-secret-key-1234";
 
 const GC_TOKEN: &str = r#"{"access":"gc-access-token","access_expires":86400}"#;
-const REQ_CREATED: &str =
-    r#"{"id":"requisition-VERY-SECRET","status":"CR","link":"https://ob.gocardless.com/psd2/start/x/Y"}"#;
+const REQ_CREATED: &str = r#"{"id":"requisition-VERY-SECRET","status":"CR","link":"https://ob.gocardless.com/psd2/start/x/Y"}"#;
 const REQ_WAITING: &str = r#"{"id":"requisition-VERY-SECRET","status":"UA"}"#;
 const REQ_LINKED: &str =
     r#"{"id":"requisition-VERY-SECRET","status":"LN","accounts":["acc1","acc2"]}"#;
@@ -155,7 +154,10 @@ impl Fixture {
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        panic!("{name} never reached {state}: {}", self.connection(name).await);
+        panic!(
+            "{name} never reached {state}: {}",
+            self.connection(name).await
+        );
     }
 
     async fn sync(&self, name: &str) -> (StatusCode, Value) {
@@ -300,8 +302,16 @@ async fn rejected_keys_are_reported_as_a_server_setup_problem() {
 async fn an_expired_consent_drops_the_credential_and_asks_to_link_again() {
     let fake = gocardless_script(FakeHttp::new())
         // the second read finds the consent gone
-        .answer("GET /api/v2/requisitions/requisition-VERY-SECRET/", 200, REQ_LINKED)
-        .answer("GET /api/v2/requisitions/requisition-VERY-SECRET/", 200, REQ_EXPIRED);
+        .answer(
+            "GET /api/v2/requisitions/requisition-VERY-SECRET/",
+            200,
+            REQ_LINKED,
+        )
+        .answer(
+            "GET /api/v2/requisitions/requisition-VERY-SECRET/",
+            200,
+            REQ_EXPIRED,
+        );
     let f = Fixture::new(fake, vec![connection("Giro", BankProvider::GoCardless, 0)]).await;
     f.sync("Giro").await;
     f.wait_for("Giro", "idle").await;

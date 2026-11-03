@@ -28,7 +28,9 @@ pub struct LinkStart {
 pub enum LinkPoll {
     Waiting,
     /// Done: keep this (sealed) and use it for every `fetch`.
-    Done { credential: String },
+    Done {
+        credential: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

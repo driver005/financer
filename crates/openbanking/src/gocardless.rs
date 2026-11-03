@@ -21,7 +21,9 @@ use zeroize::Zeroizing;
 
 use crate::error::{ApiError, OpenError};
 use crate::http::{Answer, OpenHttp, Request};
-use crate::types::{mask_of, FetchRequest, Fetched, LinkPoll, LinkRequest, LinkStart, LinkedAccount};
+use crate::types::{
+    mask_of, FetchRequest, Fetched, LinkPoll, LinkRequest, LinkStart, LinkedAccount,
+};
 use crate::{cents_of, date_text, parse_date, LinkProvider};
 
 const NAME: &str = "GoCardless";
@@ -155,7 +157,11 @@ impl GoCardless {
             "secret_key": self.cfg.secret_key.as_str(),
         });
         let answer = self
-            .send(Request::post_json(self.url("/api/v2/token/new/"), None, body))
+            .send(Request::post_json(
+                self.url("/api/v2/token/new/"),
+                None,
+                body,
+            ))
             .await?;
         if answer.status != 200 {
             return Err(Self::api_error(&answer, true));
@@ -270,15 +276,22 @@ impl LinkProvider for GoCardless {
         }
         let mut out = Fetched::default();
         let mut balance: Option<i64> = None;
-        for account in r.accounts.iter().filter(|a| {
-            req.account_ids.is_empty() || req.account_ids.iter().any(|w| w == *a)
-        }) {
+        for account in r
+            .accounts
+            .iter()
+            .filter(|a| req.account_ids.is_empty() || req.account_ids.iter().any(|w| w == *a))
+        {
             let details: Value = self
                 .get(&format!("/api/v2/accounts/{account}/details/"))
                 .await
                 .unwrap_or(Value::Null);
             let d = details.get("account").unwrap_or(&details);
-            let text = |k: &str| d.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+            let text = |k: &str| {
+                d.get(k)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+            };
             let iban = text("iban").or_else(|| text("bban"));
             out.accounts.push(LinkedAccount {
                 id: account.clone(),
@@ -292,7 +305,9 @@ impl LinkProvider for GoCardless {
                 kind: text("cashAccountType").unwrap_or("account").to_string(),
             });
 
-            let balances: Value = self.get(&format!("/api/v2/accounts/{account}/balances/")).await?;
+            let balances: Value = self
+                .get(&format!("/api/v2/accounts/{account}/balances/"))
+                .await?;
             if let Some((cents, date)) = Self::pick_balance(&balances) {
                 *balance.get_or_insert(0) += cents;
                 if let Some(date) = date {
@@ -368,7 +383,9 @@ impl GoCardless {
 
     /// `None`: skipped (another currency or no readable date or amount).
     pub(crate) fn map_transaction(raw: &Value) -> Option<Transaction> {
-        let currency = raw.pointer("/transactionAmount/currency").and_then(Value::as_str);
+        let currency = raw
+            .pointer("/transactionAmount/currency")
+            .and_then(Value::as_str);
         if currency.is_some_and(|c| !c.eq_ignore_ascii_case("EUR")) {
             return None;
         }
@@ -376,7 +393,12 @@ impl GoCardless {
         let date = ["bookingDate", "valueDate", "bookingDateTime"]
             .iter()
             .find_map(|k| raw.get(*k).and_then(Value::as_str).and_then(parse_date))?;
-        let text = |k: &str| raw.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+        let text = |k: &str| {
+            raw.get(k)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        };
         let outgoing = amount < 0;
         let (name, iban) = if outgoing {
             (text("creditorName"), raw.pointer("/creditorAccount/iban"))
@@ -427,7 +449,8 @@ mod tests {
         )
     }
 
-    const TOKEN: &str = r#"{"access":"tok","access_expires":86400,"refresh":"r","refresh_expires":1}"#;
+    const TOKEN: &str =
+        r#"{"access":"tok","access_expires":86400,"refresh":"r","refresh_expires":1}"#;
 
     fn req() -> LinkRequest {
         LinkRequest {
@@ -456,7 +479,10 @@ mod tests {
         let body = fake.call(1).body;
         assert_eq!(body["institution_id"], "SPARKASSE_X");
         assert_eq!(body["user_language"], "DE");
-        assert!(body["reference"].as_str().unwrap().starts_with("girokonto-"));
+        assert!(body["reference"]
+            .as_str()
+            .unwrap()
+            .starts_with("girokonto-"));
         // the call carried the token, and the fake never shows the keys
         assert!(fake.call(1).bearer);
         assert!(fake.call(0).body.get("secret_key").is_none());
@@ -477,7 +503,11 @@ mod tests {
         let (c, fake) = client(
             FakeHttp::new()
                 .answer("POST /api/v2/token/new/", 200, TOKEN)
-                .answer("GET /api/v2/requisitions/r/", 200, r#"{"id":"r","status":"UA"}"#),
+                .answer(
+                    "GET /api/v2/requisitions/r/",
+                    200,
+                    r#"{"id":"r","status":"UA"}"#,
+                ),
         );
         assert_eq!(c.poll("r").await.unwrap(), LinkPoll::Waiting);
         assert_eq!(c.poll("r").await.unwrap(), LinkPoll::Waiting);
@@ -486,7 +516,12 @@ mod tests {
 
     #[tokio::test]
     async fn poll_follows_the_requisition_status() {
-        for (status, done, failed) in [("LN", true, false), ("RJ", false, true), ("EX", false, true), ("GC", false, false)] {
+        for (status, done, failed) in [
+            ("LN", true, false),
+            ("RJ", false, true),
+            ("EX", false, true),
+            ("GC", false, false),
+        ] {
             let (c, _) = client(
                 FakeHttp::new()
                     .answer("POST /api/v2/token/new/", 200, TOKEN)
@@ -498,7 +533,12 @@ mod tests {
             );
             let got = c.poll("r").await;
             match (done, failed) {
-                (true, _) => assert_eq!(got.unwrap(), LinkPoll::Done { credential: "r".into() }),
+                (true, _) => assert_eq!(
+                    got.unwrap(),
+                    LinkPoll::Done {
+                        credential: "r".into()
+                    }
+                ),
                 (_, true) => assert!(matches!(got, Err(OpenError::LinkFailed { .. }))),
                 _ => assert_eq!(got.unwrap(), LinkPoll::Waiting),
             }
@@ -555,7 +595,10 @@ mod tests {
         let rewe = &out.transactions[0];
         assert_eq!(rewe.amount.cents(), -1294);
         assert_eq!(rewe.counterparty, "REWE Markt");
-        assert_eq!(rewe.counterparty_iban.as_deref(), Some("DE02120300000000202051"));
+        assert_eq!(
+            rewe.counterparty_iban.as_deref(),
+            Some("DE02120300000000202051")
+        );
         assert_eq!(out.transactions[1].counterparty, "Arbeitgeber");
         assert_eq!(out.transactions[1].purpose, "Gehalt Mai");
         let asked = fake.keys();
@@ -569,10 +612,26 @@ mod tests {
         let (c, fake) = client(
             FakeHttp::new()
                 .answer("POST /api/v2/token/new/", 200, TOKEN)
-                .answer("GET /api/v2/requisitions/r/", 200, r#"{"id":"r","status":"LN","accounts":["a1","a2"]}"#)
-                .answer("GET /api/v2/accounts/a2/details/", 200, r#"{"account":{"name":"Tagesgeld"}}"#)
-                .answer("GET /api/v2/accounts/a2/balances/", 200, r#"{"balances":[]}"#)
-                .answer("GET /api/v2/accounts/a2/transactions/", 200, r#"{"transactions":{"booked":[]}}"#),
+                .answer(
+                    "GET /api/v2/requisitions/r/",
+                    200,
+                    r#"{"id":"r","status":"LN","accounts":["a1","a2"]}"#,
+                )
+                .answer(
+                    "GET /api/v2/accounts/a2/details/",
+                    200,
+                    r#"{"account":{"name":"Tagesgeld"}}"#,
+                )
+                .answer(
+                    "GET /api/v2/accounts/a2/balances/",
+                    200,
+                    r#"{"balances":[]}"#,
+                )
+                .answer(
+                    "GET /api/v2/accounts/a2/transactions/",
+                    200,
+                    r#"{"transactions":{"booked":[]}}"#,
+                ),
         );
         let out = c
             .fetch(&FetchRequest {
@@ -592,7 +651,11 @@ mod tests {
         let (c, _) = client(
             FakeHttp::new()
                 .answer("POST /api/v2/token/new/", 200, TOKEN)
-                .answer("GET /api/v2/requisitions/r/", 200, r#"{"id":"r","status":"EX","accounts":[]}"#),
+                .answer(
+                    "GET /api/v2/requisitions/r/",
+                    200,
+                    r#"{"id":"r","status":"EX","accounts":[]}"#,
+                ),
         );
         let e = c
             .fetch(&FetchRequest {

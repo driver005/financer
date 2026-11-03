@@ -162,8 +162,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Plaid: forget the connection. Tells Plaid to drop it and deletes the stored access token, so
-         *     the next sync starts with signing in again. The imported transactions stay.
+         * Plaid, GoCardless, finAPI: forget the connection. Tells the provider to drop it and deletes
+         *     the stored access, so the next sync starts with signing in again. The imported transactions stay.
          */
         post: operations["disconnect_connection"];
         delete?: never;
@@ -1472,7 +1472,7 @@ export interface components {
             balance_date?: string | null;
             bank_code: string;
             iban_masked: string;
-            /** @description `fints` or `plaid`. */
+            /** @description `fints`, `plaid`, `gocardless` or `finapi`. */
             kind: string;
             last_result?: components["schemas"]["SyncOutcomeDto"] | null;
             /**
@@ -3410,7 +3410,7 @@ export interface operations {
                     "application/json": components["schemas"]["BankConnectionDto"];
                 };
             };
-            /** @description Not a Plaid connection */
+            /** @description A FinTS connection has nothing to forget */
             400: {
                 headers: {
                     [name: string]: unknown;
