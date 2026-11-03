@@ -106,11 +106,16 @@ jobs:
           cache-dependency-path: |
             packages/ui/package-lock.json
             packages/shopping/package-lock.json
+            packages/mail/package-lock.json
             apps/catalog/package-lock.json
       - name: Tokens, contrast and the no-raw-values guard
         run: |
           npm ci --prefix packages/ui
           npm test --prefix packages/ui
+      - name: Mail client module tests (its screens are type checked with the catalog below)
+        run: |
+          npm ci --prefix packages/mail
+          npm test --prefix packages/mail
       - name: Catalog type check and web bundle
         working-directory: apps/catalog
         run: |

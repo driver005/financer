@@ -134,6 +134,7 @@ shop-test: $(SHOP_STAMP) ## Everything of the shopping assistant: Rust crates, m
 ui-test: ## UI package: token tests, contrast tests and the guard against raw spacing/colours
 	cd packages/ui && npm ci && npm test
 	cd $(SHOP_MOD) && npm ci && npm test
+	cd packages/mail && npm ci && npm test
 
 ui-catalog: ## The catalog of every UI element in the browser (phone, tablet, web; light and dark)
 	cd apps/catalog && npm ci && npx expo start --web

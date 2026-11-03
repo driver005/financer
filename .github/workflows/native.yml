@@ -14,6 +14,7 @@ on:
       - "apps/mobile/scripts/enable-embedded.sh"
       - "apps/shopping/**"
       - "packages/shopping/**"
+      - "packages/mail/**"
       - "packages/ui/**"
       - ".github/workflows/native.yml"
   workflow_dispatch:
