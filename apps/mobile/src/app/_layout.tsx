@@ -34,6 +34,7 @@ export default function RootLayout() {
           <Tabs.Screen name="basket" options={{ title: "Usual items" }} />
           <Tabs.Screen name="receipts" options={{ title: "Receipts" }} />
           <Tabs.Screen name="receipt-sources" options={{ title: "Receipt sources" }} />
+          <Tabs.Screen name="rewe-sync" options={{ title: "REWE receipts" }} />
           <Tabs.Screen name="server-config" options={{ title: "Server settings" }} />
           <Tabs.Screen name="sync" options={{ title: "Sync with Sparkasse" }} />
           <Tabs.Screen name="rules" options={{ title: "Rules" }} />

@@ -2509,6 +2509,140 @@
         ]
       }
     },
+    "/v1/receipts/rewe": {
+      "delete": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Forget when the app last pushed. Receipts already stored stay.",
+        "operationId": "rewe_forget",
+        "responses": {
+          "204": {
+            "description": "Forgotten"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/rewe/import": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Store receipts the app read from REWE's web shop, once each, and match them to bank payments.\nExperimental: see docs/RECEIPT_SOURCES.md.",
+        "operationId": "rewe_import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReweImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReweImportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A receipt is malformed or there are too many",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/rewe/known": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Which of REWE's receipt ids are not stored yet. The app calls it with the list it just read, so\nthat it fetches the details of the new ones only.",
+        "operationId": "rewe_known",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReweKnownRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReweKnownDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Too many ids or an odd id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/rewe/status": {
+      "get": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "When the app last pushed REWE receipts and how many came this way.",
+        "operationId": "rewe_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReweStatusDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/receipts/scan": {
       "post": {
         "tags": [
@@ -7060,6 +7194,182 @@
               "type": "string"
             },
             "description": "Weekly only: MO, TU, WE, TH, FR, SA, SU. Empty means the weekday of the start."
+          }
+        }
+      },
+      "ReweImportDto": {
+        "type": "object",
+        "required": [
+          "imported",
+          "duplicates",
+          "skipped",
+          "linked",
+          "notes"
+        ],
+        "properties": {
+          "duplicates": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "imported": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "linked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Receipts matched to a bank payment by this import.",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ReweImportRequest": {
+        "type": "object",
+        "required": [
+          "receipts"
+        ],
+        "properties": {
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReweReceiptInput"
+            },
+            "description": "At most 100 receipts."
+          }
+        }
+      },
+      "ReweKnownDto": {
+        "type": "object",
+        "required": [
+          "unknown"
+        ],
+        "properties": {
+          "unknown": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The ids that are not stored yet: fetch and push only these."
+          }
+        }
+      },
+      "ReweKnownRequest": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "REWE's receipt ids the app has just listed."
+          }
+        }
+      },
+      "ReweLineInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "quantity",
+          "total_cents"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 to 99.",
+            "minimum": 0
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What the line cost in cents (negative for a refund)."
+          }
+        }
+      },
+      "ReweReceiptInput": {
+        "type": "object",
+        "required": [
+          "id",
+          "date",
+          "lines"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Local day of the purchase, `YYYY-MM-DD`.",
+            "example": "2026-03-02"
+          },
+          "id": {
+            "type": "string",
+            "description": "REWE's id of the receipt."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReweLineInput"
+            }
+          },
+          "store": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "time": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Local time, `HH:MM`."
+          },
+          "total_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The printed total in cents; the sum of the lines when absent."
+          }
+        }
+      },
+      "ReweStatusDto": {
+        "type": "object",
+        "required": [
+          "receipts"
+        ],
+        "properties": {
+          "last_import": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds of the last push."
+          },
+          "receipts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Receipts that came this way.",
+            "minimum": 0
           }
         }
       },

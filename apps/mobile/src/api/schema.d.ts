@@ -825,6 +825,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/receipts/rewe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Forget when the app last pushed. Receipts already stored stay. */
+        delete: operations["rewe_forget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/rewe/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Store receipts the app read from REWE's web shop, once each, and match them to bank payments.
+         *     Experimental: see docs/RECEIPT_SOURCES.md.
+         */
+        post: operations["rewe_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/rewe/known": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Which of REWE's receipt ids are not stored yet. The app calls it with the list it just read, so
+         *     that it fetches the details of the new ones only.
+         */
+        post: operations["rewe_known"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/rewe/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** When the app last pushed REWE receipts and how many came this way. */
+        get: operations["rewe_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/receipts/scan": {
         parameters: {
             query?: never;
@@ -2439,6 +2513,75 @@ export interface components {
             until?: string | null;
             /** @description Weekly only: MO, TU, WE, TH, FR, SA, SU. Empty means the weekday of the start. */
             weekdays: string[];
+        };
+        ReweImportDto: {
+            /** Format: int32 */
+            duplicates: number;
+            /** Format: int32 */
+            imported: number;
+            /**
+             * Format: int64
+             * @description Receipts matched to a bank payment by this import.
+             */
+            linked: number;
+            notes: string[];
+            /** Format: int32 */
+            skipped: number;
+        };
+        ReweImportRequest: {
+            /** @description At most 100 receipts. */
+            receipts: components["schemas"]["ReweReceiptInput"][];
+        };
+        ReweKnownDto: {
+            /** @description The ids that are not stored yet: fetch and push only these. */
+            unknown: string[];
+        };
+        ReweKnownRequest: {
+            /** @description REWE's receipt ids the app has just listed. */
+            ids: string[];
+        };
+        ReweLineInput: {
+            name: string;
+            /**
+             * Format: int32
+             * @description 1 to 99.
+             */
+            quantity: number;
+            /**
+             * Format: int64
+             * @description What the line cost in cents (negative for a refund).
+             */
+            total_cents: number;
+        };
+        ReweReceiptInput: {
+            /**
+             * @description Local day of the purchase, `YYYY-MM-DD`.
+             * @example 2026-03-02
+             */
+            date: string;
+            /** @description REWE's id of the receipt. */
+            id: string;
+            lines: components["schemas"]["ReweLineInput"][];
+            store?: string | null;
+            /** @description Local time, `HH:MM`. */
+            time?: string | null;
+            /**
+             * Format: int64
+             * @description The printed total in cents; the sum of the lines when absent.
+             */
+            total_cents?: number | null;
+        };
+        ReweStatusDto: {
+            /**
+             * Format: int64
+             * @description Unix seconds of the last push.
+             */
+            last_import?: number | null;
+            /**
+             * Format: int64
+             * @description Receipts that came this way.
+             */
+            receipts: number;
         };
         /**
          * @description A user categorization rule. Rules run in list order; the first match wins and beats the
@@ -4697,6 +4840,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LidlStatusDto"];
+                };
+            };
+        };
+    };
+    rewe_forget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Forgotten */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    rewe_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReweImportRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReweImportDto"];
+                };
+            };
+            /** @description A receipt is malformed or there are too many */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    rewe_known: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReweKnownRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReweKnownDto"];
+                };
+            };
+            /** @description Too many ids or an odd id */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    rewe_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReweStatusDto"];
                 };
             };
         };

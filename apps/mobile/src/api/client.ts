@@ -26,6 +26,9 @@ export type ReceiptSource = components["schemas"]["ReceiptSourceDto"];
 export type ReceiptSync = components["schemas"]["ReceiptSyncDto"];
 export type LidlStart = components["schemas"]["LidlStartDto"];
 export type LidlStatus = components["schemas"]["LidlStatusDto"];
+export type ReweStatus = components["schemas"]["ReweStatusDto"];
+export type ReweReceiptInput = components["schemas"]["ReweReceiptInput"];
+export type ReweImportResult = components["schemas"]["ReweImportDto"];
 export type Affordability = components["schemas"]["AffordabilityDto"];
 export type RecipeMatch = components["schemas"]["RecipeMatchDto"];
 export type Idea = components["schemas"]["IdeaDto"];
@@ -245,6 +248,24 @@ export class Api {
 
   lidlDisconnect() {
     return this.request<void>("/v1/receipts/lidl", { method: "DELETE" });
+  }
+
+  /** Which of REWE's receipt ids (read in the app's browser window) are not stored yet. */
+  reweKnown(ids: string[]) {
+    return this.json<components["schemas"]["ReweKnownDto"]>("/v1/receipts/rewe/known", "POST", { ids });
+  }
+
+  /** Store receipts the app read from REWE's web shop. */
+  reweImport(receipts: ReweReceiptInput[]) {
+    return this.json<ReweImportResult>("/v1/receipts/rewe/import", "POST", { receipts });
+  }
+
+  reweStatus() {
+    return this.request<ReweStatus>("/v1/receipts/rewe/status");
+  }
+
+  reweForget() {
+    return this.request<void>("/v1/receipts/rewe", { method: "DELETE" });
   }
 
   /** The Kaufland Card sign-in: same shapes as Lidl Plus, Kaufland's own page. */

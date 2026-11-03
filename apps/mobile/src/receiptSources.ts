@@ -34,6 +34,8 @@ export function sourceTitle(s: string): string {
       return "Lidl Plus";
     case "kaufland_card":
       return "Kaufland Card";
+    case "rewe_app":
+      return "REWE eBon (app)";
     case "folder":
       return "Watched folder";
     default:
@@ -299,11 +301,11 @@ export type ShopGuide = {
 export const SHOP_GUIDES: readonly ShopGuide[] = [
   {
     shop: "REWE",
-    summary: "The eBon comes by email as a PDF. Financer reads it from your mailbox.",
+    summary: "The eBon comes by email as a PDF, or you read it from REWE's web shop in a window of the app (below).",
     steps: [
       "In the REWE app (or your account on rewe.de) switch on the eBon and hold the app to the scanner at the till. Without that scan you get a paper receipt, and a missing eBon cannot be sent again.",
-      "REWE mails the eBon as a PDF to the address of your REWE account.",
-      "Connect that mailbox under Email above (needs your own server). Receipts then arrive by themselves.",
+      "By email: REWE mails the eBon as a PDF to the address of your REWE account. Connect that mailbox under Email above (needs your own server).",
+      "Or in the app: tap Read my REWE receipts below, sign in on REWE's own page in the window and the new receipts are read. Unofficial; needs the phone app.",
     ],
   },
   {

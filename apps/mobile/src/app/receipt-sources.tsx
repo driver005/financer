@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
 import { Badge, Box, Button, Card, Expandable, Group, ListItem, Note, Section, Text, VirtualList } from "@financer/ui";
 
-import type { Api, LidlStatus, ReceiptSource } from "@/api/client";
+import type { Api, LidlStatus, ReceiptSource, ReweStatus } from "@/api/client";
 import { useApi } from "@/api/config";
 import { Page } from "@/components/Page";
+import { ReweCard } from "@/components/receipts/ReweCard";
 import { SignInCard } from "@/components/receipts/SignInCard";
 import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import { useScreenData } from "@/hooks";
@@ -25,11 +26,11 @@ import {
 } from "@/receiptSources";
 import { asIcon, toTone } from "@/uiTone";
 
-type Loaded = { sources: ReceiptSource[]; lidl: LidlStatus | null; kaufland: LidlStatus | null };
+type Loaded = { sources: ReceiptSource[]; lidl: LidlStatus | null; kaufland: LidlStatus | null; rewe: ReweStatus | null };
 
 async function loadAll(api: Api): Promise<Loaded> {
-  const [sources, lidl, kaufland] = await Promise.all([api.receiptSources(), api.lidlStatus().catch(() => null), api.kauflandStatus().catch(() => null)]);
-  return { sources, lidl, kaufland };
+  const [sources, lidl, kaufland, rewe] = await Promise.all([api.receiptSources(), api.lidlStatus().catch(() => null), api.kauflandStatus().catch(() => null), api.reweStatus().catch(() => null)]);
+  return { sources, lidl, kaufland, rewe };
 }
 
 /**
@@ -92,6 +93,7 @@ export default function ReceiptSources() {
         footer={
           data ? (
             <Box gap="lg">
+              <ReweCard status={data.rewe} />
               <Section title="REWE, Kaufland, Penny, ALDI" description="None of these shops has a public interface for receipts. This is what works for each.">
                 <Card gap="sm">
                   {SHOP_GUIDES.map((g) => (

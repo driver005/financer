@@ -263,7 +263,7 @@ None of the four has a public interface for receipts, and Financer does not sign
 
 | Shop | What the shop offers | What works in Financer |
 | --- | --- | --- |
-| REWE | eBon in the REWE app or account; the PDF is mailed to the account's address and kept under "Meine Einkäufe" | the **Email** source reads the PDF. The REWE app's own interface is protected (Cloudflare mutual TLS since March 2024, certificates from the APK), so an app sign-in is not an option |
+| REWE | eBon in the REWE app or account; the PDF is mailed to the account's address and kept under "Meine Einkäufe" | the **Email** source reads the PDF; or the **REWE window** below (unofficial). The REWE app's own interface is protected (Cloudflare mutual TLS since March 2024, certificates from the APK), so only the web shop is used |
 | Kaufland | digital receipt in the Kaufland app with the Kaufland Card ("Papierbon sparen") | the **Kaufland Card** source below (unofficial sign-in); or a screenshot of the receipt, scanned under Receipts |
 | Penny | eBon in the PENNY app (off until switched on) | same as Kaufland |
 | ALDI | no digital receipt found | photograph the paper receipt |
@@ -283,7 +283,7 @@ What other people have worked out (read in their public code on 2026-11-03, none
 - **Penny and ALDI**: nothing found.
 
 None of this is an official interface; it can stop working at any app update and may go against the shops' terms
-of use. The Kaufland sign-in is built into Financer (below); REWE's cookie way is not. The guide in Settings > Receipt sources shows the table above.
+of use. The Kaufland sign-in and the REWE window (below) are built into Financer. The guide in Settings > Receipt sources shows the table above.
 
 ## Kaufland Card (experimental, unofficial, off by default)
 
@@ -304,3 +304,31 @@ ends the run; at most 200 new ones per run) every 12 hours (`poll_hours`).
 - Only receipts you get digitally exist (the "Papierbon sparen" switch in the Kaufland app).
 - It may break at any app update and may go against Kaufland's terms of use. Switch it off or disconnect any time;
   disconnecting deletes the token and keeps the receipts already imported.
+
+## REWE eBon in a window of the app (experimental, unofficial, phone app only)
+
+Settings > Receipt sources > REWE eBon > Read my REWE receipts opens REWE's web shop (`shop.rewe.de`) in a window
+of the app (`react-native-webview`). You sign in there, on REWE's own page. Once signed in, a small script that
+**the app runs inside that page** asks the shop's own address `/api/receipts/` for the list of receipts and then
+fetches the new ones (30 per run, one every 0.4 seconds); the app sends them to your server, which stores each once
+(by REWE's receipt id), matches them to bank payments and treats a copy that also arrived as the mailed PDF eBon as
+the same purchase.
+
+- **No cookie is copied.** The page's own session does the authentication inside the window, so the session cookie
+  never leaves it, whether scripts can read it or not. (Reading cookies out of Chrome is not an option: not from a
+  phone app, and on a computer Chrome 127 and later block it.) Your password is only typed on REWE's page.
+- **Only REWE's pages load** in the window (`*.rewe.de` over https), and the app only believes messages that come from
+  `shop.rewe.de` itself. A receipt id is only used in the script or the address when it consists of letters, digits,
+  `-` and `_`.
+- **Nothing runs by itself**: receipts are read when you open the window. While you are still signed in to REWE
+  there, that happens right away; when the session has run out, you sign in again. There is no background schedule.
+- The server side is `POST /v1/receipts/rewe/known` (which ids are new), `POST /v1/receipts/rewe/import` (at most 100
+  receipts of at most 500 lines, validated), `GET /v1/receipts/rewe/status` and `DELETE /v1/receipts/rewe`.
+- The shape of REWE's answers (`items` with `receiptId`, `receiptTimestamp`, `receiptTotalPrice`; a receipt's
+  `articles` with `productName`, `quantity`, `totalPrice`, all prices in cents) comes from the public project
+  `grocy-rewe-connect`. It is **not** an official interface and **was not run against a real REWE account**; the
+  scripts were run in a desktop browser against a stand-in server with that shape, and the window itself was never
+  run on a phone. Lines without a product name (deposit, counter goods) are left out, so a receipt with such lines is
+  flagged as not adding up to its total.
+- It needs a new build of the phone app, because `react-native-webview` is a native module. It may break at any
+  change of REWE's web shop and may go against REWE's terms of use.
