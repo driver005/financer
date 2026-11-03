@@ -153,11 +153,13 @@ export function LidlCard({
     <Card gap="md">
       <Row gap="md">
         <IconBadge icon="cart-heart" tone="info" />
-        <Box grow>
+        <Box grow gap="xs">
           <Text variant="heading" level={2}>Lidl Plus</Text>
           <Text variant="caption" tone="muted">Experimental and unofficial</Text>
+          <Row>
+            <Badge label={pill.label} tone={toTone(pill.tone)} icon={asIcon(pill.icon)} />
+          </Row>
         </Box>
-        <Badge label={pill.label} tone={toTone(pill.tone)} icon={asIcon(pill.icon)} />
       </Row>
 
       <Text variant="body">{lidlStateText(state, status?.connected_at, now, onPhone)}</Text>

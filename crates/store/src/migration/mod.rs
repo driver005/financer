@@ -14,6 +14,7 @@ mod m20261012_000202_create_category_overrides;
 mod m20261012_000300_create_alert_dismissals;
 mod m20261012_000400_create_meal_plan_days;
 mod m20261013_000500_receipt_sources;
+mod m20261103_000600_create_calendar;
 
 pub struct Migrator;
 
@@ -33,6 +34,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261012_000300_create_alert_dismissals::Migration),
             Box::new(m20261012_000400_create_meal_plan_days::Migration),
             Box::new(m20261013_000500_receipt_sources::Migration),
+            Box::new(m20261103_000600_create_calendar::Migration),
         ]
     }
 }

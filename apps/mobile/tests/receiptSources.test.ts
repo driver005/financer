@@ -241,3 +241,15 @@ describe("on the phone's own backend", () => {
     assert.ok(lidlPromises(true).some((t) => t.startsWith("This is unofficial")));
   });
 });
+
+import { SHOP_GUIDES } from "../src/receiptSources";
+
+describe("shop guides", () => {
+  it("cover the four shops and say what to do in steps", () => {
+    assert.deepEqual(SHOP_GUIDES.map((g) => g.shop), ["REWE", "Kaufland", "Penny", "ALDI"]);
+    for (const g of SHOP_GUIDES) assert.ok(g.summary.length > 0 && g.steps.length >= 2);
+  });
+  it("never promise a sign-in to an app", () => {
+    for (const g of SHOP_GUIDES) assert.ok(!/sign in to (the )?(app|your account)/i.test(g.steps.join(" ")));
+  });
+});

@@ -7,6 +7,7 @@ use axum::Json;
 use financer_core::{BasketItem, Budget, Catalog, Money, Transaction};
 use financer_receipts::ParsedReceipt;
 
+use crate::calendar;
 use crate::dto::*;
 use crate::routes::ApiError;
 use crate::AppState;
@@ -88,6 +89,29 @@ impl ExportRoutes {
                     })
             })
             .collect();
+        let calendars = store.calendars().await?;
+        let names: std::collections::HashMap<i64, String> =
+            calendars.iter().map(|c| (c.id, c.name.clone())).collect();
+        let events = store
+            .all_calendar_events()
+            .await?
+            .into_iter()
+            .filter_map(|e| {
+                let calendar = names.get(&e.event.calendar_id)?.clone();
+                Some(ExportEvent {
+                    calendar,
+                    event: e.into(),
+                })
+            })
+            .collect();
+        let calendars = calendars
+            .into_iter()
+            .map(|c| ExportCalendar {
+                name: c.name,
+                tone: c.tone,
+                visible: c.visible,
+            })
+            .collect();
         Ok(Json(ExportDto {
             version: FORMAT_VERSION,
             transactions,
@@ -99,6 +123,8 @@ impl ExportRoutes {
                 llm_provider: store.get_setting("llm_provider").await?,
                 llm_model: store.get_setting("llm_model").await?,
             },
+            calendars,
+            events,
         }))
     }
 
@@ -156,6 +182,20 @@ impl ExportRoutes {
             }
         }
 
+        // calendars by name, and events checked like any other input
+        if data.calendars.len() > 100 || data.events.len() > MAX_ITEMS {
+            return Err(ApiError::BadRequest("export is too large".into()));
+        }
+        let mut wanted_calendars = Vec::new();
+        for c in &data.calendars {
+            wanted_calendars.push(calendar::check_calendar_input(&c.name, &c.tone, c.visible)?);
+        }
+        let mut wanted_events = Vec::new();
+        for e in data.events {
+            let new = calendar::check_event_input(calendar::EventInput::from_body(0, e.event))?;
+            wanted_events.push((e.calendar, new));
+        }
+
         let txs: Vec<Transaction> = data
             .transactions
             .into_iter()
@@ -205,6 +245,39 @@ impl ExportRoutes {
                 store.set_setting(key, v).await?;
             }
         }
+        let mut existing = store.calendars().await?;
+        for c in wanted_calendars {
+            if !existing.iter().any(|x| x.name == c.name) {
+                existing.push(store.create_calendar(&c).await?);
+            }
+        }
+        let mut events_added = 0;
+        if !wanted_events.is_empty() {
+            let known: Vec<_> = store
+                .all_calendar_events()
+                .await?
+                .into_iter()
+                .map(|e| e.event)
+                .collect();
+            for (name, mut new) in wanted_events {
+                let Some(cal) = existing.iter().find(|c| c.name == name) else {
+                    continue;
+                };
+                new.calendar_id = cal.id;
+                // the same event (calendar, title, start, repeat) is not added twice
+                if known.iter().any(|k| {
+                    k.calendar_id == new.calendar_id
+                        && k.title == new.title
+                        && k.start_date == new.start_date
+                        && k.start_time == new.start_time
+                        && k.repeat_kind == new.repeat_kind
+                }) {
+                    continue;
+                }
+                store.create_event(&new).await?;
+                events_added += 1;
+            }
+        }
         Ok(Json(ImportReportDto {
             transactions_added,
             transactions_known: txs.len() - transactions_added,
@@ -212,6 +285,7 @@ impl ExportRoutes {
             receipts_known: receipts.len() - receipts_added,
             budget_envelopes: budget.envelopes.len(),
             basket_items: basket.len(),
+            events_added,
         }))
     }
 }
