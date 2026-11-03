@@ -72,7 +72,7 @@ export function HeroStats({ items }: { items: { label: string; value: string; sp
   const { colors } = useTheme();
   return (
     <Box gap="md" pt="md">
-      <View style={{ height: size.stroke.sm, backgroundColor: colors.tones.accent.onSolid, opacity: opacity[25] }} />
+      <View style={{ height: size.stroke.hair, backgroundColor: colors.tones.accent.onSolid, opacity: opacity[25] }} />
       <Row gap="md" align="start">
         {items.map((it) => (
           <Box key={it.label} equal accessible accessibilityLabel={`${it.label}: ${it.spoken ?? it.value}`}>

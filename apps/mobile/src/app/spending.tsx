@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { BarChart, Box, Chip, ChipRow, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, IconButton, Money, Note, Section, Text, VirtualList } from "@financer/ui";
+import { BarChart, Box, Chip, ChipRow, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, IconButton, Note, Section, Text, VirtualList } from "@financer/ui";
 
 import type { Split, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -11,7 +11,7 @@ import { SectionSwitch } from "@/components/SectionSwitch";
 import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import { TransactionRow } from "@/components/TransactionRow";
 import { peakText, spendingTrend, trendSummary } from "@/charts";
-import { dayHeading, spokenMoney } from "@/format";
+import { dayHeading, formatMoney, spokenMoney } from "@/format";
 import { pickFileBytes } from "@/native/files";
 import { localIsoDate } from "@/period";
 import { TX_FILTERS, dayTotal, emptyFilterText, filterTx, type TxFilter } from "@/spendingView";
@@ -159,13 +159,12 @@ export default function Spending() {
           )
         }
         renderItem={(g) => (
-          <Section title={dayHeading(g.date, today)}>
+          <Section title={dayHeading(g.date, today)} aside={formatMoney(dayTotal(g.items), { signed: true })}>
             <Group>
               {g.items.map((t) => (
                 <TransactionRow key={t.id} item={t} split={splitIds.has(t.id)} onPress={() => setSelected(t)} />
               ))}
             </Group>
-            <Money cents={dayTotal(g.items)} variant="caption" signed tone="muted" />
           </Section>
         )}
       />

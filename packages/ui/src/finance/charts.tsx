@@ -37,7 +37,7 @@ export function BarChart({
   const { colors } = useTheme();
   const { w, onLayout } = useWidth();
   const h = size.chart[height];
-  const bars = barRects(values, w, h, space.xs, size.stroke.lg);
+  const bars = barRects(values, w, h, space.xs, size.stroke.sm);
   const peak = highlight === undefined ? (Math.max(...values, 0) > 0 ? values.indexOf(Math.max(...values)) : -1) : (highlight ?? -1);
   const ink = onCard ? colors.tones.accent.onSolid : colors.tones.accent.solid;
   return (
@@ -49,10 +49,10 @@ export function BarChart({
               <Rect
                 key={i}
                 x={b.x}
-                y={b.height === 0 ? h - size.stroke.lg : b.y}
+                y={b.height === 0 ? h - size.stroke.sm : b.y}
                 width={b.width}
-                height={b.height === 0 ? size.stroke.lg : b.height}
-                rx={Math.min(size.stroke.xl, b.width / 2)}
+                height={b.height === 0 ? size.stroke.sm : b.height}
+                rx={Math.min(size.stroke.md, b.width / 2)}
                 fill={ink}
                 opacity={b.height === 0 ? opacity[25] : i === peak ? opacity[100] : opacity[50]}
               />
@@ -188,13 +188,13 @@ export function CurveChart({ summary, build }: { summary: string; build: (width:
               <Stop offset="1" stopColor={ink} stopOpacity={0} />
             </LinearGradient>
           </Defs>
-          <Line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke={ink} strokeOpacity={opacity[25]} strokeWidth={size.stroke.md} />
+          <Line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke={ink} strokeOpacity={opacity[25]} strokeWidth={size.stroke.hair} />
           {geo.solid.length > 1 ? <Path d={areaPath(geo.solid, h, pad)} fill="url(#heroFill)" /> : null}
-          {geo.solid.length > 1 ? <Path d={linePath(geo.solid)} stroke={ink} strokeWidth={size.stroke.lg} strokeLinecap="round" strokeLinejoin="round" fill="none" /> : null}
-          {geo.dashed.length > 1 ? <Path d={linePath(geo.dashed)} stroke={ink} strokeOpacity={opacity[75]} strokeWidth={size.stroke.lg} strokeDasharray={`${size.stroke.md} ${space.sm}`} strokeLinecap="round" fill="none" /> : null}
-          {geo.dashed.length > 1 ? <Circle cx={geo.dashed[1].x} cy={geo.dashed[1].y} r={size.stroke.xl} fill="none" stroke={ink} strokeOpacity={opacity[75]} strokeWidth={size.stroke.md} /> : null}
-          <Circle cx={geo.today.x} cy={geo.today.y} r={space.sm + size.stroke.md} fill={ink} fillOpacity={opacity[25]} />
-          <Circle cx={geo.today.x} cy={geo.today.y} r={size.stroke.xl} fill={ink} />
+          {geo.solid.length > 1 ? <Path d={linePath(geo.solid)} stroke={ink} strokeWidth={size.stroke.sm} strokeLinecap="round" strokeLinejoin="round" fill="none" /> : null}
+          {geo.dashed.length > 1 ? <Path d={linePath(geo.dashed)} stroke={ink} strokeOpacity={opacity[75]} strokeWidth={size.stroke.sm} strokeDasharray={`${size.stroke.sm} ${space.sm}`} strokeLinecap="round" fill="none" /> : null}
+          {geo.dashed.length > 1 ? <Circle cx={geo.dashed[1].x} cy={geo.dashed[1].y} r={size.stroke.md} fill="none" stroke={ink} strokeOpacity={opacity[75]} strokeWidth={size.stroke.sm} /> : null}
+          <Circle cx={geo.today.x} cy={geo.today.y} r={size.stroke.lg} fill={ink} fillOpacity={opacity[25]} />
+          <Circle cx={geo.today.x} cy={geo.today.y} r={size.stroke.md} fill={ink} />
         </Svg>
       ) : null}
     </View>
@@ -218,9 +218,9 @@ export function ColumnChart({ columns, average, summary }: { columns: Column[]; 
   return (
     <View accessible accessibilityRole="image" accessibilityLabel={summary}>
       <View style={{ height: plot, flexDirection: "row", gap: space.sm }}>
-        {avgY > 0 ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: avgY, borderTopWidth: size.stroke.md / 2, borderTopColor: colors.text.muted, borderStyle: "dotted", opacity: opacity[75] }} /> : null}
+        {avgY > 0 ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: avgY, borderTopWidth: size.stroke.hair, borderTopColor: colors.text.muted, borderStyle: "dotted", opacity: opacity[75] }} /> : null}
         {columns.map((c, i) => {
-          const hh = c.value > 0 ? Math.max(size.bar.lg, Math.round((c.value / max) * room)) : 0;
+          const hh = c.value > 0 ? Math.max(size.bar.md, Math.round((c.value / max) * room)) : 0;
           return (
             <View key={c.key} style={{ flex: 1, justifyContent: "flex-end", alignItems: "center" }}>
               {i === peak && c.note ? <Text variant="caption" numberOfLines={1}>{c.note}</Text> : null}
@@ -267,10 +267,10 @@ export function useSeriesColor(): (index: number, other?: boolean) => string {
 export function DonutChart({ slices, centre, caption, summary }: { slices: { key: string; share: number; other?: boolean }[]; centre: string; caption: string; summary: string }) {
   const { colors } = useTheme();
   const colour = useSeriesColor();
-  const d = size.ring.xl - size.icon.xl;
-  const sw = size.stroke.xl * 4 + size.stroke.lg;
+  const d = size.ring.xl - size.avatar.lg;
+  const sw = size.stroke.xl;
   const r = (d - sw) / 2;
-  const arcs = donutArcs(slices.map((s) => s.share), r, size.stroke.xl);
+  const arcs = donutArcs(slices.map((s) => s.share), r, size.stroke.md);
   return (
     <View style={{ width: d, height: d, alignItems: "center", justifyContent: "center" }} accessible accessibilityRole="image" accessibilityLabel={summary}>
       <Svg width={d} height={d} style={{ position: "absolute" }}>

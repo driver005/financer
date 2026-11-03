@@ -12,7 +12,7 @@ const ARM = space.xl + space.sm;
 function Corner({ at, colour }: { at: "tl" | "tr" | "bl" | "br"; colour: string }) {
   const top = at[0] === "t";
   const left = at[1] === "l";
-  const w = size.stroke.xl;
+  const w = size.stroke.md;
   return (
     <View
       pointerEvents="none"

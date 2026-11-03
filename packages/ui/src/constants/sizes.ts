@@ -17,7 +17,7 @@ export const size = {
   thumb: { sm: spacing[16], md: spacing[24], lg: spacing[40] },
   ring: { sm: spacing[10], md: spacing[14], lg: spacing[24], xl: spacing[48] },
   /** Line widths of rings and charts. */
-  stroke: { sm: spacing[0.5], md: spacing[1], lg: spacing[2], xl: spacing[4] },
+  stroke: { hair: spacing.px, sm: spacing[0.5], md: spacing[1], lg: spacing[2], xl: spacing[4] },
   bar: { sm: spacing[1.5], md: spacing[2], lg: spacing[3] },
   chart: { sm: spacing[10], md: spacing[16], lg: spacing[24] },
   nav: { bottomBar: spacing[16], rail: spacing[20], sidebar: spacing[64] },

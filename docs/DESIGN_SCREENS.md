@@ -158,3 +158,14 @@ In the app itself (browser, light and dark) the in-app progress card was checked
 
 What is already tested without a device (`packages/shopping/tests/logic.test.ts`): what each notification says, the progress
 values, the Stop action, and that Stop only affects the run that is showing.
+
+## The finance screens against Stitch
+
+Stitch's "Shopping Assistant" project only held shopping screens. For the finance app, Spending and Settings were
+generated there with the same HeroUI design system and compared with the app (Today timed out in Stitch and was
+judged against the design system's own rules instead). What the comparison changed: each day's total now sits on
+the right of the day's heading, the settings groups have quiet muted headings instead of page-sized ones, and the
+chart strokes were corrected (they had been set eight times too thick). Where the app deliberately differs from the
+Stitch drawing: labels stay in sentence case (Stitch drew some in capitals), the expandable settings rows show a
+down arrow where Stitch drew a right arrow, and the hero chart has no peak and date labels under the bars.
+

@@ -43,7 +43,7 @@ export default function SettingsScreen() {
 
   return (
     <Page title="Settings">
-      <Section title="Account & data">
+      <Section quiet title="Account & data">
         <Group>
           <BackendCard settingsLoaded={settings !== null} settingsError={error} />
           {api && mode === "remote" ? <ListItem icon="server-network" tile title="Server settings" subtitle="Keys, bank providers, receipts: everything in financer.toml" onPress={() => router.push("/server-config")} /> : null}
@@ -54,7 +54,7 @@ export default function SettingsScreen() {
         {api && error ? <Note tone="error">{`Could not load your settings: ${error}`}</Note> : null}
       </Section>
 
-      <Section title="Money">
+      <Section quiet title="Money">
         <Group>
           {settings ? <PaydayCard settings={settings} onSave={save} /> : null}
           <ListItem icon="shape-outline" tile title="Categorization rules" subtitle="Match merchants to categories" onPress={() => router.push("/rules")} />
@@ -65,7 +65,7 @@ export default function SettingsScreen() {
         </Group>
       </Section>
 
-      <Section title="Groceries">
+      <Section quiet title="Groceries">
         <Group>
           {settings ? <HabitsCard settings={settings} onSave={save} /> : null}
           <ListItem icon="format-list-checks" tile title="Usual items" subtitle="What you buy most often" onPress={() => router.push("/basket")} />
@@ -87,7 +87,7 @@ export default function SettingsScreen() {
         </Group>
       </Section>
 
-      <Section title="Privacy & security">
+      <Section quiet title="Privacy & security">
         <Group>
           <LockCard />
           <NotificationsCard />
@@ -95,7 +95,7 @@ export default function SettingsScreen() {
         <Text variant="caption" tone="muted">Only item names, offers, diet and budget are ever sent to an AI model, never bank data.</Text>
       </Section>
 
-      <Section title="About">
+      <Section quiet title="About">
         <Group>
           <AboutCard />
           <ListItem
