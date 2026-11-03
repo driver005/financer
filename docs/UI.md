@@ -119,6 +119,11 @@ What the finance screens needed beyond the shopping ones lives in `packages/ui/s
 | `VirtualList` | long lists, in the same readable column as a `Screen` |
 | `Mascot`, `MascotFace`, `Confetti`, `ScanFrame`, `Cover` | the playful and the camera parts |
 
+The calendar (`packages/ui/src/calendar`) adds `MonthGrid`, `TimeGrid` (week, 3 days and day), `AgendaList`
+(schedule), `MiniMonth`, `TimePicker` and `FloatingButton`, and `layout/Scroll` is a scrolling area for pages that
+do not scroll themselves. They take plain data (`CalendarItem`, `DayColumn`, `MonthCell`, ...); the dates and
+repeats are worked out in the app, see [CALENDAR.md](CALENDAR.md).
+
 The app adds a few components of its own on top (`Page` for the title bar, `AppFrame` for the adaptive navigation,
 `Loading`, `Empty` and `NeedsSetup` in `Status.tsx`, `SectionSwitch`); they use only this package.
 

@@ -6,19 +6,21 @@
  *    safe-to-spend card.
  *  - `payday`: the day the next budget period starts (the app's existing period rule).
  *  - `priceDrop`: an item from the usual-items list got cheaper; each drop is announced once.
+ *  - `events`: the reminders of the calendar's events ("Dentist, in 1 hour").
  *
  * The app is English-only (only the number format is German), so the texts are English.
  * Dates are ISO `YYYY-MM-DD` in the phone's local calendar; times are local hour and minute.
  */
 import type { Price, SafeToSpend } from "./api/client";
 import { formatCents } from "./format";
+import { addDays as addCalendarDays, expand, fromDayNumber, reminderText, stamp, timeOf, type EventRule } from "./calendar";
 import { budgetPeriod, periodLabel } from "./period";
 
-export type NotifyKind = "evening" | "payday" | "priceDrop";
-export const NOTIFY_KINDS: NotifyKind[] = ["evening", "payday", "priceDrop"];
+export type NotifyKind = "evening" | "payday" | "priceDrop" | "events";
+export const NOTIFY_KINDS: NotifyKind[] = ["evening", "payday", "priceDrop", "events"];
 
 export type NotifyPrefs = Record<NotifyKind, boolean>;
-export const DEFAULT_PREFS: NotifyPrefs = { evening: false, payday: false, priceDrop: false };
+export const DEFAULT_PREFS: NotifyPrefs = { evening: false, payday: false, priceDrop: false, events: false };
 
 /** Everything is off until the user turns it on; unreadable stored data counts as off. */
 export function parsePrefs(raw: string | null | undefined): NotifyPrefs {
@@ -48,6 +50,7 @@ export type Planned = { id: string; date: string; hour: number; minute: number; 
 
 export const EVENING_ID_PREFIX = "financer.evening.";
 export const PAYDAY_ID_PREFIX = "financer.payday.";
+export const EVENT_ID_PREFIX = "financer.event.";
 
 const DAY_MS = 86_400_000;
 
@@ -232,4 +235,45 @@ export function priceDropMessage(drops: PriceDrop[]): { title: string; body: str
   const shown = drops.slice(0, 3).map(line).join("\n");
   const more = drops.length > 3 ? `\nand ${drops.length - 3} more` : "";
   return { title: `${drops.length} of your usual items got cheaper`, body: shown + more };
+}
+
+// ---- calendar events ----
+
+/** The hour an all-day event's reminders count from (a reminder "1 day before" arrives at 09:00 the day before). */
+export const ALL_DAY_TIME = "09:00";
+/** The phone keeps at most 64 scheduled notifications; the events get this many of them. */
+export const MAX_EVENT_NOTIFICATIONS = 40;
+/** How far ahead event reminders are planned. */
+export const EVENT_HORIZON_DAYS = 14;
+
+/**
+ * The reminders of the events that start in the next two weeks, soonest first, at most
+ * `MAX_EVENT_NOTIFICATIONS`. A reminder is "minutes before the start"; an all-day event starts at
+ * 09:00 for this. One that is already past is left out. The ids are stable, so a repeated run
+ * replaces the earlier schedule instead of doubling it.
+ */
+export function eventPlan(rules: EventRule[], now: { date: string; minutes: number }, opts: { days?: number; max?: number } = {}): Planned[] {
+  const to = addCalendarDays(now.date, opts.days ?? EVENT_HORIZON_DAYS);
+  // a reminder a week before an event two weeks away is due today, so look a week past the horizon
+  const lookTo = addCalendarDays(to, 7);
+  const nowStamp = stamp(now.date, timeOf(now.minutes));
+  const out: (Planned & { at: number })[] = [];
+  for (const rule of rules) {
+    for (const o of expand(rule, now.date, lookTo, "accent")) {
+      const start = stamp(o.startDate, o.allDay ? ALL_DAY_TIME : o.startTime);
+      for (const before of rule.reminders) {
+        const at = start - before;
+        if (at <= nowStamp || at > stamp(to, "23:59")) continue;
+        const date = fromDayNumber(Math.floor(at / 1440));
+        const clock = at - Math.floor(at / 1440) * 1440;
+        const when = o.allDay ? "All day" : `Starts at ${o.startTime}`;
+        const body = [before === 0 ? when : `${when} (${reminderText(before).replace(/^At the start$/, "now")})`, o.location].filter(Boolean).join(" · ");
+        out.push({ id: `${EVENT_ID_PREFIX}${rule.id}:${o.startDate}:${before}`, date, hour: Math.floor(clock / 60), minute: clock % 60, title: o.title, body, at });
+      }
+    }
+  }
+  return out
+    .sort((a, b) => a.at - b.at)
+    .slice(0, opts.max ?? MAX_EVENT_NOTIFICATIONS)
+    .map(({ at: _at, ...planned }) => planned);
 }

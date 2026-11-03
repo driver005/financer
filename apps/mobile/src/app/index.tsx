@@ -11,6 +11,7 @@ import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import { StoresLink } from "@/components/StoresLink";
 import { CategoryCard } from "@/components/today/CategoryCard";
 import { OverviewTiles } from "@/components/today/OverviewTiles";
+import { UpcomingCard } from "@/components/today/UpcomingCard";
 import { TodayHero } from "@/components/today/TodayHero";
 import { WeekCard } from "@/components/today/WeekCard";
 import { TrophiesCard } from "@/components/TrophiesCard";
@@ -192,6 +193,8 @@ export default function Today() {
         <>
           <Snackbar visible={note !== null} onDismiss={() => setNote(null)} seconds={5}>{note ? `${note.title} ${note.text}` : ""}</Snackbar>
           <TodayHero safe={data.safe} forecast={data.forecast} txs={data.txs} today={today} />
+
+          <UpcomingCard />
 
           <OverviewTiles safe={data.safe} txs={data.txs} today={today} />
 

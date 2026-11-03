@@ -5,8 +5,10 @@ import { getSecret, setSecret } from "@/api/storage";
 import {
   DEFAULT_PREFS,
   EVENING_ID_PREFIX,
+  EVENT_ID_PREFIX,
   PAYDAY_ID_PREFIX,
   eveningPlan,
+  eventPlan,
   findPriceDrops,
   parsePrefs,
   parsePriceMemory,
@@ -16,6 +18,7 @@ import {
   type NotifyPrefs,
   type Planned,
 } from "@/notifyPlan";
+import { ruleFromDto } from "@/calendarForm";
 import { localIsoDate } from "@/period";
 
 /**
@@ -119,7 +122,7 @@ export async function setKindEnabled(kind: NotifyKind, enabled: boolean): Promis
   return { prefs, permission };
 }
 
-export type NotifyApi = Pick<Api, "safeToSpend" | "basket" | "prices">;
+export type NotifyApi = Pick<Api, "safeToSpend" | "basket" | "prices" | "calendars" | "calendarEvents">;
 
 let running: Promise<void> | null = null;
 
@@ -152,6 +155,7 @@ async function check(api: NotifyApi, now: Date): Promise<void> {
   };
   if (!granted || !prefs.evening) await cancelWithPrefix(EVENING_ID_PREFIX);
   if (!granted || !prefs.payday) await cancelWithPrefix(PAYDAY_ID_PREFIX);
+  if (!granted || !prefs.events) await cancelWithPrefix(EVENT_ID_PREFIX);
   if (!granted) return;
 
   const today = localIsoDate(now);
@@ -184,6 +188,20 @@ async function check(api: NotifyApi, now: Date): Promise<void> {
     }
   }
 
+  if (prefs.events) {
+    try {
+      const from = today;
+      const to = addDaysIso(today, 21);
+      const [calendars, events] = await Promise.all([api.calendars(), api.calendarEvents(from, to)]);
+      const shown = new Set(calendars.filter((c) => c.visible).map((c) => c.id));
+      const plan = eventPlan(events.filter((e) => shown.has(e.calendar_id)).map(ruleFromDto), { date: today, minutes: nowMinutes });
+      await cancelWithPrefix(EVENT_ID_PREFIX);
+      for (const p of plan) await schedule(p);
+    } catch {
+      // no answer: keep the reminders that are already scheduled
+    }
+  }
+
   if (prefs.priceDrop) {
     try {
       await checkPriceDrops(n, api);
@@ -191,6 +209,11 @@ async function check(api: NotifyApi, now: Date): Promise<void> {
       // try again at the next check
     }
   }
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
 async function checkPriceDrops(n: Notifications, api: NotifyApi): Promise<void> {
