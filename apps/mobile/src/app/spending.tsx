@@ -5,15 +5,19 @@ import { BarChart, Box, Chip, ChipRow, Group, HeroCaption, HeroCard, HeroChip, H
 import type { Split, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
 import { CategorizationTools } from "@/components/CategorizationTools";
+import { BankSetupSheet } from "@/components/BankSetupSheet";
 import { Page } from "@/components/Page";
 import { RecategorizeSheet } from "@/components/RecategorizeSheet";
 import { SectionSwitch } from "@/components/SectionSwitch";
+import { SourceSwitcher } from "@/components/SourceSwitcher";
 import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import { TransactionRow } from "@/components/TransactionRow";
 import { peakText, spendingTrend, trendSummary } from "@/charts";
 import { dayHeading, formatMoney, spokenMoney } from "@/format";
+import { defaultSource, needsSetup, type SourceId } from "@/bankSetup";
 import { pickFileBytes } from "@/native/files";
 import { localIsoDate } from "@/period";
+import { useBankSources } from "@/useBankSources";
 import { TX_FILTERS, dayTotal, emptyFilterText, filterTx, type TxFilter } from "@/spendingView";
 
 const TREND_DAYS = 14;
@@ -41,6 +45,8 @@ export default function Spending() {
   const [splits, setSplits] = useState<Split[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [filter, setFilter] = useState<TxFilter>("all");
+  const [source, setSource] = useState<SourceId | null>(null);
+  const [setup, setSetup] = useState<{ open: boolean; start?: SourceId }>({ open: false });
 
   const load = useCallback(async () => {
     if (!api) return;
@@ -80,6 +86,14 @@ export default function Spending() {
     }
   }, [api]);
 
+  const banks = useBankSources(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+  const connections = banks.list ?? [];
+  const activeSource = source ?? defaultSource(connections);
+
   const today = localIsoDate();
   const groups = useMemo(() => groupByDay(filterTx(items, filter)), [items, filter]);
   const splitIds = useMemo(() => new Set(splits.map((s) => s.transaction_id)), [splits]);
@@ -100,12 +114,25 @@ export default function Spending() {
       fixed
       actions={
         <>
-          <IconButton icon="bank-transfer" label="Sync with Sparkasse" onPress={() => router.push("/sync")} />
+          <IconButton icon="bank-plus" label="Connect a bank" onPress={() => setSetup({ open: true })} />
           <IconButton icon="storefront-outline" label="Spending by store" onPress={() => router.push("/stores")} />
-          <IconButton icon="file-delimited-outline" label="Import Sparkasse CSV" onPress={() => void importCsv()} disabled={busy} />
+          <IconButton icon="file-delimited-outline" label="Import a CSV file" onPress={() => void importCsv()} disabled={busy} />
         </>
       }
     >
+      <BankSetupSheet
+        visible={setup.open}
+        start={setup.start}
+        list={connections}
+        onClose={() => setSetup({ open: false })}
+        onImportCsv={() => void importCsv()}
+        onSaved={(id) => {
+          setSetup({ open: false });
+          setSource(id);
+          void banks.load();
+          setMessage("Saved. Press Connect to sign in to your bank.");
+        }}
+      />
       <RecategorizeSheet
         tx={selected}
         split={splits.find((s) => s.transaction_id === selected?.id)}
@@ -125,6 +152,21 @@ export default function Spending() {
         header={
           <Box gap="md">
             <SectionSwitch />
+            {banks.list !== null ? (
+              <SourceSwitcher
+                list={connections}
+                active={activeSource}
+                onChange={setSource}
+                onSetup={(id) => setSetup({ open: true, start: id })}
+                onImportCsv={() => void importCsv()}
+                importing={busy}
+                starting={banks.starting}
+                errors={banks.errors}
+                onStart={(c) => void banks.start(c)}
+                onCancel={(c) => void banks.cancel(c)}
+                onOpenLink={(c) => void banks.openLink(c)}
+              />
+            ) : null}
             {items.length > 0 ? (
               <>
                 <HeroCard label={`Spent, last ${TREND_DAYS} days`} chip={delta !== null && delta !== 0 ? <HeroChip icon={delta > 0 ? "trending-up" : "trending-down"} text={`${Math.abs(delta)} % ${delta > 0 ? "more" : "less"}`} /> : null}>
@@ -151,10 +193,10 @@ export default function Spending() {
           ) : (
             <Empty
               title="No transactions yet"
-              message="Import a CSV export from Sparkasse online banking, or sync your account, and your spending shows up here."
-              actionLabel="Import Sparkasse CSV"
-              actionIcon="file-delimited-outline"
-              onAction={() => void importCsv()}
+              message="Connect a bank, or import a CSV export from your online banking, and your spending shows up here."
+              actionLabel={needsSetup(connections) ? "Set up" : "Import a CSV file"}
+              actionIcon={needsSetup(connections) ? "bank-plus" : "file-delimited-outline"}
+              onAction={() => (needsSetup(connections) ? setSetup({ open: true }) : void importCsv())}
             />
           )
         }

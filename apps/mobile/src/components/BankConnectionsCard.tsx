@@ -13,7 +13,8 @@ import {
   connectionKey,
   connectionSubtitle,
   isBusy,
-  isPlaid,
+  linksOnce,
+  providerLabel,
   isSafeLinkUrl,
   lastResultText,
   linkedAccountsText,
@@ -30,7 +31,7 @@ import { toTone } from "@/uiTone";
 /**
  * Settings card: the bank connections that are set up in the server's financer.toml, from either
  * provider. Shows the state of each, starts a sync ("Sync now") and, while the bank waits for the
- * approval in the banking app (FinTS) or for you to sign in on Plaid's page (Plaid), says so. The
+ * approval in the banking app (FinTS) or for you to sign in on the provider's page (Plaid, GoCardless, finAPI), says so. The
  * server polls by itself and imports as soon as you are done, so this screen does not have to stay
  * open. The old manual flow (Spending > Sync with Sparkasse) is
  * offered here only when no connection is configured.
@@ -95,7 +96,7 @@ export function BankConnectionsCard() {
       const updated = await api.syncConnection(conn.name, pins[key] || undefined);
       replace(updated);
       setPins((cur) => ({ ...cur, [key]: "" })); // the PIN is not kept
-      // Plaid: its page is where you sign in to your bank; open it right away
+      // Plaid, GoCardless, finAPI: their page is where you sign in to your bank; open it right away
       if (updated.state === "needs_link") await openLink(updated, key);
     } catch (e) {
       setError(key, e instanceof Error ? e.message : "Could not start the sync");
@@ -107,7 +108,7 @@ export function BankConnectionsCard() {
 
   async function openLink(conn: BankConnection, key: string) {
     if (!isSafeLinkUrl(conn.link_url)) {
-      setError(key, "The sign-in address from the server does not look like a Plaid page, so it was not opened.");
+      setError(key, "The sign-in address from the server does not look like a page of Plaid, GoCardless or finAPI, so it was not opened.");
       return;
     }
     try {
@@ -174,7 +175,7 @@ export function BankConnectionsCard() {
       ) : (
         <>
           <Text variant="caption" tone="muted">
-            These connections are set up under Server settings, Bank accounts (or in financer.toml on the server). A bank (FinTS) connection never stores your PIN: it comes from the server's environment or you type it here, and every login needs your approval in the banking app. A Plaid connection needs neither: you sign in to your bank once on Plaid's page.
+            These connections are set up under Server settings, Bank accounts (or in financer.toml on the server). A bank (FinTS) connection never stores your PIN: it comes from the server's environment or you type it here, and every login needs your approval in the banking app. A Plaid, GoCardless or finAPI connection needs neither: you sign in to your bank once on the provider's page.
           </Text>
           {list.map((conn, index) => {
             const key = connectionKey(conn);
@@ -214,9 +215,9 @@ export function BankConnectionsCard() {
                     <Box accessibilityRole="alert" gap="sm">
                       <Row gap="md">
                         <Spinner />
-                        <Box grow><Text variant="bodyStrong">Sign in to your bank on Plaid's page</Text></Box>
+                        <Box grow><Text variant="bodyStrong">{`Sign in to your bank on ${providerLabel(conn)}'s page`}</Text></Box>
                       </Row>
-                      <Text variant="body">{`Your bank login goes to Plaid, not to this app. When you are done, this screen updates and the first sync starts by itself. ${left ?? ""}`}</Text>
+                      <Text variant="body">{`Your bank login goes to ${providerLabel(conn)}, not to this app. When you are done, this screen updates and the first sync starts by itself. ${left ?? ""}`}</Text>
                     </Box>
                     <Button label="Open the sign-in page" icon="open-in-new" variant="outline" onPress={() => void openLink(conn, key)} />
                     <Button variant="ghost" label="Cancel" onPress={() => void cancel(conn)} />
@@ -225,7 +226,7 @@ export function BankConnectionsCard() {
                 {conn.state === "syncing" ? (
                   <Row gap="md">
                     <Spinner />
-                    <Box grow><Text variant="body">{isPlaid(conn) ? "Reading transactions from Plaid…" : "Logging in or fetching transactions…"}</Text></Box>
+                    <Box grow><Text variant="body">{linksOnce(conn) ? `Reading transactions from ${providerLabel(conn)}…` : "Logging in or fetching transactions…"}</Text></Box>
                   </Row>
                 ) : null}
                 {conn.state === "error" && conn.message ? <Note tone="error">{conn.message}</Note> : null}
@@ -247,10 +248,10 @@ export function BankConnectionsCard() {
                       onPress={() => void sync(conn)}
                       disabled={starting !== null || !canSync(conn, pin)}
                     />
-                    {isPlaid(conn) && conn.linked && confirming !== key ? <Button variant="ghost" label="Disconnect" icon="link-variant-off" onPress={() => setConfirming(key)} /> : null}
+                    {linksOnce(conn) && conn.linked && confirming !== key ? <Button variant="ghost" label="Disconnect" icon="link-variant-off" onPress={() => setConfirming(key)} /> : null}
                     {confirming === key ? (
                       <Box gap="sm" accessibilityRole="alert">
-                        <Text variant="body">Plaid is told to forget this connection and its access is deleted here. The transactions you already have stay. You sign in again to reconnect.</Text>
+                        <Text variant="body">{`${providerLabel(conn)} is told to forget this connection and its access is deleted here. The transactions you already have stay. You sign in again to reconnect.`}</Text>
                         <Button label="Disconnect" icon="link-variant-off" variant="outline" tone="danger" onPress={() => disconnect(conn)} />
                         <Button variant="ghost" label="Keep it" onPress={() => setConfirming(null)} />
                       </Box>

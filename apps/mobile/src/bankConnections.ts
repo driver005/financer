@@ -1,8 +1,9 @@
 /**
  * Pure logic for the Bank connections card in Settings. The connections themselves are described
  * in the server's financer.toml, each with a provider: FinTS (the server logs in, waits for the
- * approval in the banking app and imports) or Plaid (you sign in once on Plaid's page; after that
- * there is no PIN and no approval). The card only shows the state and starts or cancels a sync.
+ * approval in the banking app and imports), or Plaid, GoCardless or finAPI (you sign in once on the
+ * provider's page; after that there is no PIN and no approval). The card only shows the state and
+ * starts or cancels a sync.
  */
 import type { BankConnection } from "./api/client";
 
@@ -17,22 +18,30 @@ export function isPlaid(c: BankConnection): boolean {
   return c.kind === "plaid";
 }
 
-/** A Plaid connection that has not been signed in to a bank yet. */
-export function needsLinking(c: BankConnection): boolean {
-  return isPlaid(c) && !c.linked;
+/** Plaid, GoCardless and finAPI: sign in once on the provider's page, then no PIN and no approval. */
+export function linksOnce(c: Pick<BankConnection, "kind">): boolean {
+  return c.kind !== "fints";
 }
 
-/** `Plaid` or `Bank (FinTS)`, for the line under the name. */
-export function providerLabel(c: BankConnection): string {
-  return isPlaid(c) ? "Plaid" : "Bank (FinTS)";
+const PROVIDER_NAMES: Record<string, string> = { plaid: "Plaid", gocardless: "GoCardless", finapi: "finAPI", fints: "Bank (FinTS)" };
+
+/** `Plaid`, `GoCardless`, `finAPI` or `Bank (FinTS)`, for the line under the name. */
+export function providerLabel(c: Pick<BankConnection, "kind">): string {
+  return PROVIDER_NAMES[c.kind] ?? c.kind;
+}
+
+/** A connection that has not been signed in to a bank yet (Plaid, GoCardless, finAPI). */
+export function needsLinking(c: BankConnection): boolean {
+  return linksOnce(c) && !c.linked;
 }
 
 /** The line under the connection's name: what it is connected to. */
 export function connectionSubtitle(c: BankConnection): string {
-  if (!isPlaid(c)) return `Bank code ${c.bank_code} · login ${c.login_masked} · ${c.iban_masked}`;
-  if (!c.linked) return "Plaid · not connected yet";
+  if (!linksOnce(c)) return `Bank code ${c.bank_code} · login ${c.login_masked} · ${c.iban_masked}`;
+  const name = providerLabel(c);
+  if (!c.linked) return `${name} · not connected yet`;
   const n = c.accounts.length;
-  return n === 0 ? "Plaid · connected" : `Plaid · ${n} account${n === 1 ? "" : "s"} connected`;
+  return n === 0 ? `${name} · connected` : `${name} · ${n} account${n === 1 ? "" : "s"} connected`;
 }
 
 /** The linked accounts as `Giro ••0000, Tagesgeld ••1111`, or `null` when there are none. */
@@ -84,14 +93,14 @@ export function stateTone(c: BankConnection): Tone {
   }
 }
 
-/** A FinTS PIN has to be typed in the app unless the server has it in the environment. Plaid has no PIN. */
+/** A FinTS PIN has to be typed in the app unless the server has it in the environment. The others have no PIN. */
 export function needsTypedPin(c: BankConnection): boolean {
-  return !isPlaid(c) && !c.pin_from_env;
+  return !linksOnce(c) && !c.pin_from_env;
 }
 
 /** Whether the main button can be pressed with what has been typed. */
 export function canSync(c: BankConnection, typedPin: string): boolean {
-  return !isBusy(c) && (isPlaid(c) || c.pin_from_env || typedPin.length > 0);
+  return !isBusy(c) && (linksOnce(c) || c.pin_from_env || typedPin.length > 0);
 }
 
 function pad(n: number): string {
@@ -117,7 +126,7 @@ export function lastResultText(c: BankConnection): string | null {
 /** When the next scheduled sync is, in words. */
 export function nextSyncText(c: BankConnection, nowSeconds: number): string | null {
   if (needsLinking(c)) {
-    return "Press Connect your bank to sign in once on Plaid's page. After that a sync needs no PIN and no approval.";
+    return `Press Connect your bank to sign in once on ${providerLabel(c)}'s page. After that a sync needs no PIN and no approval.`;
   }
   if (c.sync_every_hours <= 0) return "Syncs only when you press Sync now.";
   if (c.next_sync_at === null || c.next_sync_at === undefined) return null;
@@ -129,7 +138,7 @@ export function nextSyncText(c: BankConnection, nowSeconds: number): string | nu
   return `Scheduled ${every}. Next in about ${Math.round(mins / 60)} hours.`;
 }
 
-/** How long the server keeps waiting for the approval, or for you to finish signing in on Plaid's page. */
+/** How long the server keeps waiting for the approval, or for you to finish signing in on the provider's page. */
 export function approvalLeftText(c: BankConnection, nowSeconds: number): string | null {
   if (c.state !== "needs_approval" && c.state !== "needs_link") return null;
   if (c.approval_expires_at === null || c.approval_expires_at === undefined) return null;
@@ -139,12 +148,15 @@ export function approvalLeftText(c: BankConnection, nowSeconds: number): string 
   return `The server waits about ${mins} more minute${mins === 1 ? "" : "s"}.`;
 }
 
-/** Only a web address that Plaid hands out is opened: https, on a plaid.com host. */
+/** The hosts whose sign-in pages are opened: Plaid, GoCardless (its bank pages) and finAPI (its web form). */
+const LINK_HOSTS = ["plaid.com", "gocardless.com", "finapi.io"];
+
+/** Only a web address that one of the providers hands out is opened: https, on one of their hosts. */
 export function isSafeLinkUrl(url: string | null | undefined): url is string {
   if (!url) return false;
   try {
     const u = new URL(url);
-    return u.protocol === "https:" && (u.hostname === "plaid.com" || u.hostname.endsWith(".plaid.com"));
+    return u.protocol === "https:" && LINK_HOSTS.some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`));
   } catch {
     return false;
   }
