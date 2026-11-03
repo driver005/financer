@@ -11,5 +11,5 @@
     "types": ["node"],
     "lib": ["es2022", "dom"]
   },
-  "include": ["../src/constants/*.ts", "../src/responsive/resolve.ts", "../src/responsive/contrast.ts", "./*.test.ts"]
+  "include": ["../src/constants/*.ts", "../src/responsive/resolve.ts", "../src/responsive/contrast.ts", "../src/components/avatarModel.ts", "./*.test.ts"]
 }

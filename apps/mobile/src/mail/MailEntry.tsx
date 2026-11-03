@@ -1,0 +1,28 @@
+import { useRouter } from "expo-router";
+import { useMemo, type ComponentType } from "react";
+
+import { useApi } from "@/api/config";
+
+type Host = { server: () => Promise<{ baseUrl: string; token: string } | null>; onExit: () => void };
+
+// The mail client is bundled source from packages/mail, drawn entirely with packages/ui. It is
+// loaded with `require` so this app's type check does not descend into it (the catalog checks it).
+const { MailModule } = require("../../../../packages/mail/src") as { MailModule: ComponentType<{ host: Host }> };
+
+/**
+ * The mail client inside the finance app. It lives on the same server and uses the same token, so
+ * there is nothing to set up here. It needs a server (not the on-phone backend): mail is read and
+ * sent by the server.
+ */
+export function MailEntry() {
+  const { config, mode } = useApi();
+  const router = useRouter();
+  const host = useMemo<Host>(
+    () => ({
+      server: async () => (mode === "remote" && config ? { baseUrl: config.baseUrl, token: config.token } : null),
+      onExit: () => (router.canGoBack() ? router.back() : router.replace("/")),
+    }),
+    [config, mode, router],
+  );
+  return <MailModule host={host} />;
+}

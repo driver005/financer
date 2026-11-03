@@ -23,6 +23,7 @@ const APP_DIRS = [
   "apps/shopping/src",
   "apps/shopping/index.ts",
   "packages/shopping/src/ui",
+  "packages/mail/src/ui",
 ];
 
 function files(path, out = []) {

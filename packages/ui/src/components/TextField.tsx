@@ -20,6 +20,8 @@ export type TextFieldProps = {
   error?: string;
   icon?: IconName;
   multiline?: boolean;
+  /** A multi-line field that starts one line high and grows with the text (a chat box). */
+  compact?: boolean;
   secure?: boolean;
   keyboardType?: TextInputProps["keyboardType"];
   returnKeyType?: TextInputProps["returnKeyType"];
@@ -34,7 +36,7 @@ export type TextFieldProps = {
 };
 
 export function TextField({
-  label, value, onChangeText, placeholder, helper, error, icon, multiline, secure, keyboardType, returnKeyType, onSubmit,
+  label, value, onChangeText, placeholder, helper, error, icon, multiline, compact, secure, keyboardType, returnKeyType, onSubmit,
   clearable, variant = "secondary", autoFocus, capitalize, testID,
 }: TextFieldProps) {
   const { colors } = useTheme();
@@ -79,8 +81,8 @@ export function TextField({
                 color: colors.text.default,
                 fontSize: fontSize.base,
                 lineHeight: lineHeight.base,
-                paddingVertical: multiline ? space.md : space.none,
-                minHeight: multiline ? size.control.lg * 3 : size.control.sm,
+                paddingVertical: multiline && !compact ? space.md : space.none,
+                minHeight: multiline && !compact ? size.control.lg * 3 : size.control.sm,
                 textAlignVertical: multiline ? "top" : "center",
               },
               // the border of the row shows the focus; the browser's own outline would double it

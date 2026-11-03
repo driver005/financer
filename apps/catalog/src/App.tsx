@@ -9,9 +9,10 @@ import { actions } from "./stories/actions";
 import { feedback } from "./stories/feedback";
 import { foundations } from "./stories/foundations";
 import { layoutStories } from "./stories/layout";
+import { mailStories } from "./stories/mail";
 import { shopStories } from "./stories/shop";
 
-type Group = "foundations" | "actions" | "feedback" | "layout" | "shop";
+type Group = "foundations" | "actions" | "feedback" | "layout" | "shop" | "mail";
 
 const GROUPS: (NavItem<Group> & { stories: StoryDef[]; title: string })[] = [
   { key: "foundations", label: "Tokens", title: "Foundations", icon: "palette-outline", stories: foundations },
@@ -19,6 +20,7 @@ const GROUPS: (NavItem<Group> & { stories: StoryDef[]; title: string })[] = [
   { key: "feedback", label: "Display", title: "Feedback and data", icon: "view-dashboard-outline", stories: feedback },
   { key: "layout", label: "Layout", title: "Layout and navigation", icon: "page-layout-body", stories: layoutStories },
   { key: "shop", label: "Shopping", title: "Shopping", icon: "shopping-outline", stories: shopStories },
+  { key: "mail", label: "Mail", title: "Mail", icon: "email-outline", stories: mailStories },
 ];
 
 const DEVICES = [

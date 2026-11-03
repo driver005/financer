@@ -106,6 +106,7 @@ export default function SettingsScreen() {
               <SettingsRow icon="receipt-text-outline" title="Receipts" subtitle="Add and read receipts" onPress={() => router.push("/receipts")} />
               <SettingsRow icon="email-sync-outline" title="Receipt sources" subtitle="Mailbox, Lidl Plus and a watched folder" onPress={() => router.push("/receipt-sources")} />
               <SettingsRow icon="silverware-fork-knife" title="Meal plan" subtitle="Plan the week and shop for it" onPress={() => router.push("/mealplan")} />
+              <SettingsRow icon="email-outline" title="Mail" subtitle="Chats by person and topic, calendar, greetings" onPress={() => router.push("/mail")} />
               {SHOPPING_ENABLED ? (
                 <SettingsRow icon="shopping-search-outline" title="Shopping assistant" subtitle="Compare phones, plans and prices" onPress={() => router.push("/shop")} />
               ) : null}
