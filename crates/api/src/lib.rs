@@ -305,6 +305,7 @@ impl AppState {
         receipt_sources::rewe_import,
         receipt_sources::rewe_status,
         receipt_sources::rewe_forget,
+        receipt_sources::orders_import,
         grocery::affordability,
         grocery::recipes,
         grocery::recipe_ideas,
@@ -408,6 +409,7 @@ impl AppState {
         receipt_sources::ReweImportRequest,
         receipt_sources::ReweImportDto,
         receipt_sources::ReweStatusDto,
+        receipt_sources::OrdersImportRequest,
         dto::ScanDto,
         dto::ChainAffordabilityDto,
         dto::StapleDto,
@@ -583,6 +585,10 @@ impl Api {
             .route("/receipts/rewe/import", post(receipt_sources::rewe_import))
             .route("/receipts/rewe/status", get(receipt_sources::rewe_status))
             .route("/receipts/rewe", delete(receipt_sources::rewe_forget))
+            .route(
+                "/receipts/orders/import",
+                post(receipt_sources::orders_import),
+            )
             .route("/affordability", get(grocery::affordability))
             .route("/recipes", get(grocery::recipes))
             .route("/recipes/ideas", post(grocery::recipe_ideas))

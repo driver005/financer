@@ -260,6 +260,11 @@ export class Api {
     return this.json<ReweImportResult>("/v1/receipts/rewe/import", "POST", { receipts });
   }
 
+  /** Store online orders read from a file the shop produced (Amazon's data request, for example). */
+  ordersImport(shop: string, orders: ReweReceiptInput[]) {
+    return this.json<ReweImportResult>("/v1/receipts/orders/import", "POST", { shop, orders });
+  }
+
   reweStatus() {
     return this.request<ReweStatus>("/v1/receipts/rewe/status");
   }

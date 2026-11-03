@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Badge, Box, Button, Card, Expandable, Group, ListItem, Note, Section, Text, VirtualList } from "@financer/ui";
 
@@ -40,6 +41,7 @@ async function loadAll(api: Api): Promise<Loaded> {
  */
 export default function ReceiptSources() {
   const { api, loaded, mode: backendMode } = useApi();
+  const router = useRouter();
   const onPhone = backendMode === "embedded";
   const { data, error, busy, reload } = useScreenData(loadAll);
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -94,6 +96,11 @@ export default function ReceiptSources() {
           data ? (
             <Box gap="lg">
               <ReweCard status={data.rewe} />
+              <Card gap="md">
+                <Text variant="heading" level={2}>Online orders</Text>
+                <Text variant="body" tone="muted">Amazon and other web shops have no connection for private customers, but Amazon's "request your data" gives your order history as a file. Import it here.</Text>
+                <Button label="Import an order file" icon="file-delimited-outline" variant="outline" onPress={() => router.push("/orders-import")} />
+              </Card>
               <Section title="REWE, Kaufland, Penny, ALDI" description="None of these shops has a public interface for receipts. This is what works for each.">
                 <Card gap="sm">
                   {SHOP_GUIDES.map((g) => (

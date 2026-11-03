@@ -2509,6 +2509,51 @@
         ]
       }
     },
+    "/v1/receipts/orders/import": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Store online orders the app read from a file the shop produced (Amazon's data request, for\nexample), once each per shop and order number. Nothing is fetched from the shop.",
+        "operationId": "orders_import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrdersImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReweImportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An order is malformed or there are too many",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/receipts/rewe": {
       "delete": {
         "tags": [
@@ -6430,6 +6475,26 @@
               "null"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "OrdersImportRequest": {
+        "type": "object",
+        "required": [
+          "shop",
+          "orders"
+        ],
+        "properties": {
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReweReceiptInput"
+            },
+            "description": "At most 200 orders. Same shape as a REWE receipt: the id is the shop's order number, the\ndate the day of the order, `time` is not used."
+          },
+          "shop": {
+            "type": "string",
+            "description": "The shop's name as it should show (\"Amazon\"); at most 40 characters."
           }
         }
       },

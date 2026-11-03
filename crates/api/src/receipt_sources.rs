@@ -760,3 +760,69 @@ pub async fn rewe_forget(State(state): State<AppState>) -> Result<StatusCode, Ap
         .map_err(sync_error)?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+// ---- online orders from a file (Amazon's data export and the like) ----
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct OrdersImportRequest {
+    /// The shop's name as it should show ("Amazon"); at most 40 characters.
+    pub shop: String,
+    /// At most 200 orders. Same shape as a REWE receipt: the id is the shop's order number, the
+    /// date the day of the order, `time` is not used.
+    pub orders: Vec<ReweReceiptInput>,
+}
+
+/// Store online orders the app read from a file the shop produced (Amazon's data request, for
+/// example), once each per shop and order number. Nothing is fetched from the shop.
+#[utoipa::path(post, path = "/v1/receipts/orders/import", request_body = OrdersImportRequest, responses(
+    (status = 200, body = ReweImportDto),
+    (status = 400, description = "An order is malformed or there are too many", body = ErrorBody)),
+    security(("bearer" = [])))]
+pub async fn orders_import(
+    State(state): State<AppState>,
+    Json(req): Json<OrdersImportRequest>,
+) -> Result<Json<ReweImportDto>, ApiError> {
+    use financer_receipt_sources::orders::{self, Order, OrderLine};
+    let shop = req.shop.trim();
+    if shop.is_empty() || shop.chars().count() > 40 || orders::retailer_key(shop).is_empty() {
+        return Err(bad("the shop needs a name of at most 40 characters"));
+    }
+    if req.orders.len() > orders::MAX_ORDERS {
+        return Err(bad("too many orders in one call (at most 200)"));
+    }
+    let mut parsed = Vec::new();
+    for o in &req.orders {
+        let r = rewe_receipt(o)?;
+        if r.lines.len() > orders::MAX_LINES {
+            return Err(bad("an order has too many lines"));
+        }
+        parsed.push(Order {
+            id: r.id,
+            date: r.date,
+            total: r.total,
+            lines: r
+                .lines
+                .into_iter()
+                .map(|l| OrderLine {
+                    name: l.name,
+                    quantity: l.quantity,
+                    total: l.total,
+                })
+                .collect(),
+        });
+    }
+    let summary = orders::import(&state.store, shop, &parsed)
+        .await
+        .map_err(sync_error)?;
+    let matcher = financer_core::StoreMatcher::with_aliases(&[]);
+    let linked = financer_receipt_sources::Linker::run(&state.store, &matcher)
+        .await
+        .map_err(sync_error)?;
+    Ok(Json(ReweImportDto {
+        imported: summary.imported,
+        duplicates: summary.duplicates,
+        skipped: summary.skipped,
+        linked: linked as u64,
+        notes: summary.notes,
+    }))
+}

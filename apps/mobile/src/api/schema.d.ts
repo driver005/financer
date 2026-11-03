@@ -825,6 +825,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/receipts/orders/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Store online orders the app read from a file the shop produced (Amazon's data request, for
+         *     example), once each per shop and order number. Nothing is fetched from the shop.
+         */
+        post: operations["orders_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/receipts/rewe": {
         parameters: {
             query?: never;
@@ -2226,6 +2246,15 @@ export interface components {
             unit?: string | null;
             /** Format: int64 */
             unit_price_cents?: number | null;
+        };
+        OrdersImportRequest: {
+            /**
+             * @description At most 200 orders. Same shape as a REWE receipt: the id is the shop's order number, the
+             *     date the day of the order, `time` is not used.
+             */
+            orders: components["schemas"]["ReweReceiptInput"][];
+            /** @description The shop's name as it should show ("Amazon"); at most 40 characters. */
+            shop: string;
         };
         PantryDto: {
             /** @description True until the list is saved for the first time. */
@@ -4840,6 +4869,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LidlStatusDto"];
+                };
+            };
+        };
+    };
+    orders_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrdersImportRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReweImportDto"];
+                };
+            };
+            /** @description An order is malformed or there are too many */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

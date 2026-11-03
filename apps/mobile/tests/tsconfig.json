@@ -32,6 +32,7 @@
     "../src/calendarForm.ts",
     "../src/calendarFeeds.ts",
     "../src/reweSync.ts",
+    "../src/orderCsv.ts",
     "../src/period.ts",
     "./*.test.ts"
   ]

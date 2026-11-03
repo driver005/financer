@@ -18,6 +18,7 @@ pub mod lidl;
 pub mod mail;
 pub mod matching;
 pub mod message;
+pub mod orders;
 pub mod reader;
 pub mod rewe;
 pub mod secret;

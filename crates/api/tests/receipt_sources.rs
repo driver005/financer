@@ -250,6 +250,7 @@ async fn every_route_needs_the_token() {
         (Method::POST, "/v1/receipts/rewe/import"),
         (Method::GET, "/v1/receipts/rewe/status"),
         (Method::DELETE, "/v1/receipts/rewe"),
+        (Method::POST, "/v1/receipts/orders/import"),
     ] {
         let (status, _) = f.send(method.clone(), uri, None, false).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {uri}");
@@ -644,6 +645,67 @@ async fn rewe_pushes_are_checked() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let (status, _) = f
         .post("/v1/receipts/rewe/known", Some(json!({"ids": ["a b"]})))
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn online_orders_from_a_file_are_stored_once_per_shop_and_number() {
+    let store = Store::connect("sqlite::memory:").await.unwrap();
+    let f = Fixture {
+        app: Api::router(AppState::new(store.clone()), TokenHash::new(TOKEN)),
+        store,
+        mailbox: FakeMailbox::new(1),
+        http: Arc::new(FakeLidlHttp::default()),
+        dir: std::env::temp_dir().join("financer-api-receipts-orders"),
+    };
+    let body = json!({"shop": "Amazon", "orders": [{
+        "id": "302-1234567-1234567", "date": "2026-02-11", "total_cents": 2498,
+        "lines": [
+            {"name": "USB-C Kabel", "quantity": 2, "total_cents": 1299},
+            {"name": "Handyhülle", "quantity": 1, "total_cents": 1199}
+        ]
+    }]});
+    let (status, r) = f
+        .post("/v1/receipts/orders/import", Some(body.clone()))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{r}");
+    assert_eq!(
+        (r["imported"].as_i64(), r["duplicates"].as_i64()),
+        (Some(1), Some(0))
+    );
+    let (_, again) = f
+        .post("/v1/receipts/orders/import", Some(body.clone()))
+        .await;
+    assert_eq!(
+        (again["imported"].as_i64(), again["duplicates"].as_i64()),
+        (Some(0), Some(1))
+    );
+    let (_, receipts) = f.get("/v1/receipts").await;
+    let first = &receipts.as_array().unwrap()[0];
+    assert_eq!(
+        (first["source"].as_str(), first["merchant"].as_str()),
+        (Some("orders_file"), Some("Amazon"))
+    );
+
+    for bad in [
+        json!({"shop": " ", "orders": []}),
+        json!({"shop": "x".repeat(41), "orders": []}),
+        json!({"shop": "Amazon", "orders": [{"id": "../x", "date": "2026-02-11", "lines": []}]}),
+    ] {
+        let (status, _) = f
+            .post("/v1/receipts/orders/import", Some(bad.clone()))
+            .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let many: Vec<Value> = (0..201)
+        .map(|i| json!({"id": format!("o{i}"), "date": "2026-02-11", "lines": [{"name": "x", "quantity": 1, "total_cents": 1}]}))
+        .collect();
+    let (status, _) = f
+        .post(
+            "/v1/receipts/orders/import",
+            Some(json!({"shop": "Amazon", "orders": many})),
+        )
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }

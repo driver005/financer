@@ -240,7 +240,7 @@ impl ReceiptSyncer {
             SourceKind::LidlPlus => self.cfg.lidl_plus.enabled,
             SourceKind::KauflandCard => self.cfg.kaufland.enabled,
             SourceKind::Folder => self.cfg.folder.as_ref().is_some_and(|f| f.enabled),
-            SourceKind::ReweApp => false,
+            SourceKind::ReweApp | SourceKind::OrdersFile => false,
         }
     }
 
@@ -250,7 +250,7 @@ impl ReceiptSyncer {
             SourceKind::LidlPlus => Some(self.cfg.lidl_plus.poll_interval()),
             SourceKind::KauflandCard => Some(self.cfg.kaufland.poll_interval()),
             SourceKind::Folder => self.cfg.folder.as_ref().map(|f| f.poll_interval()),
-            SourceKind::ReweApp => None,
+            SourceKind::ReweApp | SourceKind::OrdersFile => None,
         }
     }
 
@@ -276,7 +276,7 @@ impl ReceiptSyncer {
                 .folder
                 .as_ref()
                 .map(|f| f.path.display().to_string()),
-            SourceKind::ReweApp => None,
+            SourceKind::ReweApp | SourceKind::OrdersFile => None,
         }
     }
 
@@ -317,7 +317,7 @@ impl ReceiptSyncer {
             SourceKind::Email => self.cfg.email.is_some(),
             SourceKind::LidlPlus | SourceKind::KauflandCard => true,
             SourceKind::Folder => self.cfg.folder.is_some(),
-            SourceKind::ReweApp => false,
+            SourceKind::ReweApp | SourceKind::OrdersFile => false,
         };
         let enabled = self.enabled(kind);
         let rec = self.record(kind).await?;
@@ -470,7 +470,7 @@ impl ReceiptSyncer {
                     .ok_or_else(|| SyncError::other("Kaufland is not enabled"))?;
                 Ok((card.sync().await?, None))
             }
-            SourceKind::ReweApp => Err(SyncError::other(
+            SourceKind::ReweApp | SourceKind::OrdersFile => Err(SyncError::other(
                 "REWE receipts are pushed by the app, they are not fetched on a schedule",
             )),
         }

@@ -24,6 +24,8 @@ pub enum SourceKind {
     /// REWE receipts the app pushes (see [`crate::rewe`]); not one of the sources that run on a
     /// schedule, so it is not in [`SourceKind::ALL`].
     ReweApp,
+    /// Online orders imported from a file (Amazon's data export and the like); also pushed, not scheduled.
+    OrdersFile,
 }
 
 impl SourceKind {
@@ -42,6 +44,7 @@ impl SourceKind {
             SourceKind::KauflandCard => "kaufland_card",
             SourceKind::Folder => "folder",
             SourceKind::ReweApp => "rewe_app",
+            SourceKind::OrdersFile => "orders_file",
         }
     }
 
