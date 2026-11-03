@@ -1749,6 +1749,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "financer-openbanking"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "financer-core",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "financer-plaid"
 version = "0.1.0"
 dependencies = [
@@ -4149,6 +4166,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
