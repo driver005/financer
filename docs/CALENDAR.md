@@ -55,3 +55,13 @@ The shopping feed needs the assistant on the same server (`/v1/shop`); without i
 - Time zones, invitations, attachments, drag and drop, other people's calendars, importing or exporting `.ics`.
 - Local reminders and the screens were not run on a phone; the screens were driven in a desktop browser at phone
   and laptop sizes.
+
+## Design
+
+The calendar screens were drawn in Stitch (HeroUI design system, project "Shopping Assistant") before the
+layout was changed: the phone month view, the 3-day view and the new-event sheet. What was taken over: the title
+on the left with the Today pill and the chevrons on the right, the month grid in a white card with the selected
+day's events as cards (a colour bar on the left, the time on the right) under it, and in the editor icons on the
+date and time rows, the times as soft blue pills and the location and notes together in one card. Stitch's 3-day
+grid placed overlapping events badly, so the grid keeps its own layout. The laptop week screen did not come back
+from Stitch (the service timed out), so that layout follows the other two.

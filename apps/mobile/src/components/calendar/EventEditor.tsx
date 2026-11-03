@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Banner, Box, Button, Chip, ChipRow, Group, ListItem, Row, Sheet, Stepper, SwitchRow, Text, TextField, TimePicker } from "@financer/ui";
+import { Badge, Banner, Box, Button, Card, Chip, ChipRow, Group, ListItem, Row, Sheet, Stepper, SwitchRow, Text, TextField, TimePicker } from "@financer/ui";
 
 import type { Calendar } from "@/api/client";
 import { WEEKDAY_CODES, WEEKDAY_SHORT, longDay, repeatText, reminderText, type RepeatKind } from "@/calendar";
@@ -112,10 +112,10 @@ export function EventEditor({ draft, calendars, saving, error, onChange, onSave,
         <TextField label="Title" value={draft.title} onChangeText={(title) => onChange({ ...draft, title })} placeholder="Add a title" autoFocus={draft.id === null} capitalize returnKeyType="done" error={issue === "Give the event a title." ? issue : undefined} />
         <Group>
           <Box py="xs"><SwitchRow label="All day" value={draft.allDay} onChange={(allDay) => onChange({ ...draft, allDay })} /></Box>
-          <ListItem title="Starts" value={longDay(draft.startDate)} onPress={() => setPanel("startDate")} chevron />
-          {draft.allDay ? null : <ListItem title="Start time" value={draft.startTime} onPress={() => setPanel("startTime")} chevron />}
-          <ListItem title="Ends" value={longDay(draft.endDate)} onPress={() => setPanel("endDate")} chevron />
-          {draft.allDay ? null : <ListItem title="End time" value={draft.endTime} onPress={() => setPanel("endTime")} chevron />}
+          <ListItem title="Starts" icon="calendar-outline" value={longDay(draft.startDate)} onPress={() => setPanel("startDate")} chevron />
+          {draft.allDay ? null : <ListItem title="Start time" icon="clock-outline" trailing={<Badge label={draft.startTime} tone="accent" />} onPress={() => setPanel("startTime")} chevron />}
+          <ListItem title="Ends" icon="calendar-check-outline" value={longDay(draft.endDate)} onPress={() => setPanel("endDate")} chevron />
+          {draft.allDay ? null : <ListItem title="End time" icon="clock-check-outline" trailing={<Badge label={draft.endTime} tone="accent" />} onPress={() => setPanel("endTime")} chevron />}
           <ListItem title="Repeat" icon="repeat" value={repeatText(draft.repeat)} onPress={() => setPanel("repeat")} chevron />
         </Group>
         {draft.id !== null && draft.repeat.kind !== "none" ? <Text variant="caption" tone="muted">Changes apply to every event of the series.</Text> : null}
@@ -131,8 +131,10 @@ export function EventEditor({ draft, calendars, saving, error, onChange, onSave,
             <Chip key={m} label={reminderText(m)} selected={draft.reminders.includes(m)} onPress={() => onChange(toggleReminder(draft, m))} />
           ))}
         </ChipRow>
-        <TextField label="Location" value={draft.location} onChangeText={(location) => onChange({ ...draft, location })} placeholder="Add a place" icon="map-marker-outline" />
-        <TextField label="Notes" value={draft.notes} onChangeText={(notes) => onChange({ ...draft, notes })} placeholder="Add notes" multiline />
+        <Card gap="sm">
+          <TextField variant="secondary" value={draft.location} onChangeText={(location) => onChange({ ...draft, location })} placeholder="Add location" icon="map-marker-outline" />
+          <TextField variant="secondary" value={draft.notes} onChangeText={(notes) => onChange({ ...draft, notes })} placeholder="Add notes or description" icon="text" multiline />
+        </Card>
         {issue && issue !== "Give the event a title." ? <Banner tone="warning">{issue}</Banner> : null}
         {error ? <Banner tone="danger">{error}</Banner> : null}
       </>

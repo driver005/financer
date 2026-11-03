@@ -1,11 +1,11 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AgendaList, Box, Button, FloatingButton, IconButton, MiniMonth, MonthGrid, Row, Scroll, Section, Segmented, Snackbar, Stack, Text, TextField, TimeGrid, useLayout } from "@financer/ui";
+import { AgendaList, Box, Button, Card, FloatingButton, IconButton, MiniMonth, MonthGrid, Row, Scroll, Section, Segmented, Snackbar, Stack, Text, TextField, TimeGrid, useLayout } from "@financer/ui";
 
 import type { Calendar, CalendarEvent } from "@/api/client";
 import { useApi } from "@/api/config";
 import { getSecret, setSecret } from "@/api/storage";
-import { WEEKDAY_SHORT, addDays, expand, parseQuickAdd, timeOf, weekOf, type Occurrence } from "@/calendar";
+import { WEEKDAY_SHORT, addDays, expand, longDay, parseQuickAdd, timeOf, weekOf, type Occurrence } from "@/calendar";
 import { FEEDS, loadFeeds } from "@/calendarFeeds";
 import { draftFromRule, newDraft, problem, ruleFromDto, toInput, type Draft } from "@/calendarForm";
 import { toTone } from "@/calendarTones";
@@ -113,11 +113,8 @@ export default function CalendarScreen() {
     setScheduleDays(SCHEDULE_DAYS);
     void setSecret(VIEW_KEY, v);
   };
-  const selectDay = (date: string) => {
-    // a day in the month view: a phone goes to that day, a wide screen keeps the month and moves the selection
-    setAnchor(date);
-    if (!wide && view === "month") pickView("day");
-  };
+  // a day in the month view is selected; a phone lists its events under the grid
+  const selectDay = (date: string) => setAnchor(date);
 
   const firstCalendar = calendars.find((c) => c.visible) ?? calendars[0];
   const startNew = (date: string, time?: string | null) => {
@@ -216,13 +213,15 @@ export default function CalendarScreen() {
         : [anchor];
 
   const nav = (
-    <Row gap="xs" align="center">
-      <IconButton icon="chevron-left" label="Previous" onPress={() => go(step(view, anchor, -1))} />
-      <IconButton icon="chevron-right" label="Next" onPress={() => go(step(view, anchor, 1))} />
-      <Button label="Today" variant="outline" size="sm" onPress={() => go(today)} />
+    <Row gap="sm" align="center">
       <Box grow>
-        <Text variant="subheading" numberOfLines={1}>{titleFor(view, anchor)}</Text>
+        <Text variant="heading" numberOfLines={1}>{titleFor(view, anchor)}</Text>
       </Box>
+      <Button label="Today" variant="outline" size="sm" onPress={() => go(today)} />
+      <Row>
+        <IconButton icon="chevron-left" label="Previous" onPress={() => go(step(view, anchor, -1))} />
+        <IconButton icon="chevron-right" label="Next" onPress={() => go(step(view, anchor, 1))} />
+      </Row>
     </Row>
   );
 
@@ -233,7 +232,17 @@ export default function CalendarScreen() {
       {error ? <Text tone="danger">{error}</Text> : null}
       {view === "month" ? (
         <Scroll>
-          <MonthGrid weekdays={WEEKDAY_SHORT.slice()} weeks={monthCells(anchor, today, anchor, occurrences, open)} onSelectDay={selectDay} />
+          {wide ? (
+            <MonthGrid weekdays={WEEKDAY_SHORT.slice()} weeks={monthCells(anchor, today, anchor, occurrences, open)} onSelectDay={selectDay} />
+          ) : (
+            <>
+              <Card>
+                <MonthGrid weekdays={WEEKDAY_SHORT.slice()} weeks={monthCells(anchor, today, anchor, occurrences, open)} onSelectDay={selectDay} />
+              </Card>
+              <Text variant="subheading">{anchor === today ? `Today, ${longDay(anchor)}` : longDay(anchor, today)}</Text>
+              <AgendaList days={agendaDays(anchor, anchor, today, occurrences, open).map((d) => ({ ...d, heading: "" }))} empty="Nothing planned this day." />
+            </>
+          )}
         </Scroll>
       ) : view === "schedule" ? (
         <Scroll>

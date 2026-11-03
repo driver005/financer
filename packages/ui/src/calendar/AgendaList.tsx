@@ -1,5 +1,7 @@
-import { Box, Row } from "../primitives/Box";
-import { Dot } from "../primitives/Dot";
+import { View } from "react-native";
+
+import { size } from "../constants/sizes";
+import { Box } from "../primitives/Box";
 import { Text } from "../primitives/Text";
 import { Touchable } from "../primitives/Touchable";
 import { useTheme } from "../theme/ThemeProvider";
@@ -22,17 +24,17 @@ export function AgendaList({ days, empty }: { days: AgendaDay[]; empty?: string 
     <Box gap="lg">
       {days.map((d) => (
         <Box key={d.date} gap="xs">
-          <Text variant="bodyStrong" tone={d.today ? "accent" : "default"}>{d.heading}</Text>
+          {d.heading ? <Text variant="bodyStrong" tone={d.today ? "accent" : "default"}>{d.heading}</Text> : null}
           {d.items.map((it) => (
-            <Touchable key={it.key} onPress={it.onPress} disabled={!it.onPress} label={`${it.title}, ${it.range}`} hit={false} bg="surface" radius="xl" p="md" direction="row" gap="md" align="center">
-              <Dot color={colors.tones[it.tone].solid} />
-              <Box grow>
-                <Text variant="bodyStrong" numberOfLines={1}>{it.title}</Text>
+            <Touchable key={it.key} onPress={it.onPress} disabled={!it.onPress} label={`${it.title}, ${it.range}`} hit={false} bg="surface" radius="xl" overflow="hidden" direction="row" align="stretch" shadow="surface">
+              <View accessibilityElementsHidden style={{ width: size.stroke.md, backgroundColor: colors.tones[it.tone].solid }} />
+              <Box grow p="md" gap="2xs">
+                <Box direction="row" justify="between" gap="md">
+                  <Box grow><Text variant="bodyStrong" numberOfLines={1}>{it.title}</Text></Box>
+                  <Text variant="caption" tone="muted">{it.range}</Text>
+                </Box>
                 {it.subtitle ? <Text variant="caption" tone="muted" numberOfLines={1}>{it.subtitle}</Text> : null}
               </Box>
-              <Row>
-                <Text variant="caption" tone="muted">{it.range}</Text>
-              </Row>
             </Touchable>
           ))}
         </Box>
