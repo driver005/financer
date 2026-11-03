@@ -72,7 +72,7 @@ p("use std::sync::Arc;");
 p("");
 p("use serde::{Deserialize, Serialize};");
 p("");
-p("use crate::call::{answer, encode, parse_args, query, Caller};");
+p("use crate::call::{answer, decode_base64, encode, parse_args, query, Caller};");
 p("use crate::error::SdkError;");
 p("use crate::json::JsonValue;");
 p("use crate::transport::Transport;");
@@ -172,7 +172,7 @@ for (const [path, item] of Object.entries(doc.paths)) {
     const wireArgs = [
       ...pathParams.map((x) => ({ name: x.name, t: x.t, opt: false })),
       ...queryParams.map((x) => ({ name: x.name, t: `Option<${x.t}>`, opt: true })),
-      ...(body ? [body.kind === "csv" ? { name: "csv", t: "String", opt: false } : { name: "body", t: body.opt ? `Option<${body.t}>` : body.t, opt: body.opt }] : []),
+      ...(body ? [body.kind === "csv" ? { name: "csv_base64", t: "String", opt: false } : { name: "body", t: body.opt ? `Option<${body.t}>` : body.t, opt: body.opt }] : []),
     ];
     const argNames = [...pathParams.map((x) => x.name), ...queryParams.map((x) => x.name), ...(body ? [body.kind === "csv" ? "csv" : "body"] : [])].join(", ");
     methods.push({ id, doc: op.summary ?? op.description, args, ret, call, verb, path, wireArgs, argNames, csv: body?.kind === "csv" });
@@ -225,7 +225,7 @@ p("}");
 p("");
 p("impl FinanceSdk {");
 p("    /// One call by operation id, its arguments as a JSON object (a path or query value by its name,");
-p("    /// the request body as `body`, a CSV upload as the text `csv`), the answer as JSON text. This is");
+p("    /// the request body as `body`, a CSV upload as `csv_base64`), the answer as JSON text. This is");
 p("    /// the one entry the apps use: it holds the contract, the paths and the encoding in Rust.");
 p("    pub async fn dispatch(&self, op: &str, args: &str) -> Result<String, SdkError> {");
 p("        match op {");
@@ -241,7 +241,7 @@ for (const m of methods) {
     p("                }");
     p("                let a: A = parse_args(args)?;");
   }
-  const callArgs = m.wireArgs.map((a) => (a.name === "csv" ? "a.csv.into_bytes()" : `a.${a.name}`)).join(", ");
+  const callArgs = m.wireArgs.map((a) => (a.name === "csv_base64" ? "decode_base64(&a.csv_base64)?" : `a.${a.name}`)).join(", ");
   p(m.ret ? `                answer::<${m.ret}>(self.${m.id}_raw(${callArgs}).await?)` : `                self.${m.id}_raw(${callArgs}).await.map(|_| "null".to_string())`);
   p("            }");
 }

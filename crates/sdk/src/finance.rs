@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::call::{answer, encode, parse_args, query, Caller};
+use crate::call::{answer, decode_base64, encode, parse_args, query, Caller};
 use crate::error::SdkError;
 use crate::json::JsonValue;
 use crate::transport::Transport;
@@ -2468,7 +2468,7 @@ impl FinanceSdk {
 
 impl FinanceSdk {
     /// One call by operation id, its arguments as a JSON object (a path or query value by its name,
-    /// the request body as `body`, a CSV upload as the text `csv`), the answer as JSON text. This is
+    /// the request body as `body`, a CSV upload as `csv_base64`), the answer as JSON text. This is
     /// the one entry the apps use: it holds the contract, the paths and the encoding in Rust.
     pub async fn dispatch(&self, op: &str, args: &str) -> Result<String, SdkError> {
         match op {
@@ -2735,10 +2735,10 @@ impl FinanceSdk {
             "import_transactions" => {
                 #[derive(Deserialize)]
                 struct A {
-                    csv: String,
+                    csv_base64: String,
                 }
                 let a: A = parse_args(args)?;
-                answer::<ImportReport>(self.import_transactions_raw(a.csv.into_bytes()).await?)
+                answer::<ImportReport>(self.import_transactions_raw(decode_base64(&a.csv_base64)?).await?)
             }
             "lidl_disconnect" => {
                 self.lidl_disconnect_raw().await.map(|_| "null".to_string())

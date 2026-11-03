@@ -313,6 +313,7 @@ async fn the_servers_reasons_and_path_values_that_need_escaping() {
 
 #[tokio::test]
 async fn the_wire_entry_takes_json_and_answers_the_servers_own_text() {
+    use base64::Engine;
     use financer_sdk::Wire;
     let app = Api::router(
         AppState::new(Store::connect("sqlite::memory:").await.unwrap()),
@@ -326,7 +327,7 @@ async fn the_wire_entry_takes_json_and_answers_the_servers_own_text() {
         .call(
             "finance".into(),
             "import_transactions".into(),
-            serde_json::json!({ "csv": csv }).to_string(),
+            serde_json::json!({ "csv_base64": base64::engine::general_purpose::STANDARD.encode(csv.as_bytes()) }).to_string(),
         )
         .await
         .unwrap();

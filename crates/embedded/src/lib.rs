@@ -460,12 +460,30 @@ mod tests {
         assert_eq!(Fixtures::json(&list)[0]["category"], "groceries");
     }
 
+    fn base64_of(bytes: &[u8]) -> String {
+        const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for c in bytes.chunks(3) {
+            let n = (u32::from(c[0]) << 16)
+                | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+                | u32::from(*c.get(2).unwrap_or(&0));
+            for i in 0..4 {
+                if i <= c.len() {
+                    out.push(T[((n >> (18 - 6 * i)) & 63) as usize] as char);
+                } else {
+                    out.push('=');
+                }
+            }
+        }
+        out
+    }
+
     #[tokio::test]
     async fn the_apps_typed_calls_run_over_the_in_process_router() {
         let b = Backend::start_with(Fixtures::config("typed"))
             .await
             .unwrap();
-        let csv = serde_json::json!({ "csv": CSV }).to_string();
+        let csv = serde_json::json!({ "csv_base64": base64_of(CSV.as_bytes()) }).to_string();
         let report = b
             .call("finance".into(), "import_transactions".into(), csv)
             .await

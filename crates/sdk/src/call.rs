@@ -131,3 +131,13 @@ pub(crate) fn to_json<T: Serialize>(value: &T) -> Result<String, SdkError> {
         message: e.to_string(),
     })
 }
+
+/// Bytes that arrived as base64 text (an upload the app read from a file).
+pub(crate) fn decode_base64(text: &str) -> Result<Vec<u8>, SdkError> {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(text.trim())
+        .map_err(|e| SdkError::Decode {
+            message: format!("the upload was not base64: {e}"),
+        })
+}

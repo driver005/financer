@@ -25,6 +25,7 @@ required-features = ["bindgen-cli"]
 [dependencies]
 financer-mail-core = { path = "../mail-core" }
 async-trait = "0.1"
+base64 = "0.23"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"], optional = true }
 serde.workspace = true
 serde_json.workspace = true
