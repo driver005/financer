@@ -1723,12 +1723,6 @@ fn qv<T: Serialize>(v: &Option<T>) -> Option<String> {
 #[cfg_attr(not(target_arch = "wasm32"), uniffi::export(async_runtime = "tokio"))]
 #[cfg_attr(target_arch = "wasm32", uniffi::export)]
 impl FinanceSdk {
-    /// The finance API of the server at `base_url`, logged in with the server's token.
-    #[cfg(feature = "http")]
-    #[uniffi::constructor]
-    pub fn new(base_url: String, token: String) -> Arc<FinanceSdk> {
-        FinanceSdk::with_transport(Arc::new(crate::transport::HttpTransport::new(&base_url, &token)))
-    }
 
     /// Accept suggestions: one rule per merchant, then the rules are applied to existing
     /// transactions.
@@ -3034,5 +3028,15 @@ impl FinanceSdk {
             }
             other => Err(SdkError::Decode { message: format!("unknown operation {other}") }),
         }
+    }
+}
+
+#[cfg(feature = "http")]
+#[uniffi::export]
+impl FinanceSdk {
+    /// The finance API of the server at `base_url`, logged in with the server's token.
+    #[uniffi::constructor]
+    pub fn new(base_url: String, token: String) -> Arc<FinanceSdk> {
+        FinanceSdk::with_transport(Arc::new(crate::transport::HttpTransport::new(&base_url, &token)))
     }
 }

@@ -38,15 +38,6 @@ impl Wire {
 #[cfg_attr(not(target_arch = "wasm32"), uniffi::export(async_runtime = "tokio"))]
 #[cfg_attr(target_arch = "wasm32", uniffi::export)]
 impl Wire {
-    /// The server at `base_url`, logged in with its token.
-    #[cfg(feature = "http")]
-    #[uniffi::constructor]
-    pub fn new(base_url: String, token: String) -> Arc<Wire> {
-        Wire::with_transport(Arc::new(crate::transport::HttpTransport::new(
-            &base_url, &token,
-        )))
-    }
-
     /// One call: `app` is `finance`, `shop` or `mail`; `op` names the call; `args` is a JSON object.
     /// The answer is JSON text (`null` for a call that answers nothing). A refusal is an
     /// [`SdkError::Api`] with the server's words; not reaching the server is [`SdkError::Network`].
@@ -74,5 +65,18 @@ impl Wire {
                 .await,
             Ok(r) if (200..300).contains(&r.status)
         )
+    }
+}
+
+#[cfg(feature = "http")]
+#[uniffi::export]
+impl Wire {
+    /// The server at `base_url`, logged in with its token.
+    #[cfg(feature = "http")]
+    #[uniffi::constructor]
+    pub fn new(base_url: String, token: String) -> Arc<Wire> {
+        Wire::with_transport(Arc::new(crate::transport::HttpTransport::new(
+            &base_url, &token,
+        )))
     }
 }

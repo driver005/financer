@@ -78,6 +78,14 @@ pub enum EmbeddedError {
     Database { message: String },
     #[error("{message}")]
     Failed { message: String },
+    /// The backend refused a call (`status` is the HTTP status it would have answered with).
+    #[error("{message}")]
+    Refused {
+        status: u16,
+        message: String,
+        /// One entry per thing to fix when it refused a form.
+        problems: Vec<String>,
+    },
 }
 
 #[derive(uniffi::Object)]
@@ -100,6 +108,36 @@ impl HttpResponse {
                 .to_string()
                 .into_bytes(),
         }
+    }
+}
+
+/// The SDK's transport over this backend's router.
+struct InProcess {
+    router: Router,
+    token: String,
+}
+
+#[async_trait::async_trait]
+impl financer_sdk::Transport for InProcess {
+    async fn send(
+        &self,
+        r: financer_sdk::Request,
+    ) -> Result<financer_sdk::Response, financer_sdk::SdkError> {
+        let res = dispatch(
+            &self.router,
+            Some(&self.token),
+            HttpRequest {
+                method: r.method,
+                path_and_query: r.path,
+                content_type: r.content_type,
+                body: r.body.unwrap_or_default(),
+            },
+        )
+        .await;
+        Ok(financer_sdk::Response {
+            status: res.status,
+            body: res.body,
+        })
     }
 }
 
@@ -185,6 +223,13 @@ impl Backend {
             state,
             receipts,
             token,
+        }))
+    }
+
+    fn wire(&self) -> Arc<financer_sdk::Wire> {
+        financer_sdk::Wire::with_transport(Arc::new(InProcess {
+            router: self.router.clone(),
+            token: self.token.clone(),
         }))
     }
 
@@ -290,6 +335,31 @@ impl Backend {
         self.handle_request(request).await
     }
 
+    /// One call of the finance, shopping or mail API by name (`app` is `finance`, `shop` or `mail`;
+    /// `args` is a JSON object), answered as JSON text. The same typed calls as the app makes to a
+    /// server, over the in-process router.
+    pub async fn call(
+        &self,
+        app: String,
+        op: String,
+        args: String,
+    ) -> Result<String, EmbeddedError> {
+        self.wire().call(app, op, args).await.map_err(|e| match e {
+            financer_sdk::SdkError::Api {
+                status,
+                message,
+                problems,
+            } => EmbeddedError::Refused {
+                status,
+                message,
+                problems,
+            },
+            other => EmbeddedError::Failed {
+                message: other.to_string(),
+            },
+        })
+    }
+
     pub async fn refresh_prices(&self) -> Result<String, EmbeddedError> {
         self.refresh().await
     }
@@ -388,6 +458,53 @@ mod tests {
         let list = b.handle_request(Fixtures::get("/v1/transactions")).await;
         assert_eq!(list.content_type.as_deref(), Some("application/json"));
         assert_eq!(Fixtures::json(&list)[0]["category"], "groceries");
+    }
+
+    #[tokio::test]
+    async fn the_apps_typed_calls_run_over_the_in_process_router() {
+        let b = Backend::start_with(Fixtures::config("typed"))
+            .await
+            .unwrap();
+        let csv = serde_json::json!({ "csv": CSV }).to_string();
+        let report = b
+            .call("finance".into(), "import_transactions".into(), csv)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&report).unwrap()["imported"],
+            1
+        );
+        let list = b
+            .call("finance".into(), "list_transactions".into(), "{}".into())
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&list).unwrap()[0]["category"],
+            "groceries"
+        );
+
+        // a refusal keeps its status and words
+        let refused = b
+            .call(
+                "finance".into(),
+                "ean_lookup".into(),
+                r#"{"ean":"123"}"#.into(),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(refused, EmbeddedError::Refused { status: 400, .. }),
+            "{refused:?}"
+        );
+        // an app this build does not have is a 404 from the router
+        let none = b
+            .call("mail".into(), "info".into(), "{}".into())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(none, EmbeddedError::Refused { status: 404, .. }),
+            "{none:?}"
+        );
     }
 
     #[tokio::test]

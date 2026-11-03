@@ -326,15 +326,6 @@ impl MailSdk {
 #[cfg_attr(not(target_arch = "wasm32"), uniffi::export(async_runtime = "tokio"))]
 #[cfg_attr(target_arch = "wasm32", uniffi::export)]
 impl MailSdk {
-    /// The mail client of the server at `base_url`, logged in with the server's token.
-    #[cfg(feature = "http")]
-    #[uniffi::constructor]
-    pub fn new(base_url: String, token: String) -> Arc<MailSdk> {
-        MailSdk::with_transport(Arc::new(crate::transport::HttpTransport::new(
-            &base_url, &token,
-        )))
-    }
-
     /// Whether a mailbox is connected, how the last check went, and how much mail there is.
     pub async fn info(&self) -> Result<MailInfo, SdkError> {
         self.call("GET", "/info".into(), None::<&()>).await
@@ -583,5 +574,18 @@ mod tests {
             ]),
             "?by=topic&q=Fu%C3%9Fball"
         );
+    }
+}
+
+#[cfg(feature = "http")]
+#[uniffi::export]
+impl MailSdk {
+    /// The mail client of the server at `base_url`, logged in with the server's token.
+    #[cfg(feature = "http")]
+    #[uniffi::constructor]
+    pub fn new(base_url: String, token: String) -> Arc<MailSdk> {
+        MailSdk::with_transport(Arc::new(crate::transport::HttpTransport::new(
+            &base_url, &token,
+        )))
     }
 }

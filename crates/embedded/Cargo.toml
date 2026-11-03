@@ -29,6 +29,9 @@ financer-fints = { path = "../fints" }
 financer-shop-api = { path = "../shop-api", optional = true }
 financer-prices = { path = "../prices" }
 financer-receipt-sources = { path = "../receipt-sources" }
+# The app's typed calls (docs/SDK.md); here they run over the in-process router, no network.
+financer-sdk = { path = "../sdk", default-features = false }
+async-trait = "0.1"
 financer-store = { path = "../store" }
 axum = { version = "0.8", default-features = false }
 http-body-util = "0.1"

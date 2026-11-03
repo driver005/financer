@@ -205,12 +205,6 @@ p("");
 p('#[cfg_attr(not(target_arch = "wasm32"), uniffi::export(async_runtime = "tokio"))]');
 p('#[cfg_attr(target_arch = "wasm32", uniffi::export)]');
 p("impl FinanceSdk {");
-p("    /// The finance API of the server at `base_url`, logged in with the server's token.");
-p('    #[cfg(feature = "http")]');
-p("    #[uniffi::constructor]");
-p("    pub fn new(base_url: String, token: String) -> Arc<FinanceSdk> {");
-p("        FinanceSdk::with_transport(Arc::new(crate::transport::HttpTransport::new(&base_url, &token)))");
-p("    }");
 for (const m of methods) {
   p("");
   p(`${doc3(m.doc ?? `${m.verb.toUpperCase()} ${m.path}`, "    ")}    pub async fn ${m.id}(&self${m.args.map((a) => `, ${a}`).join("")}) -> Result<${m.ret ?? "()"}, SdkError> {`.replace(/^\n/, ""));
@@ -253,6 +247,16 @@ for (const m of methods) {
 }
 p('            other => Err(SdkError::Decode { message: format!("unknown operation {other}") }),');
 p("        }");
+p("    }");
+p("}");
+p("");
+p('#[cfg(feature = "http")]');
+p("#[uniffi::export]");
+p("impl FinanceSdk {");
+p("    /// The finance API of the server at `base_url`, logged in with the server's token.");
+p("    #[uniffi::constructor]");
+p("    pub fn new(base_url: String, token: String) -> Arc<FinanceSdk> {");
+p("        FinanceSdk::with_transport(Arc::new(crate::transport::HttpTransport::new(&base_url, &token)))");
 p("    }");
 p("}");
 const text = lines.join("\n") + "\n";

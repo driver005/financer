@@ -1702,11 +1702,13 @@ dependencies = [
 name = "financer-embedded"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "financer-api",
  "financer-fints",
  "financer-prices",
  "financer-receipt-sources",
+ "financer-sdk",
  "financer-shop-api",
  "financer-store",
  "http-body-util",

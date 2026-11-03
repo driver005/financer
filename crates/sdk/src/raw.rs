@@ -42,15 +42,6 @@ impl ApiClient {
 #[cfg_attr(not(target_arch = "wasm32"), uniffi::export(async_runtime = "tokio"))]
 #[cfg_attr(target_arch = "wasm32", uniffi::export)]
 impl ApiClient {
-    /// A client of the server at `base_url`, logged in with its token.
-    #[cfg(feature = "http")]
-    #[uniffi::constructor]
-    pub fn new(base_url: String, token: String) -> Arc<ApiClient> {
-        ApiClient::with_transport(Arc::new(crate::transport::HttpTransport::new(
-            &base_url, &token,
-        )))
-    }
-
     pub async fn send(&self, request: RawRequest) -> Result<RawResponse, SdkError> {
         let res = self
             .transport
@@ -73,5 +64,18 @@ impl ApiClient {
             self.transport.send(Request { method: "GET".into(), path: "/health".into(), body: None, content_type: None }).await,
             Ok(r) if (200..300).contains(&r.status)
         )
+    }
+}
+
+#[cfg(feature = "http")]
+#[uniffi::export]
+impl ApiClient {
+    /// A client of the server at `base_url`, logged in with its token.
+    #[cfg(feature = "http")]
+    #[uniffi::constructor]
+    pub fn new(base_url: String, token: String) -> Arc<ApiClient> {
+        ApiClient::with_transport(Arc::new(crate::transport::HttpTransport::new(
+            &base_url, &token,
+        )))
     }
 }

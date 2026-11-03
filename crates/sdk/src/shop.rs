@@ -751,15 +751,6 @@ impl ShopSdk {
 #[cfg_attr(not(target_arch = "wasm32"), uniffi::export(async_runtime = "tokio"))]
 #[cfg_attr(target_arch = "wasm32", uniffi::export)]
 impl ShopSdk {
-    /// The shopping API of the server at `base_url`, logged in with the server's token.
-    #[cfg(feature = "http")]
-    #[uniffi::constructor]
-    pub fn new(base_url: String, token: String) -> Arc<ShopSdk> {
-        ShopSdk::with_transport(Arc::new(crate::transport::HttpTransport::new(
-            &base_url, &token,
-        )))
-    }
-
     pub async fn info(&self) -> Result<ShopInfo, SdkError> {
         self.get("/info".into()).await
     }
@@ -1148,5 +1139,18 @@ impl ShopSdk {
                 message: format!("unknown operation {other}"),
             }),
         }
+    }
+}
+
+#[cfg(feature = "http")]
+#[uniffi::export]
+impl ShopSdk {
+    /// The shopping API of the server at `base_url`, logged in with the server's token.
+    #[cfg(feature = "http")]
+    #[uniffi::constructor]
+    pub fn new(base_url: String, token: String) -> Arc<ShopSdk> {
+        ShopSdk::with_transport(Arc::new(crate::transport::HttpTransport::new(
+            &base_url, &token,
+        )))
     }
 }
