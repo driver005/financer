@@ -42,6 +42,7 @@ export { Thumbnail } from "./components/Thumbnail";
 export { Grid } from "./layout/Grid";
 export { AppShell, NavRail, Sidebar, TabBar, type NavItem } from "./layout/navigation";
 export { Screen } from "./layout/Screen";
+export { Scroll } from "./layout/Scroll";
 export { Section } from "./layout/Section";
 export { Sheet } from "./layout/Sheet";
 export { Split } from "./layout/Split";

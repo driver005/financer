@@ -20,7 +20,7 @@ export function dimValue(d: Dim): number {
 }
 
 export type MaxWidth = keyof typeof size.content;
-export type Basis = "auto" | "full" | "half";
+export type Basis = "auto" | "full" | "half" | "third" | "quarter";
 
 /** React Native 0.88 types styles as read-only; a style under construction is not. */
 export type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -88,7 +88,7 @@ const JUSTIFY: Record<Justify, ViewStyle["justifyContent"]> = {
   start: "flex-start", center: "center", end: "flex-end", between: "space-between", around: "space-around",
 };
 const SHEET_MAX_HEIGHT = "85%";
-const BASIS: Record<Basis, DimensionValue> = { auto: "auto", full: "100%", half: "50%" };
+const BASIS: Record<Basis, DimensionValue> = { auto: "auto", full: "100%", half: "50%", third: "33.333%", quarter: "25%" };
 
 export function bgColor(bg: BgToken, theme: Theme): string {
   const c = theme.colors;
