@@ -44,6 +44,8 @@ uniffi-runtime-wasm = "0.31.0-6"
 
 [dev-dependencies]
 financer-mail-api = { path = "../mail-api" }
+financer-api = { path = "../api" }
+financer-store = { path = "../store" }
 axum = { version = "0.8", default-features = false, features = ["json", "tokio", "http1"] }
 serde_json.workspace = true
 http-body-util = "0.1"

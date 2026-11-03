@@ -75,6 +75,8 @@ export type HostOptions = {
   /** The generated `ShopBackend` of the native module, or null in builds without it. */
   ShopBackend?: { start(config: { dbPath: string; sourcesJson?: string; claudeApiKey?: string; openaiApiKey?: string }): Promise<ShopBackendHandle> } | null;
   sharedServer?: () => Promise<ShopServerConfig | null>;
+  /** A transport for the server's requests, e.g. the Rust SDK's; null or absent: `fetch`. */
+  makeTransport?: ModuleHost["makeTransport"];
   onExit?: () => void;
 };
 
@@ -85,6 +87,7 @@ export function createHost(opts: HostOptions = {}): ModuleHost {
     storage: fileStorage(),
     secrets: secretStorage(),
     sharedServer: opts.sharedServer,
+    makeTransport: opts.makeTransport,
     startEmbedded: backend ? (c: EmbeddedStart) => backend.start(c) : null,
     progress: (_query, onStop) => createProgressSurface(onStop),
     dataDir: documentDir,

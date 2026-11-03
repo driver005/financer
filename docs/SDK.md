@@ -1,8 +1,13 @@
 # The Rust SDK
 
-A typed Rust client for the Financer server's APIs (`crates/sdk`), and the way the Expo app uses it:
-the app calls Rust functions, in the browser as WebAssembly and on a phone as a native module.
-So far it covers the **mail API**. Shopping and finance follow (see [What is done](#what-is-done)).
+A Rust client for the Financer server's APIs (`crates/sdk`), and the way the Expo app uses it: the app
+calls Rust functions, in the browser as WebAssembly and on a phone as a native module. There are two ways in:
+
+- **Typed calls**: `MailSdk` has one Rust function per call of the mail API, with the server's own types.
+- **The generic client**: `ApiClient` takes a request (method, path, bytes) and returns the answer (status,
+  bytes). The **finance app and the shopping assistant send all their traffic through it** when the build
+  has the SDK: network, TLS and the token are handled in Rust, and their typed TypeScript wrappers decide
+  what to ask and read the answer. Typed Rust calls for them come next (see [What is done](#what-is-done)).
 
 ## Why
 
@@ -76,19 +81,23 @@ scripts/enable-sdk.sh ios                         # needs Xcode
 | The web app calling Rust | done and **driven in a real browser** against the real server: the module loads (HTTP 200), the Mailbox screen reports the Rust SDK, chats, a chat, the greeting/closing preview, a send (refused by the missing mail server, as expected), the calendar, all through Rust |
 | Adapter between the generated and the screens' shapes | done; 11 Node tests with a fake of the generated shapes, plus the browser run above |
 | Native (JSI) build for Android and iOS | **written, never built or run**: `scripts/enable-sdk.sh android\|ios` and `rustSdk.native.ts` follow the embedded backend's setup, but this needs the NDK or Xcode (CI has a job to add) |
-| Shopping and finance APIs | **not done** |
-| Removing the TypeScript clients | **not done, on purpose**: Expo Go and builds without the SDK need them; they go when every build the project ships has the SDK |
+| `ApiClient`, the generic client: bytes in, status and bytes out, a refusal is an answer, only not reaching the server is an error | done; tested against the real finance router (with mail mounted beside it), and over a real socket (token sent, `/health` open, no token in an error) |
+| The finance app and the shopping assistant sending everything through Rust | done and **driven in a real browser**: with the SDK on, all 9 requests of the Today screen, the shopping assistant's and mail's came from WebAssembly and none from JavaScript (seen by wrapping `fetch` and reading each call's stack). The first load waits for the module, so nothing is asked twice |
+| Typed Rust calls for the finance API | **not done** (68 operations, 114 schemas in `openapi.json`: the plan is to generate the Rust types and client from that file, with a CI check that the generated file is current) |
+| Typed Rust calls for the shopping API | **not done** (no OpenAPI file; its wire types would move out of `shop-api` into a light crate like mail's, and the untagged attribute value needs a UniFFI custom type) |
+| Removing the TypeScript clients | **not done, on purpose**: the typed wrappers of finance and shopping are still how those apps decide what to ask, and Expo Go, the standalone shopping app, the catalog and the tests need the TypeScript transports. What can go once every build has the SDK: `RemoteTransport`, `RemoteShopTransport` and the mail HTTP client; what can go once typed calls exist: the wrappers |
 
 ### The rest of the plan
 
+0. (done) the generic client for finance and shopping, so all three apps do their server I/O in Rust.
 1. A CI job for the native build of `crates/sdk` (the existing `android-app` / `ios-app` jobs are the pattern),
    so the JSI path is proven, and the generated native types checked against `MailSdkLike`.
-2. **Shopping**: move its wire types (`shop-core`, rich: tagged enums, untagged attribute values, maps) into a
+2. **Typed shopping calls**: move its wire types (`shop-core`, rich: tagged enums, untagged attribute values, maps) into a
    light crate the SDK can use; the attribute values need a UniFFI custom type (a JSON string) because UniFFI
    has no untagged unions.
-3. **Finance**: the DTOs live in `crates/api` with the OpenAPI schemas; they move to a light types crate the
+3. **Typed finance calls**: the DTOs live in `crates/api` with the OpenAPI schemas; they move to a light types crate the
    same way, the generated `schema.d.ts` goes away.
-4. Remove the TypeScript clients once every shipped build has the SDK.
+4. Remove the TypeScript clients and transports once every shipped build has the SDK.
 
 Steps 2 and 3 are the bulk of the work (about 100 types and 100 endpoints), and each ends with the same checks as
 mail: the SDK against the real router, then the browser against the real server.

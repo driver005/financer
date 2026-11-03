@@ -6,14 +6,17 @@
 //! ([`transport::HttpTransport`]) or, on the phone that runs the backend inside the app, the server's
 //! router in the same process.
 //!
-//! So far: the mail API ([`mail::MailSdk`]). See docs/SDK.md for what follows.
+//! Two ways in: typed calls (the mail API, [`mail::MailSdk`]) and a generic byte client for every other
+//! call ([`raw::ApiClient`]), which the finance app and the shopping assistant use. See docs/SDK.md.
 
 pub mod error;
 pub mod mail;
+pub mod raw;
 pub mod transport;
 
 pub use error::SdkError;
 pub use mail::MailSdk;
+pub use raw::{ApiClient, RawRequest, RawResponse};
 #[cfg(feature = "http")]
 pub use transport::HttpTransport;
 pub use transport::{Request, Response, Transport};

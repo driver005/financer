@@ -108,7 +108,7 @@ export function ShopRuntime({ host, children }: { host: ModuleHost; children: Re
             setClient(null);
             return;
           }
-          transport = new RemoteShopTransport({ baseUrl, token });
+          transport = (await host.makeTransport?.({ baseUrl, token })) ?? new RemoteShopTransport({ baseUrl, token });
           setWhere("server");
         } else if (wantPhone && host.startEmbedded) {
           const backend = await host.startEmbedded({

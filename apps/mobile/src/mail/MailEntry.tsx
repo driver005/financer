@@ -9,10 +9,7 @@ type Host = { server: () => Promise<{ baseUrl: string; token: string } | null>; 
 // loaded with `require` so this app's type check does not descend into it (the catalog checks it).
 const { MailModule } = require("../../../../packages/mail/src") as { MailModule: ComponentType<{ host: Host }> };
 
-// The Rust SDK, in builds made with EXPO_PUBLIC_RUST_SDK=1 (scripts/enable-sdk.sh). The flag is tested
-// here with the variable written out, so a build without it leaves the generated bindings out of the
-// bundle entirely, like the shopping assistant (see ../shop/ShoppingEntry.tsx and docs/SDK.md).
-const rustSdk: unknown = process.env.EXPO_PUBLIC_RUST_SDK === "1" ? require("./rustSdk").rustSdk : null;
+import { rustSdk } from "@/api/rustTransport";
 
 /**
  * The mail client inside the finance app. It lives on the same server and uses the same token, so

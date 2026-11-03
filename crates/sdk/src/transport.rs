@@ -11,8 +11,10 @@ pub struct Request {
     pub method: String,
     /// Path and query, e.g. `/v1/mail/conversations?by=topic`.
     pub path: String,
-    /// A JSON body, if there is one.
+    /// A body, if there is one (JSON unless `content_type` says otherwise).
     pub body: Option<Vec<u8>>,
+    /// The body's type when it is not JSON (`text/csv` for a bank export).
+    pub content_type: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

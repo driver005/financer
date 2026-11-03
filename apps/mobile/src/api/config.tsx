@@ -4,6 +4,7 @@ import { Api, type ApiConfig } from "./client";
 import { CONFIG_KEY, MODE_KEY } from "./keys";
 import { initialMode, type BackendMode } from "./mode";
 import { deleteSecret, getSecret, setSecret } from "./storage";
+import { rustSdk, rustTransportFor, type RustTransport } from "./rustTransport";
 import { EmbeddedTransport } from "./transport";
 import { disableBackgroundRefresh, enableBackgroundRefresh } from "../native/background";
 import {
@@ -120,10 +121,30 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     setEmbedded(next);
   }, []);
 
-  const remoteApi = useMemo(() => (config ? new Api(config) : null), [config]);
+  // With the Rust SDK in the build, requests to the server go through it. The first load waits for it
+  // (so no request is made twice, once each way); if it cannot load, the TypeScript transport does the
+  // same job. A server that is changed later switches over as soon as the SDK is ready.
+  const [rust, setRust] = useState<{ config: ApiConfig; transport: RustTransport } | null>(null);
+  const [rustChecked, setRustChecked] = useState(!rustSdk);
+  useEffect(() => {
+    setRust(null);
+    if (!loaded) return;
+    if (!config) {
+      setRustChecked(true);
+      return;
+    }
+    let alive = true;
+    void rustTransportFor(config)
+      .then((transport) => alive && transport && setRust({ config, transport }))
+      .finally(() => alive && setRustChecked(true));
+    return () => {
+      alive = false;
+    };
+  }, [loaded, config]);
+  const remoteApi = useMemo(() => (config && rustChecked ? new Api(rust && rust.config === config ? rust.transport : config) : null), [config, rust, rustChecked]);
   const value = useMemo<ConfigState>(
     () => ({
-      loaded,
+      loaded: loaded && rustChecked,
       mode,
       modeChosen,
       setMode,
@@ -136,7 +157,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
       saveEmbedded,
       embeddedError,
     }),
-    [loaded, mode, setMode, config, embeddedApi, remoteApi, save, clear, embedded, saveEmbedded, embeddedError],
+    [loaded, rustChecked, mode, setMode, config, embeddedApi, remoteApi, save, clear, embedded, saveEmbedded, embeddedError],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

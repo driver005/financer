@@ -109,8 +109,8 @@ export class Api {
 
   /** Open endpoint: checks the server is reachable, without needing the token. */
   async health(): Promise<boolean> {
-    if (this.transport instanceof RemoteTransport) return this.transport.health();
-    return true;
+    const t = this.transport as Transport & { health?: () => Promise<boolean> };
+    return typeof t.health === "function" ? t.health() : true;
   }
 
   transactions() {

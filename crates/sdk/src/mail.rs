@@ -313,6 +313,7 @@ impl MailSdk {
                 method: method.to_string(),
                 path: format!("{PREFIX}{path}"),
                 body,
+                content_type: None,
             })
             .await?;
         if !(200..300).contains(&res.status) {

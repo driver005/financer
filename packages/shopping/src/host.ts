@@ -3,7 +3,7 @@
 
 import type { ProgressSurface } from "./logic/progress";
 import type { LocalNotice } from "./logic/dealNotifications";
-import type { ShopBackendHandle, ShopServerConfig } from "./api/transport";
+import type { ShopBackendHandle, ShopServerConfig, ShopTransport } from "./api/transport";
 
 export type KeyValue = {
   get(key: string): Promise<string | null>;
@@ -29,6 +29,11 @@ export type ModuleHost = {
    * token, so one setup serves both apps; the standalone app has none.
    */
   sharedServer?: () => Promise<ShopServerConfig | null>;
+  /**
+   * Carries the requests to a server, when the host has a better way than `fetch` (the Rust SDK).
+   * Returns null to use the module's own. See docs/SDK.md.
+   */
+  makeTransport?: (config: ShopServerConfig) => Promise<ShopTransport | null>;
   /** Start the Rust shopping backend of this build; absent or null when the build has none. */
   startEmbedded?: ((config: EmbeddedStart) => Promise<ShopBackendHandle>) | null;
   /** Where the index run's progress is shown (a notification). */

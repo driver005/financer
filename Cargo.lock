@@ -1894,8 +1894,10 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
+ "financer-api",
  "financer-mail-api",
  "financer-mail-core",
+ "financer-store",
  "http-body-util",
  "reqwest 0.13.5",
  "serde",
