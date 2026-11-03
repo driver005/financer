@@ -1,0 +1,130 @@
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[derive(DeriveIden)]
+enum Calendars {
+    Table,
+    Id,
+    Name,
+    Tone,
+    Visible,
+    Position,
+}
+
+#[derive(DeriveIden)]
+enum CalendarEvents {
+    Table,
+    Id,
+    CalendarId,
+    Title,
+    Notes,
+    Location,
+    AllDay,
+    StartDate,
+    StartTime,
+    EndDate,
+    EndTime,
+    RepeatKind,
+    RepeatInterval,
+    RepeatWeekdays,
+    RepeatUntil,
+    RepeatCount,
+    ExdatesJson,
+    RemindersJson,
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(Calendars::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(Calendars::Id)
+                            .big_integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(Calendars::Name).string().not_null())
+                    .col(ColumnDef::new(Calendars::Tone).string().not_null())
+                    .col(ColumnDef::new(Calendars::Visible).boolean().not_null())
+                    .col(ColumnDef::new(Calendars::Position).integer().not_null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_table(
+                Table::create()
+                    .table(CalendarEvents::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(CalendarEvents::Id)
+                            .big_integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(CalendarEvents::CalendarId)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(CalendarEvents::Title).string().not_null())
+                    .col(ColumnDef::new(CalendarEvents::Notes).text().null())
+                    .col(ColumnDef::new(CalendarEvents::Location).string().null())
+                    .col(ColumnDef::new(CalendarEvents::AllDay).boolean().not_null())
+                    .col(ColumnDef::new(CalendarEvents::StartDate).date().not_null())
+                    .col(ColumnDef::new(CalendarEvents::StartTime).time().null())
+                    .col(ColumnDef::new(CalendarEvents::EndDate).date().not_null())
+                    .col(ColumnDef::new(CalendarEvents::EndTime).time().null())
+                    .col(
+                        ColumnDef::new(CalendarEvents::RepeatKind)
+                            .string()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CalendarEvents::RepeatInterval)
+                            .integer()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(CalendarEvents::RepeatWeekdays).string().null())
+                    .col(ColumnDef::new(CalendarEvents::RepeatUntil).date().null())
+                    .col(ColumnDef::new(CalendarEvents::RepeatCount).integer().null())
+                    .col(
+                        ColumnDef::new(CalendarEvents::ExdatesJson)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CalendarEvents::RemindersJson)
+                            .text()
+                            .not_null(),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_calendar_events_start")
+                    .table(CalendarEvents::Table)
+                    .col(CalendarEvents::StartDate)
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(CalendarEvents::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(Calendars::Table).to_owned())
+            .await
+    }
+}
