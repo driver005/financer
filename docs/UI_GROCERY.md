@@ -1,5 +1,12 @@
 # Grocery screens: UI pass
 
+> **Superseded.** The finance app is now built on the design system in `packages/ui` (see [UI.md](UI.md)):
+> `kit.tsx`, `ui.tsx`, `panel.tsx`, `rows.tsx`, `theme.ts`, `colors.ts`, `tokens.ts`, `SettingsKit.tsx` and
+> `grocery/primitives.tsx` no longer exist, and neither do HeroUI Native and the utility classes. This page
+> records the decisions of the earlier look and which screens were drawn how; the file names in it refer to
+> that earlier code.
+
+
 A visual and structural pass over the grocery side of the mobile app: Prices, Scan, Recipes, Meal
 plan (with the shopping list and the recipe picker), Usual items and Receipts. Behaviour, data flow,
 API calls and routes are unchanged.

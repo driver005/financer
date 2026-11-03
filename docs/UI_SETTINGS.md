@@ -1,5 +1,12 @@
 # UI pass: Settings, onboarding and the small list screens
 
+> **Superseded.** The finance app is now built on the design system in `packages/ui` (see [UI.md](UI.md)):
+> `kit.tsx`, `ui.tsx`, `panel.tsx`, `rows.tsx`, `theme.ts`, `colors.ts`, `tokens.ts`, `SettingsKit.tsx` and
+> `grocery/primitives.tsx` no longer exist, and neither do HeroUI Native and the utility classes. This page
+> records the decisions of the earlier look and which screens were drawn how; the file names in it refer to
+> that earlier code.
+
+
 A visual and structural pass over **Settings**, the **first-run setup**, **Rules**, **Alerts**,
 **Subscriptions** and the **bank sync** screen. Behaviour, data flow, API calls and routes are
 unchanged. Screenshots (390 x 844, light and dark, from a static web build against a mocked

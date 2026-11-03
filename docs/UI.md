@@ -1,6 +1,6 @@
 # The UI package (`packages/ui`) and its catalog (`apps/catalog`)
 
-Every visual element of the shopping assistant comes from `packages/ui`. A screen never contains a
+Every visual element of both apps, the finance app and the shopping assistant, comes from `packages/ui`. A screen never contains a
 padding, margin, gap, size, radius, font size, shadow or colour of its own; it names a **token**.
 The research behind the shapes of the screens is in [UI_RESEARCH.md](UI_RESEARCH.md).
 
@@ -22,8 +22,8 @@ The research behind the shapes of the screens is in [UI_RESEARCH.md](UI_RESEARCH
 ## Design language: HeroUI
 
 The shopping app looks like the finance app, which uses HeroUI, so the two feel like one product. The
-values are read from `heroui-native`'s own style sheets (`apps/mobile/node_modules/heroui-native/src/styles`),
-converted from oklch to sRGB hex (`palette.hero` in `constants/palette.ts`).
+values were read from HeroUI Native's own style sheets (the library the finance app used before it moved onto this
+package), converted from oklch to sRGB hex (`palette.hero` in `constants/palette.ts`).
 
 - **Colour:** HeroUI's neutral zinc greys, its blue accent, green, amber and red; a light page with white
   surfaces and a grey secondary fill; in the dark theme a near-black page with `#18181b` surfaces. Status
@@ -101,7 +101,29 @@ It is a small purpose-built app and not Storybook or Widgetbook itself: the real
 dependencies and a build of their own, and the repository's rule is not to add a UI library without
 asking.
 
+## The finance app
+
+`apps/mobile` is built on this package too. Its screens (`src/app`) and the components they are made of
+(`src/components`) contain no style prop, no `StyleSheet`, no `View`/`Text` from react-native, no colour and no
+raw spacing or size; `tests/guard.test.mjs` enforces it for these folders as for the shopping assistant.
+
+What the finance screens needed beyond the shopping ones lives in `packages/ui/src/finance` and `components`:
+
+| Piece | Used for |
+| --- | --- |
+| `Money` | every amount: German notation, real minus sign, tabular, one line; income green, spending plain |
+| `HeroCard`, `HeroChip`, `HeroFigure`, `HeroNumber`, `HeroCaption`, `HeroStats`, `HeroProgress` | the one filled card at the top of a screen |
+| `BarChart`, `ColumnChart`, `CurveChart`, `DonutChart`, `CompareBars`, `ProgressRing` | charts; each takes a `summary` sentence that is its screen reader label |
+| `Group`, `ListItem` (`tile`, `value`, `note`, `tone`, `disclosure`, `leading`), `ToggleRow`, `Expandable`, `ConfirmAction`, `Note` | settings and lists |
+| `IconBadge`, `Stepper`, `TileButton`, `ChoiceCard`, `Snackbar` | small controls |
+| `VirtualList` | long lists, in the same readable column as a `Screen` |
+| `Mascot`, `MascotFace`, `Confetti`, `ScanFrame`, `Cover` | the playful and the camera parts |
+
+The app adds a few components of its own on top (`Page` for the title bar, `AppFrame` for the adaptive navigation,
+`Loading`, `Empty` and `NeedsSetup` in `Status.tsx`, `SectionSwitch`); they use only this package.
+
 ## What is not covered
 
-- `apps/mobile` (the finance app) still uses HeroUI and its own tokens; it is **not** migrated.
+- Logic files (`src/*.ts`, `src/native`, `src/api`) name colours the old way (`"good"`, `"warn"`) and icons as plain
+  strings; `src/uiTone.ts` turns those into tones and icon names at the edge.
 - The catalog was checked in a desktop browser at the three device widths; it was not run on a physical phone or tablet.
