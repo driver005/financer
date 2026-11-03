@@ -6,8 +6,7 @@ import { File, Paths } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
-import type { EmbeddedStart, KeyValue, ModuleHost } from "../host";
-import type { ShopBackendHandle, ShopServerConfig } from "../api/transport";
+import type { EmbeddedStart, KeyValue, ModuleHost, ShopBackendHandle, ShopServerConfig } from "../host";
 import type { LocalNotice } from "../logic/dealNotifications";
 import { createProgressSurface, requestProgressPermission } from "./progressSurface";
 
@@ -75,8 +74,8 @@ export type HostOptions = {
   /** The generated `ShopBackend` of the native module, or null in builds without it. */
   ShopBackend?: { start(config: { dbPath: string; sourcesJson?: string; claudeApiKey?: string; openaiApiKey?: string }): Promise<ShopBackendHandle> } | null;
   sharedServer?: () => Promise<ShopServerConfig | null>;
-  /** A transport for the server's requests, e.g. the Rust SDK's; null or absent: `fetch`. */
-  makeTransport?: ModuleHost["makeTransport"];
+  /** The shopping API of a server through the Rust SDK. */
+  makeCaller?: ModuleHost["makeCaller"];
   onExit?: () => void;
 };
 
@@ -87,7 +86,7 @@ export function createHost(opts: HostOptions = {}): ModuleHost {
     storage: fileStorage(),
     secrets: secretStorage(),
     sharedServer: opts.sharedServer,
-    makeTransport: opts.makeTransport,
+    makeCaller: opts.makeCaller,
     startEmbedded: backend ? (c: EmbeddedStart) => backend.start(c) : null,
     progress: (_query, onStop) => createProgressSurface(onStop),
     dataDir: documentDir,

@@ -88,6 +88,26 @@ pub enum EmbeddedError {
     },
 }
 
+impl EmbeddedError {
+    /// A refusal keeps its status and words; anything else is a failure.
+    pub(crate) fn from_sdk(e: financer_sdk::SdkError) -> EmbeddedError {
+        match e {
+            financer_sdk::SdkError::Api {
+                status,
+                message,
+                problems,
+            } => EmbeddedError::Refused {
+                status,
+                message,
+                problems,
+            },
+            other => EmbeddedError::Failed {
+                message: other.to_string(),
+            },
+        }
+    }
+}
+
 #[derive(uniffi::Object)]
 pub struct Backend {
     router: Router,
@@ -112,9 +132,10 @@ impl HttpResponse {
 }
 
 /// The SDK's transport over this backend's router.
-struct InProcess {
-    router: Router,
-    token: String,
+pub(crate) struct InProcess {
+    pub(crate) router: Router,
+    /// The token the router requires (the finance backend adds its own); none for the shop's.
+    pub(crate) token: Option<String>,
 }
 
 #[async_trait::async_trait]
@@ -125,7 +146,7 @@ impl financer_sdk::Transport for InProcess {
     ) -> Result<financer_sdk::Response, financer_sdk::SdkError> {
         let res = dispatch(
             &self.router,
-            Some(&self.token),
+            self.token.as_deref(),
             HttpRequest {
                 method: r.method,
                 path_and_query: r.path,
@@ -229,7 +250,7 @@ impl Backend {
     fn wire(&self) -> Arc<financer_sdk::Wire> {
         financer_sdk::Wire::with_transport(Arc::new(InProcess {
             router: self.router.clone(),
-            token: self.token.clone(),
+            token: Some(self.token.clone()),
         }))
     }
 
@@ -344,20 +365,10 @@ impl Backend {
         op: String,
         args: String,
     ) -> Result<String, EmbeddedError> {
-        self.wire().call(app, op, args).await.map_err(|e| match e {
-            financer_sdk::SdkError::Api {
-                status,
-                message,
-                problems,
-            } => EmbeddedError::Refused {
-                status,
-                message,
-                problems,
-            },
-            other => EmbeddedError::Failed {
-                message: other.to_string(),
-            },
-        })
+        self.wire()
+            .call(app, op, args)
+            .await
+            .map_err(EmbeddedError::from_sdk)
     }
 
     pub async fn refresh_prices(&self) -> Result<String, EmbeddedError> {

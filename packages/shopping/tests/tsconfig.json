@@ -7,7 +7,7 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "outDir": "../.test-build",
-    "rootDir": "..",
+    "rootDir": "../..",
     "types": [
       "node"
     ],
@@ -19,6 +19,7 @@
   "include": [
     "../src/api/*.ts",
     "../src/logic/*.ts",
-    "./*.test.ts"
+    "./*.test.ts",
+    "../../wire/src/index.ts"
   ]
 }

@@ -39,7 +39,7 @@ export function readRefusal(e: unknown): Refusal & { message: string } {
   return { status: 0, message: inner?.message ?? any?.message ?? String(e), problems: [] };
 }
 
-/** One app of the server, called by name. */
+/** One app of the server, called by name (`op`, or `app.op` for another app of the same server). */
 export interface Caller {
   call<T>(op: string, args?: Record<string, unknown>): Promise<T>;
 }
@@ -50,10 +50,14 @@ export interface Caller {
  */
 export function bind(wire: WireLike, app: App, Failure: new (status: number, message: string, problems: string[]) => Error = CallError): Caller {
   return {
-    async call<T>(op: string, args: Record<string, unknown> = {}): Promise<T> {
+    async call<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+      // `shop.categories` names a call of another app of the same server
+      const dot = name.indexOf(".");
+      const target = (dot < 0 ? app : name.slice(0, dot)) as App;
+      const op = dot < 0 ? name : name.slice(dot + 1);
       let text: string;
       try {
-        text = await wire.call(app, op, JSON.stringify(args));
+        text = await wire.call(target, op, JSON.stringify(args));
       } catch (e) {
         const r = readRefusal(e);
         throw new Failure(r.status ?? 0, r.message, r.problems ?? []);

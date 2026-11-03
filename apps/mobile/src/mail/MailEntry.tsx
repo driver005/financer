@@ -2,14 +2,17 @@ import { useRouter } from "expo-router";
 import { useMemo, type ComponentType } from "react";
 
 import { useApi } from "@/api/config";
+import { wireFor } from "../../../../packages/wire/src/connect";
 
-type Host = { server: () => Promise<{ baseUrl: string; token: string } | null>; onExit: () => void; sdk?: unknown };
+type Server = { baseUrl: string; token: string };
+type Host = { server: () => Promise<Server | null>; onExit: () => void; makeCaller: (config: Server) => Promise<unknown> };
 
 // The mail client is bundled source from packages/mail, drawn entirely with packages/ui. It is
 // loaded with `require` so this app's type check does not descend into it (the catalog checks it).
-const { MailModule } = require("../../../../packages/mail/src") as { MailModule: ComponentType<{ host: Host }> };
-
-import { rustSdk } from "@/api/rustTransport";
+const { MailModule, mailCaller } = require("../../../../packages/mail/src") as {
+  MailModule: ComponentType<{ host: Host }>;
+  mailCaller: (wire: unknown) => unknown;
+};
 
 /**
  * The mail client inside the finance app. It lives on the same server and uses the same token, so
@@ -23,7 +26,7 @@ export function MailEntry() {
     () => ({
       server: async () => (mode === "remote" && config ? { baseUrl: config.baseUrl, token: config.token } : null),
       onExit: () => (router.canGoBack() ? router.back() : router.replace("/")),
-      sdk: rustSdk,
+      makeCaller: async (c) => mailCaller(await wireFor(c)),
     }),
     [config, mode, router],
   );

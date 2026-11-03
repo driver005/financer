@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Api } from "../src/api/client";
-import type { Transport } from "../src/api/transport";
+import { apiWith } from "./fakeWire";
 import {
   EMPTY_DRAFT,
   describeRule,
@@ -121,19 +121,8 @@ describe("split form", () => {
 });
 
 describe("categorization API calls", () => {
-  function api() {
-    const calls: { method: string; path: string; body?: unknown }[] = [];
-    const transport: Transport = {
-      async send(req) {
-        calls.push({ method: req.method, path: req.path, body: typeof req.body === "string" ? JSON.parse(req.body) : undefined });
-        return { status: req.method === "DELETE" ? 204 : 200, text: req.method === "DELETE" ? "" : "{}" };
-      },
-    };
-    return { client: new Api(transport), calls };
-  }
-
-  it("uses the documented routes and bodies", async () => {
-    const { client, calls } = api();
+  it("names the documented calls with their values", async () => {
+    const { api: client, calls } = apiWith((op) => (op.startsWith("delete_") ? undefined : {}));
     await client.rules();
     await client.createRule({ pattern: "a", kind: "contains", category: "dining" });
     await client.updateRule(7, { pattern: "a", kind: "equals", category: "dining" });
@@ -147,24 +136,12 @@ describe("categorization API calls", () => {
     await client.suggestCategories();
     await client.acceptSuggestions([{ merchant: "kiosk", category: "dining" }]);
     assert.deepEqual(
-      calls.map((c) => `${c.method} ${c.path}`),
-      [
-        "GET /v1/rules",
-        "POST /v1/rules",
-        "PUT /v1/rules/7",
-        "DELETE /v1/rules/7",
-        "POST /v1/rules/reorder",
-        "POST /v1/rules/apply",
-        "PUT /v1/transactions/9/category",
-        "GET /v1/transactions/splits",
-        "PUT /v1/transactions/9/split",
-        "DELETE /v1/transactions/9/split",
-        "POST /v1/transactions/categorize-unknown",
-        "POST /v1/transactions/categorize-unknown/accept",
-      ],
+      calls.map((c) => c.op),
+      ["list_rules", "create_rule", "update_rule", "delete_rule", "reorder_rules", "apply_rules", "set_category", "list_splits", "put_split", "delete_split", "categorize_unknown", "accept_suggestions"],
     );
-    assert.deepEqual(calls[4].body, { ids: [3, 1] });
-    assert.deepEqual(calls[6].body, { category: "dining", remember: true });
-    assert.deepEqual(calls[11].body, { suggestions: [{ merchant: "kiosk", category: "dining" }] });
+    assert.deepEqual(calls[2].args, { id: 7, body: { pattern: "a", kind: "equals", category: "dining" } });
+    assert.deepEqual(calls[4].args, { body: { ids: [3, 1] } });
+    assert.deepEqual(calls[6].args, { id: 9, body: { category: "dining", remember: true } });
+    assert.deepEqual(calls[11].args, { body: { suggestions: [{ merchant: "kiosk", category: "dining" }] } });
   });
 });

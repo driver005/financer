@@ -36,3 +36,11 @@ test("not reaching the server is status 0 with the words it came with", async ()
   await assert.rejects(caller.call("x"), (e: CallError) => e.status === 0 && /cannot reach/.test(e.message));
   assert.deepEqual(readRefusal(new Error("plain")), { status: 0, message: "plain", problems: [] });
 });
+
+test("a call can name another app of the same server", async () => {
+  const seen: string[] = [];
+  const caller = bind(wire(async (app, op) => (seen.push(`${app}.${op}`), "[]")), "finance");
+  await caller.call("shop.categories");
+  await caller.call("list_transactions");
+  assert.deepEqual(seen, ["shop.categories", "finance.list_transactions"]);
+});

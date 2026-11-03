@@ -16,118 +16,93 @@ import type {
   Template,
   TemplateList,
 } from "./types";
-import type { MailTransport } from "./transport";
+import { bind, CallError, type Caller, type WireLike } from "../../../wire/src";
 
-export class MailApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    /** One entry per problem when the server refused a template or a recipient. */
-    public problems: string[] = [],
-  ) {
-    super(message);
+export class MailApiError extends CallError {
+  constructor(status: number, message: string, problems: string[] = []) {
+    super(status, status === 404 ? "This server has no mail client. It needs a build with the mail feature (docs/MAIL.md)." : message, problems);
   }
 }
 
-const PREFIX = "/v1/mail";
-
-function query(params: Record<string, string | number | boolean | undefined>): string {
-  const parts = Object.entries(params)
-    .filter(([, v]) => v !== undefined && v !== "")
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
-  return parts.length ? `?${parts.join("&")}` : "";
+/** The mail API of a connection (a server through the Rust SDK). */
+export function mailCaller(wire: WireLike): Caller {
+  return bind(wire, "mail", MailApiError);
 }
 
-/** Typed client for the mail API (`/v1/mail`). */
+/**
+ * The mail API (`/v1/mail`) as the screens use it. Every method names a call of the Rust SDK and
+ * passes its values by name; the paths, the encoding and the checking of the answer are the SDK's
+ * (crates/sdk, docs/SDK.md).
+ */
 export class MailClient {
-  constructor(private transport: MailTransport) {}
+  constructor(private caller: Caller) {}
 
-  private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await this.transport.send({
-      method,
-      path: PREFIX + path,
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    if (res.status < 200 || res.status >= 300) {
-      let message = `request failed (${res.status})`;
-      let problems: string[] = [];
-      try {
-        const parsed = JSON.parse(res.text) as { error?: string; problems?: string[] };
-        if (parsed.error) message = parsed.error;
-        if (Array.isArray(parsed.problems)) problems = parsed.problems;
-      } catch {
-        if (res.status === 401) message = "The server did not accept the token.";
-        else if (res.status === 404) message = "This server has no mail client. It needs a build with the mail feature (docs/MAIL.md).";
-        else if (res.text && res.text.length < 200) message = res.text;
-      }
-      throw new MailApiError(res.status, message, problems);
-    }
-    return (res.status === 204 || res.text === "" ? undefined : JSON.parse(res.text)) as T;
+  private op<T>(op: string, args?: Record<string, unknown>) {
+    return this.caller.call<T>(op, args);
   }
 
   info(): Promise<MailInfo> {
-    return this.call("GET", "/info");
+    return this.op("info");
   }
 
   sync(): Promise<SyncReport> {
-    return this.call("POST", "/sync", {});
+    return this.op("sync");
   }
 
   conversations(q: ListQuery = {}): Promise<ConversationList> {
-    return this.call("GET", `/conversations${query({ by: q.by, scope: q.scope, q: q.q?.trim(), limit: q.limit })}`);
+    return this.op("conversations", { by: q.by, scope: q.scope, q: q.q?.trim() || undefined, limit: q.limit });
   }
 
   conversation(key: string): Promise<ConversationDetail> {
-    return this.call("GET", `/conversations/${encodeURIComponent(key)}`);
+    return this.op("conversation", { key });
   }
 
   markRead(key: string): Promise<{ marked: number }> {
-    return this.call("POST", `/conversations/${encodeURIComponent(key)}/read`, {});
+    return this.op("mark_read", { key });
   }
 
   message(id: number): Promise<MessageDetail> {
-    return this.call("GET", `/messages/${id}`);
+    return this.op("message", { id });
   }
 
   templates(): Promise<TemplateList> {
-    return this.call("GET", "/templates");
+    return this.op("templates");
   }
 
   createTemplate(t: Omit<Template, "id">): Promise<Template> {
-    return this.call("POST", "/templates", t);
+    return this.op("create_template", { body: t });
   }
 
   updateTemplate(t: Template): Promise<Template> {
-    return this.call("PUT", `/templates/${t.id}`, t);
+    return this.op("update_template", { body: t });
   }
 
   deleteTemplate(id: number): Promise<void> {
-    return this.call("DELETE", `/templates/${id}`);
+    return this.op("delete_template", { id });
   }
 
   preview(req: PreviewRequest): Promise<Preview> {
-    return this.call("POST", "/compose/preview", req);
+    return this.op("preview", { body: req });
   }
 
   send(req: SendRequest): Promise<SendResult> {
-    return this.call("POST", "/send", req);
+    return this.op("send", { body: req });
   }
 
   events(range: { from?: string; to?: string; includeCancelled?: boolean } = {}): Promise<EventsResponse> {
-    return this.call("GET", `/events${query({ from: range.from, to: range.to, include_cancelled: range.includeCancelled ? true : undefined })}`);
+    return this.op("events", { from: range.from, to: range.to, include_cancelled: range.includeCancelled ? true : undefined });
   }
 
   createEvent(e: NewEvent): Promise<CalendarEvent> {
-    return this.call("POST", "/events", e);
+    return this.op("create_event", { body: e });
   }
 
   removeEvent(id: number): Promise<void> {
-    return this.call("DELETE", `/events/${id}`);
+    return this.op("remove_event", { id });
   }
 
   restoreEvent(id: number): Promise<CalendarEvent> {
-    return this.call("POST", `/events/${id}/restore`, {});
+    return this.op("restore_event", { id });
   }
 }
 

@@ -1,11 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { Api, type ApiConfig } from "./client";
+import type { Api, ApiConfig } from "./client";
+import { connectApi, embeddedApi as makeEmbeddedApi } from "./connect";
 import { CONFIG_KEY, MODE_KEY } from "./keys";
 import { initialMode, type BackendMode } from "./mode";
 import { deleteSecret, getSecret, setSecret } from "./storage";
-import { rustSdk, rustTransportFor, type RustTransport } from "./rustTransport";
-import { EmbeddedTransport } from "./transport";
 import { disableBackgroundRefresh, enableBackgroundRefresh } from "../native/background";
 import {
   EMBEDDED_KEY,
@@ -37,6 +36,8 @@ type ConfigState = {
   embedded: EmbeddedSettings;
   saveEmbedded: (settings: EmbeddedSettings) => Promise<void>;
   embeddedError: string | null;
+  /** Why requests to the server cannot be made: this build has no Rust SDK, or it could not be loaded. */
+  sdkError: string | null;
 };
 
 const Ctx = createContext<ConfigState | null>(null);
@@ -81,7 +82,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     startEmbedded(embedded)
       .then((backend) => {
         if (!cancelled) {
-          setEmbeddedApi(new Api(new EmbeddedTransport(backend)));
+          setEmbeddedApi(makeEmbeddedApi(backend));
           setEmbeddedError(null);
           // refresh prices once now (the app is open) and ask the OS for background windows
           void backend.refreshPrices().catch(() => {});
@@ -121,27 +122,30 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     setEmbedded(next);
   }, []);
 
-  // With the Rust SDK in the build, requests to the server go through it. The first load waits for it
-  // (so no request is made twice, once each way); if it cannot load, the TypeScript transport does the
-  // same job. A server that is changed later switches over as soon as the SDK is ready.
-  const [rust, setRust] = useState<{ config: ApiConfig; transport: RustTransport } | null>(null);
-  const [rustChecked, setRustChecked] = useState(!rustSdk);
+  // Every request to a server goes through the Rust SDK. The first load waits for it, and a server that
+  // is changed later switches over as soon as the SDK is ready. A build without the SDK says so.
+  const [remote, setRemote] = useState<{ config: ApiConfig; api: Api } | null>(null);
+  const [sdkChecked, setSdkChecked] = useState(false);
+  const [sdkError, setSdkError] = useState<string | null>(null);
   useEffect(() => {
-    setRust(null);
+    setRemote(null);
+    setSdkError(null);
     if (!loaded) return;
     if (!config) {
-      setRustChecked(true);
+      setSdkChecked(true);
       return;
     }
     let alive = true;
-    void rustTransportFor(config)
-      .then((transport) => alive && transport && setRust({ config, transport }))
-      .finally(() => alive && setRustChecked(true));
+    void connectApi(config)
+      .then((api) => alive && setRemote({ config, api }))
+      .catch((e) => alive && setSdkError(e instanceof Error ? e.message : String(e)))
+      .finally(() => alive && setSdkChecked(true));
     return () => {
       alive = false;
     };
   }, [loaded, config]);
-  const remoteApi = useMemo(() => (config && rustChecked ? new Api(rust && rust.config === config ? rust.transport : config) : null), [config, rust, rustChecked]);
+  const rustChecked = sdkChecked;
+  const remoteApi = useMemo(() => (remote && remote.config === config ? remote.api : null), [config, remote]);
   const value = useMemo<ConfigState>(
     () => ({
       loaded: loaded && rustChecked,
@@ -156,8 +160,9 @@ export function ApiProvider({ children }: { children: ReactNode }) {
       embedded,
       saveEmbedded,
       embeddedError,
+      sdkError,
     }),
-    [loaded, rustChecked, mode, setMode, config, embeddedApi, remoteApi, save, clear, embedded, saveEmbedded, embeddedError],
+    [loaded, rustChecked, mode, setMode, config, embeddedApi, remoteApi, save, clear, embedded, saveEmbedded, embeddedError, sdkError],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

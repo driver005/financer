@@ -103,6 +103,11 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: The wire to the SDK
+        working-directory: packages/wire
+        run: |
+          npm ci
+          npm test
 
   # The UI package: token and contrast tests, and the guard that keeps raw spacing, sizes and
   # colours out of the screens (CLAUDE.md); the catalog must type check and bundle (docs/UI.md).
@@ -134,8 +139,9 @@ jobs:
           npm run typecheck
           CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/catalog-web"
 
-  # The Rust SDK in the app (docs/SDK.md): builds the WebAssembly module, generates its TypeScript and
-  # bundles the web app with it. It does not run the app; the native (JSI) build is in native.yml.
+  # The Rust SDK in the app (docs/SDK.md): the apps reach every server through it, so every bundle needs
+  # it. Builds the WebAssembly module, generates its TypeScript and bundles the web apps with it. It does
+  # not run them; the native (JSI) build is in native.yml.
   sdk-web:
     runs-on: ubuntu-latest
     steps:
@@ -153,20 +159,29 @@ jobs:
           cache: npm
           cache-dependency-path: |
             apps/mobile/package-lock.json
+            apps/shopping/package-lock.json
             apps/sdk-bindings/package-lock.json
       - run: npm ci --prefix apps/mobile
+      - run: npm ci --prefix apps/shopping
       - run: apps/mobile/scripts/enable-sdk.sh web
-      - name: Bundle the web app with the Rust SDK
+      - run: apps/mobile/scripts/enable-sdk.sh web ../shopping
+      - name: Finance app bundles with the SDK, with the shop inside and without it
         working-directory: apps/mobile
-        env:
-          EXPO_PUBLIC_RUST_SDK: "1"
-          CI: "1"
         run: |
-          npx expo export --platform web --output-dir "$RUNNER_TEMP/rust-web"
-          find "$RUNNER_TEMP/rust-web" -name 'financer_sdk*.wasm' | grep .
+          EXPO_PUBLIC_SHOPPING=1 CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/mobile-with-shop"
+          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/mobile-without-shop"
+          find "$RUNNER_TEMP/mobile-with-shop" -name 'financer_sdk*.wasm' | grep .
+          # without the flag the shop's code must not be in the bundle at all
+          ! grep -rl "Nothing is read from the web" "$RUNNER_TEMP/mobile-without-shop/_expo"
+          grep -rl "Nothing is read from the web" "$RUNNER_TEMP/mobile-with-shop/_expo"
+      - name: Standalone shopping app bundles with the SDK
+        working-directory: apps/shopping
+        run: |
+          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/shop-web"
+          find "$RUNNER_TEMP/shop-web" -name 'financer_sdk*.wasm' | grep .
 
-  # The shopping assistant: its module (logic tests), the standalone app (type check, web bundle)
-  # and the finance app bundled with it (docs/SHOP.md).
+  # The shopping assistant: its module (logic tests) and the standalone app (type check). The bundles
+  # with the finance app are in sdk-web (docs/SHOP.md).
   shopping:
     runs-on: ubuntu-latest
     steps:
@@ -183,18 +198,8 @@ jobs:
         run: |
           npm ci --prefix packages/shopping
           npm test --prefix packages/shopping
-      - name: Standalone app type check and web bundle
+      - name: Standalone app type check (its web bundle is in sdk-web, which has the Rust SDK)
         working-directory: apps/shopping
         run: |
           npm ci
           npm run typecheck
-          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/shop-web"
-      - name: Finance app bundles with the shop inside, and without it
-        working-directory: apps/mobile
-        run: |
-          npm ci
-          EXPO_PUBLIC_SHOPPING=1 CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/mobile-with-shop"
-          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/mobile-without-shop"
-          # without the flag the shop's code must not be in the bundle at all
-          ! grep -rl "Nothing is read from the web" "$RUNNER_TEMP/mobile-without-shop/_expo"
-          grep -rl "Nothing is read from the web" "$RUNNER_TEMP/mobile-with-shop/_expo"

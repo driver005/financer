@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Builds the Rust SDK (crates/sdk) for the app and turns it on (opt-in; see docs/SDK.md).
+# Builds the Rust SDK (crates/sdk) for an app. The apps reach every server through it (docs/SDK.md),
+# so run this once before starting, bundling or building an app.
 #
-#   scripts/enable-sdk.sh web                browser: WebAssembly, needs wasm-bindgen-cli (see below)
-#   scripts/enable-sdk.sh android            phone: needs cargo-ndk and the Android NDK
-#   scripts/enable-sdk.sh ios                phone: needs Xcode (macOS)
+#   scripts/enable-sdk.sh web [app]          browser: WebAssembly, needs wasm-bindgen-cli (see below)
+#   scripts/enable-sdk.sh android [app]      phone: needs cargo-ndk and the Android NDK
+#   scripts/enable-sdk.sh ios [app]          phone: needs Xcode (macOS)
 #
-# Then start or build the app with EXPO_PUBLIC_RUST_SDK=1. Without it (the default) the app uses its
-# TypeScript client, which also runs in Expo Go and in any browser. If the SDK cannot be loaded at
-# run time, the app falls back to that client by itself.
+# `app` is the app folder (default: this one, apps/mobile; apps/shopping is the other one that calls
+# a server). Expo Go cannot load the native module: a phone needs a development build.
 set -euo pipefail
 platform="${1:-web}"
 case "$platform" in web | android | ios) ;; *) echo "usage: $0 web|android|ios" >&2; exit 2 ;; esac
 
-app="$(cd "$(dirname "$0")/.." && pwd)"
+app="$(cd "${2:-$(dirname "$0")/..}" && pwd)"
 bindings="$app/../sdk-bindings"
 
 (cd "$bindings" && npm install --no-audit --no-fund)
@@ -33,4 +33,4 @@ case "$platform" in
     (cd "$app" && npm install --no-audit --no-fund --install-links "$bindings" @ubjs/react-native@0.31.0-6 @ubjs/core@0.31.0-6)
     ;;
 esac
-echo "Rust SDK built for $platform. Start the app with EXPO_PUBLIC_RUST_SDK=1 (npx expo start / export)."
+echo "Rust SDK built for $platform. Start or bundle the app now (npx expo start / export)."

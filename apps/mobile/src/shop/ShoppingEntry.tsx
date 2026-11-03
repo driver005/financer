@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import { useMemo, type ComponentType } from "react";
 
 import { useApi } from "@/api/config";
-import { rustTransportFor } from "@/api/rustTransport";
+import { wireFor } from "../../../../packages/wire/src/connect";
 import { ShopBackend } from "../../modules/financer-embedded";
 
 type Host = unknown;
@@ -11,10 +11,11 @@ type ShoppingExports = {
   createHost: (options: {
     ShopBackend: unknown;
     sharedServer: () => Promise<{ baseUrl: string; token: string } | null>;
-    makeTransport: (config: { baseUrl: string; token: string }) => Promise<unknown>;
+    makeCaller: (config: { baseUrl: string; token: string }) => Promise<unknown>;
     onExit: () => void;
   }) => Host;
   registerIndexService: () => void;
+  shopCaller: (wire: unknown) => unknown;
 };
 
 // The shopping assistant is bundled source from packages/shopping. It is loaded with `require`
@@ -39,8 +40,8 @@ export function ShoppingEntry() {
       shopping?.createHost({
         ShopBackend,
         sharedServer: async () => (mode === "remote" && config ? { baseUrl: config.baseUrl, token: config.token } : null),
-        // the Rust SDK carries the requests when the build has it
-        makeTransport: (c) => rustTransportFor(c),
+        // the Rust SDK carries every request
+        makeCaller: async (c) => shopping.shopCaller(await wireFor(c)),
         onExit: () => (router.canGoBack() ? router.back() : router.replace("/")),
       }),
     [config, mode, router],

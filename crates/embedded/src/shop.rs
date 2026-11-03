@@ -97,6 +97,23 @@ impl ShopBackend {
         self.handle_request(request).await
     }
 
+    /// One call of the shopping API by name (`app` is `shop`; `args` is a JSON object), answered as
+    /// JSON text: the same typed calls as the app makes to a server, over the in-process router.
+    pub async fn call(
+        &self,
+        app: String,
+        op: String,
+        args: String,
+    ) -> Result<String, EmbeddedError> {
+        financer_sdk::Wire::with_transport(Arc::new(crate::InProcess {
+            router: self.router.clone(),
+            token: None,
+        }))
+        .call(app, op, args)
+        .await
+        .map_err(EmbeddedError::from_sdk)
+    }
+
     /// Look at the watches against what the last searches found; returns how many new deal
     /// messages there are. Cheap, makes no network request.
     pub async fn check_deals(&self) -> Result<u32, EmbeddedError> {
@@ -148,6 +165,37 @@ mod tests {
         json!([{ "name": "feed", "kind": "feed", "feed_url": "https://f.test/all.csv", "category": "smartphone",
                  "mapping": { "title": "name", "price": "price", "url": "link", "brand": "brand" } }])
         .to_string()
+    }
+
+    #[tokio::test]
+    async fn the_apps_typed_shop_calls_run_in_process() {
+        let backend = ShopBackend::start_with(
+            ShopStartConfig {
+                db_path: temp_db("typed"),
+                sources_json: None,
+                claude_api_key: None,
+                openai_api_key: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+        let info = backend
+            .call("shop".into(), "info".into(), "{}".into())
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&info).unwrap()["mode"],
+            "integrated"
+        );
+        let refused = backend
+            .call("shop".into(), "product".into(), r#"{"id":"nope"}"#.into())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(refused, EmbeddedError::Refused { status: 404, .. }),
+            "{refused:?}"
+        );
     }
 
     #[tokio::test]

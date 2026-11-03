@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { Api } from "../src/api/client";
 import type { Alert, PriceHike, Subscriptions, UpcomingCharge } from "../src/api/client";
-import type { Transport } from "../src/api/transport";
+import { apiWith } from "./fakeWire";
 import {
   alertText,
   badgesFor,
@@ -179,30 +179,22 @@ describe("nextChargeText", () => {
 });
 
 describe("Api watchdog calls", () => {
-  function recording(body: string) {
-    const calls: Array<{ method: string; path: string }> = [];
-    const transport: Transport = {
-      async send(req) {
-        calls.push({ method: req.method, path: req.path });
-        return { status: 200, text: body };
-      },
-    };
-    return { api: new Api(transport), calls };
-  }
-
-  it("asks for the right paths", async () => {
-    const { api, calls } = recording("{}");
+  it("names the calls and passes the values by name, leaving out what is not asked", async () => {
+    const { api, calls } = apiWith();
     await api.subscriptions();
     await api.subscriptions(60);
     await api.alerts();
     await api.alerts(true);
     await api.dismissAlert("dup-0123abcd");
-    assert.deepEqual(calls, [
-      { method: "GET", path: "/v1/subscriptions" },
-      { method: "GET", path: "/v1/subscriptions?days=60" },
-      { method: "GET", path: "/v1/alerts" },
-      { method: "GET", path: "/v1/alerts?include_dismissed=true" },
-      { method: "POST", path: "/v1/alerts/dup-0123abcd/dismiss" },
-    ]);
+    assert.deepEqual(
+      calls.map((c) => [c.op, c.args]),
+      [
+        ["subscriptions", {}],
+        ["subscriptions", { days: 60 }],
+        ["alerts", {}],
+        ["alerts", { include_dismissed: true }],
+        ["dismiss_alert", { id: "dup-0123abcd" }],
+      ],
+    );
   });
 });

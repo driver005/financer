@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Api } from "../src/api/client";
-import { RemoteTransport } from "../src/api/transport";
+import { apiWith } from "./fakeWire";
 import {
   LIDL_PROMISES,
   SOURCE_ORDER,
@@ -168,22 +168,8 @@ describe("Lidl sign-in", () => {
 });
 
 describe("API client", () => {
-  function api(handler: (req: { method: string; path: string; body?: string }) => { status: number; body: unknown }) {
-    const calls: { method: string; path: string; body?: string }[] = [];
-    const fetchFn = (async (url: string, init: { method: string; body?: string }) => {
-      const path = url.replace("http://server", "");
-      calls.push({ method: init.method, path, body: init.body });
-      const r = handler({ method: init.method, path, body: init.body });
-      return { status: r.status, text: async () => (r.body === undefined ? "" : JSON.stringify(r.body)) };
-    }) as unknown as typeof fetch;
-    const a = new Api(new RemoteTransport({ baseUrl: "http://server", token: "t" }, fetchFn));
-    return { a, calls };
-  }
-
-  it("calls the receipt source endpoints", async () => {
-    const { a, calls } = api(({ path }) =>
-      path.endsWith("/lidl") ? { status: 204, body: undefined } : { status: 200, body: path.includes("sources") ? [] : { ok: true } },
-    );
+  it("names the receipt source calls", async () => {
+    const { api: a, calls } = apiWith((op) => (op === "list_sources" ? [] : op === "lidl_disconnect" ? undefined : { ok: true }));
     await a.receiptSources();
     await a.syncReceipts();
     await a.syncReceipts("folder");
@@ -192,20 +178,17 @@ describe("API client", () => {
     await a.lidlStatus();
     await a.lidlDisconnect();
     assert.deepEqual(
-      calls.map((c) => `${c.method} ${c.path}`),
+      calls.map((c) => [c.op, c.args]),
       [
-        "GET /v1/receipts/sources",
-        "POST /v1/receipts/sync",
-        "POST /v1/receipts/sync",
-        "POST /v1/receipts/lidl/start",
-        "POST /v1/receipts/lidl/finish",
-        "GET /v1/receipts/lidl/status",
-        "DELETE /v1/receipts/lidl",
+        ["list_sources", {}],
+        ["sync_now", {}],
+        ["sync_now", { body: { source: "folder" } }],
+        ["lidl_start", {}],
+        ["lidl_finish", { body: { state: "st", callback_url: "com.lidlplus.app://callback?code=A" } }],
+        ["lidl_status", {}],
+        ["lidl_disconnect", {}],
       ],
     );
-    assert.equal(calls[1].body, undefined);
-    assert.deepEqual(JSON.parse(calls[2].body ?? "{}"), { source: "folder" });
-    assert.deepEqual(JSON.parse(calls[4].body ?? "{}"), { state: "st", callback_url: "com.lidlplus.app://callback?code=A" });
   });
 });
 
