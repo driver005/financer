@@ -315,7 +315,18 @@ export type Block = {
   /** Which of `columns` side-by-side columns it sits in. */
   column: number;
   columns: number;
+  /**
+   * How it is drawn: events that start at about the same time share the width side by side (`lane`
+   * of `lanes`), later starts lie on top of earlier ones (`depth` of `depths`, each a little further right).
+   */
+  lane: number;
+  lanes: number;
+  depth: number;
+  depths: number;
 };
+
+/** Events whose starts are this close (minutes) would hide each other's titles, so they sit side by side. */
+export const SAME_START_MINUTES = 30;
 
 /** The shortest a block is drawn, so a 5-minute event can still be seen and tapped. */
 export const MIN_BLOCK_MINUTES = 30;
@@ -335,11 +346,21 @@ export function dayBlocks(list: Occurrence[], date: string): Block[] {
     .sort((a, b) => a.top - b.top || b.bottom - a.bottom);
 
   const blocks: Block[] = [];
-  let cluster: { occurrence: Occurrence; top: number; bottom: number; column: number }[] = [];
+  type Placed = { occurrence: Occurrence; top: number; bottom: number; column: number };
+  let cluster: Placed[] = [];
   let clusterEnd = -1;
   const flush = () => {
     const columns = cluster.reduce((n, b) => Math.max(n, b.column + 1), 0);
-    for (const b of cluster) blocks.push({ ...b, columns });
+    // bands: blocks starting together; the bands of a cluster lie on top of each other
+    const bands: Placed[][] = [];
+    for (const b of cluster) {
+      const band = bands[bands.length - 1];
+      if (band && b.top - band[0].top < SAME_START_MINUTES) band.push(b);
+      else bands.push([b]);
+    }
+    bands.forEach((band, depth) => {
+      band.forEach((b, lane) => blocks.push({ ...b, columns, lane, lanes: band.length, depth, depths: bands.length }));
+    });
     cluster = [];
     clusterEnd = -1;
   };

@@ -7,7 +7,7 @@ import type { StoryDef } from "../Story";
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const item = (key: string, title: string, tone: CalendarItem["tone"], time?: string, allDay = false): CalendarItem => ({ key, title, tone, allDay, time, onPress: () => {} });
-const block = (key: string, title: string, tone: TimeBlock["tone"], from: number, to: number, column = 0, columns = 1, subtitle?: string): TimeBlock => ({ key, title, subtitle, tone, top: from, bottom: to, column, columns, onPress: () => {} });
+const block = (key: string, title: string, tone: TimeBlock["tone"], from: number, to: number, depth = 0, depths = 1, subtitle?: string, lane = 0, lanes = 1): TimeBlock => ({ key, title, subtitle, tone, top: from, bottom: to, lane, lanes, depth, depths, onPress: () => {} });
 const minutes = (h: number, m = 0) => h * 60 + m;
 
 const day = (n: number): string => `2026-11-${String(n).padStart(2, "0")}`;

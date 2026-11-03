@@ -141,8 +141,10 @@ export function dayColumns(dates: string[], today: string, selected: string, occ
       tone: b.occurrence.tone,
       top: b.top,
       bottom: b.bottom,
-      column: b.column,
-      columns: b.columns,
+      lane: b.lane,
+      lanes: b.lanes,
+      depth: b.depth,
+      depths: b.depths,
       onPress: () => onOpen(b.occurrence),
     }));
     return {

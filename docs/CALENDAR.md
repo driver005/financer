@@ -13,6 +13,9 @@ phone or internet contract.
 - **Change and delete**: tap an event for its details, then Edit or Delete. For a repeating event, Delete asks
   "this event" (only that day is skipped) or "all events".
 - **Events**: title, all day or from/to (date and time), repeat, calendar, reminders, location, notes.
+- **Overlaps**: events at the same time lie on top of each other and their colours mix (blue over green looks
+  teal), so a clash shows at a glance; events that start together (within half an hour, where the titles would hide
+  each other) sit side by side instead.
 - **Repeats**: every n days, weeks (on chosen weekdays), months or years, ending never, on a date or after n
   times. A monthly event on the 31st happens on the last day of shorter months.
 - **Calendars**: several, each with a colour that can be shown or hidden. There is always at least one.

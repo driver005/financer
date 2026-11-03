@@ -21,8 +21,12 @@ export type TimeBlock = {
   tone: Tone;
   top: number;
   bottom: number;
-  column: number;
-  columns: number;
+  /** Events that start together share the width: `lane` of `lanes`. */
+  lane: number;
+  lanes: number;
+  /** Events that start later lie on top of earlier ones, each a little further right: `depth` of `depths`. */
+  depth: number;
+  depths: number;
   onPress?: () => void;
 };
 

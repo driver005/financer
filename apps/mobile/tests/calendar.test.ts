@@ -159,6 +159,14 @@ describe("the day column", () => {
     assert.deepEqual(by[3], [0, 2]); // starts when e1 ended
     assert.deepEqual(by[4], [0, 1]); // a new cluster
   });
+  it("lays events that start together side by side and later ones on top", () => {
+    const blocks = dayBlocks([occ(1, "09:00", "10:00"), occ(2, "09:10", "10:30"), occ(3, "09:45", "11:00"), occ(4, "10:00", "10:30")], "2026-11-03");
+    const by = Object.fromEntries(blocks.map((b) => [b.occurrence.eventId, [b.lane, b.lanes, b.depth, b.depths]]));
+    assert.deepEqual(by[1], [0, 2, 0, 2]); // 1 and 2 start within half an hour: side by side
+    assert.deepEqual(by[2], [1, 2, 0, 2]);
+    assert.deepEqual(by[3], [0, 2, 1, 2]); // 3 and 4 start later and lie on top of them
+    assert.deepEqual(by[4], [1, 2, 1, 2]);
+  });
   it("draws a very short event at a size that can be tapped", () => {
     const [b] = dayBlocks([occ(1, "09:00", "09:05")], "2026-11-03");
     assert.equal(b.bottom - b.top, 30);

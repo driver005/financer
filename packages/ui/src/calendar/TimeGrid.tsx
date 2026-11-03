@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { type GestureResponderEvent, Pressable, ScrollView, type ScrollViewInstance, View } from "react-native";
 
-import { opacity } from "../constants/misc";
-import { borderWidth, radius } from "../constants/radius";
+import { opacity, overlap } from "../constants/misc";
+import { borderWidth } from "../constants/radius";
 import { size } from "../constants/sizes";
 import { space } from "../constants/spacing";
 import { Box } from "../primitives/Box";
@@ -81,7 +81,7 @@ export function TimeGrid({ days, nowMinutes, onSlot, onSelectDay }: { days: DayC
               {HOURS.slice(1).map((h) => (
                 <View key={h} pointerEvents="none" style={{ position: "absolute", top: h * hour, left: 0, right: 0, ...hair }} />
               ))}
-              {d.blocks.map((b) => (
+              {[...d.blocks].sort((a, b) => a.depth - b.depth).map((b) => (
                 <Block key={b.key} block={b} />
               ))}
               {d.today && nowMinutes !== undefined ? (
@@ -104,33 +104,34 @@ function AllDayChip({ item }: { item: CalendarItem }) {
   return item.onPress ? <Touchable onPress={item.onPress} label={item.title} hit={false}>{body}</Touchable> : body;
 }
 
+/**
+ * One event. Events that overlap in time lie on top of each other, each a little further right so
+ * every title stays readable, and each fill is see-through: where two overlap their colours mix
+ * (blue over green looks teal), so a clash is visible at a glance. Events that start together
+ * (their titles would hide each other) share the width side by side instead.
+ */
 function Block({ block: b }: { block: TimeBlock }) {
   const { colors } = useTheme();
   const hour = size.calendar.hour;
   const tall = b.bottom - b.top >= 45;
+  const indent = Math.min(overlap.indent, overlap.spread / Math.max(1, b.depths - 1));
+  const from = b.depth * indent;
+  const share = (100 - from) / b.lanes;
   return (
     <View
       style={{
         position: "absolute",
         top: (b.top / 60) * hour,
         height: ((b.bottom - b.top) / 60) * hour - size.stroke.hair,
-        left: `${(b.column / b.columns) * 100}%`,
-        width: `${100 / b.columns}%`,
+        left: `${from + b.lane * share}%`,
+        width: `${share}%`,
         paddingRight: size.stroke.sm,
       }}
     >
-      <Touchable
-        onPress={b.onPress}
-        label={b.subtitle ? `${b.title}, ${b.subtitle}` : b.title}
-        hit={false}
-        bg={`${b.tone}-soft`}
-        radius="md"
-        p="xs"
-        overflow="hidden"
-        grow
-      >
-        <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: size.stroke.md, backgroundColor: colors.tones[b.tone].solid, borderTopLeftRadius: radius.md, borderBottomLeftRadius: radius.md }} />
-        <Box pl="xs">
+      <Touchable onPress={b.onPress} label={b.subtitle ? `${b.title}, ${b.subtitle}` : b.title} hit={false} radius="md" overflow="hidden" grow>
+        <View pointerEvents="none" style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colors.tones[b.tone].solid, opacity: opacity[40] }} />
+        <View pointerEvents="none" style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: size.stroke.md, backgroundColor: colors.tones[b.tone].solid }} />
+        <Box p="xs" pl="sm">
           <Text variant="caption" tone={`on-${b.tone}-soft`} numberOfLines={tall ? 2 : 1}>{b.title}</Text>
           {tall && b.subtitle ? <Text variant="caption" tone={`on-${b.tone}-soft`} numberOfLines={1}>{b.subtitle}</Text> : null}
         </Box>
@@ -138,4 +139,3 @@ function Block({ block: b }: { block: TimeBlock }) {
     </View>
   );
 }
-
