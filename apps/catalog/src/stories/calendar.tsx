@@ -14,11 +14,11 @@ const day = (n: number): string => `2026-11-${String(n).padStart(2, "0")}`;
 
 function monthWeeks(): MonthCell[][] {
   const weeks: MonthCell[][] = [];
-  // 26 October 2026 is a Monday; six weeks.
+  // the grid starts on Monday 26 October 2026; six weeks.
   for (let w = 0; w < 6; w += 1) {
     const row: MonthCell[] = [];
     for (let d = 0; d < 7; d += 1) {
-      const offset = w * 7 + d - 6; // 1 November is the 7th cell
+      const offset = w * 7 + d - 5; // 1 November (a Sunday) is the 7th cell
       const inMonth = offset >= 1 && offset <= 30;
       const date = inMonth ? day(offset) : `${offset < 1 ? "2026-10" : "2026-12"}-${String(offset < 1 ? 31 + offset : offset - 30).padStart(2, "0")}`;
       const items: CalendarItem[] = [];
