@@ -1,10 +1,8 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { Button, Expandable, Note, Row, Text } from "@financer/ui";
 
 import type { ExportData } from "@/api/client";
 import { useApi } from "@/api/config";
-import { FieldMessage, PanelText, SettingsPanel } from "@/components/settings/SettingsKit";
-import { Button } from "@/components/ui";
 import { pickTextFile, shareTextFile } from "@/native/files";
 
 /** Settings, Account & data: the plain JSON export and import (the encrypted backup is its own card). */
@@ -31,29 +29,22 @@ export function DataCard() {
       const text = await pickTextFile(["application/json", "text/plain"]);
       if (text === null) return;
       const r = await api.importData(JSON.parse(text) as ExportData);
-      setStatus({
-        text: `Imported ${r.transactions_added} new transactions (${r.transactions_known} already here) and ${r.receipts_added} receipts.`,
-        ok: true,
-      });
+      setStatus({ text: `Imported ${r.transactions_added} new transactions (${r.transactions_known} already here) and ${r.receipts_added} receipts.`, ok: true });
     } catch (e) {
       setStatus({ text: e instanceof SyntaxError ? "That file is not a Financer backup." : e instanceof Error ? e.message : "Import failed", ok: false });
     }
   }
 
   return (
-    <SettingsPanel icon="swap-vertical-bold" title="Export and import" summary="Move your data as a plain file">
-      <PanelText style={{ marginTop: 4 }}>
+    <Expandable icon="swap-vertical-bold" title="Export and import" summary="Move your data as a plain file">
+      <Text variant="caption" tone="muted">
         A backup file holds your transactions, budget, usual items and receipts, never PINs, tokens or API keys. Use it to back up, or to move between a server and this phone. Importing twice changes nothing.
-      </PanelText>
-      <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-        <View style={{ flex: 1 }}>
-          <Button label="Export" icon="export" onPress={exportBackup} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button label="Import" icon="import" mode="outlined" onPress={importBackup} />
-        </View>
-      </View>
-      {status ? <FieldMessage tone={status.ok ? "ok" : "error"}>{status.text}</FieldMessage> : null}
-    </SettingsPanel>
+      </Text>
+      <Row gap="sm">
+        <Button label="Export" icon="export" onPress={exportBackup} />
+        <Button label="Import" icon="import" variant="outline" onPress={importBackup} />
+      </Row>
+      {status ? <Note tone={status.ok ? "ok" : "error"}>{status.text}</Note> : null}
+    </Expandable>
   );
 }

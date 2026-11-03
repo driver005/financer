@@ -47,6 +47,8 @@ export const palette = {
 export const alpha = {
   scrimLight: "rgba(0, 0, 0, 0.4)",
   scrimDark: "rgba(0, 0, 0, 0.6)",
+  /** A dark chip behind text over a camera picture. */
+  chip: "rgba(0, 0, 0, 0.65)",
   clear: "rgba(0, 0, 0, 0)",
   /** The light streak along the top of a progress bar. */
   shine: "rgba(255, 255, 255, 0.35)",

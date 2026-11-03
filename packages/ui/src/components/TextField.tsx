@@ -35,13 +35,15 @@ export type TextFieldProps = {
   /** Do not let the keyboard fix the text (codes, IBANs, names of files). */
   autoCorrect?: boolean;
   editable?: boolean;
+  /** Called when the field is left (to show a problem only after the person was there). */
+  onBlur?: () => void;
   maxLength?: number;
   testID?: string;
 };
 
 export function TextField({
   label, value, onChangeText, placeholder, helper, error, icon, multiline, secure, keyboardType, returnKeyType, onSubmit,
-  clearable, variant = "secondary", autoFocus, capitalize, right, autoCorrect = false, editable = true, maxLength, testID,
+  clearable, variant = "secondary", autoFocus, capitalize, right, autoCorrect = false, editable = true, onBlur, maxLength, testID,
 }: TextFieldProps) {
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
@@ -79,7 +81,10 @@ export function TextField({
             editable={editable}
             maxLength={maxLength}
             onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            onBlur={() => {
+              setFocused(false);
+              onBlur?.();
+            }}
             accessibilityLabel={label ?? placeholder}
             testID={testID}
             style={[

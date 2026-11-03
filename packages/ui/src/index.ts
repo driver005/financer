@@ -71,3 +71,5 @@ export { ToggleRow } from "./components/ToggleRow";
 export { Snackbar } from "./components/Snackbar";
 export { VirtualList } from "./layout/VirtualList";
 export { Mascot, MascotFace, type Mood } from "./finance/Mascot";
+export { ScanFrame } from "./finance/ScanFrame";
+export { TileButton } from "./components/TileButton";
