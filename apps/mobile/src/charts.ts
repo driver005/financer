@@ -18,53 +18,6 @@ function toIso(ms: number): string {
 
 export type Point = { x: number; y: number };
 
-/**
- * Points for a line over `values`, scaled into a `width` x `height` box with `pad` on every side.
- * The y axis starts at 0 (a spending trend should not exaggerate small changes), the highest
- * value touches the top padding. One value gives one point in the middle.
- */
-export function sparkPoints(values: number[], width: number, height: number, pad = 2): Point[] {
-  if (values.length === 0) return [];
-  const max = Math.max(...values, 0);
-  const innerW = Math.max(0, width - pad * 2);
-  const innerH = Math.max(0, height - pad * 2);
-  return values.map((v, i) => ({
-    x: values.length === 1 ? width / 2 : pad + (innerW * i) / (values.length - 1),
-    y: pad + innerH - (max > 0 ? (innerH * Math.max(0, v)) / max : 0),
-  }));
-}
-
-/** SVG path (`M x y L x y ...`) through the points; empty string without points. */
-export function linePath(points: Point[]): string {
-  return points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-}
-
-/** The same line closed down to the baseline, for a soft fill under it. */
-export function areaPath(points: Point[], height: number, pad = 2): string {
-  if (points.length === 0) return "";
-  const base = height - pad;
-  const first = points[0];
-  const last = points[points.length - 1];
-  return `${linePath(points)} L${last.x.toFixed(1)} ${base} L${first.x.toFixed(1)} ${base} Z`;
-}
-
-export type Bar = { x: number; y: number; width: number; height: number };
-
-/**
- * Bars for `values` in a `width` x `height` box, `gap` apart. A bar is at least 2 tall when its
- * value is above 0, so a small amount stays visible next to a big one; a zero value has height 0.
- * `max` lets several charts share one scale (grouped bars).
- */
-export function barRects(values: number[], width: number, height: number, gap = 4, max?: number): Bar[] {
-  if (values.length === 0) return [];
-  const top = max ?? Math.max(...values, 0);
-  const barW = Math.max(1, (width - gap * (values.length - 1)) / values.length);
-  return values.map((v, i) => {
-    const h = top > 0 && v > 0 ? Math.max(2, (height * v) / top) : 0;
-    return { x: i * (barW + gap), y: height - h, width: barW, height: h };
-  });
-}
-
 export type SpendingTrend = {
   /** Cents spent per day, oldest first, `days` long. Refunds and income do not count. */
   series: number[];

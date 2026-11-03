@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { ChipRow, Segmented, Text, TextField } from "@financer/ui";
 
-import { TextInput } from "@/components/kit";
-import { FieldMessage, Segmented } from "@/components/settings/SettingsKit";
 import { FieldLabel, NumberTiles, Note, StepFrame, ToggleChip } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
 import { CHAINS, CHAIN_NAMES, HOUSEHOLD_MAX, mascotFor, parseBudget, parsePostalCode, type Cadence } from "@/onboarding";
@@ -56,30 +54,25 @@ export function HouseholdStep({ ctx }: { ctx: StepCtx }) {
       <FieldLabel>Grocery budget</FieldLabel>
       <Segmented<Cadence>
         value={cadence}
-        onValueChange={(v) => update({ groceryCadence: v })}
-        buttons={[
+        onChange={(v) => update({ groceryCadence: v })}
+        options={[
           { value: "weekly", label: "Per week" },
           { value: "monthly", label: "Per month" },
         ]}
       />
-      <View style={{ marginTop: 8 }}>
-        <TextInput
-          mode="outlined"
-          label={cadence === "weekly" ? "Budget per week" : "Budget per month"}
-          accessibilityLabel={cadence === "weekly" ? "Grocery budget per week in euros" : "Grocery budget per month in euros"}
-          value={budgetText}
-          onChangeText={onBudget}
-          keyboardType="decimal-pad"
-          placeholder="e.g. 60"
-          error={!budget.ok}
-          right={<TextInput.Affix text="€" />}
-        />
-        {!budget.ok ? <FieldMessage tone="error">{budget.error}</FieldMessage> : null}
-      </View>
+      <TextField
+        label={cadence === "weekly" ? "Budget per week" : "Budget per month"}
+        value={budgetText}
+        onChangeText={onBudget}
+        keyboardType="decimal-pad"
+        placeholder="e.g. 60"
+        error={!budget.ok ? budget.error : undefined}
+        right={<Text variant="label" tone="muted">€</Text>}
+      />
       <Note icon="help-circle-outline">Why we ask: your budget is the starting point for the daily number on the next screen. Leave it empty and I will suggest one.</Note>
 
       <FieldLabel>Where do you shop?</FieldLabel>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      <ChipRow>
         {CHAINS.map((c) => {
           const on = chains.includes(c);
           return (
@@ -91,22 +84,10 @@ export function HouseholdStep({ ctx }: { ctx: StepCtx }) {
             />
           );
         })}
-      </View>
+      </ChipRow>
 
       <FieldLabel>Postal code (optional)</FieldLabel>
-      <TextInput
-        mode="outlined"
-        label="Postal code"
-        accessibilityLabel="Postal code"
-        value={postal}
-        onChangeText={onPostal}
-        keyboardType="number-pad"
-        maxLength={5}
-        autoComplete="postal-code"
-        placeholder="10115"
-        error={!postalCheck.ok}
-      />
-      {!postalCheck.ok ? <FieldMessage tone="error">{postalCheck.error}</FieldMessage> : null}
+      <TextField label="Postal code" value={postal} onChangeText={onPostal} keyboardType="number-pad" maxLength={5} placeholder="10115" error={!postalCheck.ok ? postalCheck.error : undefined} />
       <Note icon="map-marker-outline">
         Why we ask: prices differ a little by region. It stays on this device with your setup. Today's price sources cover whole chains, so it does not change any numbers yet.
       </Note>

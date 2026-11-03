@@ -26,7 +26,7 @@ export type ListItemProps = {
   /** The accessible name when it differs from the title. */
   label?: string;
   /** The row is a switch or a toggle for assistive technology. */
-  role?: "button" | "switch" | "link";
+  role?: "button" | "switch" | "link" | "checkbox";
   checked?: boolean;
   onPress?: () => void;
   /** Show a chevron to say it opens something. */

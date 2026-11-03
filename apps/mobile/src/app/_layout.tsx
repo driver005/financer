@@ -1,8 +1,7 @@
 import { Tabs } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { HeroUINativeProvider } from "heroui-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { ThemeProvider } from "@financer/ui";
+import { ThemeProvider, fill } from "@financer/ui";
 
 import { ApiProvider } from "@/api/config";
 import { AppLockOverlay } from "@/components/AppLockOverlay";
@@ -11,13 +10,11 @@ import { BackupOnOpen } from "@/components/BackupOnOpen";
 import "@/native/background"; // defines the background task at startup
 import { NotificationSync } from "@/components/NotificationSync";
 import { OnboardingGate } from "@/components/OnboardingGate";
-import "@/global.css";
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView {...fill}>
       <ThemeProvider>
-      <HeroUINativeProvider config={{ toast: { defaultProps: { placement: "bottom" } } }}>
       <ApiProvider>
         {/* dark icons on the light theme, light icons on the dark one (the default left white ones on white) */}
         <StatusBar style="auto" />
@@ -53,7 +50,6 @@ export default function RootLayout() {
         <BackupOnOpen />
         <AppLockOverlay />
       </ApiProvider>
-    </HeroUINativeProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

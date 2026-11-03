@@ -1,13 +1,10 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { View } from "react-native";
+import { Button, Card, Note as Message, Text } from "@financer/ui";
 
 import { useApi } from "@/api/config";
-import { ChunkyButton, Text } from "@/components/kit";
-import { FieldMessage } from "@/components/settings/SettingsKit";
 import { Note, StepFrame } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
-import { Card, useColors } from "@/components/ui";
 import { pickFileBytes } from "@/native/files";
 import { mascotFor, nextStep, stepsFor } from "@/onboarding";
 import { applyDraft } from "@/onboardingApply";
@@ -20,7 +17,6 @@ type Message = { text: string; error: boolean };
 export function MoneyStep({ ctx }: { ctx: StepCtx }) {
   const { api, mode } = useApi();
   const router = useRouter();
-  const c = useColors();
   const { draft, update } = ctx;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
@@ -99,72 +95,48 @@ export function MoneyStep({ ctx }: { ctx: StepCtx }) {
       primary={{ label: "Continue", onPress: ctx.next, icon: "arrow-right" }}
       onSkip={ctx.next}
     >
-      <Card>
-        <Text variant="titleMedium">Sync with your bank</Text>
-        <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
+      <Card gap="sm">
+        <Text variant="subheading">Sync with your bank</Text>
+        <Text variant="caption" tone="muted">
           Pulls your Sparkasse bookings over FinTS. It needs a FinTS product ID, a free registration with the Deutsche Kreditwirtschaft that can take weeks, so most people start with a CSV. You approve each sync in your pushTAN app.{" "}
           {onPhone
             ? "With the on-phone backend your PIN never leaves the phone."
             : "Your PIN goes to your own server for the sync only and is never stored there."}{" "}
           Financer does not keep it unless you switch "remember" on in the sync screen.
         </Text>
-        <View style={{ marginTop: 12 }}>
-          <ChunkyButton outline icon="bank-transfer" label="Open bank sync" onPress={openBankSync} />
-        </View>
-        <Text variant="bodySmall" style={{ color: c.muted, marginTop: 6 }}>
-          This leaves the setup; your answers are saved and it picks up again the next time the app starts.
-        </Text>
+        <Button variant="outline" icon="bank-transfer" label="Open bank sync" onPress={openBankSync} />
+        <Text variant="caption" tone="muted">This leaves the setup; your answers are saved and it picks up again the next time the app starts.</Text>
       </Card>
 
-      <Card>
-        <Text variant="titleMedium">Import a CSV</Text>
-        <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
+      <Card gap="sm">
+        <Text variant="subheading">Import a CSV</Text>
+        <Text variant="caption" tone="muted">
           Export your bookings from Sparkasse online banking as CSV and pick the file. Importing the same file twice changes nothing.
         </Text>
-        <View style={{ marginTop: 12 }}>
-          <ChunkyButton
-            outline
-            icon="file-delimited-outline"
-            label={mixOk && draft.demoLoaded ? "Import anyway" : "Pick a CSV file"}
-            onPress={() => void importCsv()}
-            disabled={busy || offline}
-          />
-        </View>
-        {(draft.csvImported ?? 0) > 0 ? <FieldMessage tone="info">{draft.csvImported} bookings imported so far.</FieldMessage> : null}
+        <Button variant="outline" icon="file-delimited-outline" label={mixOk && draft.demoLoaded ? "Import anyway" : "Pick a CSV file"} onPress={() => void importCsv()} disabled={busy || offline} />
+        {(draft.csvImported ?? 0) > 0 ? <Message>{`${draft.csvImported} bookings imported so far.`}</Message> : null}
       </Card>
 
-      <Card>
-        <Text variant="titleMedium">Try with demo data</Text>
-        <Text variant="bodySmall" style={{ color: c.muted, marginTop: 4 }}>
+      <Card gap="sm">
+        <Text variant="subheading">Try with demo data</Text>
+        <Text variant="caption" tone="muted">
           Loads about four months of invented bookings (a salary, rent, a subscription, grocery trips) so Today is alive before you link anything. Every booking is labelled [DEMO]. It is only offered while there are no bookings yet, and it never touches your budget or your list of usual items.
         </Text>
         <Note icon="alert-outline">
           Be aware: Financer cannot delete bookings yet, so demo bookings stay until you start with an empty database. If you want to link your bank for real, skip this.
         </Note>
         {confirmDemo ? (
-          <View style={{ marginTop: 12, gap: 4 }}>
-            <ChunkyButton icon="check" label={busy ? "Loading…" : "Yes, load the demo data"} onPress={() => void loadDemo()} disabled={busy} />
-            <ChunkyButton flat label="Cancel" onPress={() => setConfirmDemo(false)} disabled={busy} />
-          </View>
+          <>
+            <Button icon="check" label={busy ? "Loading…" : "Yes, load the demo data"} onPress={() => void loadDemo()} disabled={busy} />
+            <Button variant="ghost" label="Cancel" onPress={() => setConfirmDemo(false)} disabled={busy} />
+          </>
         ) : (
-          <View style={{ marginTop: 12 }}>
-            <ChunkyButton
-              outline
-              icon="test-tube"
-              label={draft.demoLoaded ? "Demo data loaded" : "Try with demo data"}
-              onPress={() => setConfirmDemo(true)}
-              disabled={busy || offline || !!draft.demoLoaded}
-            />
-          </View>
+          <Button variant="outline" icon="test-tube" label={draft.demoLoaded ? "Demo data loaded" : "Try with demo data"} onPress={() => setConfirmDemo(true)} disabled={busy || offline || !!draft.demoLoaded} />
         )}
       </Card>
 
-      {offline ? (
-        <FieldMessage tone="info">
-          Importing and the demo need a connected backend. Go back one step to connect, or skip this for now.
-        </FieldMessage>
-      ) : null}
-      {message ? <FieldMessage tone={message.error ? "error" : "ok"}>{message.text}</FieldMessage> : null}
+      {offline ? <Message>Importing and the demo need a connected backend. Go back one step to connect, or skip this for now.</Message> : null}
+      {message ? <Message tone={message.error ? "error" : "ok"}>{message.text}</Message> : null}
     </StepFrame>
   );
 }

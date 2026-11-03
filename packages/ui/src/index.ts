@@ -74,3 +74,6 @@ export { VirtualList } from "./layout/VirtualList";
 export { Mascot, MascotFace, type Mood } from "./finance/Mascot";
 export { ScanFrame } from "./finance/ScanFrame";
 export { TileButton } from "./components/TileButton";
+export { ChoiceCard } from "./components/ChoiceCard";
+export { Confetti } from "./finance/Confetti";
+export { Cover, fill } from "./layout/Cover";

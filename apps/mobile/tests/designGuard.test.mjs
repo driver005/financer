@@ -1,6 +1,7 @@
-// Watches over the design: fails when a change breaks a rule the app's look depends on, so a
-// regression shows up in CI instead of on someone's phone. The rules are the ones the design pass
-// settled on (docs/UI_DESIGN.md). Each rule lists its few, deliberate exceptions.
+// Watches over the finance app's design: fails when a change breaks a rule that the look depends
+// on. What a screen may contain (no raw spacing, sizes or colours, no style props, nothing from
+// react-native but behaviour) is enforced by packages/ui/tests/guard.test.mjs; these are the rules
+// that are about this app's own screens.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -34,64 +35,27 @@ function hits(pattern, { except = [] } = {}) {
 }
 
 describe("design guard", () => {
-  it("colours come from the palette, not hex literals", () => {
-    // ScanFrame draws over the camera picture, SettingsKit owns the red of destructive buttons
-    const found = hits(/#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/, { except: ["components/grocery/ScanFrame.tsx", "components/settings/SettingsKit.tsx", "groceryView.ts"] });
-    assert.deepEqual(found, []);
-  });
-
   it("labels are in sentence case, not capitals", () => {
     assert.deepEqual(hits(/textTransform:\s*["']uppercase["']|\.toUpperCase\(\)/), []);
   });
 
-  it("borders are hairlines (1), except on inputs, the mascot and the scan frame", () => {
-    const found = hits(/borderWidth:\s*[2-9]\b/, { except: ["components/kit.tsx", "components/Mascot.tsx", "components/grocery/ScanFrame.tsx"] });
-    assert.deepEqual(found, []);
+  it("emoji are game content (mascot, badges, trophies, quests), never interface icons", () => {
+    // the interface uses vector icons; emoji live only where they ARE the content
+    const allowed = ["components/TrophiesCard.tsx", "app/trophies.tsx", "app/index.tsx"];
+    assert.deepEqual(hits(/\p{Extended_Pictographic}/u, { except: allowed }), []);
   });
 
-  it("buttons are flat: no 3D lip under them", () => {
-    assert.deepEqual(hits(/borderBottomWidth:\s*[3-9]\b/, { except: ["components/Mascot.tsx", "components/grocery/ScanFrame.tsx"] }), []);
-  });
-
-  it("no text under 12 points", () => {
-    assert.deepEqual(hits(/fontSize:\s*([0-9]|1[01])\b/), []);
-  });
-
-  it("emoji are game content (mascot, badges, toasts), never interface icons", () => {
-    // Today's pills and the forecast use vector icons; emoji live only where they ARE the content
-    const allowed = ["components/Mascot.tsx", "components/TrophiesCard.tsx", "components/onboarding/Frame.tsx", "app/trophies.tsx", "app/index.tsx"];
-    const found = hits(/\p{Extended_Pictographic}/u, { except: allowed });
-    assert.deepEqual(found, []);
-  });
-
-  it("screens use the shared Screen and Title, not their own page wrapper", () => {
+  it("every screen is a Page (title bar, Settings button or back button, safe areas)", () => {
     const bare = sources
       .filter((s) => s.path.startsWith("app/") && !s.path.startsWith("app/_") && !s.path.startsWith("app/+"))
-      .filter((s) => !/<Screen>|<Page\b|<Page>/.test(s.text) && !/<Redirect/.test(s.text))
-      // the shopping assistant is a module with its own screens (see src/shop)
-      .filter((s) => s.path !== "app/shop.tsx")
+      .filter((s) => !/<Page\b/.test(s.text) && !/<Redirect/.test(s.text))
+      // setup has its own frame, the shopping assistant is a module with its own screens (src/shop)
+      .filter((s) => s.path !== "app/shop.tsx" && s.path !== "app/onboarding.tsx")
       .map((s) => s.path);
     assert.deepEqual(bare, []);
   });
 
-  it("every screen shows a Title (it carries the Settings button and the back button)", () => {
-    const missing = sources
-      .filter((s) => s.path.startsWith("app/") && !s.path.startsWith("app/_") && !s.path.startsWith("app/+") && s.path !== "app/onboarding.tsx" && s.path !== "app/shop.tsx")
-      .filter((s) => !/<Title\b/.test(s.text))
-      .map((s) => s.path);
-    assert.deepEqual(missing, []);
-  });
-
-  it("an accent-filled rounded block is the shared HeroPanel, not a copy", () => {
-    // hand-made copies are how the screens drifted apart; the panel lives in components/panel.tsx
-    const found = hits(/backgroundColor:\s*p\.accent\b.*borderRadius:\s*(16|radius\.xl)|borderRadius:\s*(16|radius\.xl).*backgroundColor:\s*p\.accent\b/, {
-      except: ["components/panel.tsx", "components/today/TodayHero.tsx"],
-    });
-    assert.deepEqual(found, []);
-  });
-
-  it("filled tiles live in the Today overview only", () => {
-    const found = hits(/backgroundColor:\s*tint,/, { except: ["components/today/OverviewTiles.tsx"] });
-    assert.deepEqual(found, []);
+  it("nothing draws with the old kit, HeroUI or utility classes any more", () => {
+    assert.deepEqual(hits(/from "@\/components\/(ui|kit|panel|rows)"|from "heroui-native"|className=/), []);
   });
 });

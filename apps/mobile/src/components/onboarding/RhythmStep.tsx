@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { Text as RNText, View } from "react-native";
+import { Card, Text, TextField } from "@financer/ui";
 
 import { useApi } from "@/api/config";
-import { TextInput } from "@/components/kit";
-import { FieldMessage } from "@/components/settings/SettingsKit";
 import { PaydayPicker } from "@/components/PaydayPicker";
 import { ChoiceCard, FieldLabel, Note, StepFrame } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
@@ -11,12 +9,10 @@ import { formatCents } from "@/format";
 import { dailyAllowanceOn } from "@/game";
 import { INTENSITIES, groceryLimitFor, mascotFor, parseBudget, suggestAllowance, type Intensity } from "@/onboarding";
 import { budgetPeriod, localIsoDate, periodDays, periodLabel } from "@/period";
-import { usePalette } from "@/theme";
 
 export function RhythmStep({ ctx }: { ctx: StepCtx }) {
   const { draft, update } = ctx;
   const { api } = useApi();
-  const p = usePalette();
   const today = localIsoDate();
   const payday = draft.payday ?? 1;
   const [allowanceText, setAllowanceText] = useState(draft.dailyAllowanceCents === undefined ? "" : (draft.dailyAllowanceCents / 100).toFixed(2).replace(".", ","));
@@ -98,28 +94,20 @@ export function RhythmStep({ ctx }: { ctx: StepCtx }) {
 
       {draft.intensity ? (
         <>
-          <TextInput
-            mode="outlined"
+          <TextField
             label="Daily grocery goal"
-            accessibilityLabel="Daily grocery goal in euros"
             value={allowanceText}
             onChangeText={onAllowance}
             keyboardType="decimal-pad"
-            error={!allowance.ok}
-            right={<TextInput.Affix text="€ a day" />}
+            error={!allowance.ok ? allowance.error : undefined}
+            right={<Text variant="label" tone="muted">€ a day</Text>}
           />
-          {!allowance.ok ? <FieldMessage tone="error">{allowance.error}</FieldMessage> : null}
           {daily !== null && limit !== null ? (
-            <View
-              style={{ marginTop: 12, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: p.border, backgroundColor: p.surface }}
-              accessibilityLabel={`Your daily grocery goal is ${formatCents(daily)}`}
-            >
-              <RNText style={{ color: p.muted, fontSize: 13, fontWeight: "600" }}>Your daily grocery goal</RNText>
-              <RNText style={{ color: p.text, fontSize: 30, fontWeight: "800", marginTop: 4 }}>{formatCents(daily)} a day</RNText>
-              <RNText style={{ color: p.muted, fontSize: 13, marginTop: 4 }}>
-                {formatCents(limit)} over {periodDays(period)} days ({periodLabel(period)}). This is what the Today screen counts down.
-              </RNText>
-            </View>
+            <Card gap="xs">
+              <Text variant="label" tone="muted">Your daily grocery goal</Text>
+              <Text variant="title" accessibilityLabel={`Your daily grocery goal is ${formatCents(daily)}`}>{`${formatCents(daily)} a day`}</Text>
+              <Text variant="caption" tone="muted">{`${formatCents(limit)} over ${periodDays(period)} days (${periodLabel(period)}). This is what the Today screen counts down.`}</Text>
+            </Card>
           ) : null}
         </>
       ) : null}

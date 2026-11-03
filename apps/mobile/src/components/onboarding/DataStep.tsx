@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
+import { Note as Message, TextField } from "@financer/ui";
 
 import { Api } from "@/api/client";
 import { useApi } from "@/api/config";
-import { TextInput } from "@/components/kit";
-import { FieldMessage } from "@/components/settings/SettingsKit";
 import { ChoiceCard, FieldLabel, Note, StepFrame } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
 import { mascotFor, validateServer, type BackendChoice } from "@/onboarding";
@@ -113,46 +112,35 @@ export function DataStep({ ctx }: { ctx: StepCtx }) {
         onPress={() => void choose("server")}
       />
 
-      {choice === "embedded" && embeddedError ? <FieldMessage tone="error">{embeddedError}</FieldMessage> : null}
+      {choice === "embedded" && embeddedError ? <Message tone="error">{embeddedError}</Message> : null}
 
       {choice === "server" ? (
         <>
           <FieldLabel>Your server</FieldLabel>
-          <TextInput
-            mode="outlined"
+          <TextField
             label="Address (use https://)"
-            accessibilityLabel="Server address"
             value={baseUrl}
             onChangeText={(v) => {
               setBaseUrl(v);
               setConnected(false);
             }}
-            autoCapitalize="none"
-            autoCorrect={false}
             keyboardType="url"
             placeholder="https://financer.example.com"
-            error={!!addressProblem}
+            error={addressProblem ?? undefined}
           />
-          {addressProblem ? <FieldMessage tone="error">{addressProblem}</FieldMessage> : null}
-          <TextInput
-            mode="outlined"
+          <TextField
             label="API token"
-            accessibilityLabel="API token"
             value={token}
             onChangeText={(v) => {
               setToken(v);
               setConnected(false);
             }}
-            autoCapitalize="none"
-            autoCorrect={false}
-            secureTextEntry
+            secure
             onBlur={() => setTokenTouched(true)}
-            error={!!tokenProblem}
-            style={{ marginTop: 8 }}
+            error={tokenProblem ?? undefined}
           />
-          {tokenProblem ? <FieldMessage tone="error">{tokenProblem}</FieldMessage> : null}
-          {check.ok && check.warning ? <FieldMessage tone="error">{check.warning}</FieldMessage> : null}
-          {status ? <FieldMessage tone={status.ok ? "ok" : "error"}>{status.text}</FieldMessage> : null}
+          {check.ok && check.warning ? <Message tone="error">{check.warning}</Message> : null}
+          {status ? <Message tone={status.ok ? "ok" : "error"}>{status.text}</Message> : null}
           <Note icon="shield-lock-outline">
             Why we ask: the token is the password you set on the server (FINANCER_API_TOKEN). It is kept in this phone's secure storage and only sent to the address above.
           </Note>
