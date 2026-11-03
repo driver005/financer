@@ -173,7 +173,9 @@ mod tests {
         };
         let s = import(&store, "Amazon", &[a.clone(), b]).await.unwrap();
         assert_eq!((s.imported, s.duplicates, s.skipped), (2, 0, 0));
-        let s = import(&store, "Amazon", &[a.clone()]).await.unwrap();
+        let s = import(&store, "Amazon", std::slice::from_ref(&a))
+            .await
+            .unwrap();
         assert_eq!((s.imported, s.duplicates), (0, 1));
         // the same number at another shop is another order
         let s = import(&store, "eBay", &[a]).await.unwrap();
