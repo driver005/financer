@@ -127,6 +127,7 @@ impl Fixture {
             name: name.into(),
             kind: BankProvider::Fints,
             account_ids: vec![],
+            institution: None,
             bank_code: "37050198".into(),
             login: "login-name-123".into(),
             iban: "DE89 3704 0044 0532 0130 00".into(),

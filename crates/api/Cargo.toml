@@ -11,6 +11,7 @@ financer-config = { path = "../config", features = ["openapi"] }
 financer-core = { path = "../core" }
 financer-fints = { path = "../fints" }
 financer-llm = { path = "../llm" }
+financer-openbanking = { path = "../openbanking" }
 financer-plaid = { path = "../plaid" }
 financer-prices = { path = "../prices" }
 financer-receipt-sources = { path = "../receipt-sources" }

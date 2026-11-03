@@ -1,5 +1,5 @@
 //! Bank connections described in the server configuration (`[[bank.accounts]]`), from either
-//! provider: FinTS (below) or Plaid (see `bank_plaid.rs`).
+//! provider: FinTS (below), Plaid (see `bank_plaid.rs`), or GoCardless / finAPI (`bank_open.rs`).
 //!
 //! The connection (bank code, login, account) lives in the file; the PIN is typed in the app or
 //! read from the environment variable named by `pin_env`, and is never stored. A sync is started
@@ -21,6 +21,7 @@ use tokio::task::AbortHandle;
 use utoipa::ToSchema;
 
 use crate::bank::BankRoutes;
+use crate::bank_open::BankOpen;
 use crate::bank_plaid::{BankPlaid, LinkedAccountDto};
 use crate::dto::ErrorBody;
 use crate::routes::ApiError;
@@ -45,6 +46,10 @@ pub enum BankProvider {
     Fints,
     /// Plaid: you sign in once on Plaid's page; syncs need no PIN and no approval.
     Plaid,
+    /// GoCardless Bank Account Data: you sign in once on its page; syncs need no PIN.
+    GoCardless,
+    /// finAPI: you pick your bank and sign in once on its web form; syncs need no PIN.
+    Finapi,
 }
 
 impl BankProvider {
@@ -52,7 +57,24 @@ impl BankProvider {
         match self {
             BankProvider::Fints => "fints",
             BankProvider::Plaid => "plaid",
+            BankProvider::GoCardless => "gocardless",
+            BankProvider::Finapi => "finapi",
         }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "fints" => Some(BankProvider::Fints),
+            "plaid" => Some(BankProvider::Plaid),
+            "gocardless" => Some(BankProvider::GoCardless),
+            "finapi" => Some(BankProvider::Finapi),
+            _ => None,
+        }
+    }
+
+    /// Plaid, GoCardless and finAPI: sign in once on the provider's page, no PIN, no approval.
+    pub fn links_once(self) -> bool {
+        !matches!(self, BankProvider::Fints)
     }
 }
 
@@ -61,8 +83,10 @@ impl BankProvider {
 pub struct BankConnection {
     pub name: String,
     pub kind: BankProvider,
-    /// Plaid only: read only these accounts (empty = all that were linked).
+    /// Plaid, GoCardless, finAPI: read only these accounts (empty = all that were linked).
     pub account_ids: Vec<String>,
+    /// GoCardless only: the bank to connect (an institution id from GoCardless's list).
+    pub institution: Option<String>,
     pub bank_code: String,
     pub login: String,
     pub iban: String,
@@ -160,7 +184,7 @@ pub struct SyncOutcomeDto {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct BankConnectionDto {
     pub name: String,
-    /// `fints` or `plaid`.
+    /// `fints`, `plaid`, `gocardless` or `finapi`.
     pub kind: String,
     pub bank_code: String,
     pub login_masked: String,
@@ -262,6 +286,15 @@ impl BankSync {
         }
     }
 
+    /// Has a once-only sign-in been done? Always true for FinTS, which has none.
+    async fn is_linked(state: &AppState, conn: &BankConnection) -> bool {
+        match conn.kind {
+            BankProvider::Fints => true,
+            BankProvider::Plaid => BankPlaid::is_linked(state, conn).await,
+            _ => BankOpen::is_linked(state, conn).await,
+        }
+    }
+
     async fn auth_failed(state: &AppState, conn: &BankConnection) -> bool {
         Self::get_i64(state, conn, "auth_failed").await == Some(1)
     }
@@ -328,8 +361,8 @@ impl BankSync {
                 })
                 .unwrap_or_default()
         };
-        let plaid = conn.kind == BankProvider::Plaid;
-        let linked = !plaid || BankPlaid::is_linked(state, conn).await;
+        let plaid = conn.kind.links_once();
+        let linked = !plaid || Self::is_linked(state, conn).await;
         let auth_failed = Self::auth_failed(state, conn).await;
         let last_result: Option<StoredOutcome> = state
             .store
@@ -375,10 +408,10 @@ impl BankSync {
             approval_expires_at: expires,
             linked,
             link_url,
-            accounts: if plaid {
-                BankPlaid::linked_accounts(state, conn).await
-            } else {
-                Vec::new()
+            accounts: match conn.kind {
+                BankProvider::Fints => Vec::new(),
+                BankProvider::Plaid => BankPlaid::linked_accounts(state, conn).await,
+                _ => BankOpen::linked_accounts(state, conn).await,
             },
             sync_due,
             last_sync_at: Self::get_i64(state, conn, "last_sync_at").await,
@@ -421,8 +454,12 @@ impl BankSync {
             .find(name)
             .ok_or(ApiError::NotFound)?
             .clone();
-        if conn.kind == BankProvider::Plaid {
-            return BankPlaid::start(state, &conn).await;
+        match conn.kind {
+            BankProvider::Plaid => return BankPlaid::start(state, &conn).await,
+            BankProvider::GoCardless | BankProvider::Finapi => {
+                return BankOpen::start(state, &conn).await
+            }
+            BankProvider::Fints => {}
         }
         if !state.bank_configured {
             return Err(ApiError::Unavailable(
@@ -696,6 +733,15 @@ impl BankSync {
                         continue;
                     }
                 }
+                BankProvider::GoCardless | BankProvider::Finapi => {
+                    let ready = match conn.kind {
+                        BankProvider::GoCardless => state.gocardless.is_some(),
+                        _ => state.finapi.is_some(),
+                    };
+                    if !ready || !BankOpen::is_linked(state, conn).await {
+                        continue;
+                    }
+                }
             }
             let due = match Self::get_i64(state, conn, "last_attempt_at").await {
                 None => true,
@@ -788,18 +834,34 @@ pub async fn cancel_connection(
     Ok(Json(BankSync::dto(&state, conn).await))
 }
 
-/// Plaid: forget the connection. Tells Plaid to drop it and deletes the stored access token, so
-/// the next sync starts with signing in again. The imported transactions stay.
+/// Plaid, GoCardless, finAPI: forget the connection. Tells the provider to drop it and deletes
+/// the stored access, so the next sync starts with signing in again. The imported transactions stay.
 #[utoipa::path(post, path = "/v1/bank/connections/{name}/disconnect", params(("name" = String, Path, description = "connection name")), responses(
     (status = 200, body = BankConnectionDto),
-    (status = 400, description = "Not a Plaid connection", body = ErrorBody),
+    (status = 400, description = "A FinTS connection has nothing to forget", body = ErrorBody),
     (status = 404, description = "No such connection", body = ErrorBody)),
     security(("bearer" = [])))]
 pub async fn disconnect_connection(
     State(state): State<AppState>,
     Path(name): Path<String>,
 ) -> Result<Json<BankConnectionDto>, ApiError> {
-    BankPlaid::disconnect(&state, &name).await?;
+    let found = state
+        .bank_connections
+        .find(&name)
+        .ok_or(ApiError::NotFound)?
+        .clone();
+    match found.kind {
+        BankProvider::Plaid => BankPlaid::disconnect(&state, &name).await?,
+        BankProvider::GoCardless | BankProvider::Finapi => {
+            BankOpen::disconnect(&state, &found).await?
+        }
+        BankProvider::Fints => {
+            return Err(ApiError::BadRequest(
+                "a FinTS connection stores nothing to forget; only Plaid, GoCardless and finAPI connections can be disconnected"
+                    .into(),
+            ))
+        }
+    }
     let conn = state
         .bank_connections
         .find(&name)
@@ -829,6 +891,7 @@ mod tests {
             name: "Giro".into(),
             kind: BankProvider::Fints,
             account_ids: vec![],
+            institution: None,
             bank_code: "37050198".into(),
             login: "secret-login".into(),
             iban: "DE89370400440532013000".into(),

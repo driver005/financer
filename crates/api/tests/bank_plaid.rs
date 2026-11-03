@@ -56,6 +56,7 @@ fn plaid_connection(name: &str, hours: u32, account_ids: &[&str]) -> BankConnect
         name: name.into(),
         kind: BankProvider::Plaid,
         account_ids: account_ids.iter().map(|s| s.to_string()).collect(),
+        institution: None,
         bank_code: String::new(),
         login: String::new(),
         iban: String::new(),

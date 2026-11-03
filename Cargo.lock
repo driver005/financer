@@ -1652,6 +1652,7 @@ dependencies = [
  "financer-core",
  "financer-fints",
  "financer-llm",
+ "financer-openbanking",
  "financer-plaid",
  "financer-prices",
  "financer-receipt-sources",

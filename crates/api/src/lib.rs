@@ -4,6 +4,7 @@ mod auth;
 mod backup;
 mod bank;
 mod bank_connections;
+mod bank_open;
 mod bank_plaid;
 mod budget_period;
 mod calendar;
@@ -37,6 +38,7 @@ use utoipa::OpenApi;
 
 pub use auth::TokenHash;
 pub use bank_connections::{BankConnection, BankProvider, ConnectionState};
+pub use bank_open::OpenSetup;
 pub use bank_plaid::PlaidSetup;
 pub use financer_fints::{BankClient as BankClientTrait, BankData, BankError, MockBank};
 pub use financer_llm::MockProvider;
@@ -82,6 +84,8 @@ pub struct AppState {
     pub(crate) bank_connections: Arc<bank_connections::Connections>,
     pub(crate) pin_lookup: PinLookup,
     pub(crate) plaid: Option<Arc<PlaidSetup>>,
+    pub(crate) gocardless: Option<Arc<OpenSetup>>,
+    pub(crate) finapi: Option<Arc<OpenSetup>>,
     pub(crate) secret_box: Option<Arc<financer_receipt_sources::SecretBox>>,
     pub(crate) connection_poll: std::time::Duration,
     pub(crate) http: Arc<dyn Http>,
@@ -107,6 +111,8 @@ impl AppState {
             bank_connections: Arc::new(bank_connections::Connections::new(Vec::new())),
             pin_lookup: Arc::new(|var| std::env::var(var).ok().filter(|v| !v.is_empty())),
             plaid: None,
+            gocardless: None,
+            finapi: None,
             secret_box: None,
             connection_poll: bank_connections::DEFAULT_POLL,
             http: Arc::new(NoNetwork),
@@ -177,7 +183,21 @@ impl AppState {
         self
     }
 
-    /// Seals the secrets the server keeps (the Plaid access token) with a key derived from a
+    /// GoCardless Bank Account Data, for the connections with `kind = "gocardless"`. Needs
+    /// [`AppState::with_secret_box`] as well.
+    pub fn with_gocardless(mut self, setup: OpenSetup) -> Self {
+        self.gocardless = Some(Arc::new(setup));
+        self
+    }
+
+    /// finAPI, for the connections with `kind = "finapi"`. Needs [`AppState::with_secret_box`] as
+    /// well.
+    pub fn with_finapi(mut self, setup: OpenSetup) -> Self {
+        self.finapi = Some(Arc::new(setup));
+        self
+    }
+
+    /// Seals the secrets the server keeps (the Plaid, GoCardless and finAPI access) with a key derived from a
     /// server secret that is not in the database.
     pub fn with_secret_box(mut self, secrets: financer_receipt_sources::SecretBox) -> Self {
         self.secret_box = Some(Arc::new(secrets));
