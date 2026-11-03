@@ -77,3 +77,11 @@ export { TileButton } from "./components/TileButton";
 export { ChoiceCard } from "./components/ChoiceCard";
 export { Confetti } from "./finance/Confetti";
 export { Cover, fill } from "./layout/Cover";
+
+export { AgendaList } from "./calendar/AgendaList";
+export { FloatingButton } from "./calendar/FloatingButton";
+export { MiniMonth } from "./calendar/MiniMonth";
+export { MonthGrid } from "./calendar/MonthGrid";
+export { TimeGrid } from "./calendar/TimeGrid";
+export { TimePicker } from "./calendar/TimePicker";
+export type { AgendaDay, CalendarItem, DayColumn, MiniCell, MonthCell, TimeBlock } from "./calendar/types";
