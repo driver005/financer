@@ -4,22 +4,24 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use financer_mail_core::wire::{
+    ChatMessage, Choice, ConversationDetail, ConversationList, ErrorBody, EventList, MailInfo,
+    Marked, MessageDetail, NewEvent, PlaceholderInfo, Preview, PreviewRequest, SendRequest,
+    SentMessage, SyncReport, TemplateList, UsedTemplate,
+};
 use financer_mail_core::{
     apply_templates, choose_template, group_by_person, group_by_topic, normalize_subject,
     render_template, validate_template, Address, CalendarEvent, Context, Conversation,
     ConversationKind, EventSource, Template, TemplateKind, PLACEHOLDERS,
 };
 use financer_mail_store::{EventStatus, MailStoreError};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::compose::{compose, new_message_id, Draft};
 use crate::smtp::SendError;
-use crate::state::{MailState, SyncReport};
+use crate::state::MailState;
 use crate::sync::SyncError;
-use crate::view::{
-    chat_message, day_text, parse_day, parse_local, AddressDto, ChatMessageDto, ConversationDto,
-    EventDto,
-};
+use crate::view::{chat_message, day_text, event_info, parse_day, parse_local};
 
 /// Most messages looked at when grouping; older ones fall off the lists.
 const GROUPING_WINDOW: u64 = 5000;
@@ -47,13 +49,6 @@ impl From<MailStoreError> for ApiError {
     }
 }
 
-#[derive(Serialize)]
-struct ErrorBody {
-    error: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    problems: Vec<String>,
-}
-
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, error, problems) = match self {
@@ -76,22 +71,10 @@ type Res<T> = Result<Json<T>, ApiError>;
 
 // ---- info and sync ------------------------------------------------------------------------------
 
-#[derive(Serialize)]
-pub struct InfoDto {
-    configured: bool,
-    address: Option<AddressDto>,
-    timezone: String,
-    poll_minutes: u64,
-    messages: u64,
-    unread: u64,
-    syncing: bool,
-    last_sync: Option<SyncReport>,
-}
-
-pub async fn info(State(s): State<MailState>) -> Res<InfoDto> {
-    Ok(Json(InfoDto {
+pub async fn info(State(s): State<MailState>) -> Res<MailInfo> {
+    Ok(Json(MailInfo {
         configured: s.configured(),
-        address: s.config.as_ref().map(|c| AddressDto::from(&c.address)),
+        address: s.config.as_ref().map(|c| c.address.clone()),
         timezone: s
             .config
             .as_ref()
@@ -125,13 +108,6 @@ pub struct ListQuery {
     limit: Option<usize>,
 }
 
-#[derive(Serialize)]
-pub struct ListDto {
-    conversations: Vec<ConversationDto>,
-    unread_people: usize,
-    unread_updates: usize,
-}
-
 fn matches(c: &Conversation, q: &str) -> bool {
     let q = q.to_lowercase();
     c.title.to_lowercase().contains(&q)
@@ -143,7 +119,7 @@ fn matches(c: &Conversation, q: &str) -> bool {
 pub async fn list_conversations(
     State(s): State<MailState>,
     Query(q): Query<ListQuery>,
-) -> Res<ListDto> {
+) -> Res<ConversationList> {
     let metas = s.store.metas(GROUPING_WINDOW).await?;
     let me = s.me();
     let unread = |automated: bool| {
@@ -178,12 +154,12 @@ pub async fn list_conversations(
         })
         .filter(|c| needle.is_none_or(|n| matches(c, n)))
         .take(q.limit.unwrap_or(100).min(500))
-        .map(ConversationDto::from)
+        .cloned()
         .collect();
-    Ok(Json(ListDto {
+    Ok(Json(ConversationList {
         conversations,
-        unread_people: unread(false),
-        unread_updates: unread(true),
+        unread_people: unread(false) as u32,
+        unread_updates: unread(true) as u32,
     }))
 }
 
@@ -204,16 +180,6 @@ async fn find_conversation(s: &MailState, key: &str) -> Result<(Conversation, Ve
     Ok((conv, ids))
 }
 
-#[derive(Serialize)]
-pub struct ConversationDetail {
-    conversation: ConversationDto,
-    messages: Vec<ChatMessageDto>,
-    /// Who a reply goes to.
-    reply_to: Vec<AddressDto>,
-    /// The id of the newest message, to answer it (keeps the topic's thread together).
-    reply_to_message: Option<i64>,
-}
-
 pub async fn get_conversation(
     State(s): State<MailState>,
     Path(key): Path<String>,
@@ -222,20 +188,20 @@ pub async fn get_conversation(
     let messages = s.store.messages(&ids).await?;
     let events = s.store.events_of_messages(&ids).await?;
     let me = s.me();
-    let bubbles: Vec<ChatMessageDto> = messages
+    let bubbles: Vec<ChatMessage> = messages
         .iter()
         .map(|m| {
-            let mine: Vec<EventDto> = events
+            let mine: Vec<financer_mail_core::wire::EventInfo> = events
                 .iter()
                 .filter(|e| e.message_row == Some(m.id))
-                .map(EventDto::from)
+                .map(event_info)
                 .collect();
             chat_message(m, mine)
         })
         .collect();
     // answer the people of the conversation; for a topic, the people other than you on its latest message
-    let reply_to: Vec<AddressDto> = match conv.kind {
-        ConversationKind::Person => conv.people.iter().map(AddressDto::from).collect(),
+    let reply_to: Vec<Address> = match conv.kind {
+        ConversationKind::Person => conv.people.clone(),
         ConversationKind::Topic => messages
             .last()
             .map(|m| {
@@ -246,21 +212,16 @@ pub async fn get_conversation(
                 } else {
                     people.extend(n.to.iter().filter(|a| !me.is_me(a)));
                 }
-                people.into_iter().map(AddressDto::from).collect()
+                people.into_iter().cloned().collect()
             })
             .unwrap_or_default(),
     };
     Ok(Json(ConversationDetail {
         reply_to_message: messages.last().map(|m| m.id),
-        conversation: ConversationDto::from(&conv),
+        conversation: conv.clone(),
         messages: bubbles,
         reply_to,
     }))
-}
-
-#[derive(Serialize)]
-pub struct Marked {
-    marked: u64,
 }
 
 pub async fn mark_read(State(s): State<MailState>, Path(key): Path<String>) -> Res<Marked> {
@@ -268,21 +229,6 @@ pub async fn mark_read(State(s): State<MailState>, Path(key): Path<String>) -> R
     Ok(Json(Marked {
         marked: s.store.mark_seen(&ids).await?,
     }))
-}
-
-#[derive(Serialize)]
-pub struct MessageDetail {
-    id: i64,
-    message_id: String,
-    folder: String,
-    outgoing: bool,
-    from: AddressDto,
-    to: Vec<AddressDto>,
-    cc: Vec<AddressDto>,
-    subject: String,
-    at: i64,
-    /// The whole text, quoted chain included.
-    body: String,
 }
 
 pub async fn get_message(State(s): State<MailState>, Path(id): Path<i64>) -> Res<MessageDetail> {
@@ -297,9 +243,9 @@ pub async fn get_message(State(s): State<MailState>, Path(id): Path<i64>) -> Res
         message_id: n.message_id,
         folder: n.folder,
         outgoing: n.outgoing,
-        from: AddressDto::from(&n.from),
-        to: n.to.iter().map(AddressDto::from).collect(),
-        cc: n.cc.iter().map(AddressDto::from).collect(),
+        from: n.from.clone(),
+        to: n.to.clone(),
+        cc: n.cc.clone(),
         subject: n.subject,
         at: n.sent_at,
         body: n.body,
@@ -308,25 +254,16 @@ pub async fn get_message(State(s): State<MailState>, Path(id): Path<i64>) -> Res
 
 // ---- templates ----------------------------------------------------------------------------------
 
-#[derive(Serialize)]
-pub struct PlaceholderDto {
-    name: &'static str,
-    description: &'static str,
-}
-
-#[derive(Serialize)]
-pub struct TemplatesDto {
-    templates: Vec<Template>,
-    placeholders: Vec<PlaceholderDto>,
-}
-
-pub async fn list_templates(State(s): State<MailState>) -> Res<TemplatesDto> {
+pub async fn list_templates(State(s): State<MailState>) -> Res<TemplateList> {
     s.ensure_default_templates().await?;
-    Ok(Json(TemplatesDto {
+    Ok(Json(TemplateList {
         templates: s.store.templates().await?,
         placeholders: PLACEHOLDERS
             .iter()
-            .map(|(name, description)| PlaceholderDto { name, description })
+            .map(|(name, description)| PlaceholderInfo {
+                name: name.to_string(),
+                description: description.to_string(),
+            })
             .collect(),
     }))
 }
@@ -377,42 +314,6 @@ pub async fn delete_template(
     }
 }
 
-/// Which template to put on: the best fit for the recipients, none, or a chosen one.
-#[derive(Debug, Clone, Copy, Default, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Choice {
-    #[default]
-    Auto,
-    None,
-    Id(i64),
-}
-
-#[derive(Deserialize)]
-pub struct PreviewRequest {
-    to: Vec<String>,
-    body: String,
-    #[serde(default)]
-    greeting: Choice,
-    #[serde(default)]
-    closing: Choice,
-}
-
-#[derive(Serialize)]
-pub struct UsedTemplate {
-    id: i64,
-    name: String,
-    text: String,
-}
-
-#[derive(Serialize)]
-pub struct PreviewDto {
-    /// The message as it would be sent.
-    text: String,
-    greeting: Option<UsedTemplate>,
-    closing: Option<UsedTemplate>,
-    warnings: Vec<String>,
-}
-
 fn parse_addresses(label: &str, items: &[String]) -> Result<Vec<Address>, ApiError> {
     let mut out: Vec<Address> = Vec::new();
     let mut bad = Vec::new();
@@ -441,14 +342,14 @@ async fn dress(
     body: &str,
     greeting: Choice,
     closing: Choice,
-) -> Result<PreviewDto, ApiError> {
+) -> Result<Preview, ApiError> {
     s.ensure_default_templates().await?;
     let templates = s.store.templates().await?;
     let pick = |kind: TemplateKind, choice: Choice| -> Result<Option<&Template>, ApiError> {
         match choice {
             Choice::None => Ok(None),
             Choice::Auto => Ok(choose_template(&templates, kind, recipients)),
-            Choice::Id(id) => templates
+            Choice::Id { id } => templates
                 .iter()
                 .find(|t| t.id == id && t.kind == kind)
                 .map(Some)
@@ -493,7 +394,7 @@ async fn dress(
             text: r.text.clone(),
         })
     };
-    Ok(PreviewDto {
+    Ok(Preview {
         text: applied.text,
         greeting: used(g, &rg),
         closing: used(c, &rc),
@@ -501,10 +402,7 @@ async fn dress(
     })
 }
 
-pub async fn preview(
-    State(s): State<MailState>,
-    Json(req): Json<PreviewRequest>,
-) -> Res<PreviewDto> {
+pub async fn preview(State(s): State<MailState>, Json(req): Json<PreviewRequest>) -> Res<Preview> {
     let to = parse_addresses("recipient", &req.to)?;
     Ok(Json(
         dress(&s, &to, &req.body, req.greeting, req.closing).await?,
@@ -513,38 +411,10 @@ pub async fn preview(
 
 // ---- sending ------------------------------------------------------------------------------------
 
-#[derive(Deserialize)]
-pub struct SendRequest {
-    to: Vec<String>,
-    #[serde(default)]
-    cc: Vec<String>,
-    #[serde(default)]
-    bcc: Vec<String>,
-    #[serde(default)]
-    subject: String,
-    /// What you typed, without greeting and closing.
-    body: String,
-    #[serde(default)]
-    greeting: Choice,
-    #[serde(default)]
-    closing: Choice,
-    /// The message this answers (its row id): the reply stays in the same thread.
-    reply_to: Option<i64>,
-}
-
-#[derive(Serialize)]
-pub struct SentDto {
-    id: i64,
-    message_id: String,
-    /// The message as it went out.
-    text: String,
-    warnings: Vec<String>,
-}
-
 pub async fn send(
     State(s): State<MailState>,
     Json(req): Json<SendRequest>,
-) -> Result<(StatusCode, Json<SentDto>), ApiError> {
+) -> Result<(StatusCode, Json<SentMessage>), ApiError> {
     let cfg = s.config.clone().ok_or_else(|| {
         ApiError::Unavailable(
             "No mailbox is configured, so nothing can be sent (docs/MAIL.md).".into(),
@@ -636,7 +506,7 @@ pub async fn send(
     }
     Ok((
         StatusCode::CREATED,
-        Json(SentDto {
+        Json(SentMessage {
             id,
             message_id,
             text: dressed.text,
@@ -655,17 +525,10 @@ pub struct EventsQuery {
     include_cancelled: bool,
 }
 
-#[derive(Serialize)]
-pub struct EventsDto {
-    from: String,
-    to: String,
-    events: Vec<EventDto>,
-}
-
 pub async fn list_events(
     State(s): State<MailState>,
     Query(q): Query<EventsQuery>,
-) -> Res<EventsDto> {
+) -> Res<EventList> {
     let today = s.zone().to_local(s.now()).date();
     let from = match q.from.as_deref() {
         Some(f) => {
@@ -687,29 +550,17 @@ pub async fn list_events(
         .store
         .events(&day_text(from), &day_text(to), q.include_cancelled)
         .await?;
-    Ok(Json(EventsDto {
+    Ok(Json(EventList {
         from: day_text(from),
         to: day_text(to),
-        events: events.iter().map(EventDto::from).collect(),
+        events: events.iter().map(event_info).collect(),
     }))
-}
-
-#[derive(Deserialize)]
-pub struct NewEvent {
-    title: String,
-    /// `2026-11-05T14:00`, or a day for an all-day event.
-    start: String,
-    end: Option<String>,
-    #[serde(default)]
-    all_day: bool,
-    location: Option<String>,
-    description: Option<String>,
 }
 
 pub async fn create_event(
     State(s): State<MailState>,
     Json(req): Json<NewEvent>,
-) -> Result<(StatusCode, Json<EventDto>), ApiError> {
+) -> Result<(StatusCode, Json<financer_mail_core::wire::EventInfo>), ApiError> {
     let title = req.title.trim();
     if title.is_empty() {
         return Err(ApiError::bad("The event needs a title."));
@@ -753,7 +604,7 @@ pub async fn create_event(
         .iter()
         .find(|e| e.event.uid == event.uid)
         .ok_or(ApiError::Internal("the event was not saved".into()))?;
-    Ok((StatusCode::CREATED, Json(EventDto::from(stored))))
+    Ok((StatusCode::CREATED, Json(event_info(stored))))
 }
 
 /// Takes an event off the calendar. It stays off when the same invitation is read again.
@@ -771,7 +622,10 @@ pub async fn remove_event(
     }
 }
 
-pub async fn restore_event(State(s): State<MailState>, Path(id): Path<i64>) -> Res<EventDto> {
+pub async fn restore_event(
+    State(s): State<MailState>,
+    Path(id): Path<i64>,
+) -> Res<financer_mail_core::wire::EventInfo> {
     let event = s
         .store
         .event(id)
@@ -788,5 +642,5 @@ pub async fn restore_event(State(s): State<MailState>, Path(id): Path<i64>) -> R
         .event(id)
         .await?
         .ok_or(ApiError::NotFound("event"))?;
-    Ok(Json(EventDto::from(&again)))
+    Ok(Json(event_info(&again)))
 }

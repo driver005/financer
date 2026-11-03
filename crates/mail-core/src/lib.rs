@@ -15,6 +15,7 @@ pub mod quote;
 pub mod subject;
 pub mod template;
 pub mod when;
+pub mod wire;
 pub mod zone;
 
 pub use address::{is_automated_sender, is_valid_email, Address};

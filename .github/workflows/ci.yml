@@ -35,6 +35,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
       # Dependencies and workspace libs are compiled once and restored on later runs (also when a
       # run fails, so the next push does not start from zero).
       - uses: Swatinem/rust-cache@v2
@@ -44,6 +45,8 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The Rust SDK (docs/SDK.md) also runs in the browser, as WebAssembly: it must keep building there.
+      - run: cargo clippy -p financer-sdk --target wasm32-unknown-unknown -- -D warnings
       # The bundled build: the shopping assistant and the mail client inside the finance server
       # (features "shop" and "mail")
       - run: cargo clippy -p financer-server --features shop,mail --all-targets -- -D warnings
@@ -122,6 +125,37 @@ jobs:
           npm ci
           npm run typecheck
           CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/catalog-web"
+
+  # The Rust SDK in the app (docs/SDK.md): builds the WebAssembly module, generates its TypeScript and
+  # bundles the web app with it. It does not run the app; the native (JSI) build is in native.yml.
+  sdk-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: sdk-web
+          cache-on-failure: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/mobile/package-lock.json
+            apps/sdk-bindings/package-lock.json
+      - run: npm ci --prefix apps/mobile
+      - run: apps/mobile/scripts/enable-sdk.sh web
+      - name: Bundle the web app with the Rust SDK
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_RUST_SDK: "1"
+          CI: "1"
+        run: |
+          npx expo export --platform web --output-dir "$RUNNER_TEMP/rust-web"
+          find "$RUNNER_TEMP/rust-web" -name 'financer_sdk*.wasm' | grep .
 
   # The shopping assistant: its module (logic tests), the standalone app (type check, web bundle)
   # and the finance app bundled with it (docs/SHOP.md).

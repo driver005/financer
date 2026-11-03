@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Banner, Box, Button, Chip, ChipRow, OptionList, Row, Sheet, Stack, Text, type Option } from "@financer/ui";
 
-import type { MailClient } from "../../api/client";
+import type { MailBackend } from "../../api/backend";
 import type { Choice, Preview, Template, TemplateKind } from "../../api/types";
 import { choiceKey, choiceLabel, firstLine, templatesOf } from "../../logic/templates";
 
@@ -23,7 +23,7 @@ export type Dressing = {
  * The greeting and closing that will be put around what is typed, worked out again a moment after
  * the text or the recipients change. This is the "at the end" step: the text stays as typed until it is sent.
  */
-export function useDressing(client: MailClient | null, to: string[], body: string): Dressing {
+export function useDressing(client: MailBackend | null, to: string[], body: string): Dressing {
   const [greeting, setGreeting] = useState<Choice>("auto");
   const [closing, setClosing] = useState<Choice>("auto");
   const [templates, setTemplates] = useState<Template[]>([]);

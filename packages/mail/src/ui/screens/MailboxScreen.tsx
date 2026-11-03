@@ -12,7 +12,7 @@ const SETTINGS = [
 
 /** Whether the server reads and sends mail, how the last check went, and how to connect a mailbox. */
 export function MailboxScreen() {
-  const { info, syncing, syncNow, now, error } = useMail();
+  const { info, syncing, syncNow, now, error, backend } = useMail();
   const nav = useNav();
   const last = info?.last_sync;
   return (
@@ -32,6 +32,7 @@ export function MailboxScreen() {
             {last?.error ? <Banner tone="warning" title="The last check failed">{last.error}</Banner> : null}
             {last?.more ? <Text variant="caption" tone="muted">There is more to download; the next check continues.</Text> : null}
             <Button label="Check now" icon="sync" loading={syncing} onPress={() => void syncNow()} />
+            <Text variant="caption" tone="subtle">{backend === "rust" ? "Talking to the server through the Rust SDK." : "Talking to the server through the TypeScript client."}</Text>
             <Text variant="caption" tone="subtle">Mail is only read. Nothing is marked as read, moved or deleted on the mail server.</Text>
           </Stack>
         </Section>

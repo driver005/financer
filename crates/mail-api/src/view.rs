@@ -1,81 +1,10 @@
-//! What the API says: conversations and chat messages as the app draws them.
-
-use financer_mail_core::{
-    fresh_text, normalize_subject, Address, CalendarEvent, Conversation, ConversationKind,
-};
+use financer_mail_core::wire::{ChatMessage, EventInfo};
+use financer_mail_core::{fresh_text, normalize_subject};
 use financer_mail_store::{EventStatus, StoredEvent, StoredMessage};
-use serde::{Deserialize, Serialize};
 use time::PrimitiveDateTime;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AddressDto {
-    pub name: Option<String>,
-    pub email: String,
-}
-
-impl From<&Address> for AddressDto {
-    fn from(a: &Address) -> Self {
-        AddressDto {
-            name: a.name.clone(),
-            email: a.email.clone(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ConversationDto {
-    pub key: String,
-    pub kind: ConversationKind,
-    pub title: String,
-    pub people: Vec<AddressDto>,
-    pub count: usize,
-    pub unread: usize,
-    pub last_at: i64,
-    pub last_from_me: bool,
-    pub preview: String,
-    pub topics: Vec<String>,
-    pub automated: bool,
-}
-
-impl From<&Conversation> for ConversationDto {
-    fn from(c: &Conversation) -> Self {
-        ConversationDto {
-            key: c.key.clone(),
-            kind: c.kind,
-            title: c.title.clone(),
-            people: c.people.iter().map(AddressDto::from).collect(),
-            count: c.count,
-            unread: c.unread,
-            last_at: c.last_at,
-            last_from_me: c.last_from_me,
-            preview: c.preview.clone(),
-            topics: c.topics.clone(),
-            automated: c.automated,
-        }
-    }
-}
-
-/// One bubble of a chat.
-#[derive(Debug, Clone, Serialize)]
-pub struct ChatMessageDto {
-    pub id: i64,
-    pub mine: bool,
-    pub from: AddressDto,
-    pub to: Vec<AddressDto>,
-    pub cc: Vec<AddressDto>,
-    pub at: i64,
-    pub subject: String,
-    /// The subject without "Re:", the topic this bubble belongs to.
-    pub topic: String,
-    /// What was said: no quoted chain, no signature, no greeting and closing.
-    pub text: String,
-    /// A quoted chain or signature was left out.
-    pub trimmed: bool,
-    pub unread: bool,
-    pub events: Vec<EventDto>,
-}
-
-pub fn chat_message(m: &StoredMessage, events: Vec<EventDto>) -> ChatMessageDto {
+/// A stored message as a bubble of a chat.
+pub fn chat_message(m: &StoredMessage, events: Vec<EventInfo>) -> ChatMessage {
     let n = &m.message;
     let fresh = fresh_text(&n.body);
     // a message that is only a greeting and a closing still shows something
@@ -88,12 +17,12 @@ pub fn chat_message(m: &StoredMessage, events: Vec<EventDto>) -> ChatMessageDto 
             .collect::<Vec<_>>()
             .join("\n")
     };
-    ChatMessageDto {
+    ChatMessage {
         id: m.id,
         mine: n.outgoing,
-        from: AddressDto::from(&n.from),
-        to: n.to.iter().map(AddressDto::from).collect(),
-        cc: n.cc.iter().map(AddressDto::from).collect(),
+        from: n.from.clone(),
+        to: n.to.clone(),
+        cc: n.cc.clone(),
         at: n.sent_at,
         subject: n.subject.clone(),
         topic: normalize_subject(&n.subject),
@@ -127,35 +56,48 @@ pub fn day_text(d: time::Date) -> String {
     d.format(LOCAL_DATE).unwrap_or_default()
 }
 
-/// An event on the calendar.
-#[derive(Debug, Clone, Serialize)]
-pub struct EventDto {
-    pub id: i64,
-    /// `active` or `cancelled`.
-    pub status: &'static str,
-    /// The message it was found in.
-    pub message: Option<i64>,
-    #[serde(flatten)]
-    pub event: CalendarEvent,
+const LOCAL_MINUTES_TEXT: &[time::format_description::BorrowedFormatItem<'static>] = LOCAL_MINUTES;
+
+fn local_text(t: PrimitiveDateTime) -> String {
+    t.format(LOCAL_MINUTES_TEXT).unwrap_or_default()
 }
 
-impl From<&StoredEvent> for EventDto {
-    fn from(e: &StoredEvent) -> Self {
-        EventDto {
-            id: e.id,
-            status: match e.status {
-                EventStatus::Cancelled => "cancelled",
-                _ => "active",
-            },
-            message: e.message_row,
-            event: e.event.clone(),
+/// A stored event as it goes over the wire.
+pub fn event_info(e: &StoredEvent) -> EventInfo {
+    let ev = &e.event;
+    EventInfo {
+        id: e.id,
+        status: match e.status {
+            EventStatus::Cancelled => "cancelled",
+            _ => "active",
         }
+        .to_string(),
+        message: e.message_row,
+        uid: ev.uid.clone(),
+        title: ev.title.clone(),
+        start: local_text(ev.start),
+        end: ev.end.map(local_text),
+        all_day: ev.all_day,
+        location: ev.location.clone(),
+        description: ev.description.clone(),
+        organizer: ev.organizer.clone(),
+        source: match ev.source {
+            financer_mail_core::EventSource::Invite => "invite",
+            financer_mail_core::EventSource::Text => "text",
+            financer_mail_core::EventSource::Manual => "manual",
+        }
+        .to_string(),
+        sequence: ev.sequence,
+        cancelled: ev.cancelled,
+        recurrence: ev.recurrence.clone(),
+        note: ev.note.clone(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use financer_mail_core::Address;
     use financer_mail_store::NewMessage;
 
     fn stored(body: &str, subject: &str, outgoing: bool, seen: bool) -> StoredMessage {

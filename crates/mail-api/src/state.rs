@@ -7,32 +7,13 @@ use std::time::Duration;
 use financer_mail_core::{Me, Template, TemplateKind};
 use financer_mail_store::MailStore;
 use financer_receipt_sources::mail::{ImapConnector, MailboxConnector};
-use serde::{Deserialize, Serialize};
 
 use crate::config::MailConfig;
 use crate::smtp::{Sender, SmtpSender};
 
 pub type Clock = Arc<dyn Fn() -> i64 + Send + Sync>;
 
-/// How the last sync went, kept for the settings screen and across restarts.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SyncReport {
-    /// When it ran (seconds since the epoch).
-    pub at: i64,
-    /// Messages downloaded.
-    pub fetched: u32,
-    /// New messages stored.
-    pub stored: u32,
-    /// Already there (the same Message-ID, e.g. a copy in the sent folder).
-    pub duplicates: u32,
-    /// Messages that could not be read (no sender, damaged).
-    pub skipped: u32,
-    /// Calendar events added or changed.
-    pub events: u32,
-    /// There is more to download; the next sync continues.
-    pub more: bool,
-    pub error: Option<String>,
-}
+pub use financer_mail_core::wire::SyncReport;
 
 #[derive(Clone)]
 pub struct MailState {

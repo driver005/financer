@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import type { MailBackend } from "../api/backend";
 import { MailApiError, MailClient } from "../api/client";
+import { SdkMailClient } from "../api/sdk";
 import { RemoteMailTransport } from "../api/transport";
 import type { MailInfo, SyncReport } from "../api/types";
 import type { MailHost } from "../host";
@@ -11,7 +13,9 @@ type Status = "loading" | "ready" | "no-server" | "error";
 export type Runtime = {
   status: Status;
   error: string | null;
-  client: MailClient | null;
+  client: MailBackend | null;
+  /** Which one carries the calls: the Rust SDK, or the TypeScript client over HTTP. */
+  backend: "rust" | "typescript" | null;
   info: MailInfo | null;
   /** Locale and zone of this device, for times in the lists. */
   fmt: Fmt;
@@ -43,7 +47,8 @@ const FRESH_SECS = 60;
 export function MailRuntime({ host, children }: { host: MailHost; children: ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
-  const [client, setClient] = useState<MailClient | null>(null);
+  const [client, setClient] = useState<MailBackend | null>(null);
+  const [backend, setBackend] = useState<"rust" | "typescript" | null>(null);
   const [info, setInfo] = useState<MailInfo | null>(null);
   const [version, setVersion] = useState(0);
   const [syncing, setSyncing] = useState(false);
@@ -61,9 +66,21 @@ export function MailRuntime({ host, children }: { host: MailHost; children: Reac
           setStatus("no-server");
           return;
         }
-        const c = new MailClient(new RemoteMailTransport(server));
+        // the Rust SDK when this build has it; if it cannot be loaded, the TypeScript client does the same
+        let c: MailBackend | null = null;
+        let which: "rust" | "typescript" = "typescript";
+        if (host.sdk) {
+          try {
+            c = await SdkMailClient.connect(host.sdk, server.baseUrl, server.token);
+            which = "rust";
+          } catch (e) {
+            console.warn("The Rust SDK could not be loaded; using the TypeScript client.", e);
+          }
+        }
+        c ??= new MailClient(new RemoteMailTransport(server));
         const i = await c.info();
         if (!alive) return;
+        setBackend(which);
         setClient(c);
         setInfo(i);
         setStatus("ready");
@@ -123,8 +140,8 @@ export function MailRuntime({ host, children }: { host: MailHost; children: Reac
   }, [client, syncing, refreshInfo]);
 
   const value = useMemo<Runtime>(
-    () => ({ status, error, client, info, fmt, now, version, bump, syncing, syncNow, refreshInfo, exit: host.onExit }),
-    [status, error, client, info, fmt, now, version, bump, syncing, syncNow, refreshInfo, host.onExit],
+    () => ({ status, error, client, backend, info, fmt, now, version, bump, syncing, syncNow, refreshInfo, exit: host.onExit }),
+    [status, error, client, backend, info, fmt, now, version, bump, syncing, syncNow, refreshInfo, host.onExit],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
