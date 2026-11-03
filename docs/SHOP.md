@@ -226,6 +226,10 @@ The on-phone backend: `crates/embedded` builds `ShopBackend` by default, so
 apps. For `apps/shopping` run the same script (`apps/shopping/scripts/enable-embedded.sh`), which
 points it at its own folder.
 
+## Screens under More
+
+Besides the Stitch-designed screens, every part of the API has a screen: **My products** (everything found or added, by category, with *Add a product*: name, brand, barcode, a price from one shop, and the category's specs; a product page can be removed), **Saved priorities** (the profiles by name: switch the one searches use, keep a copy under a name, delete), **Reading history** (every index run: what it read, what it found, which shop had trouble, Stop for one that is running). They are drawn from the same `@financer/ui` pieces as the rest; Stitch has no design for them.
+
 ## API
 
 All under `/v1/shop`, JSON, bearer token on servers (none in-process on the phone).
@@ -254,6 +258,6 @@ All under `/v1/shop`, JSON, bearer token on servers (none in-process on the phon
 | API, notifiers (ntfy, Expo, webhook) | tested through the router with fake HTTP; **never sent to ntfy, Expo or a real endpoint** |
 | Bundled server (one token for both apps), embedded `ShopBackend` | tested in-process; Kotlin bindings generate with `ShopBackend`; **not built into an APK or run on a phone** |
 | The module's logic (client, weights, progress, notices, schema editing) | Node tests (`packages/shopping`) |
-| The screens | typechecked, bundled for the web, and driven in a real browser against the real server (search, picks, compare, integrated-mode progress bar); **never run on a phone** |
+| The screens | typechecked, bundled for the web, and driven in a real browser against the real server (search, picks, compare, integrated-mode progress bar; and under More: My products, Add a product with a bad price and a good one, removing a product, Saved priorities and switching the one searches use, Reading history only in its empty state because no shop was configured to read); **never run on a phone** |
 | Notifee progress bar, foreground service, deal notifications, push token | written against the libraries' typings and docs; **never run on a device**. The foreground service type plugin is unverified on Android 14 |
 | Real shops | **no real shop was read**: the sources are yours to configure, and whether a given shop publishes usable structured data is for you to find out with `--probe` |

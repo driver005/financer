@@ -83,6 +83,7 @@ export class ShopClient {
     category: string;
     title: string;
     brand?: string;
+    gtin?: string;
     attributes?: Product["attributes"];
     offers?: Product["offers"];
   }) => this.call<Product>("POST", "/products", p);

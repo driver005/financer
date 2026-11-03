@@ -7,11 +7,15 @@ import type { ModuleHost } from "../host";
 import { planDealNotices } from "../logic/dealNotifications";
 import { NavProvider, useNav, type Route, type Tab } from "./nav";
 import { ShopRuntime, useShop } from "./runtime";
+import { AddProductScreen } from "./screens/AddProductScreen";
 import { CategoriesScreen, CategoryEditorScreen } from "./screens/CategoriesScreen";
 import { CompareScreen } from "./screens/CompareScreen";
 import { DealsScreen } from "./screens/DealsScreen";
+import { LibraryScreen } from "./screens/LibraryScreen";
 import { PlansScreen } from "./screens/PlansScreen";
 import { ProductScreen } from "./screens/ProductScreen";
+import { ProfilesScreen } from "./screens/ProfilesScreen";
+import { RunsScreen } from "./screens/RunsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { SettingsScreen, SourcesScreen } from "./screens/SettingsScreen";
 import { NewWatchScreen, WatchesScreen } from "./screens/WatchesScreen";
@@ -128,6 +132,14 @@ function Routed({ route }: { route: Route }) {
       return <SettingsScreen />;
     case "sources":
       return <SourcesScreen />;
+    case "library":
+      return <LibraryScreen category={route.category} />;
+    case "addProduct":
+      return <AddProductScreen category={route.category} />;
+    case "profiles":
+      return <ProfilesScreen />;
+    case "runs":
+      return <RunsScreen />;
   }
 }
 
