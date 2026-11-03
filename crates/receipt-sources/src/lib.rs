@@ -13,6 +13,7 @@ pub mod email;
 pub mod error;
 pub mod folder;
 pub mod ingest;
+pub mod kaufland;
 pub mod lidl;
 pub mod mail;
 pub mod matching;
@@ -25,7 +26,8 @@ pub mod testing;
 pub mod text;
 
 pub use config::{
-    EmailConfig, FolderConfig, LidlPlusConfig, OnDone, ReceiptSourcesConfig, SenderRule, SourceKind,
+    EmailConfig, FolderConfig, KauflandCardConfig, LidlPlusConfig, OnDone, ReceiptSourcesConfig,
+    SenderRule, SourceKind,
 };
 pub use ingest::{Ingest, Stored};
 pub use matching::{Linker, Matcher};

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "tx-0003",
+    "store": {"name": "Kaufland Köln-Ehrenfeld"},
+    "timestamp": "2026-02-20T12:10:00+01:00",
+    "sum": 399,
+    "positions": [{"name": "Hähnchenbrust 500g", "quantity": 1, "price": 399, "total": 399}]
+  }
+]

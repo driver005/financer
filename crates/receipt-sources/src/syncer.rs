@@ -12,6 +12,7 @@ use crate::config::{ReceiptSourcesConfig, SourceKind};
 use crate::email::{EmailCursor, EmailSync};
 use crate::error::SyncError;
 use crate::folder::FolderSync;
+use crate::kaufland::{KauflandCard, KauflandClient};
 use crate::lidl::{Connection, Endpoints, LidlClient, LidlHttp, LidlPlus, ReqwestLidlHttp};
 use crate::mail::{ImapConnector, MailboxConnector};
 use crate::matching::Linker;
@@ -63,9 +64,9 @@ pub enum SourceHealth {
     Running,
     Ok,
     Error,
-    /// Lidl Plus is on but nobody signed in yet.
+    /// Lidl Plus or the Kaufland Card is on but nobody signed in yet.
     NotConnected,
-    /// Lidl Plus needs a new sign-in.
+    /// Lidl Plus or the Kaufland Card needs a new sign-in.
     NeedsSignin,
 }
 
@@ -127,6 +128,7 @@ pub struct ReceiptSyncer {
     cfg: ReceiptSourcesConfig,
     deps: SyncDeps,
     lidl: Option<LidlPlus>,
+    kaufland: Option<KauflandCard>,
     /// Decides which chain a booking belongs to (the Stores screen's table plus your spellings).
     matcher: StoreMatcher,
     running: Mutex<HashSet<SourceKind>>,
@@ -156,11 +158,24 @@ impl ReceiptSyncer {
         } else {
             None
         };
+        let kaufland = if cfg.kaufland.enabled {
+            let secrets = SecretBox::new(server_secret)
+                .map_err(|e| format!("cannot keep the Kaufland sign-in safe: {e}"))?;
+            let client = KauflandClient::new(
+                deps.lidl_http.clone(),
+                crate::kaufland::Endpoints::from_config(&cfg.kaufland),
+                deps.lidl_gap,
+            );
+            Some(KauflandCard::new(store.clone(), secrets, client))
+        } else {
+            None
+        };
         Ok(Arc::new(ReceiptSyncer {
             store,
             cfg,
             deps,
             lidl,
+            kaufland,
             matcher: StoreMatcher::with_aliases(store_aliases),
             running: Mutex::new(HashSet::new()),
             run_lock: tokio::sync::Mutex::new(()),
@@ -210,6 +225,11 @@ impl ReceiptSyncer {
         self.lidl.as_ref()
     }
 
+    /// The Kaufland Card source, when switched on.
+    pub fn kaufland(&self) -> Option<&KauflandCard> {
+        self.kaufland.as_ref()
+    }
+
     pub fn store(&self) -> &Store {
         &self.store
     }
@@ -218,6 +238,7 @@ impl ReceiptSyncer {
         match kind {
             SourceKind::Email => self.cfg.email.as_ref().is_some_and(|e| e.enabled),
             SourceKind::LidlPlus => self.cfg.lidl_plus.enabled,
+            SourceKind::KauflandCard => self.cfg.kaufland.enabled,
             SourceKind::Folder => self.cfg.folder.as_ref().is_some_and(|f| f.enabled),
         }
     }
@@ -226,6 +247,7 @@ impl ReceiptSyncer {
         match kind {
             SourceKind::Email => self.cfg.email.as_ref().map(|e| e.poll_interval()),
             SourceKind::LidlPlus => Some(self.cfg.lidl_plus.poll_interval()),
+            SourceKind::KauflandCard => Some(self.cfg.kaufland.poll_interval()),
             SourceKind::Folder => self.cfg.folder.as_ref().map(|f| f.poll_interval()),
         }
     }
@@ -241,6 +263,11 @@ impl ReceiptSyncer {
                 "{}-{}",
                 self.cfg.lidl_plus.language.to_lowercase(),
                 self.cfg.lidl_plus.country.to_uppercase()
+            )),
+            SourceKind::KauflandCard => Some(format!(
+                "{}-{}",
+                self.cfg.kaufland.language.to_lowercase(),
+                self.cfg.kaufland.country.to_uppercase()
             )),
             SourceKind::Folder => self
                 .cfg
@@ -285,7 +312,7 @@ impl ReceiptSyncer {
     async fn status(&self, kind: SourceKind) -> Result<SourceStatus, SyncError> {
         let configured = match kind {
             SourceKind::Email => self.cfg.email.is_some(),
-            SourceKind::LidlPlus => true,
+            SourceKind::LidlPlus | SourceKind::KauflandCard => true,
             SourceKind::Folder => self.cfg.folder.is_some(),
         };
         let enabled = self.enabled(kind);
@@ -293,6 +320,10 @@ impl ReceiptSyncer {
         let imported_total = self.store.count_receipts_from(kind.key()).await?;
         let connection = match (&self.lidl, kind) {
             (Some(l), SourceKind::LidlPlus) => Some(l.connection().await?),
+            _ if kind == SourceKind::KauflandCard => match &self.kaufland {
+                Some(k) => Some(k.connection().await?),
+                None => None,
+            },
             _ => None,
         };
         let running = self.running.lock().unwrap().contains(&kind);
@@ -428,6 +459,13 @@ impl ReceiptSyncer {
                     .ok_or_else(|| SyncError::other("Lidl Plus is not enabled"))?;
                 Ok((lidl.sync().await?, None))
             }
+            SourceKind::KauflandCard => {
+                let card = self
+                    .kaufland
+                    .as_ref()
+                    .ok_or_else(|| SyncError::other("Kaufland is not enabled"))?;
+                Ok((card.sync().await?, None))
+            }
         }
     }
 
@@ -443,6 +481,13 @@ impl ReceiptSyncer {
                 // nothing to do until someone has signed in
                 if let Some(l) = &self.lidl {
                     if l.connection().await? != Connection::Connected {
+                        continue;
+                    }
+                }
+            }
+            if kind == SourceKind::KauflandCard {
+                if let Some(k) = &self.kaufland {
+                    if k.connection().await? != Connection::Connected {
                         continue;
                     }
                 }
@@ -467,6 +512,12 @@ impl ReceiptSyncer {
             if kind == SourceKind::LidlPlus {
                 match &self.lidl {
                     Some(l) if l.connection().await? == Connection::Connected => {}
+                    _ => continue,
+                }
+            }
+            if kind == SourceKind::KauflandCard {
+                match &self.kaufland {
+                    Some(k) if k.connection().await? == Connection::Connected => {}
                     _ => continue,
                 }
             }
@@ -559,6 +610,7 @@ mod tests {
                 poll_hours: 6,
                 ..Default::default()
             },
+            kaufland: Default::default(),
             folder: Some(FolderConfig {
                 enabled: true,
                 path: dir.clone(),
@@ -600,7 +652,12 @@ mod tests {
     async fn fresh_syncer_lists_every_source_with_its_state() {
         let r = rig(Some("pw")).await;
         let s = r.syncer.statuses().await.unwrap();
-        assert_eq!(s.len(), 3);
+        assert_eq!(s.len(), 4);
+        assert_eq!(
+            by_kind(&s, SourceKind::KauflandCard).health,
+            SourceHealth::Disabled,
+            "off unless asked for"
+        );
         assert_eq!(by_kind(&s, SourceKind::Email).health, SourceHealth::Waiting);
         assert_eq!(
             by_kind(&s, SourceKind::Folder).health,
@@ -833,6 +890,99 @@ mod tests {
         let report = off.sync_now(None).await.unwrap();
         assert_eq!(report.imported, 0);
         std::fs::remove_dir_all(r.dir).ok();
+    }
+
+    #[tokio::test]
+    async fn kaufland_runs_once_signed_in_and_the_schedule_honours_poll_hours() {
+        let store = Store::connect("sqlite::memory:").await.unwrap();
+        let http = Arc::new(FakeLidlHttp::default());
+        let syncer = ReceiptSyncer::new(
+            store.clone(),
+            ReceiptSourcesConfig {
+                kaufland: crate::config::KauflandCardConfig {
+                    enabled: true,
+                    poll_hours: 6,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            SyncDeps {
+                connector: Arc::new(FakeMailbox::new(1)),
+                lidl_http: http.clone(),
+                env: Arc::new(|_| None),
+                lidl_gap: Duration::ZERO,
+            },
+            SECRET,
+            &[],
+        )
+        .unwrap();
+        let k = syncer.kaufland().unwrap();
+        let status = |s: &[SourceStatus]| by_kind(s, SourceKind::KauflandCard).health;
+        assert_eq!(
+            status(&syncer.statuses().await.unwrap()),
+            SourceHealth::NotConnected
+        );
+        assert!(
+            syncer.due(now_unix()).await.unwrap().is_empty(),
+            "not signed in"
+        );
+
+        http.respond(
+            Method::Post,
+            "/token-srv/token",
+            200,
+            crate::testing::kaufland_fixtures::TOKEN,
+        );
+        http.respond(
+            Method::Get,
+            "/users-srv/userinfo",
+            200,
+            crate::testing::kaufland_fixtures::USERINFO,
+        );
+        http.respond(
+            Method::Get,
+            "start=0&",
+            200,
+            crate::testing::kaufland_fixtures::TRANSACTIONS_PAGE_1,
+        );
+        let start = k.start().await.unwrap();
+        k.finish(
+            &start.state,
+            "com.kaufland.kaufland://oauth/callback?code=C",
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            status(&syncer.statuses().await.unwrap()),
+            SourceHealth::Waiting
+        );
+
+        let now = now_unix();
+        assert!(syncer
+            .due(now)
+            .await
+            .unwrap()
+            .contains(&SourceKind::KauflandCard));
+        let report = syncer
+            .sync_now(Some(SourceKind::KauflandCard))
+            .await
+            .unwrap();
+        assert_eq!(report.imported, 2);
+        assert_eq!(status(&report.sources), SourceHealth::Ok);
+        assert_eq!(
+            by_kind(&report.sources, SourceKind::KauflandCard).imported_total,
+            2
+        );
+        assert!(!syncer
+            .due(now + 5 * 3600)
+            .await
+            .unwrap()
+            .contains(&SourceKind::KauflandCard));
+        assert!(syncer
+            .due(now + 6 * 3600 + 5)
+            .await
+            .unwrap()
+            .contains(&SourceKind::KauflandCard));
     }
 
     #[tokio::test]
