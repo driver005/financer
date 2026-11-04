@@ -203,29 +203,48 @@ async fn without_a_syncer_every_source_is_disabled_and_lidl_refuses() {
     };
     let (status, list) = f.get("/v1/receipts/sources").await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(list.as_array().unwrap().len(), 4);
+    assert_eq!(list.as_array().unwrap().len(), 6);
+    // the sources the server reads are off; the two the app pushes to need no server setting
     assert!(list
         .as_array()
         .unwrap()
         .iter()
+        .filter(|s| s["flow"] != "push")
         .all(|s| s["state"] == "disabled" && s["enabled"] == false));
+    let flows: Vec<(&str, &str)> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| (s["source"].as_str().unwrap(), s["flow"].as_str().unwrap()))
+        .collect();
+    assert_eq!(
+        flows,
+        [
+            ("email", "server"),
+            ("lidl_plus", "sign_in"),
+            ("kaufland_card", "sign_in"),
+            ("folder", "server"),
+            ("rewe_app", "push"),
+            ("orders_file", "push")
+        ]
+    );
     let (status, report) = f.post("/v1/receipts/sync", None).await;
     assert_eq!(
         (status, report["imported"].as_i64()),
         (StatusCode::OK, Some(0))
     );
-    let (status, body) = f.post("/v1/receipts/lidl/start", None).await;
+    let (status, body) = f.post("/v1/receipts/sources/lidl_plus/connect", None).await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert!(body["error"].as_str().unwrap().contains("not switched on"));
-    let (status, st) = f.get("/v1/receipts/lidl/status").await;
+    let (status, st) = f.get("/v1/receipts/sources/lidl_plus").await;
     assert_eq!(
         (status, st["state"].as_str(), st["enabled"].as_bool()),
         (StatusCode::OK, Some("disabled"), Some(false))
     );
-    let (status, body) = f.post("/v1/receipts/kaufland/start", None).await;
+    let (status, body) = f.post("/v1/receipts/sources/kaufland_card/connect", None).await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert!(body["error"].as_str().unwrap().contains("not switched on"));
-    let (status, st) = f.get("/v1/receipts/kaufland/status").await;
+    let (status, st) = f.get("/v1/receipts/sources/kaufland_card").await;
     assert_eq!(
         (status, st["state"].as_str(), st["enabled"].as_bool()),
         (StatusCode::OK, Some("disabled"), Some(false))
@@ -238,19 +257,19 @@ async fn every_route_needs_the_token() {
     for (method, uri) in [
         (Method::GET, "/v1/receipts/sources"),
         (Method::POST, "/v1/receipts/sync"),
-        (Method::POST, "/v1/receipts/lidl/start"),
-        (Method::POST, "/v1/receipts/lidl/finish"),
-        (Method::GET, "/v1/receipts/lidl/status"),
-        (Method::DELETE, "/v1/receipts/lidl"),
-        (Method::POST, "/v1/receipts/kaufland/start"),
-        (Method::POST, "/v1/receipts/kaufland/finish"),
-        (Method::GET, "/v1/receipts/kaufland/status"),
-        (Method::DELETE, "/v1/receipts/kaufland"),
-        (Method::POST, "/v1/receipts/rewe/known"),
-        (Method::POST, "/v1/receipts/rewe/import"),
-        (Method::GET, "/v1/receipts/rewe/status"),
-        (Method::DELETE, "/v1/receipts/rewe"),
-        (Method::POST, "/v1/receipts/orders/import"),
+        (Method::POST, "/v1/receipts/sources/lidl_plus/connect"),
+        (Method::POST, "/v1/receipts/sources/lidl_plus/finish"),
+        (Method::GET, "/v1/receipts/sources/lidl_plus"),
+        (Method::POST, "/v1/receipts/sources/lidl_plus/disconnect"),
+        (Method::POST, "/v1/receipts/sources/kaufland_card/connect"),
+        (Method::POST, "/v1/receipts/sources/kaufland_card/finish"),
+        (Method::GET, "/v1/receipts/sources/kaufland_card"),
+        (Method::POST, "/v1/receipts/sources/kaufland_card/disconnect"),
+        (Method::POST, "/v1/receipts/sources/rewe_app/known"),
+        (Method::POST, "/v1/receipts/sources/rewe_app/import"),
+        (Method::GET, "/v1/receipts/sources/rewe_app"),
+        (Method::POST, "/v1/receipts/sources/rewe_app/disconnect"),
+        (Method::POST, "/v1/receipts/sources/orders_file/import"),
     ] {
         let (status, _) = f.send(method.clone(), uri, None, false).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {uri}");
@@ -355,13 +374,13 @@ async fn a_failing_source_reports_the_error_without_the_password() {
 #[tokio::test]
 async fn lidl_sign_in_on_lidls_own_page_then_sync_status_and_disconnect() {
     let f = Fixture::with(true).await;
-    let (_, st) = f.get("/v1/receipts/lidl/status").await;
+    let (_, st) = f.get("/v1/receipts/sources/lidl_plus").await;
     assert_eq!(
         (st["enabled"].as_bool(), st["state"].as_str()),
-        (Some(true), Some("never"))
+        (Some(true), Some("not_connected"))
     );
 
-    let (status, start) = f.post("/v1/receipts/lidl/start", None).await;
+    let (status, start) = f.post("/v1/receipts/sources/lidl_plus/connect", None).await;
     assert_eq!(status, StatusCode::OK);
     let url = start["authorization_url"].as_str().unwrap();
     assert!(
@@ -376,7 +395,7 @@ async fn lidl_sign_in_on_lidls_own_page_then_sync_status_and_disconnect() {
     let state = start["state"].as_str().unwrap().to_string();
     let (status, body) = f
         .post(
-            "/v1/receipts/lidl/finish",
+            "/v1/receipts/sources/lidl_plus/finish",
             Some(json!({"state": "unknown", "callback_url": "com.lidlplus.app://callback?code=A"})),
         )
         .await;
@@ -384,21 +403,21 @@ async fn lidl_sign_in_on_lidls_own_page_then_sync_status_and_disconnect() {
     assert!(body["error"].as_str().unwrap().contains("start again"));
     let (status, _) = f
         .post(
-            "/v1/receipts/lidl/finish",
+            "/v1/receipts/sources/lidl_plus/finish",
             Some(json!({"state": state, "callback_url": "https://evil.example/?code=A"})),
         )
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
     // the real thing (a new start, since a failed finish uses the first one up)
-    let (_, start) = f.post("/v1/receipts/lidl/start", None).await;
+    let (_, start) = f.post("/v1/receipts/sources/lidl_plus/connect", None).await;
     let state = start["state"].as_str().unwrap();
     f.http
         .respond(LidlMethod::Post, "/connect/token", 200, fx::TOKEN);
     f.serve_tickets();
     let (status, st) = f
         .post(
-            "/v1/receipts/lidl/finish",
+            "/v1/receipts/sources/lidl_plus/finish",
             Some(json!({
                 "state": state,
                 "callback_url": format!("com.lidlplus.app://callback?code=FIXTURECODE&state={state}")
@@ -406,9 +425,9 @@ async fn lidl_sign_in_on_lidls_own_page_then_sync_status_and_disconnect() {
         )
         .await;
     assert_eq!(status, StatusCode::OK, "{st}");
-    assert_eq!(st["state"], "connected");
-    assert_eq!(st["receipts"], 2, "the first sync ran right away");
-    assert!(st["connected_at"].as_i64().is_some() && st["last_sync"].as_i64().is_some());
+    assert_eq!(st["state"], "ok");
+    assert_eq!(st["imported_total"], 2, "the first sync ran right away");
+    assert!(st["connected_at"].as_i64().is_some() && st["last_run"].as_i64().is_some());
     let text = st.to_string();
     assert!(!text.contains("fixture-refresh-token") && !text.contains("fixture-access-token"));
 
@@ -425,13 +444,13 @@ async fn lidl_sign_in_on_lidls_own_page_then_sync_status_and_disconnect() {
     assert!(!row.state.contains("fixture"));
 
     let (status, _) = f
-        .send(Method::DELETE, "/v1/receipts/lidl", None, true)
+        .send(Method::POST, "/v1/receipts/sources/lidl_plus/disconnect", None, true)
         .await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
-    let (_, st) = f.get("/v1/receipts/lidl/status").await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, st) = f.get("/v1/receipts/sources/lidl_plus").await;
     assert_eq!(
-        (st["state"].as_str(), st["receipts"].as_i64()),
-        (Some("never"), Some(2))
+        (st["state"].as_str(), st["imported_total"].as_i64()),
+        (Some("not_connected"), Some(2))
     );
     assert!(f.store.source_state("lidl_plus").await.unwrap().is_none());
 }
@@ -439,27 +458,27 @@ async fn lidl_sign_in_on_lidls_own_page_then_sync_status_and_disconnect() {
 #[tokio::test]
 async fn lidl_trouble_is_a_clear_error_status() {
     let f = Fixture::with(true).await;
-    let (_, start) = f.post("/v1/receipts/lidl/start", None).await;
+    let (_, start) = f.post("/v1/receipts/sources/lidl_plus/connect", None).await;
     f.http.respond(LidlMethod::Post, "/connect/token", 503, "");
     let (status, body) = f
         .post(
-            "/v1/receipts/lidl/finish",
+            "/v1/receipts/sources/lidl_plus/finish",
             Some(json!({"state": start["state"], "callback_url": "com.lidlplus.app://callback?code=A"})),
         )
         .await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert!(body["error"].as_str().unwrap().contains("503"));
-    let (_, st) = f.get("/v1/receipts/lidl/status").await;
-    assert_eq!(st["state"], "never");
+    let (_, st) = f.get("/v1/receipts/sources/lidl_plus").await;
+    assert_eq!(st["state"], "not_connected");
 }
 
 #[tokio::test]
 async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect() {
     let f = Fixture::with_sources(false, true).await;
-    let (_, st) = f.get("/v1/receipts/kaufland/status").await;
+    let (_, st) = f.get("/v1/receipts/sources/kaufland_card").await;
     assert_eq!(
         (st["enabled"].as_bool(), st["state"].as_str()),
-        (Some(true), Some("never"))
+        (Some(true), Some("not_connected"))
     );
     let (_, list) = f.get("/v1/receipts/sources").await;
     assert_eq!(
@@ -468,7 +487,7 @@ async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect(
     );
     assert_eq!(Fixture::source(&list, "lidl_plus")["state"], "disabled");
 
-    let (status, start) = f.post("/v1/receipts/kaufland/start", None).await;
+    let (status, start) = f.post("/v1/receipts/sources/kaufland_card/connect", None).await;
     assert_eq!(status, StatusCode::OK);
     let url = start["authorization_url"].as_str().unwrap();
     assert!(
@@ -481,13 +500,13 @@ async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect(
 
     let (status, _) = f
         .post(
-            "/v1/receipts/kaufland/finish",
+            "/v1/receipts/sources/kaufland_card/finish",
             Some(json!({"state": "unknown", "callback_url": "com.kaufland.kaufland://oauth/callback?code=A"})),
         )
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
-    let (_, start) = f.post("/v1/receipts/kaufland/start", None).await;
+    let (_, start) = f.post("/v1/receipts/sources/kaufland_card/connect", None).await;
     let state = start["state"].as_str().unwrap();
     f.http
         .respond(LidlMethod::Post, "/token-srv/token", 200, kfx::TOKEN);
@@ -497,7 +516,7 @@ async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect(
         .respond(LidlMethod::Get, "start=0&", 200, kfx::TRANSACTIONS_PAGE_1);
     let (status, st) = f
         .post(
-            "/v1/receipts/kaufland/finish",
+            "/v1/receipts/sources/kaufland_card/finish",
             Some(json!({
                 "state": state,
                 "callback_url": format!("com.kaufland.kaufland://oauth/callback?code=FIXTURECODE&state={state}")
@@ -505,8 +524,8 @@ async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect(
         )
         .await;
     assert_eq!(status, StatusCode::OK, "{st}");
-    assert_eq!(st["state"], "connected");
-    assert_eq!(st["receipts"], 2, "the first sync ran right away");
+    assert_eq!(st["state"], "ok");
+    assert_eq!(st["imported_total"], 2, "the first sync ran right away");
     let text = st.to_string();
     assert!(!text.contains("fixture-kaufland") && !text.contains("user-4711"));
 
@@ -527,13 +546,13 @@ async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect(
     assert!(!row.state.contains("fixture-kaufland"));
 
     let (status, _) = f
-        .send(Method::DELETE, "/v1/receipts/kaufland", None, true)
+        .send(Method::POST, "/v1/receipts/sources/kaufland_card/disconnect", None, true)
         .await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
-    let (_, st) = f.get("/v1/receipts/kaufland/status").await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, st) = f.get("/v1/receipts/sources/kaufland_card").await;
     assert_eq!(
-        (st["state"].as_str(), st["receipts"].as_i64()),
-        (Some("never"), Some(2))
+        (st["state"].as_str(), st["imported_total"].as_i64()),
+        (Some("not_connected"), Some(2))
     );
     assert!(f
         .store
@@ -553,15 +572,15 @@ async fn rewe_receipts_pushed_by_the_app_are_stored_once_and_linked() {
         http: Arc::new(FakeLidlHttp::default()),
         dir: std::env::temp_dir().join("financer-api-receipts-rewe"),
     };
-    let (status, st) = f.get("/v1/receipts/rewe/status").await;
+    let (status, st) = f.get("/v1/receipts/sources/rewe_app").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
-        (st["last_import"].is_null(), st["receipts"].as_i64()),
+        (st["last_run"].is_null(), st["imported_total"].as_i64()),
         (true, Some(0))
     );
 
     let ids = json!({"ids": ["r1", "r2"]});
-    let (status, known) = f.post("/v1/receipts/rewe/known", Some(ids.clone())).await;
+    let (status, known) = f.post("/v1/receipts/sources/rewe_app/known", Some(ids.clone())).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(known["unknown"], json!(["r1", "r2"]));
 
@@ -572,23 +591,23 @@ async fn rewe_receipts_pushed_by_the_app_are_stored_once_and_linked() {
             {"name": "Bio Bananen", "quantity": 1, "total_cents": 149}
         ]
     }]});
-    let (status, r) = f.post("/v1/receipts/rewe/import", Some(body.clone())).await;
+    let (status, r) = f.post("/v1/receipts/sources/rewe_app/import", Some(body.clone())).await;
     assert_eq!(status, StatusCode::OK, "{r}");
     assert_eq!(
         (r["imported"].as_i64(), r["duplicates"].as_i64()),
         (Some(1), Some(0))
     );
-    let (_, again) = f.post("/v1/receipts/rewe/import", Some(body)).await;
+    let (_, again) = f.post("/v1/receipts/sources/rewe_app/import", Some(body)).await;
     assert_eq!(
         (again["imported"].as_i64(), again["duplicates"].as_i64()),
         (Some(0), Some(1))
     );
 
-    let (_, known) = f.post("/v1/receipts/rewe/known", Some(ids)).await;
+    let (_, known) = f.post("/v1/receipts/sources/rewe_app/known", Some(ids)).await;
     assert_eq!(known["unknown"], json!(["r2"]));
-    let (_, st) = f.get("/v1/receipts/rewe/status").await;
+    let (_, st) = f.get("/v1/receipts/sources/rewe_app").await;
     assert_eq!(
-        (st["receipts"].as_i64(), st["last_import"].is_null()),
+        (st["imported_total"].as_i64(), st["last_run"].is_null()),
         (Some(1), false)
     );
     let (_, receipts) = f.get("/v1/receipts").await;
@@ -599,11 +618,11 @@ async fn rewe_receipts_pushed_by_the_app_are_stored_once_and_linked() {
         .all(|r| r["source"] == "rewe_app" && r["chain"] == "rewe"));
 
     let (status, _) = f
-        .send(Method::DELETE, "/v1/receipts/rewe", None, true)
+        .send(Method::POST, "/v1/receipts/sources/rewe_app/disconnect", None, true)
         .await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
-    let (_, st) = f.get("/v1/receipts/rewe/status").await;
-    assert!(st["last_import"].is_null());
+    assert_eq!(status, StatusCode::OK);
+    let (_, st) = f.get("/v1/receipts/sources/rewe_app").await;
+    assert!(st["last_run"].is_null());
 }
 
 #[tokio::test]
@@ -633,18 +652,18 @@ async fn rewe_pushes_are_checked() {
         one(json!({"lines": [{"name": " ", "quantity": 1, "total_cents": 1}]})),
         one(json!({"lines": [{"name": "x", "quantity": 0, "total_cents": 1}]})),
     ] {
-        let (status, _) = f.post("/v1/receipts/rewe/import", Some(bad.clone())).await;
+        let (status, _) = f.post("/v1/receipts/sources/rewe_app/import", Some(bad.clone())).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
     }
     let many: Vec<Value> = (0..101)
         .map(|i| json!({"id": format!("r{i}"), "date": "2026-03-02", "lines": [line.clone()]}))
         .collect();
     let (status, _) = f
-        .post("/v1/receipts/rewe/import", Some(json!({"receipts": many})))
+        .post("/v1/receipts/sources/rewe_app/import", Some(json!({"receipts": many})))
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let (status, _) = f
-        .post("/v1/receipts/rewe/known", Some(json!({"ids": ["a b"]})))
+        .post("/v1/receipts/sources/rewe_app/known", Some(json!({"ids": ["a b"]})))
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
@@ -659,7 +678,7 @@ async fn online_orders_from_a_file_are_stored_once_per_shop_and_number() {
         http: Arc::new(FakeLidlHttp::default()),
         dir: std::env::temp_dir().join("financer-api-receipts-orders"),
     };
-    let body = json!({"shop": "Amazon", "orders": [{
+    let body = json!({"shop": "Amazon", "receipts": [{
         "id": "302-1234567-1234567", "date": "2026-02-11", "total_cents": 2498,
         "lines": [
             {"name": "USB-C Kabel", "quantity": 2, "total_cents": 1299},
@@ -667,7 +686,7 @@ async fn online_orders_from_a_file_are_stored_once_per_shop_and_number() {
         ]
     }]});
     let (status, r) = f
-        .post("/v1/receipts/orders/import", Some(body.clone()))
+        .post("/v1/receipts/sources/orders_file/import", Some(body.clone()))
         .await;
     assert_eq!(status, StatusCode::OK, "{r}");
     assert_eq!(
@@ -675,7 +694,7 @@ async fn online_orders_from_a_file_are_stored_once_per_shop_and_number() {
         (Some(1), Some(0))
     );
     let (_, again) = f
-        .post("/v1/receipts/orders/import", Some(body.clone()))
+        .post("/v1/receipts/sources/orders_file/import", Some(body.clone()))
         .await;
     assert_eq!(
         (again["imported"].as_i64(), again["duplicates"].as_i64()),
@@ -689,12 +708,12 @@ async fn online_orders_from_a_file_are_stored_once_per_shop_and_number() {
     );
 
     for bad in [
-        json!({"shop": " ", "orders": []}),
-        json!({"shop": "x".repeat(41), "orders": []}),
-        json!({"shop": "Amazon", "orders": [{"id": "../x", "date": "2026-02-11", "lines": []}]}),
+        json!({"shop": " ", "receipts": []}),
+        json!({"shop": "x".repeat(41), "receipts": []}),
+        json!({"shop": "Amazon", "receipts": [{"id": "../x", "date": "2026-02-11", "lines": []}]}),
     ] {
         let (status, _) = f
-            .post("/v1/receipts/orders/import", Some(bad.clone()))
+            .post("/v1/receipts/sources/orders_file/import", Some(bad.clone()))
             .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
     }
@@ -703,9 +722,39 @@ async fn online_orders_from_a_file_are_stored_once_per_shop_and_number() {
         .collect();
     let (status, _) = f
         .post(
-            "/v1/receipts/orders/import",
-            Some(json!({"shop": "Amazon", "orders": many})),
+            "/v1/receipts/sources/orders_file/import",
+            Some(json!({"shop": "Amazon", "receipts": many})),
         )
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn every_source_answers_the_same_calls_and_refuses_the_ones_its_flow_does_not_have() {
+    let f = Fixture::with(true).await;
+    // one source, by its kind
+    for kind in ["email", "lidl_plus", "kaufland_card", "folder", "rewe_app", "orders_file"] {
+        let (status, one) = f.get(&format!("/v1/receipts/sources/{kind}")).await;
+        assert_eq!(status, StatusCode::OK, "{kind}");
+        assert_eq!(one["source"], kind);
+    }
+    assert_eq!(f.get("/v1/receipts/sources/nope").await.0, StatusCode::NOT_FOUND);
+    // a call for another flow is a 400 that says what the source is
+    for (path, body) in [
+        ("/v1/receipts/sources/rewe_app/connect", None),
+        ("/v1/receipts/sources/email/connect", None),
+        ("/v1/receipts/sources/folder/disconnect", None),
+        ("/v1/receipts/sources/orders_file/disconnect", None),
+        ("/v1/receipts/sources/lidl_plus/import", Some(json!({"receipts": []}))),
+        ("/v1/receipts/sources/orders_file/known", Some(json!({"ids": []}))),
+        ("/v1/receipts/sources/email/finish", Some(json!({"state": "x", "callback_url": "y"}))),
+    ] {
+        let (status, err) = f.post(path, body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{path}");
+        assert!(err["error"].as_str().unwrap().contains("source"), "{path}: {err}");
+    }
+    assert_eq!(
+        f.post("/v1/receipts/sources/nope/connect", None).await.0,
+        StatusCode::NOT_FOUND
+    );
 }

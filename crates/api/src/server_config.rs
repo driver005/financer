@@ -94,7 +94,7 @@ pub async fn get_config(State(state): State<AppState>) -> Result<Json<ConfigView
     responses(
         (status = 200, body = ConfigSaved),
         (status = 409, description = "A key is decided by an environment variable, or a restart is under way", body = ConfigProblems),
-        (status = 422, description = "The change was refused", body = ConfigProblems),
+        (status = 400, description = "The change was refused", body = ConfigProblems),
         (status = 404, description = "This backend has no server configuration", body = ErrorBody),
         (status = 503, description = "The settings file cannot be written", body = ErrorBody),
     ),
@@ -119,7 +119,7 @@ pub async fn put_config(
         Ok(u) => u,
         Err(UpdateError::Invalid(problems)) => {
             return Ok(ConfigProblems::response(
-                StatusCode::UNPROCESSABLE_ENTITY,
+                StatusCode::BAD_REQUEST,
                 problems,
             ))
         }

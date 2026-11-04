@@ -522,7 +522,7 @@ mod tests {
             .unwrap();
         assert_eq!(b.sync_receipts().await.unwrap(), "receipt import is off");
         let status = b
-            .handle_request(Fixtures::get("/v1/receipts/lidl/status"))
+            .handle_request(Fixtures::get("/v1/receipts/sources/lidl_plus"))
             .await;
         assert_eq!(status.status, 200);
         assert_eq!(Fixtures::json(&status)["state"], "disabled");
@@ -530,7 +530,7 @@ mod tests {
         let start = b
             .handle_request(HttpRequest {
                 method: "POST".into(),
-                path_and_query: "/v1/receipts/lidl/start".into(),
+                path_and_query: "/v1/receipts/sources/lidl_plus/connect".into(),
                 content_type: None,
                 body: vec![],
             })
@@ -549,17 +549,17 @@ mod tests {
             .await
             .unwrap();
         let status = b
-            .handle_request(Fixtures::get("/v1/receipts/lidl/status"))
+            .handle_request(Fixtures::get("/v1/receipts/sources/lidl_plus"))
             .await;
         let status = Fixtures::json(&status);
         assert_eq!(status["enabled"], true);
-        assert_eq!(status["state"], "never"); // on, but nobody has signed in yet
+        assert_eq!(status["state"], "not_connected"); // on, but nobody has signed in yet
 
         // the sign-in page address comes from the backend; nothing is contacted here
         let start = b
             .handle_request(HttpRequest {
                 method: "POST".into(),
-                path_and_query: "/v1/receipts/lidl/start".into(),
+                path_and_query: "/v1/receipts/sources/lidl_plus/connect".into(),
                 content_type: None,
                 body: vec![],
             })
@@ -582,15 +582,15 @@ mod tests {
             .await
             .unwrap();
         let status = b
-            .handle_request(Fixtures::get("/v1/receipts/kaufland/status"))
+            .handle_request(Fixtures::get("/v1/receipts/sources/kaufland_card"))
             .await;
         let status = Fixtures::json(&status);
         assert_eq!(status["enabled"], true);
-        assert_eq!(status["state"], "never");
+        assert_eq!(status["state"], "not_connected");
         let start = b
             .handle_request(HttpRequest {
                 method: "POST".into(),
-                path_and_query: "/v1/receipts/kaufland/start".into(),
+                path_and_query: "/v1/receipts/sources/kaufland_card/connect".into(),
                 content_type: None,
                 body: vec![],
             })
@@ -604,7 +604,7 @@ mod tests {
         assert_eq!(start["callback_scheme"], "com.kaufland.kaufland");
         // Lidl Plus stays off
         let lidl = b
-            .handle_request(Fixtures::get("/v1/receipts/lidl/status"))
+            .handle_request(Fixtures::get("/v1/receipts/sources/lidl_plus"))
             .await;
         assert_eq!(Fixtures::json(&lidl)["state"], "disabled");
     }

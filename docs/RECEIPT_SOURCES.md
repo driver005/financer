@@ -110,13 +110,13 @@ terms; that is your decision.
 **How the sign-in works (and what Financer sees)**
 
 1. In the app, **Connect Lidl Plus**. The server creates a random PKCE verifier and state and
-   returns the address of **Lidl's own sign-in page** (`POST /v1/receipts/lidl/start`). Nothing is
+   returns the address of **Lidl's own sign-in page** (`POST /v1/receipts/sources/lidl_plus/connect`). Nothing is
    sent to Lidl by this step.
 2. You sign in **on Lidl's page**, in a browser sheet (iOS: `ASWebAuthenticationSession`; Android:
    a custom tab). Financer never sees your password, your phone number or your SMS code.
 3. Lidl's page ends by redirecting to `com.lidlplus.app://callback?code=...`. On a phone the sheet
    hands that address to the app; the app sends it to the server
-   (`POST /v1/receipts/lidl/finish`), which exchanges the one-time code (with the verifier) for
+   (`POST /v1/receipts/sources/lidl_plus/finish`), which exchanges the one-time code (with the verifier) for
    tokens.
 4. **Only the refresh token is stored**, encrypted. From then on the server refreshes access
    tokens and reads new receipts every `poll_hours`, without a browser.
@@ -134,7 +134,7 @@ Receipt sources screen (`src/app/+native-intent.tsx`). This **competes with the 
 is installed, Android may offer to open the address in either app; choose Financer. On iOS an
 authentication session accepts any callback scheme.
 
-**Disconnect** (`DELETE /v1/receipts/lidl`, or the button) deletes the token and what the source
+**Disconnect** (`POST /v1/receipts/sources/lidl_plus/disconnect`, or the button) deletes the token and what the source
 remembered. Receipts already imported stay. If Lidl stops accepting the saved sign-in, the status
 becomes *Sign in again* and nothing more is requested until you do.
 
@@ -179,16 +179,26 @@ the spending-per-store view can show item-level detail later; nothing reads it f
 
 ## Endpoints
 
+One family of calls for every source, with the source as the `{kind}` (`email`, `lidl_plus`,
+`kaufland_card`, `folder`, `rewe_app`, `orders_file`), the way the bank providers work
+(`docs/API_STYLE.md`). Each source has a **flow**: `server` (the server reads a mailbox or a
+folder), `sign_in` (you sign in on the shop's own page) or `push` (the app hands the receipts over).
+
 | | |
 |---|---|
-| `GET /v1/receipts/sources` | each source: `state` (`disabled`, `waiting`, `running`, `ok`, `error`, `not_connected`, `needs_signin`), last run, last success, next run, last error, receipts imported (last run and in total), notes, where it reads from. No secrets. |
-| `POST /v1/receipts/sync` | run now; optional body `{"source": "email" \| "lidl_plus" \| "folder"}`; `409` while a run is going |
-| `POST /v1/receipts/lidl/start` | `authorization_url`, `state`, `callback_scheme`, `redirect_uri`, `expires_in_seconds` (15 minutes) |
-| `POST /v1/receipts/lidl/finish` | `{state, callback_url}`; stores the encrypted token, runs the first sync |
-| `GET /v1/receipts/lidl/status` | `disabled`, `never`, `connected` or `needs_signin`, connected-at, last sync, receipts |
-| `DELETE /v1/receipts/lidl` | disconnect |
+| `GET /v1/receipts/sources` | every source: `flow`, `state` (`disabled`, `waiting`, `running`, `ok`, `error`, `not_connected`, `needs_signin`), connected-at, last run, last success, next run, last error, receipts imported (last run and in total), notes, where it reads from. No secrets. |
+| `GET /v1/receipts/sources/{kind}` | the same for one source |
+| `POST /v1/receipts/sync` | run the scheduled sources now; optional body `{"source": "email" \| "lidl_plus" \| "kaufland_card" \| "folder"}`; `409` while a run is going |
+| `POST /v1/receipts/sources/{kind}/connect` | `sign_in`: `authorization_url`, `state`, `callback_scheme`, `redirect_uri`, `expires_in_seconds` (15 minutes) |
+| `POST /v1/receipts/sources/{kind}/finish` | `sign_in`: `{state, callback_url}`; stores the encrypted token, runs the first sync, answers with the source |
+| `POST /v1/receipts/sources/{kind}/disconnect` | forget the stored token (`sign_in`) or the note of the last push (`rewe_app`); answers with the source |
+| `POST /v1/receipts/sources/{kind}/known` | `push` (`rewe_app`): `{ids}`, answers which are not stored yet |
+| `POST /v1/receipts/sources/{kind}/import` | `push`: `{receipts, shop?}` (`rewe_app` at most 100 receipts of 500 lines; `orders_file` at most 200 orders, `shop` names the web shop) |
 
-Without a configured source every source reports `disabled`; the Lidl endpoints answer `409`.
+A call that does not fit the source's flow answers `400` and says what the source is. Without a
+configured source every scheduled source reports `disabled`; the `sign_in` calls answer `409`.
+
+
 
 ## Security notes
 
@@ -322,8 +332,8 @@ the same purchase.
   `-` and `_`.
 - **Nothing runs by itself**: receipts are read when you open the window. While you are still signed in to REWE
   there, that happens right away; when the session has run out, you sign in again. There is no background schedule.
-- The server side is `POST /v1/receipts/rewe/known` (which ids are new), `POST /v1/receipts/rewe/import` (at most 100
-  receipts of at most 500 lines, validated), `GET /v1/receipts/rewe/status` and `DELETE /v1/receipts/rewe`.
+- The server side is `POST /v1/receipts/sources/rewe_app/known` (which ids are new) and `.../import` (at most 100
+  receipts of at most 500 lines, validated); `GET /v1/receipts/sources/rewe_app` tells when it last happened.
 - The shape of REWE's answers (`items` with `receiptId`, `receiptTimestamp`, `receiptTotalPrice`; a receipt's
   `articles` with `productName`, `quantity`, `totalPrice`, all prices in cents) comes from the public project
   `grocy-rewe-connect`. It is **not** an official interface and **was not run against a real REWE account**; the
@@ -358,7 +368,7 @@ and an amount (the total, or the unit price times the quantity). Rows with the s
 cancelled rows, other currencies, rows without an amount or a readable date are left out and counted in the preview.
 A file whose columns are not found is refused with the headings it has. The orders are stored as receipts of the shop
 (`orders_file`), once per shop and order number, and matched to bank payments. The file is read on the phone; the server
-only receives the orders (`POST /v1/receipts/orders/import`, at most 200 orders of 200 lines).
+only receives the orders (`POST /v1/receipts/sources/orders_file/import`, at most 200 orders of 200 lines).
 
 It was tested with files shaped like the documented Amazon export and run end to end in a desktop browser against the
 real server; **it was not tried with a real Amazon file**, whose exact columns differ between versions.

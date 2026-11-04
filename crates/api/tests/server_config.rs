@@ -271,7 +271,7 @@ async fn a_mistake_saves_nothing_and_names_the_key() {
             "receipts.email.port": 99999,
         }}))
         .await;
-    assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(s, StatusCode::BAD_REQUEST);
     let problems: Vec<_> = body["problems"]
         .as_array()
         .unwrap()
@@ -333,7 +333,7 @@ async fn accounts_are_saved_as_a_list_and_checked_per_row() {
     let (s, body) = f
         .put(json!({"set": {"bank.accounts": [{"name": "Giro", "kind": "fints", "bank_code": "123", "login": "me", "iban": "x"}]}}))
         .await;
-    assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(s, StatusCode::BAD_REQUEST);
     let text = body["error"].as_str().unwrap();
     assert!(
         text.contains("bank.accounts[0].bank_code") && text.contains("bank.accounts[0].iban"),

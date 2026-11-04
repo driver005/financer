@@ -24,11 +24,13 @@ export type BasketItem = components["schemas"]["BasketItemDto"];
 export type Receipt = components["schemas"]["ReceiptDto"];
 export type ReceiptSource = components["schemas"]["ReceiptSourceDto"];
 export type ReceiptSync = components["schemas"]["ReceiptSyncDto"];
-export type LidlStart = components["schemas"]["LidlStartDto"];
-export type LidlStatus = components["schemas"]["LidlStatusDto"];
-export type ReweStatus = components["schemas"]["ReweStatusDto"];
-export type ReweReceiptInput = components["schemas"]["ReweReceiptInput"];
-export type ReweImportResult = components["schemas"]["ReweImportDto"];
+/** Starting a sign-in on a shop's own page (`sign_in` sources). */
+export type SourceConnect = components["schemas"]["SourceConnectDto"];
+/** A receipt (or an order) a `push` source hands over. */
+export type ReceiptInput = components["schemas"]["ReceiptInput"];
+export type ReceiptImport = components["schemas"]["ReceiptImportDto"];
+/** The sources a receipt can come from, and the key every call of one source is made with. */
+export type SourceKind = "email" | "lidl_plus" | "kaufland_card" | "folder" | "rewe_app" | "orders_file";
 export type Affordability = components["schemas"]["AffordabilityDto"];
 export type RecipeMatch = components["schemas"]["RecipeMatchDto"];
 export type Idea = components["schemas"]["IdeaDto"];
@@ -225,9 +227,14 @@ export class Api {
     return this.request<void>(`/v1/receipts/${id}`, { method: "DELETE" });
   }
 
-  /** The automatic receipt sources (mailbox, Lidl Plus, Kaufland Card, watched folder) and how each is doing. */
+  /** Every receipt source (mailbox, folder, Lidl Plus, Kaufland Card, REWE, orders file), its `flow` and how it is doing. */
   receiptSources() {
     return this.request<ReceiptSource[]>("/v1/receipts/sources");
+  }
+
+  /** One source. */
+  receiptSource(kind: SourceKind) {
+    return this.request<ReceiptSource>(`/v1/receipts/sources/${kind}`);
   }
 
   /** Run the enabled sources now, or just one. */
@@ -235,62 +242,29 @@ export class Api {
     return source ? this.json<ReceiptSync>("/v1/receipts/sync", "POST", { source }) : this.request<ReceiptSync>("/v1/receipts/sync", { method: "POST" });
   }
 
-  /** Begin the Lidl Plus sign-in; the returned address is Lidl's own page. */
-  lidlStart() {
-    return this.request<LidlStart>("/v1/receipts/lidl/start", { method: "POST" });
+  /** `sign_in` sources: begin the sign-in; the returned address is the shop's own page. */
+  connectSource(kind: SourceKind) {
+    return this.request<SourceConnect>(`/v1/receipts/sources/${kind}/connect`, { method: "POST" });
   }
 
-  /** Finish the sign-in with the address the page redirected to. */
-  lidlFinish(state: string, callbackUrl: string) {
-    return this.json<LidlStatus>("/v1/receipts/lidl/finish", "POST", { state, callback_url: callbackUrl });
+  /** `sign_in` sources: finish the sign-in with the address the page redirected to. */
+  finishSource(kind: SourceKind, state: string, callbackUrl: string) {
+    return this.json<ReceiptSource>(`/v1/receipts/sources/${kind}/finish`, "POST", { state, callback_url: callbackUrl });
   }
 
-  lidlStatus() {
-    return this.request<LidlStatus>("/v1/receipts/lidl/status");
+  /** Forget the connection (a stored token, or the note of the last push). Receipts already stored stay. */
+  disconnectSource(kind: SourceKind) {
+    return this.request<ReceiptSource>(`/v1/receipts/sources/${kind}/disconnect`, { method: "POST" });
   }
 
-  lidlDisconnect() {
-    return this.request<void>("/v1/receipts/lidl", { method: "DELETE" });
+  /** `push` sources: which of the shop's receipt ids (read in the app's browser window) are not stored yet. */
+  knownReceipts(kind: SourceKind, ids: string[]) {
+    return this.json<components["schemas"]["ReceiptKnownDto"]>(`/v1/receipts/sources/${kind}/known`, "POST", { ids });
   }
 
-  /** Which of REWE's receipt ids (read in the app's browser window) are not stored yet. */
-  reweKnown(ids: string[]) {
-    return this.json<components["schemas"]["ReweKnownDto"]>("/v1/receipts/rewe/known", "POST", { ids });
-  }
-
-  /** Store receipts the app read from REWE's web shop. */
-  reweImport(receipts: ReweReceiptInput[]) {
-    return this.json<ReweImportResult>("/v1/receipts/rewe/import", "POST", { receipts });
-  }
-
-  /** Store online orders read from a file the shop produced (Amazon's data request, for example). */
-  ordersImport(shop: string, orders: ReweReceiptInput[]) {
-    return this.json<ReweImportResult>("/v1/receipts/orders/import", "POST", { shop, orders });
-  }
-
-  reweStatus() {
-    return this.request<ReweStatus>("/v1/receipts/rewe/status");
-  }
-
-  reweForget() {
-    return this.request<void>("/v1/receipts/rewe", { method: "DELETE" });
-  }
-
-  /** The Kaufland Card sign-in: same shapes as Lidl Plus, Kaufland's own page. */
-  kauflandStart() {
-    return this.request<LidlStart>("/v1/receipts/kaufland/start", { method: "POST" });
-  }
-
-  kauflandFinish(state: string, callbackUrl: string) {
-    return this.json<LidlStatus>("/v1/receipts/kaufland/finish", "POST", { state, callback_url: callbackUrl });
-  }
-
-  kauflandStatus() {
-    return this.request<LidlStatus>("/v1/receipts/kaufland/status");
-  }
-
-  kauflandDisconnect() {
-    return this.request<void>("/v1/receipts/kaufland", { method: "DELETE" });
+  /** `push` sources: store the receipts the app read (REWE's web shop) or the orders it read from a file (`shop` names the web shop, for `orders_file`). */
+  importReceipts(kind: SourceKind, receipts: ReceiptInput[], shop?: string) {
+    return this.json<ReceiptImport>(`/v1/receipts/sources/${kind}/import`, "POST", shop === undefined ? { receipts } : { shop, receipts });
   }
 
   affordability(budgetCents?: number, daysPerBasket?: number) {

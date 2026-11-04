@@ -16,7 +16,9 @@ import {
   isSourceKey,
   lastSyncText,
   lidlPromises,
+  isSignedIn,
   lidlStateText,
+  listedSources,
   noSourceText,
   nextRunText,
   setupSteps,
@@ -180,32 +182,53 @@ describe("API client", () => {
     return { a, calls };
   }
 
-  it("calls the receipt source endpoints", async () => {
-    const { a, calls } = api(({ path }) =>
-      path.endsWith("/lidl") ? { status: 204, body: undefined } : { status: 200, body: path.includes("sources") ? [] : { ok: true } },
-    );
+  it("calls the receipt source endpoints, the same for every source", async () => {
+    const { a, calls } = api(({ path }) => ({ status: 200, body: path.endsWith("/v1/receipts/sources") ? [] : { ok: true } }));
     await a.receiptSources();
+    await a.receiptSource("lidl_plus");
     await a.syncReceipts();
     await a.syncReceipts("folder");
-    await a.lidlStart();
-    await a.lidlFinish("st", "com.lidlplus.app://callback?code=A");
-    await a.lidlStatus();
-    await a.lidlDisconnect();
+    await a.connectSource("kaufland_card");
+    await a.finishSource("lidl_plus", "st", "com.lidlplus.app://callback?code=A");
+    await a.disconnectSource("lidl_plus");
+    await a.knownReceipts("rewe_app", ["a", "b"]);
+    await a.importReceipts("rewe_app", []);
+    await a.importReceipts("orders_file", [], "Amazon");
     assert.deepEqual(
       calls.map((c) => `${c.method} ${c.path}`),
       [
         "GET /v1/receipts/sources",
+        "GET /v1/receipts/sources/lidl_plus",
         "POST /v1/receipts/sync",
         "POST /v1/receipts/sync",
-        "POST /v1/receipts/lidl/start",
-        "POST /v1/receipts/lidl/finish",
-        "GET /v1/receipts/lidl/status",
-        "DELETE /v1/receipts/lidl",
+        "POST /v1/receipts/sources/kaufland_card/connect",
+        "POST /v1/receipts/sources/lidl_plus/finish",
+        "POST /v1/receipts/sources/lidl_plus/disconnect",
+        "POST /v1/receipts/sources/rewe_app/known",
+        "POST /v1/receipts/sources/rewe_app/import",
+        "POST /v1/receipts/sources/orders_file/import",
       ],
     );
-    assert.equal(calls[1].body, undefined);
-    assert.deepEqual(JSON.parse(calls[2].body ?? "{}"), { source: "folder" });
-    assert.deepEqual(JSON.parse(calls[4].body ?? "{}"), { state: "st", callback_url: "com.lidlplus.app://callback?code=A" });
+    assert.equal(calls[2].body, undefined);
+    assert.deepEqual(JSON.parse(calls[3].body ?? "{}"), { source: "folder" });
+    assert.deepEqual(JSON.parse(calls[5].body ?? "{}"), { state: "st", callback_url: "com.lidlplus.app://callback?code=A" });
+    assert.deepEqual(JSON.parse(calls[7].body ?? "{}"), { ids: ["a", "b"] });
+    assert.deepEqual(JSON.parse(calls[8].body ?? "{}"), { receipts: [] }, "no shop for a REWE push");
+    assert.deepEqual(JSON.parse(calls[9].body ?? "{}"), { shop: "Amazon", receipts: [] });
+  });
+
+  it("reads the states of the one source list", () => {
+    for (const state of ["ok", "waiting", "running", "error", "connected"]) assert.equal(isSignedIn(state), true, state);
+    for (const state of ["not_connected", "needs_signin", "disabled", "never"]) assert.equal(isSignedIn(state), false, state);
+    assert.equal(signInStateText("Lidl", "not_connected", null, 0), "Not connected");
+    assert.equal(signInStateText("Lidl", "ok", 1000, 1000 + 7200), "Connected 2 h ago");
+    const list = [
+      { source: "email", flow: "server" },
+      { source: "lidl_plus", flow: "sign_in" },
+      { source: "rewe_app", flow: "push" },
+      { source: "orders_file", flow: "push" },
+    ];
+    assert.deepEqual(listedSources(list).map((s) => s.source), ["email", "lidl_plus"]);
   });
 });
 

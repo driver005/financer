@@ -48,8 +48,35 @@ impl SourceKind {
         }
     }
 
+    /// The sources that run on a schedule, by key.
     pub fn from_key(key: &str) -> Option<SourceKind> {
         Self::ALL.into_iter().find(|k| k.key() == key)
+    }
+
+    /// Every source, scheduled or pushed.
+    pub const EVERY: [SourceKind; 6] = [
+        SourceKind::Email,
+        SourceKind::LidlPlus,
+        SourceKind::KauflandCard,
+        SourceKind::Folder,
+        SourceKind::ReweApp,
+        SourceKind::OrdersFile,
+    ];
+
+    /// Any source by key, scheduled or pushed.
+    pub fn from_any_key(key: &str) -> Option<SourceKind> {
+        Self::EVERY.into_iter().find(|k| k.key() == key)
+    }
+
+    /// How its receipts get in: `server` (the server reads a mailbox or a folder), `sign_in` (you
+    /// sign in on the shop's own page, the server reads on a schedule) or `push` (the app hands
+    /// the receipts over).
+    pub fn flow(self) -> &'static str {
+        match self {
+            SourceKind::Email | SourceKind::Folder => "server",
+            SourceKind::LidlPlus | SourceKind::KauflandCard => "sign_in",
+            SourceKind::ReweApp | SourceKind::OrdersFile => "push",
+        }
     }
 }
 

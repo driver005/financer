@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import { Platform } from "react-native";
 import { Badge, Box, Button, Card, Icon, IconBadge, Row, Text } from "@financer/ui";
 
-import type { ReweStatus } from "@/api/client";
+import type { ReceiptSource } from "@/api/client";
 import { importedText, lastSyncText } from "@/receiptSources";
 
 /**
@@ -10,7 +10,7 @@ import { importedText, lastSyncText } from "@/receiptSources";
  * cards it has no switch and no schedule: receipts are read when you open the window, and if you are
  * still signed in there that happens by itself.
  */
-export function ReweCard({ status }: { status: ReweStatus | null }) {
+export function ReweCard({ status }: { status: ReceiptSource | null }) {
   const router = useRouter();
   const now = Math.floor(Date.now() / 1000);
   const phone = Platform.OS !== "web";
@@ -27,8 +27,8 @@ export function ReweCard({ status }: { status: ReweStatus | null }) {
         </Box>
       </Row>
       <Text variant="body">
-        {status && status.receipts > 0
-          ? `${importedText(status.receipts)}${status.last_import ? `, last read ${lastSyncText(status.last_import, now).toLowerCase()}` : ""}`
+        {status && status.imported_total > 0
+          ? `${importedText(status.imported_total)}${status.last_run ? `, last read ${lastSyncText(status.last_run, now).toLowerCase()}` : ""}`
           : "Nothing read yet"}
       </Text>
       <Box gap="sm">

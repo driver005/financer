@@ -79,6 +79,9 @@ fn query_parameters_and_fields_are_snake_case_and_one_name_means_one_thing() {
             if !snake(field) {
                 bad.push(format!("schema {schema}: field {field:?} is not snake_case"));
             }
+            if field == "as_of" {
+                bad.push(format!("schema {schema}: field `as_of`; the day is `date`"));
+            }
         }
     }
     report(bad);

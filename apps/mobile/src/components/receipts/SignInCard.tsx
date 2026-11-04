@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Platform } from "react-native";
 import { Badge, Box, Button, Card, ConfirmAction, Expandable, Group, Icon, IconBadge, ListItem, Note, Row, Text, TextField } from "@financer/ui";
 
-import type { Api, LidlStart, LidlStatus, ReceiptSource } from "@/api/client";
+import type { Api, ReceiptSource, SourceConnect } from "@/api/client";
 import { useApi } from "@/api/config";
 import { openInBrowser, openSignInPage } from "@/native/authSession";
 import { celebrate } from "@/native/haptics";
@@ -16,6 +16,7 @@ import {
   setupSteps,
   signInMode,
   signInPromises,
+  isSignedIn,
   signInStateText,
   sourceIcon,
   syncResultText,
@@ -33,9 +34,9 @@ type Brand = {
   shop: SignInShop;
   name: string;
   tone: "info" | "success";
-  start: (api: Api) => Promise<LidlStart>;
-  finish: (api: Api, state: string, url: string) => Promise<LidlStatus>;
-  disconnect: (api: Api) => Promise<void>;
+  start: (api: Api) => Promise<SourceConnect>;
+  finish: (api: Api, state: string, url: string) => Promise<ReceiptSource>;
+  disconnect: (api: Api) => Promise<ReceiptSource>;
   /** The switch of the on-phone backend. */
   phoneKey: "lidlPlus" | "kaufland";
   howItWorks: string;
@@ -48,9 +49,9 @@ const BRANDS: Record<BrandKey, Brand> = {
     shop: "Lidl",
     name: "Lidl Plus",
     tone: "info",
-    start: (a) => a.lidlStart(),
-    finish: (a, s, u) => a.lidlFinish(s, u),
-    disconnect: (a) => a.lidlDisconnect(),
+    start: (a) => a.connectSource("lidl_plus"),
+    finish: (a, s, u) => a.finishSource("lidl_plus", s, u),
+    disconnect: (a) => a.disconnectSource("lidl_plus"),
     phoneKey: "lidlPlus",
     howItWorks:
       "Lidl has no public interface for third parties. Financer uses the same sign-in the Lidl Plus app uses (an OpenID Connect sign-in with PKCE) and then reads your receipts with a long-lived token. The method was worked out by the open-source Lidl Plus client by Andre0512; Financer reimplements it and does not copy its code.",
@@ -61,9 +62,9 @@ const BRANDS: Record<BrandKey, Brand> = {
     shop: "Kaufland",
     name: "Kaufland Card",
     tone: "success",
-    start: (a) => a.kauflandStart(),
-    finish: (a, s, u) => a.kauflandFinish(s, u),
-    disconnect: (a) => a.kauflandDisconnect(),
+    start: (a) => a.connectSource("kaufland_card"),
+    finish: (a, s, u) => a.finishSource("kaufland_card", s, u),
+    disconnect: (a) => a.disconnectSource("kaufland_card"),
     phoneKey: "kaufland",
     howItWorks:
       "Kaufland has no public interface for third parties. Financer signs in the way the Kaufland app does (an OAuth sign-in with PKCE on Kaufland's own account page) and then reads your digital receipts with a long-lived token. The method was worked out by the open-source project Bonfire; Financer reimplements it and does not copy its code. Only receipts you chose to get digitally (\"Papierbon sparen\" in the Kaufland app) exist.",
@@ -86,7 +87,7 @@ export function SignInCard({
   brand: BrandKey;
   api: Api;
   source: ReceiptSource;
-  status: LidlStatus | null;
+  status: ReceiptSource | null;
   onChanged: () => Promise<void> | void;
 }) {
   const brand = BRANDS[brandKey];
@@ -98,21 +99,21 @@ export function SignInCard({
   const pill = healthPill(source);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message>(null);
-  const [pending, setPending] = useState<LidlStart | null>(null);
+  const [pending, setPending] = useState<SourceConnect | null>(null);
   const [pasted, setPasted] = useState("");
 
   const state = status?.state ?? "disabled";
   const switchedOff = state === "disabled";
-  const connected = state === "connected";
+  const connected = isSignedIn(state);
 
-  async function finish(start: LidlStart, url: string) {
+  async function finish(start: SourceConnect, url: string) {
     const result = await brand.finish(api, start.state, url);
     setPending(null);
     setPasted("");
     celebrate();
     setMessage({
       tone: "ok",
-      text: result.receipts === 0 ? "Connected. No receipts found yet." : `Connected. ${importedText(result.receipts)}.`,
+      text: result.imported_total === 0 ? "Connected. No receipts found yet." : `Connected. ${importedText(result.imported_total)}.`,
     });
     await onChanged();
   }
@@ -235,8 +236,8 @@ export function SignInCard({
 
           {connected ? (
             <Group>
-              <ListItem title="Last sync" value={lastSyncText(status?.last_sync, now)} />
-              <ListItem title={`Receipts from ${brand.name}`} value={String(status?.receipts ?? 0)} />
+              <ListItem title="Last sync" value={lastSyncText(status?.last_run, now)} />
+              <ListItem title={`Receipts from ${brand.name}`} value={String(status?.imported_total ?? 0)} />
             </Group>
           ) : null}
           {status?.last_error ? <Note tone="error">{status.last_error}</Note> : null}

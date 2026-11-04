@@ -69,7 +69,7 @@ export default function OrdersImport() {
     try {
       const total = { imported: 0, duplicates: 0, skipped: 0, linked: 0 };
       for (let i = 0; i < file.orders.length; i += BATCH) {
-        const r = await api.ordersImport(shop.trim(), file.orders.slice(i, i + BATCH));
+        const r = await api.importReceipts("orders_file", file.orders.slice(i, i + BATCH), shop.trim());
         total.imported += r.imported;
         total.duplicates += r.duplicates;
         total.skipped += r.skipped;

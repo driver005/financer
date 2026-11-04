@@ -704,249 +704,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/receipts/kaufland": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Disconnect the Kaufland Card: the stored token is deleted. Receipts already imported stay. */
-        delete: operations["kaufland_disconnect"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/kaufland/finish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Finish the sign-in with the address Kaufland's page ended on. Only the refresh token (and the
-         *     customer id) is stored, the token encrypted. Starts a first sync.
-         */
-        post: operations["kaufland_finish"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/kaufland/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Start a Kaufland Card sign-in. Returns the address of Kaufland's own sign-in page; nothing is
-         *     sent to Kaufland by this call. Same shapes as the Lidl Plus sign-in. Experimental and
-         *     unofficial: see docs/RECEIPT_SOURCES.md.
-         */
-        post: operations["kaufland_start"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/kaufland/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Whether the Kaufland Card is connected, when it last synced and how many receipts came from it. */
-        get: operations["kaufland_status"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/lidl": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Disconnect Lidl Plus: the stored token is deleted. Receipts already imported stay. */
-        delete: operations["lidl_disconnect"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/lidl/finish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Finish the sign-in with the address Lidl's page ended on. Only the refresh token is stored,
-         *     encrypted. The first receipts are fetched right away.
-         */
-        post: operations["lidl_finish"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/lidl/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Start a Lidl Plus sign-in. Returns the address of Lidl's own sign-in page; nothing is sent to
-         *     Lidl by this call. Experimental and unofficial: see docs/RECEIPT_SOURCES.md.
-         */
-        post: operations["lidl_start"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/lidl/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Whether Lidl Plus is connected, when it last synced and how many receipts came from it. */
-        get: operations["lidl_status"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/orders/import": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Store online orders the app read from a file the shop produced (Amazon's data request, for
-         *     example), once each per shop and order number. Nothing is fetched from the shop.
-         */
-        post: operations["orders_import"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/rewe": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Forget when the app last pushed. Receipts already stored stay. */
-        delete: operations["rewe_forget"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/rewe/import": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Store receipts the app read from REWE's web shop, once each, and match them to bank payments.
-         *     Experimental: see docs/RECEIPT_SOURCES.md.
-         */
-        post: operations["rewe_import"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/rewe/known": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Which of REWE's receipt ids are not stored yet. The app calls it with the list it just read, so
-         *     that it fetches the details of the new ones only.
-         */
-        post: operations["rewe_known"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/rewe/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** When the app last pushed REWE receipts and how many came this way. */
-        get: operations["rewe_status"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/receipts/scan": {
         parameters: {
             query?: never;
@@ -976,12 +733,133 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The receipt sources: the mailbox, the Lidl Plus account and the watched folder, with state,
-         *     last run, receipts imported and the last error. Never contains a password or token.
+         * Every receipt source and how it is doing: the mailbox and the watched folder (`server`), Lidl
+         *     Plus and the Kaufland Card (`sign_in`), REWE in the app and an orders file (`push`). Never
+         *     contains a password or token.
          */
         get: operations["list_sources"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One source: its state, when it last ran, how many receipts came from it, the last error. */
+        get: operations["get_source"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * `sign_in` sources: start the sign-in. Returns the address of the shop's own sign-in page;
+         *     nothing is sent to the shop by this call. Experimental and unofficial: see
+         *     docs/RECEIPT_SOURCES.md.
+         */
+        post: operations["connect_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Forget the connection: a stored token is deleted (`sign_in`), or the note of the last push
+         *     (`rewe_app`). Receipts already stored stay.
+         */
+        post: operations["disconnect_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * `sign_in` sources: finish the sign-in with the address the shop's page ended on. Only the
+         *     refresh token is stored, encrypted. The first receipts are fetched right away.
+         */
+        post: operations["finish_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * `push` sources: store the receipts the app read (REWE's web shop in its own window, `rewe_app`)
+         *     or the orders it read from a file the shop produced (`orders_file`: Amazon's data request, for
+         *     example), once each, and match them to bank payments. Nothing is fetched from the shop.
+         *     Experimental: see docs/RECEIPT_SOURCES.md.
+         */
+        post: operations["import_receipts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}/known": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * `push` sources (`rewe_app`): which of the shop's receipt ids are not stored yet. The app calls
+         *     it with the list it just read, so that it fetches the details of the new ones only.
+         */
+        post: operations["known_receipts"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2100,47 +1978,6 @@ export interface components {
             /** @description Said before saving. */
             warning?: string | null;
         };
-        LidlFinishRequest: {
-            /** @description The address the sign-in ended on, `com.lidlplus.app://callback?code=...`. */
-            callback_url: string;
-            state: string;
-        };
-        LidlStartDto: {
-            /** @description Open this address in a browser: it is Lidl's own sign-in page. */
-            authorization_url: string;
-            /**
-             * @description The address scheme Lidl's page redirects to after sign-in (`com.lidlplus.app`); an app can
-             *     watch for it, a person can copy the address from the browser.
-             */
-            callback_scheme: string;
-            /** Format: int64 */
-            expires_in_seconds: number;
-            redirect_uri: string;
-            /** @description Send this back with the final address to `POST /v1/receipts/lidl/finish`. */
-            state: string;
-        };
-        LidlStatusDto: {
-            /**
-             * Format: int64
-             * @description Unix seconds of the sign-in.
-             */
-            connected_at?: number | null;
-            /** @description Lidl Plus is switched on in the server configuration. */
-            enabled: boolean;
-            last_error?: string | null;
-            /**
-             * Format: int64
-             * @description Unix seconds of the last receipt sync.
-             */
-            last_sync?: number | null;
-            /**
-             * Format: int64
-             * @description Receipts imported from Lidl Plus.
-             */
-            receipts: number;
-            /** @description `disabled`, `never`, `connected` or `needs_signin`. */
-            state: string;
-        };
         /** @description An account the provider reported for a linked connection. */
         LinkedAccountDto: {
             /** @description Put this in `account_ids` of the connection to read only some accounts. */
@@ -2268,15 +2105,6 @@ export interface components {
             unit?: string | null;
             /** Format: int64 */
             unit_price_cents?: number | null;
-        };
-        OrdersImportRequest: {
-            /**
-             * @description At most 200 orders. Same shape as a REWE receipt: the id is the shop's order number, the
-             *     date the day of the order, `time` is not used.
-             */
-            orders: components["schemas"]["ReweReceiptInput"][];
-            /** @description The shop's name as it should show ("Amazon"); at most 40 characters. */
-            shop: string;
         };
         PantryDto: {
             /** @description True until the list is saved for the first time. */
@@ -2440,6 +2268,44 @@ export interface components {
              */
             transaction_id?: number | null;
         };
+        ReceiptImportDto: {
+            /** Format: int32 */
+            duplicates: number;
+            /** Format: int32 */
+            imported: number;
+            /**
+             * Format: int64
+             * @description Receipts matched to a bank payment by this import.
+             */
+            linked: number;
+            notes: string[];
+            /** Format: int32 */
+            skipped: number;
+        };
+        ReceiptImportRequest: {
+            /** @description At most 100 receipts for `rewe_app`, 200 orders for `orders_file` (whose `time` is not used). */
+            receipts: components["schemas"]["ReceiptInput"][];
+            /** @description `orders_file` only: the shop's name as it should show ("Amazon"); at most 40 characters. */
+            shop?: string | null;
+        };
+        ReceiptInput: {
+            /**
+             * @description Local day of the purchase, `YYYY-MM-DD`.
+             * @example 2026-03-02
+             */
+            date: string;
+            /** @description The shop's id of the receipt (for an order, its order number). */
+            id: string;
+            lines: components["schemas"]["ReceiptLineInput"][];
+            store?: string | null;
+            /** @description Local time, `HH:MM`. */
+            time?: string | null;
+            /**
+             * Format: int64
+             * @description The printed total in cents; the sum of the lines when absent.
+             */
+            total_cents?: number | null;
+        };
         ReceiptItemDto: {
             /** @description Catalog key when recognised. */
             item?: string | null;
@@ -2448,6 +2314,27 @@ export interface components {
             /** Format: int32 */
             quantity: number;
             text: string;
+        };
+        ReceiptKnownDto: {
+            /** @description The ids that are not stored yet: fetch and push only these. */
+            unknown: string[];
+        };
+        ReceiptKnownRequest: {
+            /** @description The shop's receipt ids the app has just listed. */
+            ids: string[];
+        };
+        ReceiptLineInput: {
+            name: string;
+            /**
+             * Format: int32
+             * @description 1 to 99.
+             */
+            quantity: number;
+            /**
+             * Format: int64
+             * @description What the line cost in cents (negative for a refund).
+             */
+            total_cents: number;
         };
         ReceiptScan: {
             /** @description The photo's or PDF's bytes, base64-encoded (at most 8 MB decoded). */
@@ -2459,9 +2346,16 @@ export interface components {
         ReceiptSourceDto: {
             /** @description Has a setting in the server configuration (Lidl Plus always counts). */
             configured: boolean;
+            /**
+             * Format: int64
+             * @description Unix seconds of the sign-in (a `sign_in` source).
+             */
+            connected_at?: number | null;
             /** @description Where it reads from (mail server and folder, folder path, account region); never a login. */
             detail?: string | null;
             enabled: boolean;
+            /** @description How its receipts get in: `server`, `sign_in` or `push`. */
+            flow: string;
             /**
              * Format: int64
              * @description Receipts from this source in the database.
@@ -2484,7 +2378,7 @@ export interface components {
             next_run?: number | null;
             /** @description Remarks from the last run, e.g. why a mail or file was skipped. */
             notes: string[];
-            /** @description `email`, `lidl_plus`, `kaufland_card` or `folder`. */
+            /** @description `email`, `lidl_plus`, `kaufland_card`, `folder`, `rewe_app` or `orders_file`. */
             source: string;
             /** @description `disabled`, `waiting`, `running`, `ok`, `error`, `not_connected` or `needs_signin`. */
             state: string;
@@ -2582,75 +2476,6 @@ export interface components {
             until?: string | null;
             /** @description Weekly only: MO, TU, WE, TH, FR, SA, SU. Empty means the weekday of the start. */
             weekdays: string[];
-        };
-        ReweImportDto: {
-            /** Format: int32 */
-            duplicates: number;
-            /** Format: int32 */
-            imported: number;
-            /**
-             * Format: int64
-             * @description Receipts matched to a bank payment by this import.
-             */
-            linked: number;
-            notes: string[];
-            /** Format: int32 */
-            skipped: number;
-        };
-        ReweImportRequest: {
-            /** @description At most 100 receipts. */
-            receipts: components["schemas"]["ReweReceiptInput"][];
-        };
-        ReweKnownDto: {
-            /** @description The ids that are not stored yet: fetch and push only these. */
-            unknown: string[];
-        };
-        ReweKnownRequest: {
-            /** @description REWE's receipt ids the app has just listed. */
-            ids: string[];
-        };
-        ReweLineInput: {
-            name: string;
-            /**
-             * Format: int32
-             * @description 1 to 99.
-             */
-            quantity: number;
-            /**
-             * Format: int64
-             * @description What the line cost in cents (negative for a refund).
-             */
-            total_cents: number;
-        };
-        ReweReceiptInput: {
-            /**
-             * @description Local day of the purchase, `YYYY-MM-DD`.
-             * @example 2026-03-02
-             */
-            date: string;
-            /** @description REWE's id of the receipt. */
-            id: string;
-            lines: components["schemas"]["ReweLineInput"][];
-            store?: string | null;
-            /** @description Local time, `HH:MM`. */
-            time?: string | null;
-            /**
-             * Format: int64
-             * @description The printed total in cents; the sum of the lines when absent.
-             */
-            total_cents?: number | null;
-        };
-        ReweStatusDto: {
-            /**
-             * Format: int64
-             * @description Unix seconds of the last push.
-             */
-            last_import?: number | null;
-            /**
-             * Format: int64
-             * @description Receipts that came this way.
-             */
-            receipts: number;
         };
         /**
          * @description A user categorization rule. Rules run in list order; the first match wins and beats the
@@ -2879,6 +2704,26 @@ export interface components {
             line: number;
             reason: string;
         };
+        /** @description Starting a sign-in on a shop's own page. */
+        SourceConnectDto: {
+            /** @description Open this address in a browser: it is the shop's own sign-in page. */
+            authorization_url: string;
+            /**
+             * @description The address scheme the shop's page redirects to after sign-in (`com.lidlplus.app`); an app
+             *     can watch for it, a person can copy the address from the browser.
+             */
+            callback_scheme: string;
+            /** Format: int64 */
+            expires_in_seconds: number;
+            redirect_uri: string;
+            /** @description Send this back with the final address to `POST /v1/receipts/sources/{kind}/finish`. */
+            state: string;
+        };
+        SourceFinishRequest: {
+            /** @description The address the sign-in ended on, `com.lidlplus.app://callback?code=...`. */
+            callback_url: string;
+            state: string;
+        };
         SourceStatusDto: {
             error?: string | null;
             name: string;
@@ -3046,7 +2891,7 @@ export interface components {
             /** @description Subscriptions that are still running. */
             active: components["schemas"]["SubscriptionDto"][];
             /** Format: date */
-            as_of: string;
+            date: string;
             /**
              * Format: int64
              * @description How many days ahead `upcoming` looks.
@@ -3266,7 +3111,7 @@ export interface operations {
                  * @description Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.
                  * @example 2026-03-02
                  */
-                as_of: string | null;
+                date: string | null;
             };
             cookie?: never;
         };
@@ -4655,387 +4500,6 @@ export interface operations {
             };
         };
     };
-    kaufland_disconnect: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Disconnected */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Kaufland is not switched on */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    kaufland_finish: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LidlFinishRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LidlStatusDto"];
-                };
-            };
-            /** @description The address is wrong or the sign-in expired */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Kaufland is not switched on */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Kaufland did not accept the code or could not be reached */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    kaufland_start: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LidlStartDto"];
-                };
-            };
-            /** @description Kaufland is not switched on */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    kaufland_status: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LidlStatusDto"];
-                };
-            };
-        };
-    };
-    lidl_disconnect: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Disconnected */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Lidl Plus is not switched on */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    lidl_finish: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LidlFinishRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LidlStatusDto"];
-                };
-            };
-            /** @description Unknown or expired sign-in, or an address that is not the callback */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Lidl Plus is not switched on */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Lidl did not accept the code or could not be reached */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    lidl_start: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LidlStartDto"];
-                };
-            };
-            /** @description Lidl Plus is not switched on */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    lidl_status: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LidlStatusDto"];
-                };
-            };
-        };
-    };
-    orders_import: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OrdersImportRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReweImportDto"];
-                };
-            };
-            /** @description An order is malformed or there are too many */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    rewe_forget: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Forgotten */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    rewe_import: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReweImportRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReweImportDto"];
-                };
-            };
-            /** @description A receipt is malformed or there are too many */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    rewe_known: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReweKnownRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReweKnownDto"];
-                };
-            };
-            /** @description Too many ids or an odd id */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    rewe_status: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReweStatusDto"];
-                };
-            };
-        };
-    };
     scan_receipt: {
         parameters: {
             query?: never;
@@ -5105,6 +4569,285 @@ export interface operations {
             };
         };
     };
+    get_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `email`, `lidl_plus`, `kaufland_card`, `folder`, `rewe_app` or `orders_file` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptSourceDto"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    connect_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `lidl_plus` or `kaufland_card` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceConnectDto"];
+                };
+            };
+            /** @description Not a source you sign in to */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The source is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    disconnect_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `lidl_plus`, `kaufland_card` or `rewe_app` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptSourceDto"];
+                };
+            };
+            /** @description Nothing to disconnect for this source */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The source is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    finish_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `lidl_plus` or `kaufland_card` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceFinishRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptSourceDto"];
+                };
+            };
+            /** @description Unknown or expired sign-in, or an address that is not the callback */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The source is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The shop did not accept the code or could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    import_receipts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `rewe_app` or `orders_file` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiptImportRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptImportDto"];
+                };
+            };
+            /** @description A receipt is malformed, there are too many, or the source takes no pushes */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    known_receipts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `rewe_app` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiptKnownRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptKnownDto"];
+                };
+            };
+            /** @description Too many ids, an odd id, or a source without a list */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     sync_now: {
         parameters: {
             query?: never;
@@ -5112,9 +4855,9 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": components["schemas"]["ReceiptSyncRequest"] | null;
+                "application/json": components["schemas"]["ReceiptSyncRequest"];
             };
         };
         responses: {
@@ -5487,6 +5230,15 @@ export interface operations {
                     "application/json": components["schemas"]["ConfigSaved"];
                 };
             };
+            /** @description The change was refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigProblems"];
+                };
+            };
             /** @description This backend has no server configuration */
             404: {
                 headers: {
@@ -5498,15 +5250,6 @@ export interface operations {
             };
             /** @description A key is decided by an environment variable, or a restart is under way */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfigProblems"];
-                };
-            };
-            /** @description The change was refused */
-            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5674,7 +5417,7 @@ export interface operations {
                  * @description Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.
                  * @example 2026-03-02
                  */
-                as_of: string | null;
+                date: string | null;
             };
             cookie?: never;
         };

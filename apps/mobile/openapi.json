@@ -128,7 +128,7 @@
             }
           },
           {
-            "name": "as_of",
+            "name": "date",
             "in": "path",
             "description": "Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.",
             "required": true,
@@ -2185,493 +2185,6 @@
         ]
       }
     },
-    "/v1/receipts/kaufland": {
-      "delete": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Disconnect the Kaufland Card: the stored token is deleted. Receipts already imported stay.",
-        "operationId": "kaufland_disconnect",
-        "responses": {
-          "204": {
-            "description": "Disconnected"
-          },
-          "409": {
-            "description": "Kaufland is not switched on",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/kaufland/finish": {
-      "post": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Finish the sign-in with the address Kaufland's page ended on. Only the refresh token (and the\ncustomer id) is stored, the token encrypted. Starts a first sync.",
-        "operationId": "kaufland_finish",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LidlFinishRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LidlStatusDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The address is wrong or the sign-in expired",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Kaufland is not switched on",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Kaufland did not accept the code or could not be reached",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/kaufland/start": {
-      "post": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Start a Kaufland Card sign-in. Returns the address of Kaufland's own sign-in page; nothing is\nsent to Kaufland by this call. Same shapes as the Lidl Plus sign-in. Experimental and\nunofficial: see docs/RECEIPT_SOURCES.md.",
-        "operationId": "kaufland_start",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LidlStartDto"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Kaufland is not switched on",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/kaufland/status": {
-      "get": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Whether the Kaufland Card is connected, when it last synced and how many receipts came from it.",
-        "operationId": "kaufland_status",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LidlStatusDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/lidl": {
-      "delete": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Disconnect Lidl Plus: the stored token is deleted. Receipts already imported stay.",
-        "operationId": "lidl_disconnect",
-        "responses": {
-          "204": {
-            "description": "Disconnected"
-          },
-          "409": {
-            "description": "Lidl Plus is not switched on",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/lidl/finish": {
-      "post": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Finish the sign-in with the address Lidl's page ended on. Only the refresh token is stored,\nencrypted. The first receipts are fetched right away.",
-        "operationId": "lidl_finish",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LidlFinishRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LidlStatusDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Unknown or expired sign-in, or an address that is not the callback",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Lidl Plus is not switched on",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Lidl did not accept the code or could not be reached",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/lidl/start": {
-      "post": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Start a Lidl Plus sign-in. Returns the address of Lidl's own sign-in page; nothing is sent to\nLidl by this call. Experimental and unofficial: see docs/RECEIPT_SOURCES.md.",
-        "operationId": "lidl_start",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LidlStartDto"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Lidl Plus is not switched on",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/lidl/status": {
-      "get": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Whether Lidl Plus is connected, when it last synced and how many receipts came from it.",
-        "operationId": "lidl_status",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LidlStatusDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/orders/import": {
-      "post": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Store online orders the app read from a file the shop produced (Amazon's data request, for\nexample), once each per shop and order number. Nothing is fetched from the shop.",
-        "operationId": "orders_import",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OrdersImportRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReweImportDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "An order is malformed or there are too many",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/rewe": {
-      "delete": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Forget when the app last pushed. Receipts already stored stay.",
-        "operationId": "rewe_forget",
-        "responses": {
-          "204": {
-            "description": "Forgotten"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/rewe/import": {
-      "post": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Store receipts the app read from REWE's web shop, once each, and match them to bank payments.\nExperimental: see docs/RECEIPT_SOURCES.md.",
-        "operationId": "rewe_import",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReweImportRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReweImportDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "A receipt is malformed or there are too many",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/rewe/known": {
-      "post": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Which of REWE's receipt ids are not stored yet. The app calls it with the list it just read, so\nthat it fetches the details of the new ones only.",
-        "operationId": "rewe_known",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReweKnownRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReweKnownDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Too many ids or an odd id",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/rewe/status": {
-      "get": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "When the app last pushed REWE receipts and how many came this way.",
-        "operationId": "rewe_status",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReweStatusDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/v1/receipts/scan": {
       "post": {
         "tags": [
@@ -2742,7 +2255,7 @@
         "tags": [
           "receipt_sources"
         ],
-        "summary": "The receipt sources: the mailbox, the Lidl Plus account and the watched folder, with state,\nlast run, receipts imported and the last error. Never contains a password or token.",
+        "summary": "Every receipt source and how it is doing: the mailbox and the watched folder (`server`), Lidl\nPlus and the Kaufland Card (`sign_in`), REWE in the app and an orders file (`push`). Never\ncontains a password or token.",
         "operationId": "list_sources",
         "responses": {
           "200": {
@@ -2753,6 +2266,402 @@
                   "items": {
                     "$ref": "#/components/schemas/ReceiptSourceDto"
                   }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}": {
+      "get": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "One source: its state, when it last ran, how many receipts came from it, the last error.",
+        "operationId": "get_source",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`email`, `lidl_plus`, `kaufland_card`, `folder`, `rewe_app` or `orders_file`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptSourceDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}/connect": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "`sign_in` sources: start the sign-in. Returns the address of the shop's own sign-in page;\nnothing is sent to the shop by this call. Experimental and unofficial: see\ndocs/RECEIPT_SOURCES.md.",
+        "operationId": "connect_source",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`lidl_plus` or `kaufland_card`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceConnectDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a source you sign in to",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}/disconnect": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Forget the connection: a stored token is deleted (`sign_in`), or the note of the last push\n(`rewe_app`). Receipts already stored stay.",
+        "operationId": "disconnect_source",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`lidl_plus`, `kaufland_card` or `rewe_app`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptSourceDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nothing to disconnect for this source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}/finish": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "`sign_in` sources: finish the sign-in with the address the shop's page ended on. Only the\nrefresh token is stored, encrypted. The first receipts are fetched right away.",
+        "operationId": "finish_source",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`lidl_plus` or `kaufland_card`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceFinishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptSourceDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown or expired sign-in, or an address that is not the callback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The shop did not accept the code or could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}/import": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "`push` sources: store the receipts the app read (REWE's web shop in its own window, `rewe_app`)\nor the orders it read from a file the shop produced (`orders_file`: Amazon's data request, for\nexample), once each, and match them to bank payments. Nothing is fetched from the shop.\nExperimental: see docs/RECEIPT_SOURCES.md.",
+        "operationId": "import_receipts",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`rewe_app` or `orders_file`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptImportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A receipt is malformed, there are too many, or the source takes no pushes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}/known": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "`push` sources (`rewe_app`): which of the shop's receipt ids are not stored yet. The app calls\nit with the list it just read, so that it fetches the details of the new ones only.",
+        "operationId": "known_receipts",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`rewe_app`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptKnownRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptKnownDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Too many ids, an odd id, or a source without a list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -2776,17 +2685,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/ReceiptSyncRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "$ref": "#/components/schemas/ReceiptSyncRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -3329,6 +3232,16 @@
               }
             }
           },
+          "400": {
+            "description": "The change was refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigProblems"
+                }
+              }
+            }
+          },
           "404": {
             "description": "This backend has no server configuration",
             "content": {
@@ -3341,16 +3254,6 @@
           },
           "409": {
             "description": "A key is decided by an environment variable, or a restart is under way",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfigProblems"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The change was refused",
             "content": {
               "application/json": {
                 "schema": {
@@ -3649,7 +3552,7 @@
             }
           },
           {
-            "name": "as_of",
+            "name": "date",
             "in": "path",
             "description": "Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.",
             "required": true,
@@ -6033,100 +5936,6 @@
           }
         }
       },
-      "LidlFinishRequest": {
-        "type": "object",
-        "required": [
-          "state",
-          "callback_url"
-        ],
-        "properties": {
-          "callback_url": {
-            "type": "string",
-            "description": "The address the sign-in ended on, `com.lidlplus.app://callback?code=...`."
-          },
-          "state": {
-            "type": "string"
-          }
-        }
-      },
-      "LidlStartDto": {
-        "type": "object",
-        "required": [
-          "authorization_url",
-          "state",
-          "callback_scheme",
-          "redirect_uri",
-          "expires_in_seconds"
-        ],
-        "properties": {
-          "authorization_url": {
-            "type": "string",
-            "description": "Open this address in a browser: it is Lidl's own sign-in page."
-          },
-          "callback_scheme": {
-            "type": "string",
-            "description": "The address scheme Lidl's page redirects to after sign-in (`com.lidlplus.app`); an app can\nwatch for it, a person can copy the address from the browser."
-          },
-          "expires_in_seconds": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "redirect_uri": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string",
-            "description": "Send this back with the final address to `POST /v1/receipts/lidl/finish`."
-          }
-        }
-      },
-      "LidlStatusDto": {
-        "type": "object",
-        "required": [
-          "enabled",
-          "state",
-          "receipts"
-        ],
-        "properties": {
-          "connected_at": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "Unix seconds of the sign-in."
-          },
-          "enabled": {
-            "type": "boolean",
-            "description": "Lidl Plus is switched on in the server configuration."
-          },
-          "last_error": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "last_sync": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "Unix seconds of the last receipt sync."
-          },
-          "receipts": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Receipts imported from Lidl Plus.",
-            "minimum": 0
-          },
-          "state": {
-            "type": "string",
-            "description": "`disabled`, `never`, `connected` or `needs_signin`."
-          }
-        }
-      },
       "LinkedAccountDto": {
         "type": "object",
         "description": "An account the provider reported for a linked connection.",
@@ -6454,26 +6263,6 @@
               "null"
             ],
             "format": "int64"
-          }
-        }
-      },
-      "OrdersImportRequest": {
-        "type": "object",
-        "required": [
-          "shop",
-          "orders"
-        ],
-        "properties": {
-          "orders": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ReweReceiptInput"
-            },
-            "description": "At most 200 orders. Same shape as a REWE receipt: the id is the shop's order number, the\ndate the day of the order, `time` is not used."
-          },
-          "shop": {
-            "type": "string",
-            "description": "The shop's name as it should show (\"Amazon\"); at most 40 characters."
           }
         }
       },
@@ -6868,6 +6657,113 @@
           }
         }
       },
+      "ReceiptImportDto": {
+        "type": "object",
+        "required": [
+          "imported",
+          "duplicates",
+          "skipped",
+          "linked",
+          "notes"
+        ],
+        "properties": {
+          "duplicates": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "imported": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "linked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Receipts matched to a bank payment by this import.",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ReceiptImportRequest": {
+        "type": "object",
+        "required": [
+          "receipts"
+        ],
+        "properties": {
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceiptInput"
+            },
+            "description": "At most 100 receipts for `rewe_app`, 200 orders for `orders_file` (whose `time` is not used)."
+          },
+          "shop": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`orders_file` only: the shop's name as it should show (\"Amazon\"); at most 40 characters."
+          }
+        }
+      },
+      "ReceiptInput": {
+        "type": "object",
+        "required": [
+          "id",
+          "date",
+          "lines"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Local day of the purchase, `YYYY-MM-DD`.",
+            "example": "2026-03-02"
+          },
+          "id": {
+            "type": "string",
+            "description": "The shop's id of the receipt (for an order, its order number)."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceiptLineInput"
+            }
+          },
+          "store": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "time": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Local time, `HH:MM`."
+          },
+          "total_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The printed total in cents; the sum of the lines when absent."
+          }
+        }
+      },
       "ReceiptItemDto": {
         "type": "object",
         "required": [
@@ -6897,6 +6793,60 @@
           }
         }
       },
+      "ReceiptKnownDto": {
+        "type": "object",
+        "required": [
+          "unknown"
+        ],
+        "properties": {
+          "unknown": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The ids that are not stored yet: fetch and push only these."
+          }
+        }
+      },
+      "ReceiptKnownRequest": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The shop's receipt ids the app has just listed."
+          }
+        }
+      },
+      "ReceiptLineInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "quantity",
+          "total_cents"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 to 99.",
+            "minimum": 0
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What the line cost in cents (negative for a refund)."
+          }
+        }
+      },
       "ReceiptScan": {
         "type": "object",
         "required": [
@@ -6919,6 +6869,7 @@
         "description": "One receipt source and how it is doing. Contains no secrets.",
         "required": [
           "source",
+          "flow",
           "configured",
           "enabled",
           "state",
@@ -6931,6 +6882,14 @@
             "type": "boolean",
             "description": "Has a setting in the server configuration (Lidl Plus always counts)."
           },
+          "connected_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds of the sign-in (a `sign_in` source)."
+          },
           "detail": {
             "type": [
               "string",
@@ -6940,6 +6899,10 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "flow": {
+            "type": "string",
+            "description": "How its receipts get in: `server`, `sign_in` or `push`."
           },
           "imported_total": {
             "type": "integer",
@@ -6990,7 +6953,7 @@
           },
           "source": {
             "type": "string",
-            "description": "`email`, `lidl_plus`, `kaufland_card` or `folder`."
+            "description": "`email`, `lidl_plus`, `kaufland_card`, `folder`, `rewe_app` or `orders_file`."
           },
           "state": {
             "type": "string",
@@ -7272,182 +7235,6 @@
               "type": "string"
             },
             "description": "Weekly only: MO, TU, WE, TH, FR, SA, SU. Empty means the weekday of the start."
-          }
-        }
-      },
-      "ReweImportDto": {
-        "type": "object",
-        "required": [
-          "imported",
-          "duplicates",
-          "skipped",
-          "linked",
-          "notes"
-        ],
-        "properties": {
-          "duplicates": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "imported": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "linked": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Receipts matched to a bank payment by this import.",
-            "minimum": 0
-          },
-          "notes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "skipped": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
-      "ReweImportRequest": {
-        "type": "object",
-        "required": [
-          "receipts"
-        ],
-        "properties": {
-          "receipts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ReweReceiptInput"
-            },
-            "description": "At most 100 receipts."
-          }
-        }
-      },
-      "ReweKnownDto": {
-        "type": "object",
-        "required": [
-          "unknown"
-        ],
-        "properties": {
-          "unknown": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "The ids that are not stored yet: fetch and push only these."
-          }
-        }
-      },
-      "ReweKnownRequest": {
-        "type": "object",
-        "required": [
-          "ids"
-        ],
-        "properties": {
-          "ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "REWE's receipt ids the app has just listed."
-          }
-        }
-      },
-      "ReweLineInput": {
-        "type": "object",
-        "required": [
-          "name",
-          "quantity",
-          "total_cents"
-        ],
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "quantity": {
-            "type": "integer",
-            "format": "int32",
-            "description": "1 to 99.",
-            "minimum": 0
-          },
-          "total_cents": {
-            "type": "integer",
-            "format": "int64",
-            "description": "What the line cost in cents (negative for a refund)."
-          }
-        }
-      },
-      "ReweReceiptInput": {
-        "type": "object",
-        "required": [
-          "id",
-          "date",
-          "lines"
-        ],
-        "properties": {
-          "date": {
-            "type": "string",
-            "description": "Local day of the purchase, `YYYY-MM-DD`.",
-            "example": "2026-03-02"
-          },
-          "id": {
-            "type": "string",
-            "description": "REWE's id of the receipt."
-          },
-          "lines": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ReweLineInput"
-            }
-          },
-          "store": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "time": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Local time, `HH:MM`."
-          },
-          "total_cents": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "The printed total in cents; the sum of the lines when absent."
-          }
-        }
-      },
-      "ReweStatusDto": {
-        "type": "object",
-        "required": [
-          "receipts"
-        ],
-        "properties": {
-          "last_import": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "Unix seconds of the last push."
-          },
-          "receipts": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Receipts that came this way.",
-            "minimum": 0
           }
         }
       },
@@ -7981,6 +7768,55 @@
           }
         }
       },
+      "SourceConnectDto": {
+        "type": "object",
+        "description": "Starting a sign-in on a shop's own page.",
+        "required": [
+          "authorization_url",
+          "state",
+          "callback_scheme",
+          "redirect_uri",
+          "expires_in_seconds"
+        ],
+        "properties": {
+          "authorization_url": {
+            "type": "string",
+            "description": "Open this address in a browser: it is the shop's own sign-in page."
+          },
+          "callback_scheme": {
+            "type": "string",
+            "description": "The address scheme the shop's page redirects to after sign-in (`com.lidlplus.app`); an app\ncan watch for it, a person can copy the address from the browser."
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "redirect_uri": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "description": "Send this back with the final address to `POST /v1/receipts/sources/{kind}/finish`."
+          }
+        }
+      },
+      "SourceFinishRequest": {
+        "type": "object",
+        "required": [
+          "state",
+          "callback_url"
+        ],
+        "properties": {
+          "callback_url": {
+            "type": "string",
+            "description": "The address the sign-in ended on, `com.lidlplus.app://callback?code=...`."
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
       "SourceStatusDto": {
         "type": "object",
         "required": [
@@ -8330,7 +8166,7 @@
       "SubscriptionsDto": {
         "type": "object",
         "required": [
-          "as_of",
+          "date",
           "days",
           "active",
           "monthly_total_cents",
@@ -8347,7 +8183,7 @@
             },
             "description": "Subscriptions that are still running."
           },
-          "as_of": {
+          "date": {
             "type": "string",
             "format": "date"
           },

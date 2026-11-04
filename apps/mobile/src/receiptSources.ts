@@ -266,10 +266,15 @@ export function callbackHasResult(url: string): boolean {
 export function signInStateText(shop: SignInShop, state: string, connectedAt: number | null | undefined, nowSec: number, onPhone = false): string {
   switch (state) {
     case "connected":
+    case "ok":
+    case "waiting":
+    case "running":
+    case "error":
       return connectedAt ? `Connected ${lastSyncText(connectedAt, nowSec).toLowerCase()}` : "Connected";
     case "needs_signin":
       return `${shop} no longer accepts the saved sign-in`;
     case "never":
+    case "not_connected":
       return "Not connected";
     default:
       return `Switched off on this ${onPhone ? "phone" : "server"}`;
@@ -332,3 +337,13 @@ export const SHOP_GUIDES: readonly ShopGuide[] = [
     steps: ["Keep the paper receipt and photograph it in Financer under Receipts.", "Your bank payment is matched to it afterwards, as with every other receipt."],
   },
 ];
+
+/** A source you sign in to is connected once it has a token: any state but "not connected", "switched off" and "sign in again". */
+export function isSignedIn(state: string): boolean {
+  return ["connected", "ok", "waiting", "running", "error"].includes(state);
+}
+
+/** The sources that run on a schedule or that you sign in to: the ones with a card of their own in the list. */
+export function listedSources<T extends { flow: string }>(list: readonly T[]): T[] {
+  return list.filter((s) => s.flow !== "push");
+}

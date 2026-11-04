@@ -80,9 +80,9 @@ impl WatchFixture {
 #[tokio::test]
 async fn subscriptions_report_calendar_hike_and_stale() {
     let app = WatchFixture::app().await;
-    let (s, body) = WatchFixture::get(&app, "/v1/subscriptions?as_of=2026-09-25&days=30").await;
+    let (s, body) = WatchFixture::get(&app, "/v1/subscriptions?date=2026-09-25&days=30").await;
     assert_eq!(s, StatusCode::OK);
-    assert_eq!(body["as_of"], "2026-09-25");
+    assert_eq!(body["date"], "2026-09-25");
     assert_eq!(body["days"], 30);
 
     // Netflix and Spotify are active; the gym stopped in March
@@ -125,15 +125,15 @@ async fn subscriptions_report_calendar_hike_and_stale() {
 #[tokio::test]
 async fn the_calendar_horizon_is_adjustable_and_bounded() {
     let app = WatchFixture::app().await;
-    let (_, short) = WatchFixture::get(&app, "/v1/subscriptions?as_of=2026-09-25&days=5").await;
+    let (_, short) = WatchFixture::get(&app, "/v1/subscriptions?date=2026-09-25&days=5").await;
     assert!(short["upcoming"].as_array().unwrap().is_empty());
-    let (_, long) = WatchFixture::get(&app, "/v1/subscriptions?as_of=2026-09-25&days=70").await;
+    let (_, long) = WatchFixture::get(&app, "/v1/subscriptions?date=2026-09-25&days=70").await;
     assert_eq!(long["upcoming"].as_array().unwrap().len(), 4);
-    let (_, huge) = WatchFixture::get(&app, "/v1/subscriptions?as_of=2026-09-25&days=99999").await;
+    let (_, huge) = WatchFixture::get(&app, "/v1/subscriptions?date=2026-09-25&days=99999").await;
     assert_eq!(huge["days"], 366);
-    let (s, _) = WatchFixture::get(&app, "/v1/subscriptions?as_of=not-a-date").await;
+    let (s, _) = WatchFixture::get(&app, "/v1/subscriptions?date=not-a-date").await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
-    // without as_of it uses today, which is long after the test data: everything is stale
+    // without date it uses today, which is long after the test data: everything is stale
     let (s, now) = WatchFixture::get(&app, "/v1/subscriptions").await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(now["days"], 30);
@@ -142,7 +142,7 @@ async fn the_calendar_horizon_is_adjustable_and_bounded() {
 #[tokio::test]
 async fn alerts_list_dismiss_and_stay_dismissed() {
     let app = WatchFixture::app().await;
-    let (s, body) = WatchFixture::get(&app, "/v1/alerts?as_of=2026-09-25").await;
+    let (s, body) = WatchFixture::get(&app, "/v1/alerts?date=2026-09-25").await;
     assert_eq!(s, StatusCode::OK);
     // the double charge, and the first payment to the shop (newest first)
     assert_eq!(body["unread_count"], 2);
@@ -169,13 +169,13 @@ async fn alerts_list_dismiss_and_stay_dismissed() {
     let (s, _) = WatchFixture::call(&app, Method::POST, &uri, true).await;
     assert_eq!(s, StatusCode::OK);
 
-    let (_, after) = WatchFixture::get(&app, "/v1/alerts?as_of=2026-09-25").await;
+    let (_, after) = WatchFixture::get(&app, "/v1/alerts?date=2026-09-25").await;
     assert_eq!(after["unread_count"], 1);
     assert_eq!(after["alerts"].as_array().unwrap().len(), 1);
     assert_eq!(after["alerts"][0]["kind"], "new_merchant");
 
     let (_, all) =
-        WatchFixture::get(&app, "/v1/alerts?as_of=2026-09-25&include_dismissed=true").await;
+        WatchFixture::get(&app, "/v1/alerts?date=2026-09-25&include_dismissed=true").await;
     assert_eq!(all["unread_count"], 1);
     assert_eq!(all["alerts"].as_array().unwrap().len(), 2);
     assert_eq!(all["alerts"][0]["dismissed"], true);
@@ -185,9 +185,9 @@ async fn alerts_list_dismiss_and_stay_dismissed() {
 #[tokio::test]
 async fn alerts_outside_the_lookback_window_are_not_listed() {
     let app = WatchFixture::app().await;
-    let (_, body) = WatchFixture::get(&app, "/v1/alerts?as_of=2027-03-01").await;
+    let (_, body) = WatchFixture::get(&app, "/v1/alerts?date=2027-03-01").await;
     assert_eq!(body["unread_count"], 0);
-    let (_, wide) = WatchFixture::get(&app, "/v1/alerts?as_of=2027-03-01&lookback_days=365").await;
+    let (_, wide) = WatchFixture::get(&app, "/v1/alerts?date=2027-03-01&lookback_days=365").await;
     assert_eq!(wide["unread_count"], 2);
 }
 

@@ -297,20 +297,13 @@ impl AppState {
         grocery::list_receipts,
         grocery::delete_receipt,
         receipt_sources::list_sources,
+        receipt_sources::get_source,
         receipt_sources::sync_now,
-        receipt_sources::lidl_start,
-        receipt_sources::lidl_finish,
-        receipt_sources::lidl_status,
-        receipt_sources::lidl_disconnect,
-        receipt_sources::kaufland_start,
-        receipt_sources::kaufland_finish,
-        receipt_sources::kaufland_status,
-        receipt_sources::kaufland_disconnect,
-        receipt_sources::rewe_known,
-        receipt_sources::rewe_import,
-        receipt_sources::rewe_status,
-        receipt_sources::rewe_forget,
-        receipt_sources::orders_import,
+        receipt_sources::connect_source,
+        receipt_sources::finish_source,
+        receipt_sources::disconnect_source,
+        receipt_sources::known_receipts,
+        receipt_sources::import_receipts,
         grocery::affordability,
         grocery::recipes,
         grocery::recipe_ideas,
@@ -404,17 +397,14 @@ impl AppState {
         receipt_sources::ReceiptSourceDto,
         receipt_sources::ReceiptSyncDto,
         receipt_sources::ReceiptSyncRequest,
-        receipt_sources::LidlStartDto,
-        receipt_sources::LidlFinishRequest,
-        receipt_sources::LidlStatusDto,
-        receipt_sources::ReweKnownRequest,
-        receipt_sources::ReweKnownDto,
-        receipt_sources::ReweLineInput,
-        receipt_sources::ReweReceiptInput,
-        receipt_sources::ReweImportRequest,
-        receipt_sources::ReweImportDto,
-        receipt_sources::ReweStatusDto,
-        receipt_sources::OrdersImportRequest,
+        receipt_sources::SourceConnectDto,
+        receipt_sources::SourceFinishRequest,
+        receipt_sources::ReceiptKnownRequest,
+        receipt_sources::ReceiptKnownDto,
+        receipt_sources::ReceiptLineInput,
+        receipt_sources::ReceiptInput,
+        receipt_sources::ReceiptImportRequest,
+        receipt_sources::ReceiptImportDto,
         dto::ScanDto,
         dto::ChainAffordabilityDto,
         dto::StapleDto,
@@ -562,35 +552,28 @@ impl Api {
             )
             .route("/receipts/{id}", delete(grocery::delete_receipt))
             .route("/receipts/sources", get(receipt_sources::list_sources))
+            .route("/receipts/sources/{kind}", get(receipt_sources::get_source))
+            .route(
+                "/receipts/sources/{kind}/connect",
+                post(receipt_sources::connect_source),
+            )
+            .route(
+                "/receipts/sources/{kind}/finish",
+                post(receipt_sources::finish_source),
+            )
+            .route(
+                "/receipts/sources/{kind}/disconnect",
+                post(receipt_sources::disconnect_source),
+            )
+            .route(
+                "/receipts/sources/{kind}/known",
+                post(receipt_sources::known_receipts),
+            )
+            .route(
+                "/receipts/sources/{kind}/import",
+                post(receipt_sources::import_receipts),
+            )
             .route("/receipts/sync", post(receipt_sources::sync_now))
-            .route("/receipts/lidl/start", post(receipt_sources::lidl_start))
-            .route("/receipts/lidl/finish", post(receipt_sources::lidl_finish))
-            .route("/receipts/lidl/status", get(receipt_sources::lidl_status))
-            .route("/receipts/lidl", delete(receipt_sources::lidl_disconnect))
-            .route(
-                "/receipts/kaufland/start",
-                post(receipt_sources::kaufland_start),
-            )
-            .route(
-                "/receipts/kaufland/finish",
-                post(receipt_sources::kaufland_finish),
-            )
-            .route(
-                "/receipts/kaufland/status",
-                get(receipt_sources::kaufland_status),
-            )
-            .route(
-                "/receipts/kaufland",
-                delete(receipt_sources::kaufland_disconnect),
-            )
-            .route("/receipts/rewe/known", post(receipt_sources::rewe_known))
-            .route("/receipts/rewe/import", post(receipt_sources::rewe_import))
-            .route("/receipts/rewe/status", get(receipt_sources::rewe_status))
-            .route("/receipts/rewe", delete(receipt_sources::rewe_forget))
-            .route(
-                "/receipts/orders/import",
-                post(receipt_sources::orders_import),
-            )
             .route("/affordability", get(grocery::affordability))
             .route("/recipes", get(grocery::recipes))
             .route("/recipes/ideas", post(grocery::recipe_ideas))

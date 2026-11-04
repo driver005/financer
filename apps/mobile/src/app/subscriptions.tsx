@@ -46,7 +46,7 @@ export default function SubscriptionsScreen() {
   if (!api) return <Page title="Subscriptions"><NeedsSetup /></Page>;
   if (!data) return <Page title="Subscriptions">{error ? <Note tone="error">{error}</Note> : <Loading />}</Page>;
 
-  const weeks = groupByWeek(data.upcoming, data.as_of);
+  const weeks = groupByWeek(data.upcoming, data.date);
   const nothing = data.active.length === 0 && data.stale.length === 0;
 
   return (

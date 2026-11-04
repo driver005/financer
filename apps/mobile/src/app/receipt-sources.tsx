@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Badge, Box, Button, Card, Expandable, Group, ListItem, Note, Section, Text, VirtualList } from "@financer/ui";
 
-import type { Api, LidlStatus, ReceiptSource, ReweStatus } from "@/api/client";
+import type { Api, ReceiptSource } from "@/api/client";
 import { useApi } from "@/api/config";
 import { Page } from "@/components/Page";
 import { ReweCard } from "@/components/receipts/ReweCard";
@@ -15,6 +15,7 @@ import {
   healthPill,
   importedText,
   lastSyncText,
+  listedSources,
   nextRunText,
   noSourceText,
   SHOP_GUIDES,
@@ -27,11 +28,12 @@ import {
 } from "@/receiptSources";
 import { asIcon, toTone } from "@/uiTone";
 
-type Loaded = { sources: ReceiptSource[]; lidl: LidlStatus | null; kaufland: LidlStatus | null; rewe: ReweStatus | null };
+type Loaded = { sources: ReceiptSource[]; rewe: ReceiptSource | null };
 
+/** One call lists every source; the ones the app pushes to (REWE, an orders file) have cards of their own. */
 async function loadAll(api: Api): Promise<Loaded> {
-  const [sources, lidl, kaufland, rewe] = await Promise.all([api.receiptSources(), api.lidlStatus().catch(() => null), api.kauflandStatus().catch(() => null), api.reweStatus().catch(() => null)]);
-  return { sources, lidl, kaufland, rewe };
+  const all = await api.receiptSources();
+  return { sources: listedSources(all), rewe: all.find((s) => s.source === "rewe_app") ?? null };
 }
 
 /**
@@ -120,7 +122,7 @@ export default function ReceiptSources() {
         }
         renderItem={(s) =>
           (s.source === "lidl_plus" || s.source === "kaufland_card") && data ? (
-            <SignInCard brand={s.source} api={api} source={s} status={s.source === "lidl_plus" ? data.lidl : data.kaufland} onChanged={reload} />
+            <SignInCard brand={s.source} api={api} source={s} status={s} onChanged={reload} />
           ) : (
             <SourceCard s={s} now={now} onPhone={onPhone} syncing={syncing === s.source} disabled={syncing !== null} onSync={() => void sync(s.source)} />
           )

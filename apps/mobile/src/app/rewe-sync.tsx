@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 import { WebView } from "react-native-webview";
 import { Banner, Box, Button, Card, Stack, Text } from "@financer/ui";
 
-import type { ReweReceiptInput } from "@/api/client";
+import type { ReceiptInput } from "@/api/client";
 import { useApi } from "@/api/config";
 import { Page } from "@/components/Page";
 import { Empty, NeedsSetup } from "@/components/Status";
@@ -80,7 +80,7 @@ export default function ReweSync() {
       busy.current = true;
       try {
         list.current = entries;
-        const known = await api.reweKnown(entries.map((e) => e.id));
+        const known = await api.knownReceipts("rewe_app", entries.map((e) => e.id));
         const ids = idsToRead(entries, known.unknown);
         left.current = known.unknown.length - ids.length;
         if (ids.length === 0) {
@@ -107,7 +107,7 @@ export default function ReweSync() {
       setPhase("saving");
       setText("Saving the receipts…");
       const byId = new Map(list.current.map((e) => [e.id, e]));
-      const receipts: ReweReceiptInput[] = [];
+      const receipts: ReceiptInput[] = [];
       let unreadable = 0;
       for (const id of wanted.current) {
         const entry = byId.get(id);
@@ -118,7 +118,7 @@ export default function ReweSync() {
       }
       const total = { imported: 0, duplicates: 0, skipped: unreadable, linked: 0 };
       for (let i = 0; i < receipts.length; i += 100) {
-        const r = await api.reweImport(receipts.slice(i, i + 100));
+        const r = await api.importReceipts("rewe_app", receipts.slice(i, i + 100));
         total.imported += r.imported;
         total.duplicates += r.duplicates;
         total.skipped += r.skipped;
