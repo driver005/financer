@@ -15,7 +15,7 @@ const log = (msg) => console.warn(`${TAG} ${msg}`);
     const csv =
       '"Buchungstag";"Verwendungszweck";"Beguenstigter/Zahlungspflichtiger";"Kontonummer/IBAN";"Betrag"\n' +
       '"02.03.26";"Kartenzahlung";"REWE Markt";"";"-23,47"\n';
-    const imp = await t.send({ method: "POST", path: "/v1/transactions/import", headers: { "Content-Type": "text/csv" }, body: csv });
+    const imp = await t.send({ method: "POST", path: "/v1/bank/import/csv", headers: { "Content-Type": "text/csv" }, body: csv });
     const list = await t.send({ method: "GET", path: "/v1/transactions" });
     const rows = JSON.parse(list.text);
     const ok = health.status === 200 && health.text === "ok" && imp.status === 200 && rows[0]?.category === "groceries";

@@ -70,12 +70,12 @@ describe("EmbeddedTransport", () => {
     const { backend, seen } = fakeBackend(200, '{"imported":1}');
     const res = await new EmbeddedTransport(backend).send({
       method: "POST",
-      path: "/v1/transactions/import",
+      path: "/v1/bank/import/csv",
       headers: { "Content-Type": "text/csv" },
       body: "Bücher;1,00",
     });
     assert.deepEqual(res, { status: 200, text: '{"imported":1}' });
-    assert.deepEqual(seen[0], { method: "POST", pathAndQuery: "/v1/transactions/import", contentType: "text/csv", body: "Bücher;1,00" });
+    assert.deepEqual(seen[0], { method: "POST", pathAndQuery: "/v1/bank/import/csv", contentType: "text/csv", body: "Bücher;1,00" });
   });
 
   it("sends an empty body when there is none", async () => {

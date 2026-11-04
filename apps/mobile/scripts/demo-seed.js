@@ -60,7 +60,7 @@ const LIDL_RECEIPT = ["LIDL", "Bananen  1,29 B", "Milch 1,5%  1,09 B", "Brot  2,
 
 /** Imports the demo data through an `EmbeddedTransport`-like object (`send({method, path, ...})`). */
 async function seedDemo(t) {
-  const csv = await t.send({ method: "POST", path: "/v1/transactions/import", headers: { "Content-Type": "text/csv" }, body: demoCsv() });
+  const csv = await t.send({ method: "POST", path: "/v1/bank/import/csv", headers: { "Content-Type": "text/csv" }, body: demoCsv() });
   const receipts = [];
   for (const text of [REWE_RECEIPT, LIDL_RECEIPT]) {
     receipts.push((await t.send({ method: "POST", path: "/v1/receipts", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) })).status);
