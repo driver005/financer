@@ -3,7 +3,7 @@
 use financer_core::{Money, Transaction};
 use time::Date;
 
-use crate::types::RawTransaction;
+use super::types::RawTransaction;
 
 pub(crate) enum Mapped {
     Booked(Transaction),

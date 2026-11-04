@@ -34,8 +34,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use financer_api::{
-    Api, AppState, BankConnection, BankProvider, LlmKeys, OpenSetup, PlaidSetup, PriceSourceConfig,
-    TokenHash,
+    Api, AppState, BankConnection, BankProvider, LlmKeys, PriceSourceConfig, TokenHash,
 };
 use financer_config::{
     Admin, Config, Loaded, Loader, Overlay, ProcessEnv, ProviderChoice, Renderer, SettingsFile,
@@ -363,43 +362,57 @@ impl Server {
             .with_config_admin(admin.clone(), Self::restart_process);
 
         if let Some(product_id) = Self::secret(&config.bank.fints_product_id) {
-            state = state.with_bank(Arc::new(financer_fints::FintsBank::new(&product_id)));
+            state = state.with_bank(Arc::new(financer_openbanking::fints::FintsBank::new(
+                &product_id,
+            )));
             tracing::info!("live bank sync enabled (FinTS)");
         }
 
-        // Plaid, for the connections with kind = "plaid": the access token is kept sealed with
-        // FINANCER_SECRET_KEY, or else a key derived from the API token (as the Lidl Plus token is)
-        let plaid_wanted = config.bank.accounts.iter().any(|a| a.kind == "plaid");
-        if config.bank.plaid.configured() {
+        // Plaid, GoCardless and finAPI: you sign in once on the provider's page and the access it
+        // hands over is kept sealed with FINANCER_SECRET_KEY, or else a key derived from the API
+        // token (as the Lidl Plus token is)
+        let wanted = |kind: &str| config.bank.accounts.iter().any(|a| a.kind == kind);
+        let (plaid_wanted, gocardless_wanted, finapi_wanted) =
+            (wanted("plaid"), wanted("gocardless"), wanted("finapi"));
+        if config.bank.plaid.configured()
+            || config.bank.gocardless.configured()
+            || config.bank.finapi.configured()
+        {
             let secret = std::env::var("FINANCER_SECRET_KEY")
                 .ok()
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| token.clone());
-            let secrets = financer_receipt_sources::SecretBox::new(&secret)
-                .map_err(|e| format!("cannot keep the Plaid access safe: {e}"))?;
+            state = state.with_secret_box(
+                financer_receipt_sources::SecretBox::new(&secret)
+                    .map_err(|e| format!("cannot keep the bank access safe: {e}"))?,
+            );
+        }
+        let http: Arc<dyn financer_openbanking::OpenHttp> = Arc::new(
+            financer_openbanking::ReqwestHttp::new()
+                .map_err(|e| format!("cannot start the bank client: {e}"))?,
+        );
+        if config.bank.plaid.configured() {
             let environment =
-                financer_plaid::PlaidEnvironment::parse(&config.bank.plaid.environment.value)
+                financer_openbanking::PlaidEnvironment::parse(&config.bank.plaid.environment.value)
                     .ok_or("bank.plaid.environment is not known")?;
-            let http = financer_plaid::ReqwestPlaidHttp::new()
-                .map_err(|e| format!("cannot start the Plaid client: {e}"))?;
-            let client = financer_plaid::PlaidClient::new(
-                financer_plaid::PlaidConfig::new(
+            let client = financer_openbanking::plaid::PlaidClient::new(
+                financer_openbanking::PlaidConfig::new(
                     Self::secret(&config.bank.plaid.client_id).unwrap_or_default(),
                     Self::secret(&config.bank.plaid.secret).unwrap_or_default(),
                     environment,
                 ),
-                Arc::new(http),
+                http.clone(),
             );
-            state = state.with_secret_box(secrets).with_plaid(PlaidSetup {
-                client: Arc::new(client),
-                country_codes: config.bank.plaid.country_codes.clone(),
-                language: config.bank.plaid.language.clone(),
-                redirect_uri: config.bank.plaid.redirect_uri.clone(),
-            });
+            state = state.with_provider(Arc::new(financer_openbanking::PlaidProvider::new(
+                client,
+                config.bank.plaid.country_codes.clone(),
+                config.bank.plaid.language.clone(),
+                config.bank.plaid.redirect_uri.clone(),
+            )));
             tracing::info!(
                 "Plaid enabled ({}){}",
                 environment.name(),
-                if environment == financer_plaid::PlaidEnvironment::Sandbox {
+                if environment == financer_openbanking::PlaidEnvironment::Sandbox {
                     ": test bank only"
                 } else {
                     ""
@@ -410,36 +423,17 @@ impl Server {
                 "bank accounts with kind \"plaid\" are configured but bank.plaid is not, so they cannot sync"
             );
         }
-
-        // GoCardless and finAPI work like Plaid for the app (sign in once, then sync by itself) and
-        // keep their access sealed the same way
-        let gocardless_wanted = config.bank.accounts.iter().any(|a| a.kind == "gocardless");
-        let finapi_wanted = config.bank.accounts.iter().any(|a| a.kind == "finapi");
-        if config.bank.gocardless.configured() || config.bank.finapi.configured() {
-            let secret = std::env::var("FINANCER_SECRET_KEY")
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-                .unwrap_or_else(|| token.clone());
-            state = state.with_secret_box(
-                financer_receipt_sources::SecretBox::new(&secret)
-                    .map_err(|e| format!("cannot keep the bank access safe: {e}"))?,
-            );
-        }
         if config.bank.gocardless.configured() {
-            let http = financer_openbanking::ReqwestHttp::new()
-                .map_err(|e| format!("cannot start the GoCardless client: {e}"))?;
-            let provider = financer_openbanking::GoCardless::new(
-                financer_openbanking::GoCardlessConfig::new(
-                    Self::secret(&config.bank.gocardless.secret_id).unwrap_or_default(),
-                    Self::secret(&config.bank.gocardless.secret_key).unwrap_or_default(),
-                ),
-                Arc::new(http),
+            let mut cfg = financer_openbanking::GoCardlessConfig::new(
+                Self::secret(&config.bank.gocardless.secret_id).unwrap_or_default(),
+                Self::secret(&config.bank.gocardless.secret_key).unwrap_or_default(),
             );
-            state = state.with_gocardless(OpenSetup {
-                provider: Arc::new(provider),
-                language: config.bank.gocardless.language.clone(),
-                redirect_uri: config.bank.gocardless.redirect_uri.clone(),
-            });
+            cfg.language = config.bank.gocardless.language.clone();
+            cfg.redirect_uri = config.bank.gocardless.redirect_uri.clone();
+            state = state.with_provider(Arc::new(financer_openbanking::GoCardless::new(
+                cfg,
+                http.clone(),
+            )));
             tracing::info!("GoCardless enabled");
         } else if gocardless_wanted {
             tracing::warn!(
@@ -451,21 +445,13 @@ impl Server {
                 &config.bank.finapi.environment.value,
             )
             .ok_or("bank.finapi.environment is not known")?;
-            let http = financer_openbanking::ReqwestHttp::new()
-                .map_err(|e| format!("cannot start the finAPI client: {e}"))?;
-            let provider = financer_openbanking::Finapi::new(
-                financer_openbanking::FinapiConfig::new(
-                    Self::secret(&config.bank.finapi.client_id).unwrap_or_default(),
-                    Self::secret(&config.bank.finapi.client_secret).unwrap_or_default(),
-                    environment,
-                ),
-                Arc::new(http),
+            let mut cfg = financer_openbanking::FinapiConfig::new(
+                Self::secret(&config.bank.finapi.client_id).unwrap_or_default(),
+                Self::secret(&config.bank.finapi.client_secret).unwrap_or_default(),
+                environment,
             );
-            state = state.with_finapi(OpenSetup {
-                provider: Arc::new(provider),
-                language: "de".to_string(),
-                redirect_uri: config.bank.finapi.redirect_uri.clone(),
-            });
+            cfg.redirect_uri = config.bank.finapi.redirect_uri.clone();
+            state = state.with_provider(Arc::new(financer_openbanking::Finapi::new(cfg, http)));
             tracing::info!(
                 "finAPI enabled ({}){}",
                 environment.name(),

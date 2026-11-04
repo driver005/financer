@@ -87,7 +87,7 @@ impl PeriodFixture {
         let (s, _) = Self::send(
             &app,
             Method::POST,
-            "/v1/transactions/import",
+            "/v1/bank/import/csv",
             Body::from(csv),
             Some("text/csv"),
             true,

@@ -46,9 +46,11 @@ export type Repeat = components["schemas"]["RepeatDto"];
 export type Settings = components["schemas"]["SettingsDto"];
 export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
 export type BankStatus = components["schemas"]["BankStatus"];
-export type SyncStarted = components["schemas"]["SyncStarted"];
-export type SyncDone = components["schemas"]["SyncDone"];
 export type SyncRequest = components["schemas"]["SyncRequest"];
+/** A sync, whichever provider: what the person has to do next, or how it ended. */
+export type Sync = components["schemas"]["SyncDto"];
+/** A way transactions come in (csv, fints, plaid, gocardless, finapi) and whether the server has it. */
+export type ProviderInfo = components["schemas"]["ProviderDto"];
 export type BankConnection = components["schemas"]["BankConnectionDto"];
 export type ConnectionState = components["schemas"]["ConnectionState"];
 export type StoreSpend = components["schemas"]["StoreSpendDto"];
@@ -125,8 +127,9 @@ export class Api {
     return this.request<Transaction[]>("/v1/transactions");
   }
 
-  importCsv(bytes: ArrayBuffer) {
-    return this.request<ImportReport>("/v1/transactions/import", {
+  /** Hand a file to a provider with the `file` flow (`csv`: the Sparkasse CSV-CAMT export). */
+  importFile(kind: "csv", bytes: ArrayBuffer) {
+    return this.request<ImportReport>(`/v1/bank/import/${encodeURIComponent(kind)}`, {
       method: "POST",
       headers: { "Content-Type": "text/csv" },
       body: bytes,
@@ -395,17 +398,14 @@ export class Api {
     return this.json<ImportSummary>("/v1/backup/restore", "POST", { passphrase, data_base64: dataBase64 });
   }
 
+  /** What the last login sent with a request looked like (non-secret), to prefill a form. */
   bankStatus() {
     return this.request<BankStatus>("/v1/bank/status");
   }
 
-  startSync(req: SyncRequest) {
-    return this.json<SyncStarted>("/v1/bank/sync", "POST", req);
-  }
-
-  /** Throws `ApiError` with status 409 while the approval in the banking app is still missing. */
-  confirmSync(id: string) {
-    return this.request<SyncDone>(`/v1/bank/sync/${encodeURIComponent(id)}/confirm`, { method: "POST" });
+  /** Every way transactions come in, how each works (`file`, `approval`, `link`) and whether this server has it. */
+  providers() {
+    return this.request<ProviderInfo[]>("/v1/bank/providers");
   }
 
   /** The bank connections of the server's financer.toml, without secrets. Empty when none is configured. */
@@ -414,22 +414,28 @@ export class Api {
   }
 
   /**
-   * Log in for one connection; the server then waits for the approval in the banking app and imports by
-   * itself. Send `pin` only when the connection has no `pin_from_env`.
+   * Start a sync, whichever provider: name a `connection` of the server's configuration, or for FinTS a
+   * `kind` with a `login`. The server then waits for the approval in the banking app (`needs_approval`) or
+   * for the sign-in on the provider's page (`needs_link`, with `link_url`) and imports by itself. Send
+   * `pin` only when the connection has no `pin_from_env`.
    */
-  syncConnection(name: string, pin?: string) {
-    const path = `/v1/bank/connections/${encodeURIComponent(name)}/sync`;
-    return pin ? this.json<BankConnection>(path, "POST", { pin }) : this.request<BankConnection>(path, { method: "POST" });
+  startSync(req: SyncRequest) {
+    return this.json<Sync>("/v1/bank/sync", "POST", req);
   }
 
-  /** Plaid: forget the connection (the server tells Plaid and deletes its access). Imported transactions stay. */
+  /** Where a sync stands. Ask while its `state` is `syncing`, `needs_approval` or `needs_link`. */
+  syncStatus(id: string) {
+    return this.request<Sync>(`/v1/bank/sync/${encodeURIComponent(id)}`);
+  }
+
+  /** Stop waiting for an approval or a sign-in. */
+  cancelSync(id: string) {
+    return this.request<Sync>(`/v1/bank/sync/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+  }
+
+  /** Plaid, GoCardless, finAPI: forget the connection (the server tells the provider and deletes its access). Imported transactions stay. */
   disconnectConnection(name: string) {
     return this.request<BankConnection>(`/v1/bank/connections/${encodeURIComponent(name)}/disconnect`, { method: "POST" });
-  }
-
-  /** Stop waiting for an approval, or for the sign-in on Plaid's page. */
-  cancelConnection(name: string) {
-    return this.request<BankConnection>(`/v1/bank/connections/${encodeURIComponent(name)}/cancel`, { method: "POST" });
   }
 
   /** Spending per supermarket chain for the current/previous budget period or the last `n` periods. `date` is the local day. */

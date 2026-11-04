@@ -1,10 +1,8 @@
-use axum::body::Bytes;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use financer_core::{Budget, Disposable, RecurringDetector};
-use financer_fints::SparkasseCsv;
 use serde::Deserialize;
 use time::Date;
 
@@ -74,25 +72,6 @@ pub struct Routes;
 #[utoipa::path(get, path = "/health", responses((status = 200, description = "Server is up", body = String)))]
 pub async fn health() -> &'static str {
     Routes::health().await
-}
-
-/// Import a Sparkasse CSV-CAMT export. Transactions are categorized, and rows that were
-/// imported before are skipped, so re-uploading an overlapping period is safe.
-#[utoipa::path(
-    post,
-    path = "/v1/transactions/import",
-    request_body(content = String, content_type = "text/csv"),
-    responses(
-        (status = 200, description = "Import finished", body = ImportReport),
-        (status = 400, description = "Not a Sparkasse CSV export", body = ErrorBody),
-    ),
-    security(("bearer" = []))
-)]
-pub async fn import_transactions(
-    State(state): State<AppState>,
-    body: Bytes,
-) -> Result<Json<ImportReport>, ApiError> {
-    Routes::import_transactions(state, body).await
 }
 
 /// All transactions, newest first.
@@ -196,33 +175,6 @@ pub async fn budget_status(
 impl Routes {
     pub async fn health() -> &'static str {
         "ok"
-    }
-
-    pub async fn import_transactions(
-        state: AppState,
-        body: Bytes,
-    ) -> Result<Json<ImportReport>, ApiError> {
-        let parsed = SparkasseCsv::parse(&body).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-
-        let categorizer = state.store.categorizer().await?;
-        let mut txs = parsed.transactions;
-        for tx in &mut txs {
-            tx.category = Some(categorizer.categorize(tx));
-        }
-
-        let imported = state.store.insert_new_transactions(&txs).await?;
-        Ok(Json(ImportReport {
-            imported,
-            duplicates: txs.len() - imported,
-            skipped: parsed
-                .skipped
-                .into_iter()
-                .map(|s| SkippedRowDto {
-                    line: s.line,
-                    reason: s.reason,
-                })
-                .collect(),
-        }))
     }
 
     pub async fn list_transactions(state: AppState) -> Result<Json<Vec<TransactionDto>>, ApiError> {

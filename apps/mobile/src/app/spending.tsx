@@ -75,7 +75,7 @@ export default function Spending() {
       const bytes = await pickFileBytes(["text/csv", "text/comma-separated-values", "application/vnd.ms-excel", "text/plain"]);
       if (bytes === null) return;
       setBusy(true);
-      const r = await api.importCsv(bytes);
+      const r = await api.importFile("csv", bytes);
       const skipped = r.skipped.length ? `, ${r.skipped.length} unreadable` : "";
       setMessage(`Imported ${r.imported} new, ${r.duplicates} already known${skipped}`);
       setItems(await api.transactions());

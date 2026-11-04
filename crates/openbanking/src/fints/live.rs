@@ -12,7 +12,7 @@ use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use time::{Date, Month};
 
-use crate::bank::{BankClient, BankData, BankError, PendingSync, SyncParams, TanChallenge};
+use super::bank::{BankClient, BankData, BankError, PendingSync, SyncParams, TanChallenge};
 
 /// A bank that is not in the built-in registry, or a test server.
 #[derive(Clone)]

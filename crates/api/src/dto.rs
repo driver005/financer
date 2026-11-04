@@ -418,42 +418,6 @@ impl PriceDto {
 
 // ---- bank sync ----
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct SyncRequest {
-    /// Bank code (BLZ).
-    pub blz: String,
-    /// Online banking login name.
-    pub user_id: String,
-    /// Online banking PIN. Held in memory until you approve, never stored or logged.
-    pub pin: String,
-    pub iban: String,
-    /// Leave empty to use the bank's own BIC.
-    pub bic: Option<String>,
-    /// Days of history to fetch (default 90, 1 to 365).
-    pub days: Option<u32>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct SyncStarted {
-    pub sync_id: String,
-    /// Text from the bank, e.g. "Bitte bestätigen Sie die Anfrage in Ihrer S-pushTAN-App".
-    pub challenge: String,
-    /// True if the bank needs no approval; confirm right away.
-    pub no_tan_required: bool,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct SyncDone {
-    pub imported: usize,
-    pub duplicates: usize,
-    /// Transactions left out (pending, or not in EUR).
-    pub skipped: usize,
-    #[schema(value_type = Option<i64>)]
-    pub balance_cents: Option<Money>,
-    #[schema(value_type = Option<String>, format = Date)]
-    pub balance_date: Option<Date>,
-}
-
 #[derive(Debug, Serialize, ToSchema)]
 pub struct BankStatus {
     /// False until the server has a FinTS product id.

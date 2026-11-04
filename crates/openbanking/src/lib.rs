@@ -1,42 +1,113 @@
-//! Open banking aggregators as bank connection providers.
+//! Every way transactions come in, behind one [`Provider`] trait: your online banking's CSV file,
+//! FinTS (your bank directly), Plaid, GoCardless Bank Account Data and finAPI.
 //!
-//! Both [`gocardless::GoCardless`] and [`finapi::Finapi`] work the same way for the app: you sign
-//! in to your bank once on the provider's own page, the server keeps a sealed credential, and from
-//! then on it reads transactions whenever it is asked. They implement [`LinkProvider`]; the API
-//! crate drives either one with the same code. All network access goes through [`OpenHttp`], so
-//! tests run without a network.
+//! The app and the API talk to all of them the same way. A provider has a [`Flow`]:
+//!
+//! - **File** ([`ProviderKind::Csv`]): `import` reads a file.
+//! - **Approval** ([`ProviderKind::Fints`]): `begin` logs in and asks for an approval in the banking
+//!   app, `poll` waits for it and brings the data.
+//! - **Link** (Plaid, GoCardless, finAPI): `begin` returns a page to sign in on, `poll` waits until
+//!   you are done and hands over a credential, which later `fetch` calls use.
+//!
+//! All network access goes through [`OpenHttp`], so tests run without a network.
 
 pub mod error;
 pub mod finapi;
+pub mod fints;
 pub mod gocardless;
 pub mod http;
+pub mod plaid;
+pub mod sparkasse_csv;
 pub mod testing;
 pub mod types;
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use async_trait::async_trait;
 
-pub use error::{ApiError, OpenError};
+pub use error::{ApiError, ErrorKind, OpenError};
 pub use finapi::{Finapi, FinapiConfig, FinapiEnvironment};
+pub use fints::FintsProvider;
 pub use gocardless::{GoCardless, GoCardlessConfig};
 pub use http::{OpenHttp, ReqwestHttp};
-pub use types::{FetchRequest, Fetched, LinkPoll, LinkRequest, LinkStart, LinkedAccount};
+pub use plaid::{PlaidConfig, PlaidEnvironment, PlaidProvider};
+pub use sparkasse_csv::{CsvProvider, SparkasseCsv};
+pub use types::{
+    BeginRequest, FetchRequest, Fetched, Flow, LinkedAccount, Login, Parsed, Poll, ProviderKind,
+    SkippedRow, Step,
+};
 
 #[async_trait]
-pub trait LinkProvider: Send + Sync {
-    /// For messages: "GoCardless" or "finAPI".
-    fn name(&self) -> &'static str;
+pub trait Provider: Send + Sync {
+    fn kind(&self) -> ProviderKind;
 
-    /// Start a sign-in: open [`LinkStart::url`] in a browser.
-    async fn begin(&self, req: &LinkRequest) -> Result<LinkStart, OpenError>;
+    /// Start a sign-in or a sync; see [`Step`].
+    async fn begin(&self, _req: &BeginRequest) -> Result<Step, OpenError> {
+        Err(self.unsupported("signing in"))
+    }
 
-    /// Has the browser session finished? Poll every few seconds after opening the page.
-    async fn poll(&self, session: &str) -> Result<LinkPoll, OpenError>;
+    /// Has the person finished? Poll every few seconds after [`Provider::begin`].
+    async fn poll(&self, _session: &str) -> Result<Poll, OpenError> {
+        Err(self.unsupported("signing in"))
+    }
 
-    /// Read balance, accounts and transactions with a credential from [`LinkPoll::Done`].
-    async fn fetch(&self, req: &FetchRequest) -> Result<Fetched, OpenError>;
+    /// Read balance, accounts and transactions with a credential from [`Poll::Linked`].
+    async fn fetch(&self, _req: &FetchRequest) -> Result<Fetched, OpenError> {
+        Err(self.unsupported("reading with a stored credential"))
+    }
+
+    /// Read a file that was handed over.
+    async fn import(&self, _bytes: &[u8]) -> Result<Parsed, OpenError> {
+        Err(self.unsupported("importing a file"))
+    }
+
+    /// The person gave up on a started sign-in or approval: forget its session.
+    async fn cancel(&self, _session: &str) {}
 
     /// Tell the provider to drop the connection. Best effort.
-    async fn revoke(&self, credential: &str) -> Result<(), OpenError>;
+    async fn revoke(&self, _credential: &str) -> Result<(), OpenError> {
+        Ok(())
+    }
+
+    #[doc(hidden)]
+    fn unsupported(&self, what: &str) -> OpenError {
+        OpenError::Rejected(format!("{} does not support {what}", self.kind().label()))
+    }
+}
+
+/// The providers a server has set up. CSV import needs nothing, so it is always there.
+#[derive(Clone)]
+pub struct Providers {
+    map: HashMap<ProviderKind, Arc<dyn Provider>>,
+}
+
+impl Default for Providers {
+    fn default() -> Self {
+        let mut map: HashMap<ProviderKind, Arc<dyn Provider>> = HashMap::new();
+        map.insert(ProviderKind::Csv, Arc::new(CsvProvider));
+        Self { map }
+    }
+}
+
+impl Providers {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add (or replace) the provider of its kind.
+    pub fn with(mut self, provider: Arc<dyn Provider>) -> Self {
+        self.map.insert(provider.kind(), provider);
+        self
+    }
+
+    pub fn get(&self, kind: ProviderKind) -> Option<Arc<dyn Provider>> {
+        self.map.get(&kind).cloned()
+    }
+
+    pub fn has(&self, kind: ProviderKind) -> bool {
+        self.map.contains_key(&kind)
+    }
 }
 
 /// `1234.5` or `"1234.50"` as cents, without floating point errors.

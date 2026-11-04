@@ -28,6 +28,7 @@ const SECRET_FIELDS: &[&str] = &[
     "secret_id",
     "secret_key",
     "client_id",
+    "secret",
     "client_secret",
     "password",
     "username",

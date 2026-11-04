@@ -5,7 +5,8 @@
  * provider's page; after that there is no PIN and no approval). The card only shows the state and
  * starts or cancels a sync.
  */
-import type { BankConnection } from "./api/client";
+import type { BankConnection, Sync } from "./api/client";
+import { formatCents, formatDate } from "./format";
 
 /** How often the card asks the server while a sync is running. */
 export const POLL_MS = 3000;
@@ -178,4 +179,48 @@ export function liveSyncMissing(onPhone: boolean): { title: string; body: string
         title: "Live sync is not set up on the server",
         body: "It needs a FinTS product id, which you request from the Deutsche Kreditwirtschaft. Add it under Settings, Server settings, Bank providers (or set FINANCER_FINTS_PRODUCT_ID, or bank.fints_product_id in financer.toml). See docs/FINTS.md. Until then, import a CSV export on the Spending tab.",
       };
+}
+
+// ---------------------------------------------------------------- one protocol for every provider
+
+/** A sync is still waiting for something: the bank, an approval, or the sign-in. */
+export function isRunning(s: Pick<Sync, "state">): boolean {
+  return s.state === "syncing" || s.state === "needs_approval" || s.state === "needs_link";
+}
+
+/** The connection as it looks while the given sync runs (what the sync call and its polls report). */
+export function applySync(c: BankConnection, s: Sync): BankConnection {
+  return { ...c, state: s.state, message: s.message ?? null, link_url: s.link_url ?? null, approval_expires_at: s.expires_at ?? null };
+}
+
+/** How a finished sync ended, in a sentence; `null` while it runs or when nothing is known. */
+export function syncResultText(s: Sync): string | null {
+  if (isRunning(s)) return null;
+  const r = s.result;
+  if (s.state === "error" || (r && !r.ok)) return s.message ?? r?.message ?? "The sync failed.";
+  if (!r) return null;
+  const balance = r.balance_cents != null ? ` Balance ${formatCents(r.balance_cents)}${r.balance_date ? ` (${formatDate(r.balance_date)})` : ""}.` : "";
+  return `Imported ${r.imported ?? 0} new transactions, ${r.duplicates ?? 0} were already known.${balance}`;
+}
+
+export type WaitOptions = { intervalMs?: number; giveUpMs?: number; now?: () => number; onUpdate?: (s: Sync) => void; cancelled?: () => boolean };
+
+/**
+ * Ask a started sync again and again until it is over: `poll` fetches it, `sleep` waits between asks.
+ * Resolves with the last answer, which is still running when the person gave up (`cancelled`) or the
+ * time ran out (`giveUpMs`).
+ */
+export async function waitForSync(first: Sync, poll: (id: string) => Promise<Sync>, sleep: (ms: number) => Promise<void>, opts: WaitOptions = {}): Promise<Sync> {
+  const interval = opts.intervalMs ?? POLL_MS;
+  const now = opts.now ?? Date.now;
+  const deadline = now() + (opts.giveUpMs ?? 10 * 60 * 1000);
+  let current = first;
+  opts.onUpdate?.(current);
+  while (isRunning(current) && !opts.cancelled?.() && now() < deadline) {
+    await sleep(interval);
+    if (opts.cancelled?.()) break;
+    current = await poll(current.id);
+    opts.onUpdate?.(current);
+  }
+  return current;
 }

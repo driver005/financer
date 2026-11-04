@@ -20,6 +20,7 @@ import type { ConfigField, ConfigKey, ConfigView } from "../src/serverConfig";
 
 function conn(over: Partial<BankConnection> = {}): BankConnection {
   return {
+    id: "giro",
     name: "Giro",
     kind: "gocardless",
     bank_code: "",

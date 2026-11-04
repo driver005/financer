@@ -111,7 +111,7 @@ npm run gen:api    # regenerate src/api/schema.d.ts after changing the API
 ```
 crates/core       money, catalog of generic items, categorizer, recurring payments, budget and basket engines
 crates/store      SeaORM entities + migrations (SQLite and PostgreSQL, chosen by URL)
-crates/fints      CSV import; live bank sync (trait, mock, fints-rs adapter)
+crates/openbanking   every way transactions come in behind one Provider trait: CSV import, FinTS, Plaid, GoCardless, finAPI
 crates/prices     pack-size normalisation, JSON-LD / Open Food Facts / Open Prices, polite HTTP
 crates/receipts   receipt text parser and usual-item learning
 crates/receipt-sources   mailbox, watched folder and Lidl Plus receipt import, receipt/payment matcher

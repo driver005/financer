@@ -15,7 +15,7 @@
 //! cargo install fints-rs --version 0.2.0 --features server --bin fints-server --root /tmp/fints
 //! mock/build.sh /tmp/fints-decoupled
 //! FINTS_MOCK_SERVER=/tmp/fints/bin/fints-server FINTS_MOCK_DECOUPLED=/tmp/fints-decoupled/fints-server \
-//!   cargo test -p financer-fints --test mock_bank
+//!   cargo test -p financer-openbanking --test mock_bank
 //! ```
 #![cfg(feature = "live")]
 
@@ -23,7 +23,7 @@ use std::io::BufRead;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-use financer_fints::{BankClient, BankError, FintsBank, SyncParams};
+use financer_openbanking::fints::{BankClient, BankError, FintsBank, SyncParams};
 
 struct Server {
     child: Option<Child>,

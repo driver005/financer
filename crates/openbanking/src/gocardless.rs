@@ -19,12 +19,12 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
-use crate::error::{ApiError, OpenError};
+use crate::error::{ApiError, ErrorKind, OpenError};
 use crate::http::{Answer, OpenHttp, Request};
 use crate::types::{
-    mask_of, FetchRequest, Fetched, LinkPoll, LinkRequest, LinkStart, LinkedAccount,
+    mask_of, BeginRequest, FetchRequest, Fetched, LinkedAccount, Poll, ProviderKind, Step,
 };
-use crate::{cents_of, date_text, parse_date, LinkProvider};
+use crate::{cents_of, date_text, parse_date, Provider};
 
 const NAME: &str = "GoCardless";
 const DEFAULT_BASE: &str = "https://bankaccountdata.gocardless.com";
@@ -41,6 +41,10 @@ const BALANCE_ORDER: &[&str] = &[
 pub struct GoCardlessConfig {
     pub secret_id: String,
     pub secret_key: Zeroizing<String>,
+    /// Language of the bank's sign-in page, as two letters (`de`).
+    pub language: String,
+    /// Where the bank's page sends the browser when you are done.
+    pub redirect_uri: Option<String>,
     /// For tests and proxies.
     pub base_url: Option<String>,
 }
@@ -50,6 +54,8 @@ impl GoCardlessConfig {
         Self {
             secret_id,
             secret_key: Zeroizing::new(secret_key),
+            language: "de".into(),
+            redirect_uri: None,
             base_url: None,
         }
     }
@@ -122,6 +128,17 @@ impl GoCardless {
         format!("{base}{path}")
     }
 
+    /// A refused token call means wrong keys; a 401, 403, 404 or 410 elsewhere means the access
+    /// is gone; 429 is the daily limit.
+    fn kind_of(status: u16, keys: bool) -> ErrorKind {
+        match status {
+            _ if keys => ErrorKind::BadKeys,
+            429 => ErrorKind::RateLimited,
+            401 | 403 | 404 | 410 => ErrorKind::Relink,
+            _ => ErrorKind::Other,
+        }
+    }
+
     fn api_error(answer: &Answer, keys: bool) -> OpenError {
         let v: Value = serde_json::from_str(&answer.body).unwrap_or(Value::Null);
         let field = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
@@ -134,7 +151,7 @@ impl GoCardless {
                 (_, s) if !s.is_empty() => s,
                 _ => "no details".to_string(),
             },
-            keys_rejected: keys,
+            kind: Self::kind_of(answer.status, keys),
         })
     }
 
@@ -192,12 +209,12 @@ impl GoCardless {
 }
 
 #[async_trait]
-impl LinkProvider for GoCardless {
-    fn name(&self) -> &'static str {
-        NAME
+impl Provider for GoCardless {
+    fn kind(&self) -> ProviderKind {
+        ProviderKind::GoCardless
     }
 
-    async fn begin(&self, req: &LinkRequest) -> Result<LinkStart, OpenError> {
+    async fn begin(&self, req: &BeginRequest) -> Result<Step, OpenError> {
         let institution = req.institution.as_deref().filter(|i| !i.is_empty()).ok_or_else(|| {
             OpenError::LinkFailed {
                 provider: NAME,
@@ -206,10 +223,10 @@ impl LinkProvider for GoCardless {
         })?;
         let token = self.access().await?;
         let body = json!({
-            "redirect": req.redirect_uri.as_deref().unwrap_or(DEFAULT_REDIRECT),
+            "redirect": self.cfg.redirect_uri.as_deref().unwrap_or(DEFAULT_REDIRECT),
             "institution_id": institution,
             "reference": format!("{}-{}", req.reference.to_lowercase().replace(' ', "-"), now()),
-            "user_language": req.language.to_uppercase(),
+            "user_language": self.cfg.language.to_uppercase(),
         });
         let answer = self
             .send(Request::post_json(
@@ -227,7 +244,7 @@ impl LinkProvider for GoCardless {
             .link
             .filter(|l| !l.is_empty())
             .ok_or_else(|| OpenError::unreadable(NAME, "the requisition has no link"))?;
-        Ok(LinkStart {
+        Ok(Step::Link {
             url,
             session: r.id,
             // the link is good for a while; the engine caps the wait
@@ -235,10 +252,10 @@ impl LinkProvider for GoCardless {
         })
     }
 
-    async fn poll(&self, session: &str) -> Result<LinkPoll, OpenError> {
+    async fn poll(&self, session: &str) -> Result<Poll, OpenError> {
         let r = self.requisition(session).await?;
         match r.status.as_str() {
-            "LN" => Ok(LinkPoll::Done {
+            "LN" => Ok(Poll::Linked {
                 credential: session.to_string(),
             }),
             "RJ" => Err(OpenError::LinkFailed {
@@ -249,7 +266,7 @@ impl LinkProvider for GoCardless {
                 provider: NAME,
                 message: "the sign-in expired or was suspended".into(),
             }),
-            _ => Ok(LinkPoll::Waiting),
+            _ => Ok(Poll::Waiting),
         }
     }
 
@@ -264,7 +281,7 @@ impl LinkProvider for GoCardless {
                     status: 410,
                     code: "EXPIRED".into(),
                     message: "the consent for this bank expired".into(),
-                    keys_rejected: false,
+                    kind: ErrorKind::Relink,
                 }));
             }
             other => {
@@ -452,13 +469,12 @@ mod tests {
     const TOKEN: &str =
         r#"{"access":"tok","access_expires":86400,"refresh":"r","refresh_expires":1}"#;
 
-    fn req() -> LinkRequest {
-        LinkRequest {
+    fn req() -> BeginRequest {
+        BeginRequest {
             reference: "Girokonto".into(),
             institution: Some("SPARKASSE_X".into()),
-            language: "de".into(),
             days: 90,
-            redirect_uri: None,
+            login: None,
         }
     }
 
@@ -473,9 +489,11 @@ mod tests {
                     r#"{"id":"req-1","status":"CR","link":"https://ob.gocardless.com/psd2/start/req-1/X"}"#,
                 ),
         );
-        let start = c.begin(&req()).await.unwrap();
-        assert_eq!(start.session, "req-1");
-        assert!(start.url.starts_with("https://ob.gocardless.com/"));
+        let Step::Link { url, session, .. } = c.begin(&req()).await.unwrap() else {
+            panic!("a link");
+        };
+        assert_eq!(session, "req-1");
+        assert!(url.starts_with("https://ob.gocardless.com/"));
         let body = fake.call(1).body;
         assert_eq!(body["institution_id"], "SPARKASSE_X");
         assert_eq!(body["user_language"], "DE");
@@ -509,8 +527,8 @@ mod tests {
                     r#"{"id":"r","status":"UA"}"#,
                 ),
         );
-        assert_eq!(c.poll("r").await.unwrap(), LinkPoll::Waiting);
-        assert_eq!(c.poll("r").await.unwrap(), LinkPoll::Waiting);
+        assert_eq!(c.poll("r").await.unwrap(), Poll::Waiting);
+        assert_eq!(c.poll("r").await.unwrap(), Poll::Waiting);
         assert_eq!(fake.count("POST /api/v2/token/new/"), 1);
     }
 
@@ -535,12 +553,12 @@ mod tests {
             match (done, failed) {
                 (true, _) => assert_eq!(
                     got.unwrap(),
-                    LinkPoll::Done {
+                    Poll::Linked {
                         credential: "r".into()
                     }
                 ),
                 (_, true) => assert!(matches!(got, Err(OpenError::LinkFailed { .. }))),
-                _ => assert_eq!(got.unwrap(), LinkPoll::Waiting),
+                _ => assert_eq!(got.unwrap(), Poll::Waiting),
             }
         }
     }
@@ -580,6 +598,7 @@ mod tests {
                 credential: "r".into(),
                 account_ids: vec![],
                 since: time::macros::date!(2026 - 03 - 01),
+                cursor: None,
             })
             .await
             .unwrap();
@@ -638,6 +657,7 @@ mod tests {
                 credential: "r".into(),
                 account_ids: vec!["a2".into()],
                 since: time::macros::date!(2026 - 03 - 01),
+                cursor: None,
             })
             .await
             .unwrap();
@@ -662,6 +682,7 @@ mod tests {
                 credential: "r".into(),
                 account_ids: vec![],
                 since: time::macros::date!(2026 - 03 - 01),
+                cursor: None,
             })
             .await
             .unwrap_err();

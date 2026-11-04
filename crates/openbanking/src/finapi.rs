@@ -21,12 +21,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
-use crate::error::{ApiError, OpenError};
+use crate::error::{ApiError, ErrorKind, OpenError};
 use crate::http::{Answer, OpenHttp, Request};
 use crate::types::{
-    mask_of, FetchRequest, Fetched, LinkPoll, LinkRequest, LinkStart, LinkedAccount,
+    mask_of, BeginRequest, FetchRequest, Fetched, LinkedAccount, Poll, ProviderKind, Step,
 };
-use crate::{cents_of, date_text, parse_date, LinkProvider};
+use crate::{cents_of, date_text, parse_date, Provider};
 
 const NAME: &str = "finAPI";
 const PAGE_SIZE: u32 = 500;
@@ -76,6 +76,8 @@ pub struct FinapiConfig {
     pub client_id: String,
     pub client_secret: Zeroizing<String>,
     pub environment: FinapiEnvironment,
+    /// Where the web form sends the browser when you are done.
+    pub redirect_uri: Option<String>,
     /// For tests and proxies.
     pub api_url: Option<String>,
     pub web_form_url: Option<String>,
@@ -87,6 +89,7 @@ impl FinapiConfig {
             client_id,
             client_secret: Zeroizing::new(client_secret),
             environment,
+            redirect_uri: None,
             api_url: None,
             web_form_url: None,
         }
@@ -167,6 +170,15 @@ impl Finapi {
             .map_err(|m| OpenError::connection(NAME, m))
     }
 
+    fn kind_of(status: u16, keys: bool) -> ErrorKind {
+        match status {
+            _ if keys => ErrorKind::BadKeys,
+            429 => ErrorKind::RateLimited,
+            401 | 403 | 404 | 410 => ErrorKind::Relink,
+            _ => ErrorKind::Other,
+        }
+    }
+
     fn api_error(answer: &Answer, keys: bool) -> OpenError {
         let v: Value = serde_json::from_str(&answer.body).unwrap_or(Value::Null);
         // finAPI: {"errors":[{"message":"...","code":"...","type":"..."}]} or OAuth's {"error":..}
@@ -194,7 +206,7 @@ impl Finapi {
             status: answer.status,
             code,
             message,
-            keys_rejected: keys,
+            kind: Self::kind_of(answer.status, keys),
         })
     }
 
@@ -258,12 +270,12 @@ impl Finapi {
 }
 
 #[async_trait]
-impl LinkProvider for Finapi {
-    fn name(&self) -> &'static str {
-        NAME
+impl Provider for Finapi {
+    fn kind(&self) -> ProviderKind {
+        ProviderKind::Finapi
     }
 
-    async fn begin(&self, req: &LinkRequest) -> Result<LinkStart, OpenError> {
+    async fn begin(&self, _req: &BeginRequest) -> Result<Step, OpenError> {
         let client = self.client_token().await?;
         let user = User {
             id: format!("financer-{}", uuid::Uuid::new_v4().simple()),
@@ -285,7 +297,7 @@ impl LinkProvider for Finapi {
         }
         let user_token = self.user_token(&user).await?;
         let mut body = json!({});
-        if let Some(uri) = req.redirect_uri.as_deref().filter(|u| !u.is_empty()) {
+        if let Some(uri) = self.cfg.redirect_uri.as_deref().filter(|u| !u.is_empty()) {
             body["redirectUrl"] = json!(uri);
         }
         let answer = self
@@ -312,7 +324,7 @@ impl LinkProvider for Finapi {
             let _ = self.delete_user(&user).await;
             return Err(OpenError::unreadable(NAME, "web form: no id or url"));
         };
-        Ok(LinkStart {
+        Ok(Step::Link {
             url,
             session: serde_json::to_string(&Session { user, form })
                 .map_err(|e| OpenError::unreadable(NAME, e))?,
@@ -320,7 +332,7 @@ impl LinkProvider for Finapi {
         })
     }
 
-    async fn poll(&self, session: &str) -> Result<LinkPoll, OpenError> {
+    async fn poll(&self, session: &str) -> Result<Poll, OpenError> {
         let s: Session = serde_json::from_str(session)
             .map_err(|e| OpenError::unreadable(NAME, format!("session: {e}")))?;
         let token = self.user_token(&s.user).await?;
@@ -333,7 +345,7 @@ impl LinkProvider for Finapi {
             .unwrap_or("")
             .to_ascii_uppercase();
         match status.as_str() {
-            "COMPLETED" => Ok(LinkPoll::Done {
+            "COMPLETED" => Ok(Poll::Linked {
                 credential: serde_json::to_string(&s.user)
                     .map_err(|e| OpenError::unreadable(NAME, e))?,
             }),
@@ -344,7 +356,7 @@ impl LinkProvider for Finapi {
                     message: format!("the sign-in did not finish ({})", status.to_lowercase()),
                 })
             }
-            _ => Ok(LinkPoll::Waiting),
+            _ => Ok(Poll::Waiting),
         }
     }
 
@@ -499,22 +511,17 @@ mod tests {
 
     fn client(fake: FakeHttp) -> (Finapi, Arc<FakeHttp>) {
         let fake = Arc::new(fake);
-        (
-            Finapi::new(
-                FinapiConfig::new("cid".into(), "csecret".into(), FinapiEnvironment::Sandbox),
-                fake.clone(),
-            ),
-            fake,
-        )
+        let mut cfg = FinapiConfig::new("cid".into(), "csecret".into(), FinapiEnvironment::Sandbox);
+        cfg.redirect_uri = Some("https://example.org/done".into());
+        (Finapi::new(cfg, fake.clone()), fake)
     }
 
-    fn req() -> LinkRequest {
-        LinkRequest {
+    fn req() -> BeginRequest {
+        BeginRequest {
             reference: "Giro".into(),
             institution: None,
-            language: "de".into(),
             days: 90,
-            redirect_uri: Some("https://example.org/done".into()),
+            login: None,
         }
     }
 
@@ -534,9 +541,11 @@ mod tests {
                     r#"{"id":"wf-1","url":"https://webform-sandbox.finapi.io/wf/wf-1","status":"NOT_YET_OPENED"}"#,
                 ),
         );
-        let start = c.begin(&req()).await.unwrap();
-        assert_eq!(start.url, "https://webform-sandbox.finapi.io/wf/wf-1");
-        let session: Session = serde_json::from_str(&start.session).unwrap();
+        let Step::Link { url, session, .. } = c.begin(&req()).await.unwrap() else {
+            panic!("a link");
+        };
+        assert_eq!(url, "https://webform-sandbox.finapi.io/wf/wf-1");
+        let session: Session = serde_json::from_str(&session).unwrap();
         assert_eq!(session.form, "wf-1");
         assert!(session.user.id.starts_with("financer-"));
         // the user is created with the client token and with credentials the server invented
@@ -619,8 +628,8 @@ mod tests {
             );
             let got = c.poll(&session).await;
             match expect {
-                "done" => assert!(matches!(got, Ok(LinkPoll::Done { .. }))),
-                "wait" => assert_eq!(got.unwrap(), LinkPoll::Waiting),
+                "done" => assert!(matches!(got, Ok(Poll::Linked { .. }))),
+                "wait" => assert_eq!(got.unwrap(), Poll::Waiting),
                 _ => assert!(matches!(got, Err(OpenError::LinkFailed { .. }))),
             }
         }
@@ -648,6 +657,7 @@ mod tests {
                 credential: credential(),
                 account_ids: vec![],
                 since: time::macros::date!(2026 - 03 - 01),
+                cursor: None,
             })
             .await
             .unwrap();
@@ -677,6 +687,7 @@ mod tests {
                 credential: credential(),
                 account_ids: vec![],
                 since: time::macros::date!(2026 - 03 - 01),
+                cursor: None,
             })
             .await
             .unwrap_err();
@@ -687,6 +698,7 @@ mod tests {
                 credential: credential(),
                 account_ids: vec![],
                 since: time::macros::date!(2026 - 03 - 01),
+                cursor: None,
             })
             .await
             .unwrap_err();

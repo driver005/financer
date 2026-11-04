@@ -8,6 +8,7 @@ import { useApi } from "@/api/config";
 import {
   POLL_MS,
   anyBusy,
+  applySync,
   approvalLeftText,
   canSync,
   connectionKey,
@@ -93,11 +94,12 @@ export function BankConnectionsCard() {
     setError(key, null);
     setStarting(key);
     try {
-      const updated = await api.syncConnection(conn.name, pins[key] || undefined);
+      const sync = await api.startSync({ connection: conn.name, pin: pins[key] || undefined });
+      const updated = applySync(conn, sync);
       replace(updated);
       setPins((cur) => ({ ...cur, [key]: "" })); // the PIN is not kept
       // Plaid, GoCardless, finAPI: their page is where you sign in to your bank; open it right away
-      if (updated.state === "needs_link") await openLink(updated, key);
+      if (sync.state === "needs_link") await openLink(updated, key);
     } catch (e) {
       setError(key, e instanceof Error ? e.message : "Could not start the sync");
       await load();
@@ -138,7 +140,7 @@ export function BankConnectionsCard() {
     const key = connectionKey(conn);
     setError(key, null);
     try {
-      replace(await api.cancelConnection(conn.name));
+      replace(applySync(conn, await api.cancelSync(conn.id)));
     } catch (e) {
       setError(key, e instanceof Error ? e.message : "Could not cancel");
       await load();

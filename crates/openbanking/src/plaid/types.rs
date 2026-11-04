@@ -29,7 +29,7 @@ pub struct LinkToken {
 pub enum LinkSession {
     /// Not finished yet.
     Waiting,
-    /// Done: swap this for an access token with [`crate::PlaidClient::exchange`].
+    /// Done: swap this for an access token with [`PlaidClient::exchange`].
     Finished { public_token: String },
 }
 

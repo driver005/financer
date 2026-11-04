@@ -107,7 +107,7 @@ describe("Api", () => {
     ]);
     const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
     await assert.rejects(api.transactions(), (e: unknown) => e instanceof ApiError && e.status === 401 && /token/.test(e.message));
-    await assert.rejects(api.confirmSync("abc"), (e: unknown) => e instanceof ApiError && e.status === 409);
+    await assert.rejects(api.syncStatus("abc"), (e: unknown) => e instanceof ApiError && e.status === 409);
   });
 
   it("handles 204 and non-JSON error bodies", async () => {
@@ -129,10 +129,10 @@ describe("Api", () => {
     const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
     await api.recipes({ budgetCents: 1500, tag: "vegan", limit: 5 });
     await api.affordability(8000, 7);
-    await api.confirmSync("a/b c");
+    await api.syncStatus("a/b c");
     assert.equal(calls[0].url, "https://x.test/v1/recipes?budget_cents=1500&tag=vegan&limit=5");
     assert.equal(calls[1].url, "https://x.test/v1/affordability?budget_cents=8000&days_per_basket=7");
-    assert.equal(calls[2].url, "https://x.test/v1/bank/sync/a%2Fb%20c/confirm");
+    assert.equal(calls[2].url, "https://x.test/v1/bank/sync/a%2Fb%20c");
   });
 
   it("embedded health is always true; remote health asks the server", async () => {

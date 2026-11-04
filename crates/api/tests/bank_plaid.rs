@@ -8,9 +8,10 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
-use financer_api::{Api, AppState, BankConnection, BankProvider, PlaidSetup, TokenHash};
-use financer_plaid::testing::FakePlaidHttp;
-use financer_plaid::{PlaidClient, PlaidConfig, PlaidEnvironment};
+use financer_api::{Api, AppState, BankConnection, BankProvider, TokenHash};
+use financer_openbanking::plaid::PlaidClient;
+use financer_openbanking::testing::FakeHttp;
+use financer_openbanking::{PlaidConfig, PlaidEnvironment, PlaidProvider};
 use financer_receipt_sources::SecretBox;
 use financer_store::Store;
 use http_body_util::BodyExt;
@@ -42,13 +43,13 @@ const LOGIN_REQUIRED: &str =
     r#"{"error_type":"ITEM_ERROR","error_code":"ITEM_LOGIN_REQUIRED","error_message":"changed"}"#;
 
 /// The usual script: link, exchange, one page of transactions, accounts.
-fn linking(fake: FakePlaidHttp) -> FakePlaidHttp {
-    fake.answer("/link/token/create", 200, LINK_CREATED)
-        .answer("/link/token/get", 200, LINK_WAITING)
-        .answer("/link/token/get", 200, LINK_DONE)
-        .answer("/item/public_token/exchange", 200, EXCHANGED)
-        .answer("/transactions/sync", 200, PAGE)
-        .answer("/accounts/get", 200, ACCOUNTS)
+fn linking(fake: FakeHttp) -> FakeHttp {
+    fake.answer("POST /link/token/create", 200, LINK_CREATED)
+        .answer("POST /link/token/get", 200, LINK_WAITING)
+        .answer("POST /link/token/get", 200, LINK_DONE)
+        .answer("POST /item/public_token/exchange", 200, EXCHANGED)
+        .answer("POST /transactions/sync", 200, PAGE)
+        .answer("POST /accounts/get", 200, ACCOUNTS)
 }
 
 fn plaid_connection(name: &str, hours: u32, account_ids: &[&str]) -> BankConnection {
@@ -71,17 +72,17 @@ fn plaid_connection(name: &str, hours: u32, account_ids: &[&str]) -> BankConnect
 struct Fixture {
     app: Router,
     state: AppState,
-    plaid: Arc<FakePlaidHttp>,
+    plaid: Arc<FakeHttp>,
     store: Store,
 }
 
 impl Fixture {
-    async fn new(plaid: FakePlaidHttp, connections: Vec<BankConnection>) -> Fixture {
+    async fn new(plaid: FakeHttp, connections: Vec<BankConnection>) -> Fixture {
         Self::build(plaid, connections, true, true).await
     }
 
     async fn build(
-        plaid: FakePlaidHttp,
+        plaid: FakeHttp,
         connections: Vec<BankConnection>,
         with_plaid: bool,
         with_secrets: bool,
@@ -95,19 +96,19 @@ impl Fixture {
             state = state.with_secret_box(SecretBox::new(SERVER_SECRET).unwrap());
         }
         if with_plaid {
-            state = state.with_plaid(PlaidSetup {
-                client: Arc::new(PlaidClient::new(
+            state = state.with_provider(Arc::new(PlaidProvider::new(
+                PlaidClient::new(
                     PlaidConfig::new(
                         "client-1".into(),
                         PLAID_SECRET.into(),
                         PlaidEnvironment::Sandbox,
                     ),
                     plaid.clone(),
-                )),
-                country_codes: vec!["DE".into()],
-                language: "de".into(),
-                redirect_uri: None,
-            });
+                ),
+                vec!["DE".into()],
+                "de".into(),
+                None,
+            )));
         }
         Fixture {
             app: Api::router(state.clone(), TokenHash::new(TOKEN)),
@@ -118,12 +119,22 @@ impl Fixture {
     }
 
     async fn json(&self, method: Method, uri: &str) -> (StatusCode, Value) {
-        let req = Request::builder()
+        self.send(method, uri, None).await
+    }
+
+    async fn send(&self, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
+        let mut req = Request::builder()
             .method(method)
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-            .body(Body::empty())
-            .unwrap();
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+        let body = match body {
+            Some(b) => {
+                req = req.header(header::CONTENT_TYPE, "application/json");
+                Body::from(b.to_string())
+            }
+            None => Body::empty(),
+        };
+        let req = req.body(body).unwrap();
         let res = self.app.clone().oneshot(req).await.unwrap();
         let status = res.status();
         let bytes = res.into_body().collect().await.unwrap().to_bytes();
@@ -158,8 +169,12 @@ impl Fixture {
     }
 
     async fn sync(&self, name: &str) -> (StatusCode, Value) {
-        self.json(Method::POST, &format!("/v1/bank/connections/{name}/sync"))
-            .await
+        self.send(
+            Method::POST,
+            "/v1/bank/sync",
+            Some(json!({ "connection": name })),
+        )
+        .await
     }
 
     async fn transactions(&self) -> Vec<Value> {
@@ -172,7 +187,7 @@ impl Fixture {
     }
 
     /// Link and finish the first sync.
-    async fn linked(plaid: FakePlaidHttp, connections: Vec<BankConnection>) -> Fixture {
+    async fn linked(plaid: FakeHttp, connections: Vec<BankConnection>) -> Fixture {
         let f = Fixture::new(plaid, connections).await;
         let name = f.state_first_name();
         assert_eq!(f.sync(&name).await.0, StatusCode::OK);
@@ -189,7 +204,7 @@ impl Fixture {
 #[tokio::test]
 async fn a_plaid_connection_is_listed_unlinked_and_without_secrets() {
     let f = Fixture::new(
-        FakePlaidHttp::new(),
+        FakeHttp::new(),
         vec![plaid_connection("PlaidGiro", 12, &[])],
     )
     .await;
@@ -211,7 +226,7 @@ async fn a_plaid_connection_is_listed_unlinked_and_without_secrets() {
 #[tokio::test]
 async fn signing_in_on_plaids_page_links_the_connection_and_imports() {
     let f = Fixture::new(
-        linking(FakePlaidHttp::new()),
+        linking(FakeHttp::new()),
         vec![plaid_connection("PlaidGiro", 0, &["acc1"])],
     )
     .await;
@@ -220,8 +235,8 @@ async fn signing_in_on_plaids_page_links_the_connection_and_imports() {
     // the app is told where to sign in
     assert_eq!(c["state"], "needs_link");
     assert_eq!(c["link_url"], "https://secure.plaid.com/hl/abc");
-    assert!(c["approval_expires_at"].is_number());
-    assert_eq!(c["linked"], false);
+    assert!(c["expires_at"].is_number());
+    assert_eq!(f.connection("PlaidGiro").await["linked"], false);
 
     let done = f.wait_for("PlaidGiro", "idle").await;
     assert_eq!(done["linked"], true);
@@ -234,21 +249,21 @@ async fn signing_in_on_plaids_page_links_the_connection_and_imports() {
     assert_eq!(done["accounts"][0]["id"], "acc1");
     assert_eq!(done["accounts"][1]["mask"], "1111");
     // the link asked for transactions and the connection's history
-    assert_eq!(f.plaid.body_of(0)["transactions"]["days_requested"], 60);
+    assert_eq!(f.plaid.call(0).body["transactions"]["days_requested"], 60);
     // the first read starts from the beginning
     let sync_at = f
         .plaid
-        .paths()
+        .keys()
         .iter()
-        .position(|p| p == "/transactions/sync")
+        .position(|p| p == "POST /transactions/sync")
         .unwrap();
-    assert!(f.plaid.body_of(sync_at).get("cursor").is_none());
+    assert!(f.plaid.call(sync_at).body.get("cursor").is_none());
 }
 
 #[tokio::test]
 async fn the_access_token_is_stored_sealed_and_never_listed() {
     let f = Fixture::linked(
-        linking(FakePlaidHttp::new()),
+        linking(FakeHttp::new()),
         vec![plaid_connection("PlaidGiro", 0, &[])],
     )
     .await;
@@ -281,13 +296,13 @@ async fn the_access_token_is_stored_sealed_and_never_listed() {
 
 #[tokio::test]
 async fn a_linked_connection_syncs_again_without_a_new_sign_in_and_by_cursor() {
-    let plaid = linking(FakePlaidHttp::new()).answer("/transactions/sync", 200, EMPTY_PAGE);
+    let plaid = linking(FakeHttp::new()).answer("POST /transactions/sync", 200, EMPTY_PAGE);
     let f = Fixture::linked(plaid, vec![plaid_connection("PlaidGiro", 0, &[])]).await;
     let before = f
         .plaid
-        .paths()
+        .keys()
         .iter()
-        .filter(|p| *p == "/link/token/create")
+        .filter(|p| *p == "POST /link/token/create")
         .count();
     assert_eq!(before, 1);
 
@@ -295,25 +310,28 @@ async fn a_linked_connection_syncs_again_without_a_new_sign_in_and_by_cursor() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(c["state"], "syncing", "no page to open, it just reads");
     f.wait_for("PlaidGiro", "idle").await;
-    let paths = f.plaid.paths();
+    let paths = f.plaid.keys();
     assert_eq!(
-        paths.iter().filter(|p| *p == "/link/token/create").count(),
+        paths
+            .iter()
+            .filter(|p| *p == "POST /link/token/create")
+            .count(),
         1,
         "{paths:?}"
     );
     // the cursor of the first read starts the second
     let last_sync = paths
         .iter()
-        .rposition(|p| p == "/transactions/sync")
+        .rposition(|p| p == "POST /transactions/sync")
         .unwrap();
-    assert_eq!(f.plaid.body_of(last_sync)["cursor"], "cursor-1");
+    assert_eq!(f.plaid.call(last_sync).body["cursor"], "cursor-1");
     // and the access token it sent is the one that was kept
-    assert_eq!(f.plaid.body_of(last_sync)["access_token"], ACCESS);
+    assert_eq!(f.plaid.call(last_sync).body["access_token"], ACCESS);
 }
 
 #[tokio::test]
 async fn syncing_the_same_period_twice_does_not_double_the_transactions() {
-    let plaid = linking(FakePlaidHttp::new()).answer("/transactions/sync", 200, PAGE);
+    let plaid = linking(FakeHttp::new()).answer("POST /transactions/sync", 200, PAGE);
     let f = Fixture::linked(plaid, vec![plaid_connection("PlaidGiro", 0, &[])]).await;
     assert_eq!(f.transactions().await.len(), 3);
     f.sync("PlaidGiro").await;
@@ -325,28 +343,26 @@ async fn syncing_the_same_period_twice_does_not_double_the_transactions() {
 
 #[tokio::test]
 async fn cancelling_the_sign_in_stops_waiting() {
-    let plaid = FakePlaidHttp::new()
-        .answer("/link/token/create", 200, LINK_CREATED)
-        .answer("/link/token/get", 200, LINK_WAITING);
+    let plaid = FakeHttp::new()
+        .answer("POST /link/token/create", 200, LINK_CREATED)
+        .answer("POST /link/token/get", 200, LINK_WAITING);
     let f = Fixture::new(plaid, vec![plaid_connection("PlaidGiro", 0, &[])]).await;
     f.sync("PlaidGiro").await;
     f.wait_for("PlaidGiro", "needs_link").await;
-    let (status, c) = f
-        .json(Method::POST, "/v1/bank/connections/PlaidGiro/cancel")
-        .await;
+    let (status, c) = f.json(Method::POST, "/v1/bank/sync/plaidgiro/cancel").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(c["state"], "idle");
     assert!(c["link_url"].is_null());
-    assert_eq!(c["linked"], false);
+    assert_eq!(f.connection("PlaidGiro").await["linked"], false);
     // it can start again afterwards
     assert_eq!(f.sync("PlaidGiro").await.1["state"], "needs_link");
 }
 
 #[tokio::test]
 async fn an_expired_sign_in_page_ends_in_an_error_that_says_what_to_do() {
-    let plaid = FakePlaidHttp::new()
-        .answer("/link/token/create", 200, LINK_EXPIRED)
-        .answer("/link/token/get", 200, LINK_WAITING);
+    let plaid = FakeHttp::new()
+        .answer("POST /link/token/create", 200, LINK_EXPIRED)
+        .answer("POST /link/token/get", 200, LINK_WAITING);
     let f = Fixture::new(plaid, vec![plaid_connection("PlaidGiro", 0, &[])]).await;
     f.sync("PlaidGiro").await;
     let c = f.wait_for("PlaidGiro", "error").await;
@@ -356,7 +372,7 @@ async fn an_expired_sign_in_page_ends_in_an_error_that_says_what_to_do() {
 
 #[tokio::test]
 async fn a_bank_that_wants_a_new_sign_in_unlinks_the_connection() {
-    let plaid = linking(FakePlaidHttp::new()).answer("/transactions/sync", 400, LOGIN_REQUIRED);
+    let plaid = linking(FakeHttp::new()).answer("POST /transactions/sync", 400, LOGIN_REQUIRED);
     let f = Fixture::linked(plaid, vec![plaid_connection("PlaidGiro", 0, &[])]).await;
     f.sync("PlaidGiro").await;
     let c = f.wait_for("PlaidGiro", "error").await;
@@ -375,7 +391,7 @@ async fn a_bank_that_wants_a_new_sign_in_unlinks_the_connection() {
 
 #[tokio::test]
 async fn disconnect_tells_plaid_forgets_the_access_and_keeps_the_transactions() {
-    let plaid = linking(FakePlaidHttp::new()).answer("/item/remove", 200, r#"{"removed":true}"#);
+    let plaid = linking(FakeHttp::new()).answer("POST /item/remove", 200, r#"{"removed":true}"#);
     let f = Fixture::linked(plaid, vec![plaid_connection("PlaidGiro", 0, &[])]).await;
     assert_eq!(f.transactions().await.len(), 3);
     let (status, c) = f
@@ -384,20 +400,20 @@ async fn disconnect_tells_plaid_forgets_the_access_and_keeps_the_transactions() 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(c["linked"], false);
     assert_eq!(c["accounts"], json!([]));
-    assert!(f.plaid.paths().contains(&"/item/remove".to_string()));
+    assert!(f.plaid.keys().contains(&"POST /item/remove".to_string()));
     let removed_at = f
         .plaid
-        .paths()
+        .keys()
         .iter()
-        .position(|p| p == "/item/remove")
+        .position(|p| p == "POST /item/remove")
         .unwrap();
-    assert_eq!(f.plaid.body_of(removed_at)["access_token"], ACCESS);
+    assert_eq!(f.plaid.call(removed_at).body["access_token"], ACCESS);
     assert_eq!(f.transactions().await.len(), 3, "imported rows stay");
 }
 
 #[tokio::test]
 async fn disconnect_still_forgets_when_plaid_cannot_be_reached() {
-    let plaid = linking(FakePlaidHttp::new()).answer("/item/remove", 502, "bad gateway");
+    let plaid = linking(FakeHttp::new()).answer("POST /item/remove", 502, "bad gateway");
     let f = Fixture::linked(plaid, vec![plaid_connection("PlaidGiro", 0, &[])]).await;
     let (status, c) = f
         .json(Method::POST, "/v1/bank/connections/PlaidGiro/disconnect")
@@ -409,7 +425,7 @@ async fn disconnect_still_forgets_when_plaid_cannot_be_reached() {
 #[tokio::test]
 async fn only_a_plaid_connection_can_be_disconnected() {
     let f = Fixture::new(
-        FakePlaidHttp::new(),
+        FakeHttp::new(),
         vec![
             plaid_connection("PlaidGiro", 0, &[]),
             BankConnection {
@@ -436,7 +452,7 @@ async fn only_a_plaid_connection_can_be_disconnected() {
 #[tokio::test]
 async fn without_plaid_keys_on_the_server_the_answer_says_how_to_set_it_up() {
     let f = Fixture::build(
-        FakePlaidHttp::new(),
+        FakeHttp::new(),
         vec![plaid_connection("PlaidGiro", 0, &[])],
         false,
         true,
@@ -450,7 +466,7 @@ async fn without_plaid_keys_on_the_server_the_answer_says_how_to_set_it_up() {
 #[tokio::test]
 async fn without_a_server_secret_the_access_token_is_not_kept_at_all() {
     let f = Fixture::build(
-        FakePlaidHttp::new(),
+        FakeHttp::new(),
         vec![plaid_connection("PlaidGiro", 0, &[])],
         true,
         false,
@@ -459,12 +475,12 @@ async fn without_a_server_secret_the_access_token_is_not_kept_at_all() {
     let (status, body) = f.sync("PlaidGiro").await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert!(body.to_string().contains("FINANCER_SECRET_KEY"), "{body}");
-    assert!(f.plaid.paths().is_empty(), "nothing was sent to Plaid");
+    assert!(f.plaid.keys().is_empty(), "nothing was sent to Plaid");
 }
 
 #[tokio::test]
 async fn a_failure_to_reach_plaid_while_linking_is_reported_and_leaves_the_connection_usable() {
-    let plaid = FakePlaidHttp::new().answer("/link/token/create", 500, "oops");
+    let plaid = FakeHttp::new().answer("POST /link/token/create", 500, "oops");
     let f = Fixture::new(plaid, vec![plaid_connection("PlaidGiro", 0, &[])]).await;
     let (status, _) = f.sync("PlaidGiro").await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
@@ -475,7 +491,7 @@ async fn a_failure_to_reach_plaid_while_linking_is_reported_and_leaves_the_conne
 
 #[tokio::test]
 async fn the_scheduler_syncs_linked_plaid_connections_by_itself_and_leaves_unlinked_ones() {
-    let plaid = linking(FakePlaidHttp::new()).answer("/transactions/sync", 200, EMPTY_PAGE);
+    let plaid = linking(FakeHttp::new()).answer("POST /transactions/sync", 200, EMPTY_PAGE);
     let f = Fixture::linked(
         plaid,
         vec![
@@ -498,9 +514,9 @@ async fn the_scheduler_syncs_linked_plaid_connections_by_itself_and_leaves_unlin
 
 #[tokio::test]
 async fn two_syncs_cannot_run_at_once() {
-    let plaid = FakePlaidHttp::new()
-        .answer("/link/token/create", 200, LINK_CREATED)
-        .answer("/link/token/get", 200, LINK_WAITING);
+    let plaid = FakeHttp::new()
+        .answer("POST /link/token/create", 200, LINK_CREATED)
+        .answer("POST /link/token/get", 200, LINK_WAITING);
     let f = Fixture::new(plaid, vec![plaid_connection("PlaidGiro", 0, &[])]).await;
     assert_eq!(f.sync("PlaidGiro").await.0, StatusCode::OK);
     assert_eq!(f.sync("PlaidGiro").await.0, StatusCode::CONFLICT);

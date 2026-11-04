@@ -7,16 +7,17 @@ use serde_json::{json, Value};
 use time::{Date, OffsetDateTime};
 use zeroize::Zeroizing;
 
-use crate::error::{ApiError, PlaidError};
-use crate::http::PlaidHttp;
-use crate::map::{map_transaction, Mapped};
-use crate::types::*;
+use super::map::{map_transaction, Mapped};
+use super::types::*;
+use crate::error::{ApiError, ErrorKind, OpenError};
+use crate::http::{OpenHttp, Request};
 
 const PAGE_SIZE: u32 = 500;
 /// Plaid asks to start paging again from the saved cursor when the data changes underneath.
 const MAX_RESTARTS: u32 = 3;
 const MAX_PAGES: u32 = 200;
 const CLIENT_NAME: &str = "Financer";
+pub(crate) const NAME: &str = "Plaid";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlaidEnvironment {
@@ -84,7 +85,7 @@ impl fmt::Debug for PlaidConfig {
 #[derive(Clone)]
 pub struct PlaidClient {
     cfg: PlaidConfig,
-    http: Arc<dyn PlaidHttp>,
+    http: Arc<dyn OpenHttp>,
 }
 
 impl fmt::Debug for PlaidClient {
@@ -96,7 +97,7 @@ impl fmt::Debug for PlaidClient {
 }
 
 impl PlaidClient {
-    pub fn new(cfg: PlaidConfig, http: Arc<dyn PlaidHttp>) -> Self {
+    pub fn new(cfg: PlaidConfig, http: Arc<dyn OpenHttp>) -> Self {
         Self { cfg, http }
     }
 
@@ -114,27 +115,47 @@ impl PlaidClient {
         format!("{base}{path}")
     }
 
-    /// POST one call: adds the credentials, turns Plaid's error answers into [`PlaidError`].
-    async fn call<T: DeserializeOwned>(
-        &self,
-        path: &str,
-        mut body: Value,
-    ) -> Result<T, PlaidError> {
+    /// How Plaid's error codes are treated: sign in again, wrong keys, not ready yet.
+    fn kind_of(code: &str) -> ErrorKind {
+        match code {
+            "ITEM_LOGIN_REQUIRED"
+            | "INVALID_ACCESS_TOKEN"
+            | "ITEM_NOT_FOUND"
+            | "PENDING_EXPIRATION" => ErrorKind::Relink,
+            "PRODUCT_NOT_READY" => ErrorKind::NotReady,
+            "INVALID_API_KEYS" | "INVALID_CLIENT_ID" | "INVALID_SECRET" => ErrorKind::BadKeys,
+            _ => ErrorKind::Other,
+        }
+    }
+
+    /// The data changed while paging; start the page again from the saved cursor.
+    fn mutated_during_paging(e: &OpenError) -> bool {
+        matches!(e, OpenError::Api(a) if a.code == "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION")
+    }
+
+    /// POST one call: adds the credentials, turns Plaid's error answers into [`OpenError`].
+    async fn call<T: DeserializeOwned>(&self, path: &str, mut body: Value) -> Result<T, OpenError> {
         if let Some(map) = body.as_object_mut() {
             map.insert("client_id".into(), json!(self.cfg.client_id));
             map.insert("secret".into(), json!(self.cfg.secret.as_str()));
         }
-        let answer = self.http.post_json(&self.url(path), &body).await?;
+        let answer = self
+            .http
+            .send(Request::post_json(self.url(path), None, body))
+            .await
+            .map_err(|m| OpenError::connection(NAME, m))?;
         if answer.status != 200 {
             let v: Value = serde_json::from_str(&answer.body).unwrap_or(Value::Null);
             let field = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-            return Err(PlaidError::Api(ApiError {
+            let code = match field("error_code") {
+                c if c.is_empty() => format!("HTTP_{}", answer.status),
+                c => c,
+            };
+            return Err(OpenError::Api(ApiError {
+                provider: NAME,
                 status: answer.status,
-                kind: field("error_type"),
-                code: match field("error_code") {
-                    c if c.is_empty() => format!("HTTP_{}", answer.status),
-                    c => c,
-                },
+                kind: Self::kind_of(&code),
+                code,
                 message: match (field("display_message"), field("error_message")) {
                     (d, _) if !d.is_empty() => d,
                     (_, m) if !m.is_empty() => m,
@@ -143,12 +164,12 @@ impl PlaidClient {
             }));
         }
         serde_json::from_str(&answer.body)
-            .map_err(|e| PlaidError::Unreadable(format!("{path}: {e}")))
+            .map_err(|e| OpenError::unreadable(NAME, format!("{path}: {e}")))
     }
 
     /// Start a hosted link session: open the returned page in a browser and sign in to your bank
     /// there.
-    pub async fn create_link_token(&self, req: &LinkRequest) -> Result<LinkToken, PlaidError> {
+    pub async fn create_link_token(&self, req: &LinkRequest) -> Result<LinkToken, OpenError> {
         let mut hosted = json!({ "url_lifetime_seconds": 1800 });
         if let Some(uri) = &req.completion_redirect_uri {
             hosted["completion_redirect_uri"] = json!(uri);
@@ -164,8 +185,9 @@ impl PlaidClient {
         });
         let raw: LinkTokenCreate = self.call("/link/token/create", body).await?;
         let hosted_link_url = raw.hosted_link_url.ok_or_else(|| {
-            PlaidError::Unreadable(
-                "no hosted_link_url (is Hosted Link enabled for your Plaid account?)".into(),
+            OpenError::unreadable(
+                NAME,
+                "no hosted_link_url (is Hosted Link enabled for your Plaid account?)",
             )
         })?;
         let expires_at = raw.expiration.as_deref().and_then(|e| {
@@ -181,7 +203,7 @@ impl PlaidClient {
     }
 
     /// Has the browser session finished? Poll this every few seconds after opening the page.
-    pub async fn link_session(&self, link_token: &str) -> Result<LinkSession, PlaidError> {
+    pub async fn link_session(&self, link_token: &str) -> Result<LinkSession, OpenError> {
         let raw: LinkTokenGet = self
             .call("/link/token/get", json!({ "link_token": link_token }))
             .await?;
@@ -197,7 +219,7 @@ impl PlaidClient {
         })
     }
 
-    pub async fn exchange(&self, public_token: &str) -> Result<Exchange, PlaidError> {
+    pub async fn exchange(&self, public_token: &str) -> Result<Exchange, OpenError> {
         let raw: RawExchange = self
             .call(
                 "/item/public_token/exchange",
@@ -210,7 +232,7 @@ impl PlaidClient {
         })
     }
 
-    pub async fn accounts(&self, access_token: &str) -> Result<Vec<AccountBalance>, PlaidError> {
+    pub async fn accounts(&self, access_token: &str) -> Result<Vec<AccountBalance>, OpenError> {
         let raw: RawAccounts = self
             .call("/accounts/get", json!({ "access_token": access_token }))
             .await?;
@@ -233,7 +255,7 @@ impl PlaidClient {
     }
 
     /// Read what is new since `req.cursor`, all pages of it.
-    pub async fn sync(&self, req: &SyncRequest) -> Result<SyncOutcome, PlaidError> {
+    pub async fn sync(&self, req: &SyncRequest) -> Result<SyncOutcome, OpenError> {
         let mut restarts = 0;
         'again: loop {
             let mut cursor = req.cursor.clone();
@@ -245,7 +267,7 @@ impl PlaidClient {
                     body["cursor"] = json!(c);
                 }
                 let page: RawSyncPage = match self.call("/transactions/sync", body).await {
-                    Err(e) if e.mutated_during_paging() && restarts < MAX_RESTARTS => {
+                    Err(e) if Self::mutated_during_paging(&e) && restarts < MAX_RESTARTS => {
                         restarts += 1;
                         continue 'again;
                     }
@@ -278,8 +300,9 @@ impl PlaidClient {
                     });
                 }
             }
-            return Err(PlaidError::Unreadable(
-                "too many pages of transactions".into(),
+            return Err(OpenError::unreadable(
+                NAME,
+                "too many pages of transactions",
             ));
         }
     }
@@ -312,7 +335,7 @@ impl PlaidClient {
     }
 
     /// Tell Plaid to forget the connection (it stops billing for it, too).
-    pub async fn remove_item(&self, access_token: &str) -> Result<(), PlaidError> {
+    pub async fn remove_item(&self, access_token: &str) -> Result<(), OpenError> {
         let _: Value = self
             .call("/item/remove", json!({ "access_token": access_token }))
             .await?;
@@ -323,9 +346,9 @@ impl PlaidClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::FakePlaidHttp;
+    use crate::testing::FakeHttp;
 
-    fn client(fake: FakePlaidHttp) -> (PlaidClient, Arc<FakePlaidHttp>) {
+    fn client(fake: FakeHttp) -> (PlaidClient, Arc<FakeHttp>) {
         let fake = Arc::new(fake);
         let c = PlaidClient::new(
             PlaidConfig {
@@ -365,8 +388,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_link_token_asks_for_hosted_link_and_transactions_and_clamps_the_history() {
-        let (c, fake) = client(FakePlaidHttp::new().answer(
-            "/link/token/create",
+        let (c, fake) = client(FakeHttp::new().answer("POST /link/token/create",
             200,
             r#"{"link_token":"link-sandbox-1","hosted_link_url":"https://secure.plaid.com/hl/abc","expiration":"2026-10-16T10:30:00Z"}"#,
         ));
@@ -374,7 +396,7 @@ mod tests {
         assert_eq!(t.token, "link-sandbox-1");
         assert_eq!(t.hosted_link_url, "https://secure.plaid.com/hl/abc");
         assert_eq!(t.expires_at, Some(1_792_146_600));
-        let body = fake.body_of(0);
+        let body = fake.call(0).body;
         assert_eq!(body["products"][0], "transactions");
         assert_eq!(body["country_codes"][0], "DE");
         assert_eq!(body["transactions"]["days_requested"], 730);
@@ -384,8 +406,8 @@ mod tests {
 
     #[tokio::test]
     async fn without_a_hosted_link_url_the_answer_explains_what_to_enable() {
-        let (c, _) = client(FakePlaidHttp::new().answer(
-            "/link/token/create",
+        let (c, _) = client(FakeHttp::new().answer(
+            "POST /link/token/create",
             200,
             r#"{"link_token":"link-sandbox-1"}"#,
         ));
@@ -396,10 +418,9 @@ mod tests {
     #[tokio::test]
     async fn a_link_session_is_waiting_until_it_has_a_public_token() {
         let (c, _) = client(
-            FakePlaidHttp::new()
-                .answer("/link/token/get", 200, r#"{"link_sessions":[]}"#)
-                .answer(
-                    "/link/token/get",
+            FakeHttp::new()
+                .answer("POST /link/token/get", 200, r#"{"link_sessions":[]}"#)
+                .answer("POST /link/token/get",
                     200,
                     r#"{"link_sessions":[{"finished_at":"2026-10-16T09:00:00Z","results":{"item_add_results":[{"public_token":"public-sandbox-9"}]}}]}"#,
                 ),
@@ -416,10 +437,10 @@ mod tests {
     #[tokio::test]
     async fn sync_reads_every_page_filters_accounts_and_reports_a_balance() {
         let (c, fake) = client(
-            FakePlaidHttp::new()
-                .answer("/transactions/sync", 200, TX_PAGE_1)
-                .answer("/transactions/sync", 200, TX_PAGE_2)
-                .answer("/accounts/get", 200, ACCOUNTS),
+            FakeHttp::new()
+                .answer("POST /transactions/sync", 200, TX_PAGE_1)
+                .answer("POST /transactions/sync", 200, TX_PAGE_2)
+                .answer("POST /accounts/get", 200, ACCOUNTS),
         );
         let out = c
             .sync(&SyncRequest {
@@ -440,20 +461,24 @@ mod tests {
         assert_eq!(out.balance.unwrap().cents(), 123_456);
         assert!(out.balance_date.is_some());
         // the saved cursor starts the first page, the page's cursor the next one
-        assert_eq!(fake.body_of(0)["cursor"], "start");
-        assert_eq!(fake.body_of(1)["cursor"], "c1");
+        assert_eq!(fake.call(0).body["cursor"], "start");
+        assert_eq!(fake.call(1).body["cursor"], "c1");
         assert_eq!(
-            fake.paths(),
-            ["/transactions/sync", "/transactions/sync", "/accounts/get"]
+            fake.keys(),
+            [
+                "POST /transactions/sync",
+                "POST /transactions/sync",
+                "POST /accounts/get"
+            ]
         );
     }
 
     #[tokio::test]
     async fn a_first_sync_sends_no_cursor() {
         let (c, fake) = client(
-            FakePlaidHttp::new()
-                .answer("/transactions/sync", 200, TX_PAGE_2)
-                .answer("/accounts/get", 200, ACCOUNTS),
+            FakeHttp::new()
+                .answer("POST /transactions/sync", 200, TX_PAGE_2)
+                .answer("POST /accounts/get", 200, ACCOUNTS),
         );
         c.sync(&SyncRequest {
             access_token: "a".into(),
@@ -462,21 +487,20 @@ mod tests {
         })
         .await
         .unwrap();
-        assert!(fake.body_of(0).get("cursor").is_none());
+        assert!(fake.call(0).body.get("cursor").is_none());
     }
 
     #[tokio::test]
     async fn paging_starts_again_when_the_data_changes_underneath() {
         let (c, fake) = client(
-            FakePlaidHttp::new()
-                .answer("/transactions/sync", 200, TX_PAGE_1)
-                .answer(
-                    "/transactions/sync",
+            FakeHttp::new()
+                .answer("POST /transactions/sync", 200, TX_PAGE_1)
+                .answer("POST /transactions/sync",
                     400,
                     r#"{"error_type":"TRANSACTIONS_ERROR","error_code":"TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION","error_message":"changed"}"#,
                 )
-                .answer("/transactions/sync", 200, TX_PAGE_2)
-                .answer("/accounts/get", 200, ACCOUNTS),
+                .answer("POST /transactions/sync", 200, TX_PAGE_2)
+                .answer("POST /accounts/get", 200, ACCOUNTS),
         );
         let out = c
             .sync(&SyncRequest {
@@ -488,13 +512,12 @@ mod tests {
             .unwrap();
         // page 1 was thrown away with the restart, so its transactions are not counted twice
         assert_eq!(out.transactions.len(), 1);
-        assert_eq!(fake.body_of(2)["cursor"], "start");
+        assert_eq!(fake.call(2).body["cursor"], "start");
     }
 
     #[tokio::test]
     async fn plaid_errors_are_classified_and_never_show_the_secret() {
-        let (c, fake) = client(FakePlaidHttp::new().answer(
-            "/transactions/sync",
+        let (c, fake) = client(FakeHttp::new().answer("POST /transactions/sync",
             400,
             r#"{"error_type":"ITEM_ERROR","error_code":"ITEM_LOGIN_REQUIRED","error_message":"the login details of this item have changed","display_message":"Please sign in again"}"#,
         ));
@@ -512,12 +535,11 @@ mod tests {
             assert!(!text.contains("super-secret-value"), "{text}");
         }
         assert!(
-            fake.body_of(0).get("secret").is_none(),
+            fake.call(0).body.get("secret").is_none(),
             "the fake strips credentials"
         );
 
-        let (c, _) = client(FakePlaidHttp::new().answer(
-            "/accounts/get",
+        let (c, _) = client(FakeHttp::new().answer("POST /accounts/get",
             400,
             r#"{"error_type":"INVALID_INPUT","error_code":"INVALID_API_KEYS","error_message":"invalid"}"#,
         ));
@@ -527,12 +549,12 @@ mod tests {
     #[tokio::test]
     async fn an_answer_that_is_not_plaid_json_is_reported_not_panicked_on() {
         let (c, _) =
-            client(FakePlaidHttp::new().answer("/item/public_token/exchange", 200, "<html>"));
+            client(FakeHttp::new().answer("POST /item/public_token/exchange", 200, "<html>"));
         assert!(matches!(
             c.exchange("p").await.unwrap_err(),
-            PlaidError::Unreadable(_)
+            OpenError::Unreadable { .. }
         ));
-        let (c, _) = client(FakePlaidHttp::new().answer("/item/remove", 502, "bad gateway"));
+        let (c, _) = client(FakeHttp::new().answer("POST /item/remove", 502, "bad gateway"));
         let e = c.remove_item("a").await.unwrap_err();
         assert!(e.to_string().contains("HTTP_502"), "{e}");
     }

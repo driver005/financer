@@ -12,10 +12,37 @@ de-duplication) is the same for every kind.
 | `gocardless` | the bank's institution id; you sign in once on your bank's page | nothing | European banks through GoCardless Bank Account Data, unattended scheduled syncs |
 | `finapi` | nothing in the file; you pick the bank and sign in once on finAPI's page | nothing | German banks through finAPI, unattended scheduled syncs |
 
-A CSV export of your online banking always works too and needs no provider at all.
+A CSV export of your online banking (`kind` `csv`) always works too and needs no provider setup.
 
-FinTS is described in `docs/FINTS.md`. This page is about Plaid, GoCardless and finAPI and about how
-to add a provider.
+FinTS is described in `docs/FINTS.md`. This page is about the one API every source shares, about
+Plaid, GoCardless and finAPI, and about how to add a provider.
+
+## One API for every source
+
+All five sources live in one crate, `crates/openbanking`, behind one `Provider` trait, and the API
+talks to all of them the same way, so an app or an SDK never has a per-provider call. Each has a
+**flow**, which is all a client needs to know:
+
+| flow | providers | what the client does |
+| --- | --- | --- |
+| `file` | `csv` | `POST /v1/bank/import/{kind}` with the file |
+| `approval` | `fints` | start a sync with a login and a PIN, the person approves in the banking app |
+| `link` | `plaid`, `gocardless`, `finapi` | start a sync, the person signs in once on `link_url` |
+
+| call | what it does |
+| --- | --- |
+| `GET /v1/bank/providers` | every source, its flow, whether this server has it set up |
+| `GET /v1/bank/connections` | the connections of the server configuration, with their state |
+| `POST /v1/bank/sync` | start a sync: `{"connection": "name", "pin"?}`, or for FinTS `{"kind": "fints", "login": {...}, "pin"}` |
+| `GET /v1/bank/sync/{id}` | where it stands: `state` is `syncing`, `needs_approval` (approve in the banking app), `needs_link` (open `link_url`), `idle` or `error`; `result` once it ended |
+| `POST /v1/bank/sync/{id}/cancel` | stop waiting for an approval or a sign-in |
+| `POST /v1/bank/import/{kind}` | hand over a file (`csv`) |
+| `POST /v1/bank/connections/{name}/disconnect` | forget the stored access of a `link` provider |
+
+The server does the waiting: after `POST /v1/bank/sync` it polls the provider itself and imports
+as soon as the person is done, so a client only asks `GET /v1/bank/sync/{id}` now and then (or not at
+all). The id of a configured connection is its lower-case name; a login sent with the request gets
+an id of its own, which stays readable for an hour.
 
 ## Choosing what to connect in the app
 
@@ -136,7 +163,7 @@ import, and that no secret appears in a listing, a message or a debug print.
 on it: run the sandbox flow once, check the Plaid dashboard's *Hosted Link* setting, and watch the
 first real sync. Plaid's exact field names were taken from its public documentation; if Plaid
 changes one, the sync reports "an answer this app does not understand" with the path, and
-`crates/plaid/src/types.rs` is the one place to adjust.
+`crates/openbanking/src/plaid/types.rs` is the one place to adjust.
 
 The on-phone (embedded) backend does not read `financer.toml`, so Plaid connections are a feature
 of the hosted server for now.
@@ -199,21 +226,24 @@ before you rely on either.
 
 ## Adding another provider
 
-A provider has to answer three questions, which map to three functions:
+A provider implements `Provider` (`crates/openbanking/src/lib.rs`); everything else is shared:
 
-1. *How do I get permission?* FinTS asks for a PIN and a TAN; Plaid shows a page. Add the new
-   `BankProvider` variant (`crates/api/src/bank_connections.rs`) and branch in `BankSync::start`.
-2. *How do I fetch?* Return `financer_fints::BankData` (booked transactions, balance, skipped
-   count). Everything after that is shared: `BankSync::import` de-duplicates and categorises.
-3. *How do I forget?* Store the credential with `SecretBox` (never plain), and drop it on
-   disconnect.
+- `begin` starts a sign-in or a login and says what the person has to do (`Step::Link` with a page,
+  `Step::Approval` with a message, or `Step::Fetching`);
+- `poll` waits for it and hands over a credential (`Poll::Linked`) or, for an approval flow, the
+  data (`Poll::Data`);
+- `fetch` reads with a stored credential; `import` reads a file; `revoke` and `cancel` clean up.
 
-Put the HTTP calls behind a small trait (see `PlaidHttp`) so tests run without a network, and
-add the `kind` to `crates/config` (`validate.rs`) so a typo is an error with the key's name.
-`crates/api/tests/bank_plaid.rs` is a good template for the integration tests.
+`crates/api/src/bank_connections.rs` is the one engine that drives any of them: the states, the
+background polling, sealing the credential with `SecretBox` (never plain), the schedule, the
+de-duplicating import, disconnect. So a new provider is its client plus:
 
-A provider that works like GoCardless and finAPI (a page to sign in on, then reads) does not need its
-own flow code: implement `LinkProvider` in `crates/openbanking` (`begin`, `poll`, `fetch`, `revoke`),
-add a `BankProvider` variant, and `crates/api/src/bank_open.rs` does the linking, sealing,
-scheduling and disconnecting. Then add its keys and its `kind` to `crates/config`, and an entry to
-`SOURCES` in `apps/mobile/src/bankSetup.ts` so the Spending screen offers it.
+1. a `ProviderKind` variant (with its `Flow`) in `crates/openbanking/src/types.rs`;
+2. its keys and its `kind` in `crates/config` (`validate.rs`, `schema.rs`), so a typo is an error
+   with the key's name;
+3. registering it in `crates/server/src/main.rs` (`AppState::with_provider`);
+4. an entry in `SOURCES` in `apps/mobile/src/bankSetup.ts`, so the Spending screen offers it.
+
+Put its HTTP calls behind `OpenHttp` so tests run without a network (`testing::FakeHttp` scripts the
+answers); `crates/api/tests/bank_plaid.rs` and `bank_open.rs` are templates for the integration
+tests.

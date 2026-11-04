@@ -62,7 +62,7 @@ impl ExportFixture {
 
     async fn seeded() -> Router {
         let a = Self::app().await;
-        Self::send(&a, Method::POST, "/v1/transactions/import", None, Some(CSV)).await;
+        Self::send(&a, Method::POST, "/v1/bank/import/csv", None, Some(CSV)).await;
         Self::send(
             &a,
             Method::PUT,

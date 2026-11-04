@@ -8,15 +8,13 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
-use financer_api::{Api, AppState, BankConnection, BankProvider, OpenSetup, TokenHash};
+use financer_api::{Api, AppState, BankConnection, BankProvider, TokenHash};
 use financer_openbanking::testing::FakeHttp;
-use financer_openbanking::{
-    Finapi, FinapiConfig, FinapiEnvironment, GoCardless, GoCardlessConfig, LinkProvider,
-};
+use financer_openbanking::{Finapi, FinapiConfig, FinapiEnvironment, GoCardless, GoCardlessConfig};
 use financer_receipt_sources::SecretBox;
 use financer_store::Store;
 use http_body_util::BodyExt;
-use serde_json::Value;
+use serde_json::{json, Value};
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
@@ -92,25 +90,15 @@ impl Fixture {
             state = state.with_secret_box(SecretBox::new(SERVER_SECRET).unwrap());
         }
         if configured {
-            let gocardless: Arc<dyn LinkProvider> = Arc::new(GoCardless::new(
-                GoCardlessConfig::new("secret-id".into(), GC_KEY.into()),
-                fake.clone(),
-            ));
-            let finapi: Arc<dyn LinkProvider> = Arc::new(Finapi::new(
-                FinapiConfig::new("cid".into(), "csecret".into(), FinapiEnvironment::Sandbox),
-                fake.clone(),
-            ));
             state = state
-                .with_gocardless(OpenSetup {
-                    provider: gocardless,
-                    language: "de".into(),
-                    redirect_uri: None,
-                })
-                .with_finapi(OpenSetup {
-                    provider: finapi,
-                    language: "de".into(),
-                    redirect_uri: None,
-                });
+                .with_provider(Arc::new(GoCardless::new(
+                    GoCardlessConfig::new("secret-id".into(), GC_KEY.into()),
+                    fake.clone(),
+                )))
+                .with_provider(Arc::new(Finapi::new(
+                    FinapiConfig::new("cid".into(), "csecret".into(), FinapiEnvironment::Sandbox),
+                    fake.clone(),
+                )));
         }
         Fixture {
             app: Api::router(state.clone(), TokenHash::new(TOKEN)),
@@ -121,12 +109,22 @@ impl Fixture {
     }
 
     async fn json(&self, method: Method, uri: &str) -> (StatusCode, Value) {
-        let req = Request::builder()
+        self.send(method, uri, None).await
+    }
+
+    async fn send(&self, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
+        let mut req = Request::builder()
             .method(method)
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-            .body(Body::empty())
-            .unwrap();
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+        let body = match body {
+            Some(b) => {
+                req = req.header(header::CONTENT_TYPE, "application/json");
+                Body::from(b.to_string())
+            }
+            None => Body::empty(),
+        };
+        let req = req.body(body).unwrap();
         let res = self.app.clone().oneshot(req).await.unwrap();
         let status = res.status();
         let bytes = res.into_body().collect().await.unwrap().to_bytes();
@@ -161,8 +159,12 @@ impl Fixture {
     }
 
     async fn sync(&self, name: &str) -> (StatusCode, Value) {
-        self.json(Method::POST, &format!("/v1/bank/connections/{name}/sync"))
-            .await
+        self.send(
+            Method::POST,
+            "/v1/bank/sync",
+            Some(json!({ "connection": name })),
+        )
+        .await
     }
 
     async fn transactions(&self) -> Vec<Value> {
@@ -215,7 +217,7 @@ async fn linking_gocardless_shows_the_page_then_imports_and_keeps_the_credential
     // what is stored is sealed, and nothing secret is in any answer
     let stored = f
         .store
-        .get_setting("bankconn.giro.open_access")
+        .get_setting("bankconn.giro.gocardless_access")
         .await
         .unwrap()
         .unwrap();
@@ -392,7 +394,7 @@ async fn finapi_links_on_its_web_form_and_imports() {
     // the generated finAPI password never reaches an answer or the settings in the clear
     let stored = f
         .store
-        .get_setting("bankconn.fin.open_access")
+        .get_setting("bankconn.fin.finapi_access")
         .await
         .unwrap()
         .unwrap();

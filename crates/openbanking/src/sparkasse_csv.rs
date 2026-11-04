@@ -4,8 +4,12 @@
 //! amounts (`-23,47`), and is UTF-8 or ISO-8859-1 depending on how it was saved. Columns
 //! are looked up by header name, not position, so extra or reordered columns are fine.
 
+use async_trait::async_trait;
 use financer_core::{Money, Transaction};
 use time::{Date, Month};
+
+use crate::types::{Parsed, ProviderKind, SkippedRow};
+use crate::{OpenError, Provider};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ImportError {
@@ -15,17 +19,28 @@ pub enum ImportError {
     Csv(#[from] csv::Error),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SkippedRow {
-    /// 1-based line number in the file (the header is line 1).
-    pub line: u64,
-    pub reason: String,
-}
-
 #[derive(Debug, Default)]
 pub struct ImportResult {
     pub transactions: Vec<Transaction>,
     pub skipped: Vec<SkippedRow>,
+}
+
+/// The CSV export of your online banking behind the unified [`Provider`] trait. Needs no setup.
+pub struct CsvProvider;
+
+#[async_trait]
+impl Provider for CsvProvider {
+    fn kind(&self) -> ProviderKind {
+        ProviderKind::Csv
+    }
+
+    async fn import(&self, bytes: &[u8]) -> Result<Parsed, OpenError> {
+        let parsed = SparkasseCsv::parse(bytes).map_err(|e| OpenError::Rejected(e.to_string()))?;
+        Ok(Parsed {
+            transactions: parsed.transactions,
+            skipped: parsed.skipped,
+        })
+    }
 }
 
 /// Parser for the Sparkasse CSV export.
@@ -199,5 +214,17 @@ mod tests {
         );
         assert_eq!(SparkasseCsv::parse_date("31.02.2026"), None);
         assert_eq!(SparkasseCsv::parse_date("1.2"), None);
+    }
+
+    #[tokio::test]
+    async fn the_provider_reads_a_file_and_refuses_anything_else() {
+        let p = CsvProvider;
+        assert_eq!(p.kind(), ProviderKind::Csv);
+        let parsed = p.import(SAMPLE.as_bytes()).await.unwrap();
+        assert_eq!((parsed.transactions.len(), parsed.skipped.len()), (2, 1));
+        let e = p.import(b"not;a;sparkasse\nexport").await.unwrap_err();
+        assert!(matches!(e, OpenError::Rejected(_)), "{e}");
+        // a file provider has nothing to sign in to
+        assert!(p.begin(&Default::default()).await.is_err());
     }
 }

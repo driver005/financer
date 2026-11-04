@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { Api, type BankConnection } from "../src/api/client";
+import { Api, type BankConnection, type Sync } from "../src/api/client";
 import { RemoteTransport } from "../src/api/transport";
 import {
   anyBusy,
+  applySync,
   approvalLeftText,
   canSync,
   connectionKey,
   connectionSubtitle,
   formatStamp,
   isBusy,
+  isRunning,
   isSafeLinkUrl,
   lastResultText,
   linkedAccountsText,
@@ -20,10 +22,13 @@ import {
   stateLabel,
   stateTone,
   syncButtonLabel,
+  syncResultText,
+  waitForSync,
 } from "../src/bankConnections";
 
 function conn(over: Partial<BankConnection> = {}): BankConnection {
   return {
+    id: "girokonto",
     name: "Girokonto",
     kind: "fints",
     bank_code: "37050198",
@@ -130,26 +135,105 @@ describe("texts", () => {
 });
 
 describe("API calls", () => {
-  it("lists, starts (with or without a PIN) and cancels", async () => {
+  it("speaks one protocol for every provider", async () => {
     const calls: { url: string; method?: string; body?: unknown; headers?: unknown }[] = [];
     const impl = (async (url: string, init: RequestInit = {}) => {
       calls.push({ url, method: init.method, body: init.body, headers: init.headers });
       return { status: 200, ok: true, text: async () => JSON.stringify(conn()) } as Response;
     }) as unknown as typeof fetch;
     const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
+    await api.providers();
     await api.bankConnections();
-    await api.syncConnection("Giro Konto", "1234");
-    await api.syncConnection("Giro Konto");
-    await api.cancelConnection("Giro Konto");
+    await api.startSync({ connection: "Giro Konto", pin: "1234" });
+    await api.startSync({ connection: "Plaid Giro" });
+    await api.startSync({ kind: "fints", login: { blz: "37050198", user_id: "u", iban: "DE89" }, pin: "1234" });
+    await api.syncStatus("giro konto");
+    await api.cancelSync("giro konto");
     await api.disconnectConnection("Plaid Giro");
-    assert.equal(calls[0].url, "https://x.test/v1/bank/connections");
-    assert.equal(calls[1].url, "https://x.test/v1/bank/connections/Giro%20Konto/sync");
-    assert.equal(calls[1].method, "POST");
-    assert.equal(calls[1].body, '{"pin":"1234"}');
-    assert.equal(calls[2].body, undefined); // the server has the PIN: nothing is sent
-    assert.equal(calls[3].url, "https://x.test/v1/bank/connections/Giro%20Konto/cancel");
-    assert.equal(calls[4].url, "https://x.test/v1/bank/connections/Plaid%20Giro/disconnect");
-    assert.equal(calls[4].method, "POST");
+    await api.importFile("csv", new ArrayBuffer(2));
+    assert.equal(calls[0].url, "https://x.test/v1/bank/providers");
+    assert.equal(calls[1].url, "https://x.test/v1/bank/connections");
+    // every provider starts with the same call; only the body differs
+    for (const i of [2, 3, 4]) {
+      assert.equal(calls[i].url, "https://x.test/v1/bank/sync");
+      assert.equal(calls[i].method, "POST");
+    }
+    assert.equal(calls[2].body, '{"connection":"Giro Konto","pin":"1234"}');
+    assert.equal(calls[3].body, '{"connection":"Plaid Giro"}'); // the server has the PIN, or there is none
+    assert.equal(calls[4].body, '{"kind":"fints","login":{"blz":"37050198","user_id":"u","iban":"DE89"},"pin":"1234"}');
+    assert.equal(calls[5].url, "https://x.test/v1/bank/sync/giro%20konto");
+    assert.equal(calls[6].url, "https://x.test/v1/bank/sync/giro%20konto/cancel");
+    assert.equal(calls[6].method, "POST");
+    assert.equal(calls[7].url, "https://x.test/v1/bank/connections/Plaid%20Giro/disconnect");
+    assert.equal(calls[8].url, "https://x.test/v1/bank/import/csv");
+    assert.deepEqual(calls[8].headers, { "Content-Type": "text/csv", Authorization: "Bearer t" });
+  });
+});
+
+function sync(over: Partial<Sync> = {}): Sync {
+  return { id: "giro", kind: "fints", connection: "Giro", state: "idle", message: null, link_url: null, expires_at: null, result: null, ...over };
+}
+
+describe("one sync protocol", () => {
+  it("knows what is still running", () => {
+    for (const state of ["syncing", "needs_approval", "needs_link"] as const) assert.equal(isRunning(sync({ state })), true, state);
+    for (const state of ["idle", "error"] as const) assert.equal(isRunning(sync({ state })), false, state);
+  });
+
+  it("shows a sync on its connection", () => {
+    const c = conn({ state: "idle" });
+    const shown = applySync(c, sync({ state: "needs_link", message: "Sign in", link_url: "https://ob.gocardless.com/x", expires_at: 1700 }));
+    assert.equal(shown.state, "needs_link");
+    assert.equal(shown.link_url, "https://ob.gocardless.com/x");
+    assert.equal(shown.approval_expires_at, 1700);
+    assert.equal(shown.name, c.name);
+  });
+
+  it("says in a sentence how a sync ended", () => {
+    assert.equal(syncResultText(sync({ state: "needs_approval" })), null);
+    assert.equal(syncResultText(sync()), null, "nothing known");
+    const ok = { ok: true, at: 1, imported: 2, duplicates: 1, skipped: 0, message: null, balance_cents: 123_456, balance_date: "2026-03-09" };
+    assert.equal(syncResultText(sync({ result: ok })), "Imported 2 new transactions, 1 were already known. Balance 1.234,56 € (09.03.2026).");
+    assert.equal(syncResultText(sync({ result: { ...ok, balance_cents: null, balance_date: null } })), "Imported 2 new transactions, 1 were already known.");
+    assert.equal(syncResultText(sync({ state: "error", message: "the bank refused the login" })), "the bank refused the login");
+  });
+
+  it("asks again until the sync is over", async () => {
+    const answers = [sync({ state: "needs_approval" }), sync({ state: "syncing" }), sync({ result: { ok: true, at: 1, imported: 1, duplicates: 0, skipped: 0, message: null } })];
+    const asked: string[] = [];
+    const slept: number[] = [];
+    const seen: string[] = [];
+    const last = await waitForSync(
+      sync({ state: "needs_approval" }),
+      async (id) => {
+        asked.push(id);
+        return answers.shift() as Sync;
+      },
+      async (ms) => {
+        slept.push(ms);
+      },
+      { intervalMs: 5, onUpdate: (s) => seen.push(s.state) },
+    );
+    assert.equal(last.state, "idle");
+    assert.deepEqual(asked, ["giro", "giro", "giro"].slice(0, 3));
+    assert.deepEqual(slept, [5, 5, 5]);
+    assert.deepEqual(seen, ["needs_approval", "needs_approval", "syncing", "idle"]);
+  });
+
+  it("stops when the person gives up or the time is up", async () => {
+    let calls = 0;
+    const never = async () => {
+      calls++;
+      return sync({ state: "needs_approval" });
+    };
+    let stop = false;
+    const gaveUp = await waitForSync(sync({ state: "needs_approval" }), never, async () => { stop = true; }, { cancelled: () => stop });
+    assert.equal(gaveUp.state, "needs_approval");
+    assert.equal(calls, 0, "no more asking after cancelling");
+    let t = 0;
+    const timedOut = await waitForSync(sync({ state: "needs_approval" }), never, async () => { t += 400; }, { giveUpMs: 1000, now: () => t });
+    assert.equal(isRunning(timedOut), true);
+    assert.equal(calls, 3);
   });
 });
 

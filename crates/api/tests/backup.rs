@@ -54,7 +54,7 @@ impl BackupFixture {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri("/v1/transactions/import")
+                    .uri("/v1/bank/import/csv")
                     .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
                     .header(header::CONTENT_TYPE, "text/csv")
                     .body(Body::from(csv))

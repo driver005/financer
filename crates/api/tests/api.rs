@@ -101,7 +101,7 @@ async fn import_categorizes_and_dedupes() {
     let (s, b) = ApiFixture::call(
         &app,
         Method::POST,
-        "/v1/transactions/import",
+        "/v1/bank/import/csv",
         Body::from(ApiFixture::csv()),
         Some("text/csv"),
         true,
@@ -115,7 +115,7 @@ async fn import_categorizes_and_dedupes() {
     let (_, b) = ApiFixture::call(
         &app,
         Method::POST,
-        "/v1/transactions/import",
+        "/v1/bank/import/csv",
         Body::from(ApiFixture::csv()),
         Some("text/csv"),
         true,
@@ -144,7 +144,7 @@ async fn import_rejects_other_files() {
     let (s, b) = ApiFixture::call(
         &app,
         Method::POST,
-        "/v1/transactions/import",
+        "/v1/bank/import/csv",
         Body::from("a;b\n1;2\n"),
         Some("text/csv"),
         true,
@@ -160,7 +160,7 @@ async fn recurring_and_disposable_income() {
     ApiFixture::call(
         &app,
         Method::POST,
-        "/v1/transactions/import",
+        "/v1/bank/import/csv",
         Body::from(ApiFixture::csv()),
         Some("text/csv"),
         true,
@@ -184,7 +184,7 @@ async fn envelopes_and_status() {
     ApiFixture::call(
         &app,
         Method::POST,
-        "/v1/transactions/import",
+        "/v1/bank/import/csv",
         Body::from(ApiFixture::csv()),
         Some("text/csv"),
         true,
@@ -265,7 +265,7 @@ fn openapi_document_lists_every_route() {
         "/v1/recipes/ideas",
         "/v1/settings",
         "/v1/transactions",
-        "/v1/transactions/import",
+        "/v1/bank/import/csv",
         "/v1/recurring",
         "/v1/budget/disposable",
         "/v1/budget/envelopes",

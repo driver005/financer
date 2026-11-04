@@ -4,7 +4,7 @@ import { Linking } from "react-native";
 
 import type { BankConnection } from "@/api/client";
 import { useApi } from "@/api/config";
-import { POLL_MS, anyBusy, connectionKey, isSafeLinkUrl } from "@/bankConnections";
+import { POLL_MS, anyBusy, applySync, connectionKey, isSafeLinkUrl } from "@/bankConnections";
 
 /**
  * The bank connections of the server, kept fresh while one of them is working, with the actions the
@@ -70,7 +70,7 @@ export function useBankSources(onSettled?: () => void) {
     [setError],
   );
 
-  /** Start a sync. FinTS needs a PIN and an approval, so it goes on the Sync screen instead of here. */
+  /** Start a sync of a connection: the same call for every provider. */
   const start = useCallback(
     async (conn: BankConnection) => {
       if (!api) return;
@@ -78,9 +78,10 @@ export function useBankSources(onSettled?: () => void) {
       setError(key, null);
       setStarting(key);
       try {
-        const updated = await api.syncConnection(conn.name);
+        const sync = await api.startSync({ connection: conn.name });
+        const updated = applySync(conn, sync);
         setList((cur) => (cur ?? []).map((c) => (connectionKey(c) === key ? updated : c)));
-        if (updated.state === "needs_link") await openLink(updated);
+        if (sync.state === "needs_link") await openLink(updated);
       } catch (e) {
         setError(key, e instanceof Error ? e.message : "Could not start the sync");
         await load();
@@ -96,7 +97,7 @@ export function useBankSources(onSettled?: () => void) {
       if (!api) return;
       const key = connectionKey(conn);
       try {
-        const updated = await api.cancelConnection(conn.name);
+        const updated = applySync(conn, await api.cancelSync(conn.id));
         setList((cur) => (cur ?? []).map((c) => (connectionKey(c) === key ? updated : c)));
       } catch (e) {
         setError(key, e instanceof Error ? e.message : "Could not cancel");

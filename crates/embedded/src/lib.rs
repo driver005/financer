@@ -11,7 +11,7 @@ use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode, Uri};
 use axum::Router;
 use financer_api::{Api, AppState, LlmKeys, PriceSourceConfig, TokenHash};
-use financer_fints::FintsBank;
+use financer_openbanking::fints::FintsBank;
 use financer_prices::{PoliteHttp, ReqwestHttp};
 use financer_receipt_sources::{
     KauflandCardConfig, LidlPlusConfig, ReceiptSourcesConfig, ReceiptSyncer,
@@ -400,7 +400,7 @@ mod tests {
         let import = b
             .handle_request(HttpRequest {
                 method: "post".into(), // case-insensitive
-                path_and_query: "/v1/transactions/import".into(),
+                path_and_query: "/v1/bank/import/csv".into(),
                 content_type: Some("text/csv".into()),
                 body: CSV.as_bytes().to_vec(),
             })
@@ -420,7 +420,7 @@ mod tests {
         first
             .handle_request(HttpRequest {
                 method: "POST".into(),
-                path_and_query: "/v1/transactions/import".into(),
+                path_and_query: "/v1/bank/import/csv".into(),
                 content_type: Some("text/csv".into()),
                 body: CSV.as_bytes().to_vec(),
             })

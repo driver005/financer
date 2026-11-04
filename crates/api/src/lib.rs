@@ -2,10 +2,7 @@
 
 mod auth;
 mod backup;
-mod bank;
 mod bank_connections;
-mod bank_open;
-mod bank_plaid;
 mod budget_period;
 mod calendar;
 mod categorization;
@@ -29,8 +26,9 @@ use axum::middleware;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
 use financer_core::{StoreAlias, StoreMatcher};
-use financer_fints::{BankClient, UnconfiguredBank};
 use financer_llm::{LlmError, LlmProvider, LlmSettings, ProviderFactory};
+use financer_openbanking::fints::BankClient;
+use financer_openbanking::{FintsProvider, Provider, Providers};
 use financer_prices::{Http, HttpResponse, PriceError, SourceConfig};
 use financer_store::Store;
 use tower_http::trace::TraceLayer;
@@ -38,10 +36,11 @@ use utoipa::OpenApi;
 
 pub use auth::TokenHash;
 pub use bank_connections::{BankConnection, BankProvider, ConnectionState};
-pub use bank_open::OpenSetup;
-pub use bank_plaid::PlaidSetup;
-pub use financer_fints::{BankClient as BankClientTrait, BankData, BankError, MockBank};
 pub use financer_llm::MockProvider;
+pub use financer_openbanking::fints::{
+    BankClient as BankClientTrait, BankData, BankError, MockBank,
+};
+pub use financer_openbanking::{ProviderKind, Providers as BankProviders};
 pub use financer_prices::{FakeHttp, SourceConfig as PriceSourceConfig};
 
 /// Largest request body accepted (CSV exports of many years stay well below this).
@@ -75,17 +74,14 @@ impl Http for NoNetwork {
 #[derive(Clone)]
 pub struct AppState {
     pub store: Store,
-    pub(crate) bank: Arc<dyn BankClient>,
-    pub(crate) bank_configured: bool,
-    pub(crate) pending_sync: Arc<tokio::sync::Mutex<Option<bank::PendingEntry>>>,
+    /// Every way transactions come in that this server has set up (CSV import always).
+    pub(crate) providers: Providers,
+    /// The FinTS provider, kept to set how long a wrong PIN pauses syncing.
+    pub(crate) fints: Option<Arc<FintsProvider>>,
+    pub(crate) pin_pause: Option<std::time::Duration>,
     pub(crate) sync_ttl: std::time::Duration,
-    pub(crate) pin_guard: Arc<tokio::sync::Mutex<bank::PinGuard>>,
-    pub(crate) pin_pause: std::time::Duration,
     pub(crate) bank_connections: Arc<bank_connections::Connections>,
     pub(crate) pin_lookup: PinLookup,
-    pub(crate) plaid: Option<Arc<PlaidSetup>>,
-    pub(crate) gocardless: Option<Arc<OpenSetup>>,
-    pub(crate) finapi: Option<Arc<OpenSetup>>,
     pub(crate) secret_box: Option<Arc<financer_receipt_sources::SecretBox>>,
     pub(crate) connection_poll: std::time::Duration,
     pub(crate) http: Arc<dyn Http>,
@@ -102,17 +98,12 @@ impl AppState {
     pub fn new(store: Store) -> Self {
         Self {
             store,
-            bank: Arc::new(UnconfiguredBank),
-            bank_configured: false,
-            pending_sync: Arc::new(tokio::sync::Mutex::new(None)),
-            sync_ttl: bank::DEFAULT_SYNC_TTL,
-            pin_guard: Arc::new(tokio::sync::Mutex::new(bank::PinGuard::default())),
-            pin_pause: bank::DEFAULT_PIN_PAUSE,
+            providers: Providers::new(),
+            fints: None,
+            pin_pause: None,
+            sync_ttl: bank_connections::DEFAULT_SYNC_TTL,
             bank_connections: Arc::new(bank_connections::Connections::new(Vec::new())),
             pin_lookup: Arc::new(|var| std::env::var(var).ok().filter(|v| !v.is_empty())),
-            plaid: None,
-            gocardless: None,
-            finapi: None,
             secret_box: None,
             connection_poll: bank_connections::DEFAULT_POLL,
             http: Arc::new(NoNetwork),
@@ -156,44 +147,38 @@ impl AppState {
         self
     }
 
-    /// The bank client used for live sync (the server passes the real FinTS client).
+    /// The bank client used for FinTS (the server passes the real one).
     pub fn with_bank(mut self, bank: Arc<dyn BankClient>) -> Self {
-        self.bank = bank;
-        self.bank_configured = true;
+        let fints = Arc::new(FintsProvider::new(bank));
+        if let Some(pause) = self.pin_pause {
+            fints.set_pin_pause(pause);
+        }
+        self.providers = self.providers.with(fints.clone());
+        self.fints = Some(fints);
         self
     }
 
     /// How long syncing pauses after repeated wrong PINs (tests shorten it).
     pub fn with_pin_pause(mut self, pause: std::time::Duration) -> Self {
-        self.pin_pause = pause;
+        self.pin_pause = Some(pause);
+        if let Some(fints) = &self.fints {
+            fints.set_pin_pause(pause);
+        }
+        self
+    }
+
+    /// A provider of transactions (Plaid, GoCardless, finAPI, or another FinTS client), set up by
+    /// the server from its configuration. Plaid, GoCardless and finAPI need
+    /// [`AppState::with_secret_box`] as well, because their access is kept sealed.
+    pub fn with_provider(mut self, provider: Arc<dyn Provider>) -> Self {
+        self.providers = self.providers.with(provider);
         self
     }
 
     /// The bank connections of the server configuration (`[[bank.accounts]]`). They sync with the
-    /// client set by [`AppState::with_bank`].
+    /// providers set up here.
     pub fn with_bank_connections(mut self, connections: Vec<BankConnection>) -> Self {
         self.bank_connections = Arc::new(bank_connections::Connections::new(connections));
-        self
-    }
-
-    /// Plaid, for the connections with `kind = "plaid"`. Needs [`AppState::with_secret_box`] as
-    /// well, because the access token is kept sealed.
-    pub fn with_plaid(mut self, plaid: PlaidSetup) -> Self {
-        self.plaid = Some(Arc::new(plaid));
-        self
-    }
-
-    /// GoCardless Bank Account Data, for the connections with `kind = "gocardless"`. Needs
-    /// [`AppState::with_secret_box`] as well.
-    pub fn with_gocardless(mut self, setup: OpenSetup) -> Self {
-        self.gocardless = Some(Arc::new(setup));
-        self
-    }
-
-    /// finAPI, for the connections with `kind = "finapi"`. Needs [`AppState::with_secret_box`] as
-    /// well.
-    pub fn with_finapi(mut self, setup: OpenSetup) -> Self {
-        self.finapi = Some(Arc::new(setup));
         self
     }
 
@@ -277,7 +262,6 @@ impl AppState {
     info(title = "Financer API", version = "0.1.0"),
     paths(
         routes::health,
-        routes::import_transactions,
         routes::list_transactions,
         routes::recurring,
         routes::disposable,
@@ -291,13 +275,14 @@ impl AppState {
         export::import_data,
         backup::create_backup,
         backup::restore_backup,
-        bank::start_sync,
-        bank::confirm_sync,
-        bank::bank_status,
+        bank_connections::list_providers,
         bank_connections::list_connections,
-        bank_connections::sync_connection,
-        bank_connections::cancel_connection,
+        bank_connections::start_sync,
+        bank_connections::get_sync,
+        bank_connections::cancel_sync,
         bank_connections::disconnect_connection,
+        bank_connections::import_file,
+        bank_connections::bank_status,
         stores::store_spending,
         stores::store_transactions,
         grocery::refresh_prices,
@@ -390,15 +375,15 @@ impl AppState {
         backup::BackupCreateRequest,
         backup::BackupDto,
         backup::BackupRestoreRequest,
-        dto::SyncRequest,
-        dto::SyncStarted,
-        dto::SyncDone,
         dto::BankStatus,
+        bank_connections::ProviderDto,
         bank_connections::BankConnectionDto,
         bank_connections::SyncOutcomeDto,
-        bank_connections::SyncNowRequest,
+        bank_connections::SyncRequest,
+        bank_connections::LoginDto,
+        bank_connections::SyncDto,
         bank_connections::ConnectionState,
-        bank_plaid::LinkedAccountDto,
+        bank_connections::LinkedAccountDto,
         stores::StoresPeriod,
         stores::StoreSpendDto,
         stores::StoresDto,
@@ -528,7 +513,6 @@ impl Api {
     pub fn router_with(state: AppState, token: TokenHash, apps: Vec<(&str, Router)>) -> Router {
         let mut v1 = Router::new()
             .route("/transactions", get(routes::list_transactions))
-            .route("/transactions/import", post(routes::import_transactions))
             .route("/recurring", get(routes::recurring))
             .route("/budget/disposable", get(routes::disposable))
             .route(
@@ -543,22 +527,20 @@ impl Api {
             .route("/import", post(export::import_data))
             .route("/backup/create", post(backup::create_backup))
             .route("/backup/restore", post(backup::restore_backup))
-            .route("/bank/sync", post(bank::start_sync))
-            .route("/bank/sync/{id}/confirm", post(bank::confirm_sync))
-            .route("/bank/status", get(bank::bank_status))
+            .route("/bank/providers", get(bank_connections::list_providers))
             .route("/bank/connections", get(bank_connections::list_connections))
-            .route(
-                "/bank/connections/{name}/sync",
-                post(bank_connections::sync_connection),
-            )
-            .route(
-                "/bank/connections/{name}/cancel",
-                post(bank_connections::cancel_connection),
-            )
             .route(
                 "/bank/connections/{name}/disconnect",
                 post(bank_connections::disconnect_connection),
             )
+            .route("/bank/sync", post(bank_connections::start_sync))
+            .route("/bank/sync/{id}", get(bank_connections::get_sync))
+            .route(
+                "/bank/sync/{id}/cancel",
+                post(bank_connections::cancel_sync),
+            )
+            .route("/bank/import/{kind}", post(bank_connections::import_file))
+            .route("/bank/status", get(bank_connections::bank_status))
             .route("/spending/stores", get(stores::store_spending))
             .route(
                 "/spending/stores/{chain}/transactions",
