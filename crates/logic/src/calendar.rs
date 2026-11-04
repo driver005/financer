@@ -489,7 +489,7 @@ pub fn expand(
 }
 
 impl Occurrence {
-    fn when(&self) -> When {
+    pub(crate) fn when(&self) -> When {
         When {
             all_day: self.all_day,
             start_date: self.start_date.clone(),

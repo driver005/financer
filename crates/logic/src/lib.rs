@@ -10,6 +10,7 @@ pub mod backup_plan;
 pub mod bank_connections;
 pub mod calendar;
 pub mod calendar_feeds;
+pub mod calendar_view;
 pub mod forecast;
 pub mod format;
 pub mod game;
@@ -799,6 +800,44 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
         "calendar_feeds.week_starts" => json(calendar_feeds::week_starts(
             &arg::<String>(&args, "from")?,
             &arg::<String>(&args, "to")?,
+        )?),
+        "calendar_view.range_for" => json(calendar_view::range_for(
+            &arg::<String>(&args, "view")?,
+            &arg::<String>(&args, "anchor")?,
+            opt(&args, "schedule_days")?.unwrap_or(calendar_view::SCHEDULE_DAYS),
+        )?),
+        "calendar_view.step" => json(calendar_view::step(
+            &arg::<String>(&args, "view")?,
+            &arg::<String>(&args, "anchor")?,
+            arg(&args, "direction")?,
+        )?),
+        "calendar_view.title_for" => json(calendar_view::title_for(
+            &arg::<String>(&args, "view")?,
+            &arg::<String>(&args, "anchor")?,
+        )?),
+        "calendar_view.month_cells" => json(calendar_view::month_cells(
+            &arg::<String>(&args, "anchor")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<String>(&args, "selected")?,
+            &arg::<Vec<calendar::Occurrence>>(&args, "occurrences")?,
+        )?),
+        "calendar_view.mini_cells" => json(calendar_view::mini_cells(
+            &arg::<String>(&args, "anchor")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<String>(&args, "selected")?,
+            &arg::<Vec<calendar::Occurrence>>(&args, "occurrences")?,
+        )?),
+        "calendar_view.day_columns" => json(calendar_view::day_columns(
+            &arg::<Vec<String>>(&args, "dates")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<String>(&args, "selected")?,
+            &arg::<Vec<calendar::Occurrence>>(&args, "occurrences")?,
+        )?),
+        "calendar_view.agenda_days" => json(calendar_view::agenda_days(
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<Vec<calendar::Occurrence>>(&args, "occurrences")?,
         )?),
         other => return Err(format!("unknown function {other}")),
     };
