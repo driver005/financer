@@ -1098,7 +1098,7 @@ mod tests {
             "2027-11-02",
             "a date that passed means next year"
         );
-        assert_eq!(q("Just a note").unwrap().all_day, true);
+        assert!(q("Just a note").unwrap().all_day);
         assert_eq!(q("   "), None);
         assert_eq!(q("tomorrow"), None, "nothing is left for a title");
     }
