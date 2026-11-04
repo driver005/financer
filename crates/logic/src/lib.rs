@@ -6,13 +6,19 @@
 //! ([`call`]): the arguments are a JSON object, the answer is JSON. The tests here are the old
 //! TypeScript tests, moved with the code.
 
+pub mod backup_plan;
 pub mod calendar;
 pub mod forecast;
 pub mod format;
 pub mod game;
+pub mod grocery_view;
+pub mod mealplan;
 pub mod notify_plan;
 pub mod period;
+pub mod rules;
 pub mod safe_to_spend;
+pub mod scan;
+pub mod settings_plan;
 pub mod stores;
 pub mod watchdog;
 
@@ -296,6 +302,201 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg::<String>(&args, "as_of")?,
             arg(&args, "within_days")?,
         )?),
+        "rules.draft_from_rule" => json(rules::draft_from_rule(&arg(&args, "r")?)),
+        "rules.rule_from_draft" => json(rules::rule_from_draft(&arg(&args, "d")?)),
+        "rules.describe_rule" => json(rules::describe_rule(&arg(&args, "r")?)),
+        "rules.move_id" => json(rules::move_id(
+            &arg::<Vec<i64>>(&args, "ids")?,
+            arg(&args, "index")?,
+            arg(&args, "delta")?,
+        )),
+        "rules.split_remainder" => json(rules::split_remainder(
+            arg(&args, "total_cents")?,
+            &arg::<Vec<rules::SplitDraftPart>>(&args, "parts")?,
+        )),
+        "rules.initial_split" => json(rules::initial_split(
+            arg(&args, "total_cents")?,
+            opt::<String>(&args, "category")?.as_deref(),
+        )),
+        "rules.split_from_draft" => json(rules::split_from_draft(
+            arg(&args, "total_cents")?,
+            &arg::<Vec<rules::SplitDraftPart>>(&args, "parts")?,
+        )),
+        "rules.draft_from_split" => json(rules::draft_from_split(
+            &arg::<Vec<rules::SplitPartBody>>(&args, "parts")?,
+        )),
+        "settings_plan.server_host" => {
+            json(settings_plan::server_host(&arg::<String>(&args, "url")?))
+        }
+        "settings_plan.connection_state" => {
+            json(settings_plan::connection_state(&arg(&args, "i")?))
+        }
+        "settings_plan.habit_label" => {
+            json(settings_plan::habit_label(&arg::<String>(&args, "mode")?))
+        }
+        "settings_plan.provider_label" => json(settings_plan::provider_label(&arg::<String>(
+            &args, "provider",
+        )?)),
+        "settings_plan.ai_summary" => json(settings_plan::ai_summary(
+            &arg::<String>(&args, "provider")?,
+            arg(&args, "key_configured")?,
+            &arg::<String>(&args, "model")?,
+        )),
+        "settings_plan.price_sources_label" => {
+            json(settings_plan::price_sources_label(arg(&args, "n")?))
+        }
+        "settings_plan.on_count_label" => json(settings_plan::on_count_label(
+            arg(&args, "on")?,
+            arg(&args, "total")?,
+        )),
+        "settings_plan.payday_label" => json(settings_plan::payday_label(arg(&args, "day")?)),
+        "settings_plan.blz_problem" => {
+            json(settings_plan::blz_problem(&arg::<String>(&args, "blz")?))
+        }
+        "settings_plan.iban_checksum_ok" => json(settings_plan::iban_checksum_ok(&arg::<String>(
+            &args, "iban",
+        )?)),
+        "settings_plan.iban_problem" => {
+            json(settings_plan::iban_problem(&arg::<String>(&args, "iban")?))
+        }
+        "backup_plan.parse_backup_settings" => json(backup_plan::parse_backup_settings(
+            opt::<String>(&args, "raw")?.as_deref(),
+        )),
+        "backup_plan.auto_backup_name" => json(backup_plan::auto_backup_name(arg(&args, "ms")?)?),
+        "backup_plan.manual_backup_name" => {
+            json(backup_plan::manual_backup_name(arg(&args, "ms")?)?)
+        }
+        "backup_plan.auto_backup_time" => json(backup_plan::auto_backup_time(&arg::<String>(
+            &args, "name",
+        )?)),
+        "backup_plan.newest_auto_backup" => {
+            json(backup_plan::newest_auto_backup(&arg::<Vec<String>>(
+                &args, "names",
+            )?))
+        }
+        "backup_plan.is_backup_due" => json(backup_plan::is_backup_due(
+            &arg::<String>(&args, "schedule")?,
+            opt(&args, "newest_ms")?,
+            arg(&args, "now_ms")?,
+        )),
+        "backup_plan.auto_backups_to_delete" => json(backup_plan::auto_backups_to_delete(
+            &arg::<Vec<String>>(&args, "names")?,
+            opt(&args, "keep")?.unwrap_or(backup_plan::KEEP_AUTO_BACKUPS),
+        )),
+        "backup_plan.passphrase_problem" => json(backup_plan::passphrase_problem(
+            &arg::<String>(&args, "passphrase")?,
+            opt::<String>(&args, "confirm")?.as_deref(),
+        )),
+        "grocery_view.hash_text" => json(grocery_view::hash_text(&arg::<String>(&args, "text")?)),
+        "grocery_view.meal_tone" => json(grocery_view::meal_tone(&arg::<String>(&args, "seed")?)),
+        "grocery_view.chain_tone" => {
+            json(grocery_view::chain_tone(&arg::<String>(&args, "chain")?))
+        }
+        "grocery_view.initials" => json(grocery_view::initials(&arg::<String>(&args, "name")?)),
+        "grocery_view.rank_prices" => json(grocery_view::rank_prices(&arg::<Vec<Value>>(
+            &args, "prices",
+        )?)),
+        "grocery_view.item_saving" => json(grocery_view::item_saving(&arg::<Vec<Value>>(
+            &args, "prices",
+        )?)),
+        "grocery_view.summarize_prices" => {
+            json(grocery_view::summarize_prices(&arg::<Vec<Vec<Value>>>(
+                &args, "groups",
+            )?))
+        }
+        "grocery_view.extra_text" => json(grocery_view::extra_text(arg(&args, "extra_cents")?)),
+        "grocery_view.cost_per_serving" => json(grocery_view::cost_per_serving(
+            arg(&args, "missing_cost_cents")?,
+            arg(&args, "servings")?,
+            arg(&args, "missing")?,
+        )),
+        "grocery_view.match_tone" => json(grocery_view::match_tone(arg(&args, "percent")?)),
+        "grocery_view.short_list" => json(grocery_view::short_list(
+            &arg::<Vec<String>>(&args, "names")?,
+            arg(&args, "max")?,
+        )),
+        "grocery_view.percent_done" => json(grocery_view::percent_done(
+            arg(&args, "done")?,
+            arg(&args, "total")?,
+        )),
+        "mealplan.chain_name" => json(mealplan::chain_name(&arg::<String>(&args, "chain")?)),
+        "mealplan.week_days" => json(mealplan::week_days(&arg::<String>(&args, "start")?)?),
+        "mealplan.shift_week" => json(mealplan::shift_week(
+            &arg::<String>(&args, "start")?,
+            arg(&args, "weeks")?,
+        )?),
+        "mealplan.weekday_name" => json(mealplan::weekday_name(&arg::<String>(&args, "iso")?)?),
+        "mealplan.short_date" => json(mealplan::short_date(&arg::<String>(&args, "iso")?)),
+        "mealplan.week_label" => json(mealplan::week_label(&arg::<String>(&args, "start")?)?),
+        "mealplan.week_relation" => json(mealplan::week_relation(
+            &arg::<String>(&args, "start")?,
+            &arg::<String>(&args, "today")?,
+        )?),
+        "mealplan.clamp_servings" => json(mealplan::clamp_servings(
+            opt(&args, "n")?.unwrap_or(f64::NAN),
+        )), // JSON has no NaN: it arrives as null
+        "mealplan.plan_from_days" => {
+            json(mealplan::plan_from_days(&arg::<Vec<Value>>(&args, "days")?))
+        }
+        "mealplan.entry_from_recipe" => json(mealplan::entry_from_recipe(
+            &arg(&args, "r")?,
+            opt(&args, "servings")?,
+        )),
+        "mealplan.entry_from_idea" => json(mealplan::entry_from_idea(
+            &arg(&args, "i")?,
+            opt(&args, "servings")?,
+        )),
+        "mealplan.set_day" => json(mealplan::set_day(
+            &arg(&args, "plan")?,
+            &arg::<String>(&args, "iso")?,
+            opt(&args, "entry")?,
+        )),
+        "mealplan.plan_to_input" => json(mealplan::plan_to_input(
+            &arg(&args, "plan")?,
+            &arg::<String>(&args, "start")?,
+        )?),
+        "mealplan.item_tick_id" => json(mealplan::item_tick_id(&arg::<String>(&args, "item")?)),
+        "mealplan.unmatched_tick_id" => {
+            json(mealplan::unmatched_tick_id(&arg::<String>(&args, "name")?))
+        }
+        "mealplan.tick_ids" => json(mealplan::tick_ids(&arg(&args, "list")?)),
+        "mealplan.toggle_tick" => json(mealplan::toggle_tick(
+            &arg::<Vec<String>>(&args, "ticks")?,
+            &arg::<String>(&args, "id")?,
+        )),
+        "mealplan.prune_ticks" => json(mealplan::prune_ticks(
+            &arg::<Vec<String>>(&args, "ticks")?,
+            &arg(&args, "list")?,
+        )),
+        "mealplan.tick_progress" => json(mealplan::tick_progress(
+            &arg(&args, "list")?,
+            &arg::<Vec<String>>(&args, "ticks")?,
+        )),
+        "mealplan.ticks_key" => json(mealplan::ticks_key(&arg::<String>(&args, "start")?)),
+        "mealplan.serialize_ticks" => json(mealplan::serialize_ticks(&arg::<Vec<String>>(
+            &args, "ticks",
+        )?)),
+        "mealplan.parse_ticks" => json(mealplan::parse_ticks(
+            opt::<String>(&args, "raw")?.as_deref(),
+        )),
+        "mealplan.budget_verdict" => json(mealplan::budget_verdict(&arg(&args, "b")?)),
+        "mealplan.plan_headline" => json(mealplan::plan_headline(&arg(&args, "plan")?)),
+        "mealplan.chain_total_text" => json(mealplan::chain_total_text(&arg(&args, "c")?)),
+        "mealplan.item_detail" => json(mealplan::item_detail(&arg(&args, "i")?)),
+        "mealplan.unmatched_text" => json(mealplan::unmatched_text(&arg(&args, "u")?)),
+        "scan.check_ean" => json(scan::check_ean(&arg::<String>(&args, "input")?)),
+        "scan.format_unit_price" => json(scan::format_unit_price(
+            arg(&args, "cents")?,
+            &arg::<String>(&args, "unit")?,
+        )),
+        "scan.chain_rows" => json(scan::chain_rows(&arg(&args, "r")?)),
+        "scan.headline" => json(scan::headline(&arg(&args, "r")?)),
+        "scan.product_title" => json(scan::product_title(&arg(&args, "r")?)),
+        "scan.observation_line" => json(scan::observation_line(&arg(&args, "o")?)),
+        "scan.plan_add_to_usual" => json(scan::plan_add_to_usual(
+            &arg(&args, "basket")?,
+            &arg::<String>(&args, "item")?,
+        )),
         other => return Err(format!("unknown function {other}")),
     };
     out

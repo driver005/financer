@@ -44,11 +44,17 @@ CI runs them in the `sdk-web` job, which has the bindings.
 | `calendar` (dates, series, day layout, quick-add sentences) | 468 | Rust, 8 tests; the TypeScript calendar tests (241 lines) run against it |
 | `stores` (Stores screen wording) | 110 | Rust, 6 tests |
 | `watchdog` (subscriptions and alerts wording, week grouping) | 180 | Rust, 7 tests |
+| `rules` (rule form, split sheet) | 148 | Rust, 4 tests |
+| `settingsPlan` (summaries, connection status, IBAN/BLZ hints) | 120 | Rust, 4 tests |
+| `backupPlan` (schedule, file names, retention, passphrase) | 105 | Rust, 5 tests |
+| `groceryView` (avatar tones, price ranking, summary) | 142 | Rust, 5 tests |
+| `mealplan` (weeks, plan entries, ticks, budget wording) | 280 | Rust, 6 tests |
+| `scan` (barcode check, result rows, headline) | 204 | Rust, 4 tests; the camera's repeat-read gate stays beside the camera |
 | `notifyPlan`: evening message, payday reminder, price drops | about 200 of 279 | Rust; the calendar event reminders stay beside `calendar` until that is moved |
 
 ## What is not moved yet
 
-The rest of `apps/mobile/src/*.ts` (about 4,500 lines: `onboarding`, `calendarView`/`calendarFeeds`/`calendarForm`, `mealplan`,
+The rest of `apps/mobile/src/*.ts` (about 2,300 lines: `onboarding`, `calendarView`/`calendarFeeds`/`calendarForm`, `mealplan`,
 `receiptSources`, `serverConfig`, `rules`, `scan`, `groceryView`, `stores`, `watchdog`, `todayCharts`, …), the shopping
 module's `logic/` (`weights`, `schemaEdit`, `view`, `progress`, …) and the mail module's `logic/`. They follow the
 same recipe: write the function in `crates/logic`, add its name to `financer_logic::call`, replace the body in
