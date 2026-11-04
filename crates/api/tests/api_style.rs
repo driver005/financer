@@ -66,18 +66,28 @@ fn query_parameters_and_fields_are_snake_case_and_one_name_means_one_thing() {
         for p in op["parameters"].as_array().into_iter().flatten() {
             let name = p["name"].as_str().unwrap();
             if !snake(name) {
-                bad.push(format!("{method} {path}: parameter {name:?} is not snake_case"));
+                bad.push(format!(
+                    "{method} {path}: parameter {name:?} is not snake_case"
+                ));
             }
             // the day an answer is for is always `date`
             if ["as_of", "day", "on", "today"].contains(&name) {
-                bad.push(format!("{method} {path}: parameter {name:?}; the day is `date`"));
+                bad.push(format!(
+                    "{method} {path}: parameter {name:?}; the day is `date`"
+                ));
             }
         }
     }
     for (schema, def) in doc["components"]["schemas"].as_object().unwrap() {
-        for field in def["properties"].as_object().into_iter().flat_map(|p| p.keys()) {
+        for field in def["properties"]
+            .as_object()
+            .into_iter()
+            .flat_map(|p| p.keys())
+        {
             if !snake(field) {
-                bad.push(format!("schema {schema}: field {field:?} is not snake_case"));
+                bad.push(format!(
+                    "schema {schema}: field {field:?} is not snake_case"
+                ));
             }
             if field == "as_of" {
                 bad.push(format!("schema {schema}: field `as_of`; the day is `date`"));
@@ -102,7 +112,9 @@ fn deleting_answers_204_and_nothing_else_does() {
             bad.push(format!("DELETE {path}: answers {ok:?}, not 204"));
         }
         if method != "DELETE" && ok.iter().any(|c| *c == "204") {
-            bad.push(format!("{method} {path}: 204 is for DELETE; answer with the result"));
+            bad.push(format!(
+                "{method} {path}: 204 is for DELETE; answer with the result"
+            ));
         }
     }
     report(bad);
@@ -148,11 +160,17 @@ fn bodies_are_named_schemas_or_files() {
         if path == "/health" {
             continue;
         }
-        for (content_type, c) in op["requestBody"]["content"].as_object().into_iter().flatten() {
+        for (content_type, c) in op["requestBody"]["content"]
+            .as_object()
+            .into_iter()
+            .flatten()
+        {
             if content_type != "application/json" && content_type != "text/csv" {
                 bad.push(format!("{method} {path}: request body is {content_type}"));
             } else if content_type == "application/json" && !named_or_list(&c["schema"]) {
-                bad.push(format!("{method} {path}: the request body is not a named schema"));
+                bad.push(format!(
+                    "{method} {path}: the request body is not a named schema"
+                ));
             }
         }
         for (code, r) in op["responses"].as_object().unwrap() {
@@ -161,7 +179,9 @@ fn bodies_are_named_schemas_or_files() {
             }
             if let Some(c) = r["content"]["application/json"].as_object() {
                 if !named_or_list(&c["schema"]) {
-                    bad.push(format!("{method} {path}: the {code} answer is not a named schema"));
+                    bad.push(format!(
+                        "{method} {path}: the {code} answer is not a named schema"
+                    ));
                 }
             }
         }
@@ -173,19 +193,40 @@ fn bodies_are_named_schemas_or_files() {
 fn a_provider_is_a_path_parameter_never_a_path() {
     let doc = doc();
     let providers = [
-        "lidl", "lidl-plus", "lidl_plus", "kaufland", "rewe", "orders", "plaid", "gocardless",
-        "finapi", "fints", "csv", "email", "folder",
+        "lidl",
+        "lidl-plus",
+        "lidl_plus",
+        "kaufland",
+        "rewe",
+        "orders",
+        "plaid",
+        "gocardless",
+        "finapi",
+        "fints",
+        "csv",
+        "email",
+        "folder",
     ];
     let mut bad = Vec::new();
     for (method, path, _) in operations(&doc) {
         for seg in path.trim_start_matches('/').split('/') {
             if providers.contains(&seg) {
-                bad.push(format!("{method} {path}: {seg:?} is a provider; use a {{kind}} parameter"));
+                bad.push(format!(
+                    "{method} {path}: {seg:?} is a provider; use a {{kind}} parameter"
+                ));
             }
         }
     }
     for schema in doc["components"]["schemas"].as_object().unwrap().keys() {
-        for word in ["Lidl", "Kaufland", "Rewe", "Plaid", "Gocardless", "Finapi", "Fints"] {
+        for word in [
+            "Lidl",
+            "Kaufland",
+            "Rewe",
+            "Plaid",
+            "Gocardless",
+            "Finapi",
+            "Fints",
+        ] {
             if schema.contains(word) {
                 bad.push(format!("schema {schema}: named after a provider ({word})"));
             }

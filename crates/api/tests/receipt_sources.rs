@@ -241,7 +241,9 @@ async fn without_a_syncer_every_source_is_disabled_and_lidl_refuses() {
         (status, st["state"].as_str(), st["enabled"].as_bool()),
         (StatusCode::OK, Some("disabled"), Some(false))
     );
-    let (status, body) = f.post("/v1/receipts/sources/kaufland_card/connect", None).await;
+    let (status, body) = f
+        .post("/v1/receipts/sources/kaufland_card/connect", None)
+        .await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert!(body["error"].as_str().unwrap().contains("not switched on"));
     let (status, st) = f.get("/v1/receipts/sources/kaufland_card").await;
@@ -264,7 +266,10 @@ async fn every_route_needs_the_token() {
         (Method::POST, "/v1/receipts/sources/kaufland_card/connect"),
         (Method::POST, "/v1/receipts/sources/kaufland_card/finish"),
         (Method::GET, "/v1/receipts/sources/kaufland_card"),
-        (Method::POST, "/v1/receipts/sources/kaufland_card/disconnect"),
+        (
+            Method::POST,
+            "/v1/receipts/sources/kaufland_card/disconnect",
+        ),
         (Method::POST, "/v1/receipts/sources/rewe_app/known"),
         (Method::POST, "/v1/receipts/sources/rewe_app/import"),
         (Method::GET, "/v1/receipts/sources/rewe_app"),
@@ -444,7 +449,12 @@ async fn lidl_sign_in_on_lidls_own_page_then_sync_status_and_disconnect() {
     assert!(!row.state.contains("fixture"));
 
     let (status, _) = f
-        .send(Method::POST, "/v1/receipts/sources/lidl_plus/disconnect", None, true)
+        .send(
+            Method::POST,
+            "/v1/receipts/sources/lidl_plus/disconnect",
+            None,
+            true,
+        )
         .await;
     assert_eq!(status, StatusCode::OK);
     let (_, st) = f.get("/v1/receipts/sources/lidl_plus").await;
@@ -487,7 +497,9 @@ async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect(
     );
     assert_eq!(Fixture::source(&list, "lidl_plus")["state"], "disabled");
 
-    let (status, start) = f.post("/v1/receipts/sources/kaufland_card/connect", None).await;
+    let (status, start) = f
+        .post("/v1/receipts/sources/kaufland_card/connect", None)
+        .await;
     assert_eq!(status, StatusCode::OK);
     let url = start["authorization_url"].as_str().unwrap();
     assert!(
@@ -506,7 +518,9 @@ async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect(
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
-    let (_, start) = f.post("/v1/receipts/sources/kaufland_card/connect", None).await;
+    let (_, start) = f
+        .post("/v1/receipts/sources/kaufland_card/connect", None)
+        .await;
     let state = start["state"].as_str().unwrap();
     f.http
         .respond(LidlMethod::Post, "/token-srv/token", 200, kfx::TOKEN);
@@ -546,7 +560,12 @@ async fn kaufland_sign_in_on_kauflands_own_page_then_sync_status_and_disconnect(
     assert!(!row.state.contains("fixture-kaufland"));
 
     let (status, _) = f
-        .send(Method::POST, "/v1/receipts/sources/kaufland_card/disconnect", None, true)
+        .send(
+            Method::POST,
+            "/v1/receipts/sources/kaufland_card/disconnect",
+            None,
+            true,
+        )
         .await;
     assert_eq!(status, StatusCode::OK);
     let (_, st) = f.get("/v1/receipts/sources/kaufland_card").await;
@@ -580,7 +599,9 @@ async fn rewe_receipts_pushed_by_the_app_are_stored_once_and_linked() {
     );
 
     let ids = json!({"ids": ["r1", "r2"]});
-    let (status, known) = f.post("/v1/receipts/sources/rewe_app/known", Some(ids.clone())).await;
+    let (status, known) = f
+        .post("/v1/receipts/sources/rewe_app/known", Some(ids.clone()))
+        .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(known["unknown"], json!(["r1", "r2"]));
 
@@ -591,19 +612,25 @@ async fn rewe_receipts_pushed_by_the_app_are_stored_once_and_linked() {
             {"name": "Bio Bananen", "quantity": 1, "total_cents": 149}
         ]
     }]});
-    let (status, r) = f.post("/v1/receipts/sources/rewe_app/import", Some(body.clone())).await;
+    let (status, r) = f
+        .post("/v1/receipts/sources/rewe_app/import", Some(body.clone()))
+        .await;
     assert_eq!(status, StatusCode::OK, "{r}");
     assert_eq!(
         (r["imported"].as_i64(), r["duplicates"].as_i64()),
         (Some(1), Some(0))
     );
-    let (_, again) = f.post("/v1/receipts/sources/rewe_app/import", Some(body)).await;
+    let (_, again) = f
+        .post("/v1/receipts/sources/rewe_app/import", Some(body))
+        .await;
     assert_eq!(
         (again["imported"].as_i64(), again["duplicates"].as_i64()),
         (Some(0), Some(1))
     );
 
-    let (_, known) = f.post("/v1/receipts/sources/rewe_app/known", Some(ids)).await;
+    let (_, known) = f
+        .post("/v1/receipts/sources/rewe_app/known", Some(ids))
+        .await;
     assert_eq!(known["unknown"], json!(["r2"]));
     let (_, st) = f.get("/v1/receipts/sources/rewe_app").await;
     assert_eq!(
@@ -618,7 +645,12 @@ async fn rewe_receipts_pushed_by_the_app_are_stored_once_and_linked() {
         .all(|r| r["source"] == "rewe_app" && r["chain"] == "rewe"));
 
     let (status, _) = f
-        .send(Method::POST, "/v1/receipts/sources/rewe_app/disconnect", None, true)
+        .send(
+            Method::POST,
+            "/v1/receipts/sources/rewe_app/disconnect",
+            None,
+            true,
+        )
         .await;
     assert_eq!(status, StatusCode::OK);
     let (_, st) = f.get("/v1/receipts/sources/rewe_app").await;
@@ -652,18 +684,26 @@ async fn rewe_pushes_are_checked() {
         one(json!({"lines": [{"name": " ", "quantity": 1, "total_cents": 1}]})),
         one(json!({"lines": [{"name": "x", "quantity": 0, "total_cents": 1}]})),
     ] {
-        let (status, _) = f.post("/v1/receipts/sources/rewe_app/import", Some(bad.clone())).await;
+        let (status, _) = f
+            .post("/v1/receipts/sources/rewe_app/import", Some(bad.clone()))
+            .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
     }
     let many: Vec<Value> = (0..101)
         .map(|i| json!({"id": format!("r{i}"), "date": "2026-03-02", "lines": [line.clone()]}))
         .collect();
     let (status, _) = f
-        .post("/v1/receipts/sources/rewe_app/import", Some(json!({"receipts": many})))
+        .post(
+            "/v1/receipts/sources/rewe_app/import",
+            Some(json!({"receipts": many})),
+        )
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let (status, _) = f
-        .post("/v1/receipts/sources/rewe_app/known", Some(json!({"ids": ["a b"]})))
+        .post(
+            "/v1/receipts/sources/rewe_app/known",
+            Some(json!({"ids": ["a b"]})),
+        )
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
@@ -686,7 +726,10 @@ async fn online_orders_from_a_file_are_stored_once_per_shop_and_number() {
         ]
     }]});
     let (status, r) = f
-        .post("/v1/receipts/sources/orders_file/import", Some(body.clone()))
+        .post(
+            "/v1/receipts/sources/orders_file/import",
+            Some(body.clone()),
+        )
         .await;
     assert_eq!(status, StatusCode::OK, "{r}");
     assert_eq!(
@@ -694,7 +737,10 @@ async fn online_orders_from_a_file_are_stored_once_per_shop_and_number() {
         (Some(1), Some(0))
     );
     let (_, again) = f
-        .post("/v1/receipts/sources/orders_file/import", Some(body.clone()))
+        .post(
+            "/v1/receipts/sources/orders_file/import",
+            Some(body.clone()),
+        )
         .await;
     assert_eq!(
         (again["imported"].as_i64(), again["duplicates"].as_i64()),
@@ -733,25 +779,47 @@ async fn online_orders_from_a_file_are_stored_once_per_shop_and_number() {
 async fn every_source_answers_the_same_calls_and_refuses_the_ones_its_flow_does_not_have() {
     let f = Fixture::with(true).await;
     // one source, by its kind
-    for kind in ["email", "lidl_plus", "kaufland_card", "folder", "rewe_app", "orders_file"] {
+    for kind in [
+        "email",
+        "lidl_plus",
+        "kaufland_card",
+        "folder",
+        "rewe_app",
+        "orders_file",
+    ] {
         let (status, one) = f.get(&format!("/v1/receipts/sources/{kind}")).await;
         assert_eq!(status, StatusCode::OK, "{kind}");
         assert_eq!(one["source"], kind);
     }
-    assert_eq!(f.get("/v1/receipts/sources/nope").await.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        f.get("/v1/receipts/sources/nope").await.0,
+        StatusCode::NOT_FOUND
+    );
     // a call for another flow is a 400 that says what the source is
     for (path, body) in [
         ("/v1/receipts/sources/rewe_app/connect", None),
         ("/v1/receipts/sources/email/connect", None),
         ("/v1/receipts/sources/folder/disconnect", None),
         ("/v1/receipts/sources/orders_file/disconnect", None),
-        ("/v1/receipts/sources/lidl_plus/import", Some(json!({"receipts": []}))),
-        ("/v1/receipts/sources/orders_file/known", Some(json!({"ids": []}))),
-        ("/v1/receipts/sources/email/finish", Some(json!({"state": "x", "callback_url": "y"}))),
+        (
+            "/v1/receipts/sources/lidl_plus/import",
+            Some(json!({"receipts": []})),
+        ),
+        (
+            "/v1/receipts/sources/orders_file/known",
+            Some(json!({"ids": []})),
+        ),
+        (
+            "/v1/receipts/sources/email/finish",
+            Some(json!({"state": "x", "callback_url": "y"})),
+        ),
     ] {
         let (status, err) = f.post(path, body).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{path}");
-        assert!(err["error"].as_str().unwrap().contains("source"), "{path}: {err}");
+        assert!(
+            err["error"].as_str().unwrap().contains("source"),
+            "{path}: {err}"
+        );
     }
     assert_eq!(
         f.post("/v1/receipts/sources/nope/connect", None).await.0,

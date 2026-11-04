@@ -118,10 +118,7 @@ pub async fn put_config(
     let update = match result {
         Ok(u) => u,
         Err(UpdateError::Invalid(problems)) => {
-            return Ok(ConfigProblems::response(
-                StatusCode::BAD_REQUEST,
-                problems,
-            ))
+            return Ok(ConfigProblems::response(StatusCode::BAD_REQUEST, problems))
         }
         Err(UpdateError::Locked(problems)) => {
             return Ok(ConfigProblems::response(StatusCode::CONFLICT, problems))

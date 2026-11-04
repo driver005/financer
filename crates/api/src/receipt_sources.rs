@@ -127,7 +127,6 @@ pub struct ReceiptSyncRequest {
     pub source: Option<String>,
 }
 
-
 /// Starting a sign-in on a shop's own page.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SourceConnectDto {
@@ -582,9 +581,7 @@ fn receipt_id_ok(id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':' | b'.'))
 }
 
-fn receipt(
-    r: &ReceiptInput,
-) -> Result<financer_receipt_sources::rewe::ImportReceipt, ApiError> {
+fn receipt(r: &ReceiptInput) -> Result<financer_receipt_sources::rewe::ImportReceipt, ApiError> {
     use financer_core::Money;
     use financer_receipt_sources::rewe::{ImportLine, ImportReceipt, MAX_LINES};
     if !receipt_id_ok(&r.id) {
@@ -644,7 +641,6 @@ fn receipt(
         lines,
     })
 }
-
 
 // ---- the calls ----
 
