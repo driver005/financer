@@ -162,7 +162,7 @@ impl From<StaleSubscription> for StaleSubscriptionDto {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SubscriptionsDto {
     #[schema(value_type = String, format = Date)]
-    pub as_of: Date,
+    pub date: Date,
     /// How many days ahead `upcoming` looks.
     pub days: i64,
     /// Subscriptions that are still running.
@@ -181,7 +181,7 @@ impl SubscriptionsDto {
     fn new(report: SubscriptionReport, days: i64) -> Self {
         let active: Vec<SubscriptionDto> = report.active.into_iter().map(Into::into).collect();
         SubscriptionsDto {
-            as_of: report.as_of,
+            date: report.as_of,
             days,
             monthly_total_cents: active.iter().map(|s| s.monthly_cents).sum(),
             active,
@@ -257,7 +257,7 @@ pub struct SubscriptionsQuery {
     days: Option<i64>,
     /// Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.
     #[param(value_type = Option<String>, example = "2026-03-02")]
-    as_of: Option<Date>,
+    date: Option<Date>,
 }
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
@@ -268,7 +268,7 @@ pub struct AlertsQuery {
     lookback_days: Option<i64>,
     /// Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.
     #[param(value_type = Option<String>, example = "2026-03-02")]
-    as_of: Option<Date>,
+    date: Option<Date>,
 }
 
 /// Handlers' real logic; the free functions below are thin shims because `#[utoipa::path]`
@@ -362,7 +362,7 @@ impl Watchdog {
             .into_iter()
             .map(|(_, t)| t)
             .collect();
-        let report = SubscriptionWatch::analyze(&txs, q.as_of.unwrap_or_else(Self::today), days);
+        let report = SubscriptionWatch::analyze(&txs, q.date.unwrap_or_else(Self::today), days);
         Ok(Json(SubscriptionsDto::new(report, days)))
     }
 
@@ -372,7 +372,7 @@ impl Watchdog {
             .unwrap_or(DEFAULT_ALERT_LOOKBACK_DAYS)
             .clamp(1, MAX_ALERT_LOOKBACK_DAYS);
         let txs = Self::transactions(&state).await?;
-        let alerts = Self::detect_alerts(&txs, q.as_of.unwrap_or_else(Self::today), lookback);
+        let alerts = Self::detect_alerts(&txs, q.date.unwrap_or_else(Self::today), lookback);
         let dismissed = state.store.dismissed_alert_ids().await?;
         let include_dismissed = q.include_dismissed.unwrap_or(false);
         let all: Vec<AlertDto> = alerts

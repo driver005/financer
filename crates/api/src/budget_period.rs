@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use time::{Date, Month, OffsetDateTime};
 use utoipa::ToSchema;
 
-use crate::dto::ErrorBody;
+use crate::dto::{DisposableDto, EnvelopeStatusDto, ErrorBody};
 use crate::routes::ApiError;
 use crate::AppState;
 
@@ -30,7 +30,7 @@ pub enum PeriodChoice {
 }
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
-pub struct PeriodQuery {
+pub struct BudgetQuery {
     /// `current` (default) or `previous`.
     period: Option<PeriodChoice>,
     /// The day to treat as today, ISO format (`2026-10-11`). Defaults to today (UTC); the app
@@ -39,11 +39,19 @@ pub struct PeriodQuery {
     date: Option<Date>,
 }
 
-#[derive(Debug, Deserialize, utoipa::IntoParams)]
-pub struct SafeToSpendQuery {
-    /// The day to treat as today, ISO format. Defaults to today (UTC).
-    #[param(value_type = Option<String>, format = Date, example = "2026-10-11")]
-    date: Option<Date>,
+/// The budget: the period you are in (or the one before), what was spent against each envelope in
+/// it, what is left to spend per day, and the monthly picture from your recurring payments.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct BudgetDto {
+    pub period: PeriodDto,
+    /// Monthly income minus fixed costs, from detected recurring payments.
+    pub disposable: DisposableDto,
+    /// Every envelope with its limit, what was spent in `period` and what is left. A calendar month
+    /// unless a payday is set in the settings.
+    pub envelopes: Vec<EnvelopeStatusDto>,
+    /// What you can spend per day for the rest of the period. Only for the period you are in:
+    /// absent when `period=previous`.
+    pub safe_to_spend: Option<SafeToSpendDto>,
 }
 
 /// A budget period: from payday to the day before the next payday.
@@ -174,28 +182,28 @@ impl BudgetPeriods {
         }
     }
 
-    pub async fn period(
-        State(state): State<AppState>,
-        Query(q): Query<PeriodQuery>,
-    ) -> Result<Json<PeriodDto>, ApiError> {
-        let payday = Self::payday(&state).await?;
-        let reference = q.date.unwrap_or_else(Self::today);
-        let period = Self::resolve(&state, None, None, q.period, Some(reference)).await?;
-        Ok(Json(PeriodDto {
-            payday,
-            start: period.start,
-            end: period.end,
-            days: period.days(),
-            days_left: period.days_left(reference),
-        }))
+    async fn period_dto(
+        state: &AppState,
+        choice: Option<PeriodChoice>,
+        reference: Date,
+    ) -> Result<(PeriodDto, BudgetPeriod), ApiError> {
+        let payday = Self::payday(state).await?;
+        let period = Self::resolve(state, None, None, choice, Some(reference)).await?;
+        Ok((
+            PeriodDto {
+                payday,
+                start: period.start,
+                end: period.end,
+                days: period.days(),
+                days_left: period.days_left(reference),
+            },
+            period,
+        ))
     }
 
-    pub async fn safe_to_spend(
-        State(state): State<AppState>,
-        Query(q): Query<SafeToSpendQuery>,
-    ) -> Result<Json<SafeToSpendDto>, ApiError> {
-        let payday = Self::payday(&state).await?;
-        let today = q.date.unwrap_or_else(Self::today);
+    async fn safe_to_spend_dto(state: &AppState, date: Date) -> Result<SafeToSpendDto, ApiError> {
+        let payday = Self::payday(state).await?;
+        let today = date;
         let txs: Vec<Transaction> = state
             .store
             .list_transactions()
@@ -213,7 +221,7 @@ impl BudgetPeriods {
             recurring: &recurring,
             budget: &budget,
         });
-        Ok(Json(SafeToSpendDto {
+        Ok(SafeToSpendDto {
             payday,
             period_start: period.start,
             period_end: period.end,
@@ -232,40 +240,47 @@ impl BudgetPeriods {
             pace: s.pace,
             pace_target_cents: s.pace_target.cents(),
             discretionary_spent_cents: s.discretionary_spent.cents(),
+        })
+    }
+
+    pub async fn budget(
+        State(state): State<AppState>,
+        Query(q): Query<BudgetQuery>,
+    ) -> Result<Json<BudgetDto>, ApiError> {
+        let reference = q.date.unwrap_or_else(Self::today);
+        let (period_dto, period) = Self::period_dto(&state, q.period, reference).await?;
+        let envelopes = crate::routes::Routes::envelope_status(&state, period).await?;
+        let disposable = crate::routes::Routes::disposable(&state).await?;
+        let safe_to_spend = match q.period.unwrap_or_default() {
+            PeriodChoice::Current => Some(Self::safe_to_spend_dto(&state, reference).await?),
+            PeriodChoice::Previous => None,
+        };
+        Ok(Json(BudgetDto {
+            period: period_dto,
+            disposable,
+            envelopes,
+            safe_to_spend,
         }))
     }
 }
 
-/// The budget period you are in (or the previous one), from your payday setting.
+/// The budget in one answer: the period you are in (or the previous one, `period=previous`), what
+/// was spent against each envelope in it, what you can spend per day for the rest of it, and
+/// monthly income minus fixed costs from your recurring payments. `date` is the day to treat as
+/// today (the app sends its local date so that a late evening is not already "tomorrow").
 #[utoipa::path(
     get,
-    path = "/v1/budget/period",
-    params(PeriodQuery),
-    responses((status = 200, body = PeriodDto)),
-    security(("bearer" = []))
-)]
-pub async fn budget_period(
-    State(state): State<AppState>,
-    Query(q): Query<PeriodQuery>,
-) -> Result<Json<PeriodDto>, ApiError> {
-    BudgetPeriods::period(State(state), Query(q)).await
-}
-
-/// What you can spend per day for the rest of the period, with the breakdown: expected income,
-/// recurring costs still to come, planned envelope money not yet spent, and spending so far.
-#[utoipa::path(
-    get,
-    path = "/v1/budget/safe-to-spend",
-    params(SafeToSpendQuery),
+    path = "/v1/budget",
+    params(BudgetQuery),
     responses(
-        (status = 200, body = SafeToSpendDto),
+        (status = 200, body = BudgetDto),
         (status = 400, description = "Invalid date", body = ErrorBody),
     ),
     security(("bearer" = []))
 )]
-pub async fn safe_to_spend(
+pub async fn budget(
     State(state): State<AppState>,
-    Query(q): Query<SafeToSpendQuery>,
-) -> Result<Json<SafeToSpendDto>, ApiError> {
-    BudgetPeriods::safe_to_spend(State(state), Query(q)).await
+    Query(q): Query<BudgetQuery>,
+) -> Result<Json<BudgetDto>, ApiError> {
+    BudgetPeriods::budget(State(state), Query(q)).await
 }

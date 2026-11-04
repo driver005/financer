@@ -63,6 +63,10 @@ pub struct FileBank {
     pub fints_product_id: Option<String>,
     /// `[bank.plaid]`: the Plaid account the server uses for every `kind = "plaid"` connection.
     pub plaid: FilePlaid,
+    /// `[bank.gocardless]`: GoCardless Bank Account Data for every `kind = "gocardless"` connection.
+    pub gocardless: FileGoCardless,
+    /// `[bank.finapi]`: finAPI for every `kind = "finapi"` connection.
+    pub finapi: FileFinapi,
     pub accounts: Vec<BankAccount>,
 }
 
@@ -84,6 +88,33 @@ pub struct FilePlaid {
     pub redirect_uri: Option<String>,
 }
 
+/// `[bank.gocardless]`. The secret id and key come from GoCardless's Bank Account Data portal;
+/// write them as `${GOCARDLESS_SECRET_ID}` / `${GOCARDLESS_SECRET_KEY}` so they stay out of the
+/// file.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct FileGoCardless {
+    pub secret_id: Option<String>,
+    pub secret_key: Option<String>,
+    /// Language of the bank's sign-in page, e.g. `de` (the default) or `en`.
+    pub language: Option<String>,
+    /// Where the bank's page sends the browser when you are done. Optional.
+    pub redirect_uri: Option<String>,
+}
+
+/// `[bank.finapi]`. The client id and secret come from your finAPI client; write them as
+/// `${FINAPI_CLIENT_ID}` / `${FINAPI_CLIENT_SECRET}` so they stay out of the file.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct FileFinapi {
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    /// `sandbox` (finAPI's test banks, the default) or `live`.
+    pub environment: Option<String>,
+    /// Where the web form sends the browser when you are done. Optional.
+    pub redirect_uri: Option<String>,
+}
+
 /// One `[[bank.accounts]]` entry. The PIN is never part of it: it comes from the environment
 /// variable named by `pin_env`, or is typed into the app.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -91,7 +122,8 @@ pub struct FilePlaid {
 pub struct BankAccount {
     pub name: String,
     /// The provider: `fints` (the default; your bank directly, with a PIN and an approval in the
-    /// banking app) or `plaid` (you sign in once on Plaid's page, no PIN, no approval per sync).
+    /// banking app), `plaid`, `gocardless` or `finapi` (you sign in once on the provider's page, no
+    /// PIN, no approval per sync).
     #[serde(default = "BankAccount::default_kind")]
     pub kind: String,
     /// FinTS only: the 8-digit bank code.
@@ -103,10 +135,14 @@ pub struct BankAccount {
     /// FinTS only: the account to read (FinTS needs it to pick the account).
     #[serde(default)]
     pub iban: String,
-    /// Plaid only: read only these accounts (the ids the app shows after linking). Leave out to
-    /// read every account you linked.
+    /// Plaid, GoCardless, finAPI: read only these accounts (the ids the app shows after linking).
+    /// Leave out to read every account you linked.
     #[serde(default)]
     pub account_ids: Vec<String>,
+    /// GoCardless only: the bank to connect, an institution id from GoCardless's list (for
+    /// example `SPARKASSE_...`). finAPI and Plaid let you pick the bank on their page.
+    #[serde(default)]
+    pub institution: Option<String>,
     /// Only needed together with `fints_url`.
     #[serde(default)]
     pub bic: Option<String>,

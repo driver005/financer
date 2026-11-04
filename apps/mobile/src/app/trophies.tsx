@@ -14,18 +14,18 @@ import { localIsoDate } from "@/period";
 import { getSavingsGoal, setSavingsGoal } from "@/savingsGoal";
 
 async function load(a: Api) {
-  const [txs, envelopes, basket, prices, receipts, safe, savingsGoal] = await Promise.all([
+  const [txs, budget, basket, prices, receipts, savingsGoal] = await Promise.all([
     a.transactions(),
-    a.envelopes(),
+    a.budget("current", localIsoDate()),
     a.basket(),
     a.prices(),
     a.receipts(),
-    a.safeToSpend(localIsoDate()).catch(() => null),
     getSavingsGoal(),
   ]);
+  const envelopes = budget.envelopes;
   return {
     txs,
-    payday: safe?.payday ?? 1,
+    payday: budget.period.payday,
     savingsGoal,
     groceryLimit: envelopes.find((e) => e.category === "groceries")?.limit_cents ?? 0,
     progress: {

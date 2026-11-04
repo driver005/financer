@@ -89,7 +89,7 @@ impl Fixture {
         }
         let req = Request::builder()
             .method(Method::POST)
-            .uri("/v1/transactions/import")
+            .uri("/v1/bank/import/csv")
             .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
             .header(header::CONTENT_TYPE, "text/csv")
             .body(Body::from(csv))
@@ -165,8 +165,8 @@ impl Fixture {
             Some(json!([{"category": category, "limit_cents": 100_000}])),
         )
         .await;
-        let status = Self::get(app, "/v1/budget/status?year=2026&month=3").await;
-        status[0]["spent_cents"].as_i64().unwrap()
+        let budget = Self::get(app, "/v1/budget?date=2026-03-20").await;
+        budget["envelopes"][0]["spent_cents"].as_i64().unwrap()
     }
 }
 
@@ -233,8 +233,8 @@ async fn rules_crud_validation_and_reorder() {
     // reorder
     let (s, reordered) = Fixture::call(
         &app,
-        Method::POST,
-        "/v1/rules/reorder",
+        Method::PUT,
+        "/v1/rules/order",
         Some(json!({"ids": [id_b, id_a]})),
     )
     .await;
@@ -242,8 +242,8 @@ async fn rules_crud_validation_and_reorder() {
     assert_eq!(reordered[0]["id"], id_b);
     let (s, _) = Fixture::call(
         &app,
-        Method::POST,
-        "/v1/rules/reorder",
+        Method::PUT,
+        "/v1/rules/order",
         Some(json!({"ids": [id_b]})),
     )
     .await;
@@ -310,11 +310,11 @@ async fn apply_rules_to_existing_transactions_counts_changes_and_spares_manual_o
     .await;
     assert_eq!(s, StatusCode::OK);
 
-    let (s, report) = Fixture::call(&app, Method::POST, "/v1/rules/apply", None).await;
+    let (s, report) = Fixture::call(&app, Method::POST, "/v1/rules/applications", None).await;
     assert_eq!((s, report["changed"].clone()), (StatusCode::OK, json!(1)));
     assert_eq!(Fixture::category_of(&app, "Kiosk Meier 12").await, "dining");
     assert_eq!(Fixture::category_of(&app, "Kiosk Meier 99").await, "health");
-    let (_, again) = Fixture::call(&app, Method::POST, "/v1/rules/apply", None).await;
+    let (_, again) = Fixture::call(&app, Method::POST, "/v1/rules/applications", None).await;
     assert_eq!(again["changed"], 0);
 }
 
@@ -474,13 +474,7 @@ async fn llm_fallback_sends_only_merchant_names_and_returns_vetted_suggestions()
     let (app, mock) = Fixture::app_with_llm(vec![Ok(SUGGESTIONS.into())]).await;
     Fixture::import_sample(&app).await;
 
-    let (s, body) = Fixture::call(
-        &app,
-        Method::POST,
-        "/v1/transactions/categorize-unknown",
-        None,
-    )
-    .await;
+    let (s, body) = Fixture::call(&app, Method::POST, "/v1/transactions/suggestions", None).await;
     assert_eq!(s, StatusCode::OK, "{body}");
     // Rewe is already groceries, so only the kiosk and the zebra shop are unknown
     assert_eq!(body["merchants_sent"], 2);
@@ -525,8 +519,8 @@ async fn llm_fallback_sends_only_merchant_names_and_returns_vetted_suggestions()
     // accepting creates rules and recategorizes
     let (s, report) = Fixture::call(
         &app,
-        Method::POST,
-        "/v1/transactions/categorize-unknown/accept",
+        Method::PUT,
+        "/v1/transactions/categories",
         Some(json!({"suggestions": [
             {"merchant": "kiosk meier", "category": "dining"},
             {"merchant": "zebra laden", "category": "shopping"}]})),
@@ -552,13 +546,7 @@ async fn llm_fallback_sends_only_merchant_names_and_returns_vetted_suggestions()
     );
 
     // all merchants are placed now: asking again calls no model
-    let (s, again) = Fixture::call(
-        &app,
-        Method::POST,
-        "/v1/transactions/categorize-unknown",
-        None,
-    )
-    .await;
+    let (s, again) = Fixture::call(&app, Method::POST, "/v1/transactions/suggestions", None).await;
     assert_eq!(
         (s, again["merchants_sent"].clone()),
         (StatusCode::OK, json!(0))
@@ -576,8 +564,8 @@ async fn accepting_rejects_categories_suggestions_cannot_use() {
     ] {
         let (s, _) = Fixture::call(
             &app,
-            Method::POST,
-            "/v1/transactions/categorize-unknown/accept",
+            Method::PUT,
+            "/v1/transactions/categories",
             Some(json!({"suggestions": [bad]})),
         )
         .await;
@@ -594,13 +582,7 @@ async fn accepting_rejects_categories_suggestions_cannot_use() {
 async fn llm_fallback_failures_are_reported_not_hidden() {
     // no key configured
     let app = Fixture::bank().await;
-    let (s, _) = Fixture::call(
-        &app,
-        Method::POST,
-        "/v1/transactions/categorize-unknown",
-        None,
-    )
-    .await;
+    let (s, _) = Fixture::call(&app, Method::POST, "/v1/transactions/suggestions", None).await;
     assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE);
 
     // provider failure and nonsense answers
@@ -610,13 +592,7 @@ async fn llm_fallback_failures_are_reported_not_hidden() {
     ] {
         let (app, _) = Fixture::app_with_llm(vec![answer]).await;
         Fixture::import_sample(&app).await;
-        let (s, _) = Fixture::call(
-            &app,
-            Method::POST,
-            "/v1/transactions/categorize-unknown",
-            None,
-        )
-        .await;
+        let (s, _) = Fixture::call(&app, Method::POST, "/v1/transactions/suggestions", None).await;
         assert_eq!(s, StatusCode::BAD_GATEWAY);
     }
 }
@@ -629,14 +605,14 @@ async fn new_routes_need_the_token() {
         (Method::POST, "/v1/rules"),
         (Method::PUT, "/v1/rules/1"),
         (Method::DELETE, "/v1/rules/1"),
-        (Method::POST, "/v1/rules/apply"),
-        (Method::POST, "/v1/rules/reorder"),
+        (Method::POST, "/v1/rules/applications"),
+        (Method::PUT, "/v1/rules/order"),
         (Method::PUT, "/v1/transactions/1/category"),
         (Method::PUT, "/v1/transactions/1/split"),
         (Method::DELETE, "/v1/transactions/1/split"),
         (Method::GET, "/v1/transactions/splits"),
-        (Method::POST, "/v1/transactions/categorize-unknown"),
-        (Method::POST, "/v1/transactions/categorize-unknown/accept"),
+        (Method::POST, "/v1/transactions/suggestions"),
+        (Method::PUT, "/v1/transactions/categories"),
     ] {
         let res = app
             .clone()

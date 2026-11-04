@@ -38,8 +38,9 @@ impl Validator {
             match a.kind.as_str() {
                 "fints" => Self::fints_account(a, env, &key, errors, warnings),
                 "plaid" => Self::plaid_account(a, &key, errors, warnings),
+                "gocardless" | "finapi" => Self::linked_account(a, &key, errors, warnings),
                 other => errors.push(format!(
-                    "{}: {other:?} is not supported; use \"fints\" or \"plaid\"",
+                    "{}: {other:?} is not supported; use \"fints\", \"plaid\", \"gocardless\" or \"finapi\"",
                     key("kind")
                 )),
             }
@@ -161,7 +162,7 @@ impl Validator {
         ] {
             if set {
                 warnings.push(format!(
-                    "{}: only used by kind = \"fints\"; ignored for a Plaid account (you sign in on Plaid's page)",
+                    "{}: only used by kind = \"fints\"; ignored for a Plaid, GoCardless or finAPI account (you sign in on the provider's page)",
                     key(field)
                 ));
             }
@@ -179,6 +180,102 @@ impl Validator {
                     key("account_ids")
                 ));
             }
+        }
+    }
+
+    /// The checks of a `kind = "gocardless"` or `kind = "finapi"` account: the bank is picked on
+    /// the provider's page (GoCardless needs its institution id here), so the FinTS fields would
+    /// only mislead.
+    fn linked_account(
+        a: &BankAccount,
+        key: &dyn Fn(&str) -> String,
+        errors: &mut Vec<String>,
+        warnings: &mut Vec<String>,
+    ) {
+        Self::plaid_account(a, key, errors, warnings);
+        let institution = a.institution.as_deref().map(str::trim).unwrap_or("");
+        if a.kind == "gocardless" {
+            if institution.is_empty() {
+                warnings.push(format!(
+                    "{}: GoCardless needs the bank's institution id (for example SPARKASSE_...) before it can open the sign-in page",
+                    key("institution")
+                ));
+            }
+        } else if !institution.is_empty() {
+            warnings.push(format!(
+                "{}: only used by kind = \"gocardless\"; finAPI lets you pick the bank on its page",
+                key("institution")
+            ));
+        }
+        if !institution.is_empty()
+            && (institution.len() > 100
+                || !institution
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+        {
+            errors.push(format!(
+                "{}: not an institution id (letters, digits, - and _ only)",
+                key("institution")
+            ));
+        }
+    }
+
+    /// `[bank.gocardless]`: the server-wide GoCardless keys.
+    pub fn gocardless(
+        bank: &crate::BankSettings,
+        errors: &mut Vec<String>,
+        warnings: &mut Vec<String>,
+    ) {
+        let g = &bank.gocardless;
+        if g.language.len() != 2 || !g.language.chars().all(|c| c.is_ascii_lowercase()) {
+            errors.push(format!(
+                "bank.gocardless.language: {:?} is not a two-letter language code (for example \"de\")",
+                g.language
+            ));
+        }
+        if let Some(uri) = g.redirect_uri.as_deref() {
+            if !uri.starts_with("https://") {
+                errors.push("bank.gocardless.redirect_uri: must start with https://".to_string());
+            }
+        }
+        if bank.accounts.iter().any(|a| a.kind == "gocardless") && !g.configured() {
+            warnings.push(
+                "bank.accounts with kind \"gocardless\" are configured but bank.gocardless.secret_id / bank.gocardless.secret_key are not set (or FINANCER_GOCARDLESS_SECRET_ID / FINANCER_GOCARDLESS_SECRET_KEY); syncing them stays off until they are"
+                    .to_string(),
+            );
+        }
+    }
+
+    /// `[bank.finapi]`: the server-wide finAPI client.
+    pub fn finapi(
+        bank: &crate::BankSettings,
+        errors: &mut Vec<String>,
+        warnings: &mut Vec<String>,
+    ) {
+        let f = &bank.finapi;
+        if !matches!(f.environment.value.as_str(), "sandbox" | "live") {
+            errors.push(format!(
+                "bank.finapi.environment: {:?} is not known; use \"sandbox\" or \"live\"",
+                f.environment.value
+            ));
+        }
+        if let Some(uri) = f.redirect_uri.as_deref() {
+            if !uri.starts_with("https://") {
+                errors.push("bank.finapi.redirect_uri: must start with https://".to_string());
+            }
+        }
+        let wanted = bank.accounts.iter().any(|a| a.kind == "finapi");
+        if wanted && !f.configured() {
+            warnings.push(
+                "bank.accounts with kind \"finapi\" are configured but bank.finapi.client_id / bank.finapi.client_secret are not set (or FINANCER_FINAPI_CLIENT_ID / FINANCER_FINAPI_CLIENT_SECRET); syncing them stays off until they are"
+                    .to_string(),
+            );
+        }
+        if wanted && f.configured() && f.environment.value == "sandbox" {
+            warnings.push(
+                "bank.finapi.environment is \"sandbox\": finAPI only offers its test banks; set \"live\" to link your real bank"
+                    .to_string(),
+            );
         }
     }
 

@@ -44,7 +44,7 @@ impl From<StoredTransaction> for TransactionDto {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct ImportReport {
+pub struct FileImportDto {
     /// Rows stored for the first time.
     pub imported: usize,
     /// Rows already stored (same date, amount, counterparty and purpose).
@@ -85,7 +85,7 @@ impl From<RecurringPayment> for RecurringDto {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct EnvelopeDto {
+pub struct EnvelopeInput {
     #[schema(value_type = String, example = "groceries")]
     pub category: Category,
     #[schema(value_type = i64, example = 40000)]
@@ -177,7 +177,7 @@ pub struct RefreshReportDto {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct BasketItemDto {
+pub struct BasketItemInput {
     /// Catalog key, e.g. `milch`.
     pub item: String,
     /// Packs of the reference size per shopping period (1 to 99).
@@ -207,7 +207,7 @@ pub struct CatalogItemDto {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct ReceiptUpload {
+pub struct ReceiptUploadInput {
     /// Text recognised from the receipt photo.
     pub text: String,
 }
@@ -342,7 +342,7 @@ pub struct RecipeIngredientDto {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct IdeasRequest {
+pub struct IdeasInput {
     pub count: Option<usize>,
     pub diet: Option<String>,
     pub budget_cents: Option<i64>,
@@ -381,7 +381,7 @@ pub struct SettingsDto {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct SettingsUpdate {
+pub struct SettingsInput {
     pub habit_mode: Option<String>,
     pub llm_provider: Option<String>,
     pub llm_model: Option<String>,
@@ -418,44 +418,8 @@ impl PriceDto {
 
 // ---- bank sync ----
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct SyncRequest {
-    /// Bank code (BLZ).
-    pub blz: String,
-    /// Online banking login name.
-    pub user_id: String,
-    /// Online banking PIN. Held in memory until you approve, never stored or logged.
-    pub pin: String,
-    pub iban: String,
-    /// Leave empty to use the bank's own BIC.
-    pub bic: Option<String>,
-    /// Days of history to fetch (default 90, 1 to 365).
-    pub days: Option<u32>,
-}
-
 #[derive(Debug, Serialize, ToSchema)]
-pub struct SyncStarted {
-    pub sync_id: String,
-    /// Text from the bank, e.g. "Bitte bestätigen Sie die Anfrage in Ihrer S-pushTAN-App".
-    pub challenge: String,
-    /// True if the bank needs no approval; confirm right away.
-    pub no_tan_required: bool,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct SyncDone {
-    pub imported: usize,
-    pub duplicates: usize,
-    /// Transactions left out (pending, or not in EUR).
-    pub skipped: usize,
-    #[schema(value_type = Option<i64>)]
-    pub balance_cents: Option<Money>,
-    #[schema(value_type = Option<String>, format = Date)]
-    pub balance_date: Option<Date>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct BankStatus {
+pub struct BankStatusDto {
     /// False until the server has a FinTS product id.
     pub configured: bool,
     /// Unix seconds of the last successful sync.
@@ -472,7 +436,7 @@ pub struct BankStatus {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct ReceiptScan {
+pub struct ReceiptScanInput {
     /// The photo's or PDF's bytes, base64-encoded (at most 8 MB decoded).
     pub image_base64: String,
     /// `image/jpeg`, `image/png`, `image/webp` or `application/pdf`.
@@ -535,12 +499,12 @@ pub struct ExportEvent {
 /// Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
 /// which are fetched again.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct ExportDto {
+pub struct DataDto {
     /// Format version, currently 1.
     pub version: u32,
     pub transactions: Vec<ExportTransaction>,
-    pub budget: Vec<EnvelopeDto>,
-    pub basket: Vec<BasketItemDto>,
+    pub budget: Vec<EnvelopeInput>,
+    pub basket: Vec<BasketItemInput>,
     pub receipts: Vec<ExportReceipt>,
     pub settings: ExportSettings,
     /// Added in the calendar release; older exports have none.

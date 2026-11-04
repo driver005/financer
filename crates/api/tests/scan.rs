@@ -228,7 +228,7 @@ async fn stored_prices_are_still_shown_when_open_prices_is_down() {
     let url = Fixture::url(MILK);
     let http = Arc::new(FakeHttp::with(vec![(&url, 200, &Fixture::milk_answer())]));
     let app = Fixture::app(http.clone(), vec![Fixture::open_prices(MILK)]).await;
-    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", true).await;
+    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refreshes", true).await;
     assert_eq!(status, StatusCode::OK, "{report}");
     assert!(report["stored"].as_i64().unwrap() >= 3);
 

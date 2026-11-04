@@ -10,6 +10,8 @@ export type EmbeddedSettings = {
   priceSourcesJson: string;
   /** Import receipts from Lidl Plus (you sign in on Lidl's own page from the Receipt sources screen). */
   lidlPlus: boolean;
+  /** Import receipts from the Kaufland Card (you sign in on Kaufland's own page). */
+  kaufland: boolean;
 };
 
 export const EMPTY_EMBEDDED_SETTINGS: EmbeddedSettings = {
@@ -18,6 +20,7 @@ export const EMPTY_EMBEDDED_SETTINGS: EmbeddedSettings = {
   fintsProductId: "",
   priceSourcesJson: "",
   lidlPlus: false,
+  kaufland: false,
 };
 
 /** True when this build contains the Rust backend (a custom dev build with the native module). */
@@ -73,6 +76,7 @@ async function startNew(settings: EmbeddedSettings): Promise<StartedEmbedded> {
     lidlCountry: undefined,
     lidlLanguage: undefined,
     lidlPollHours: undefined,
-    deviceSecret: settings.lidlPlus ? await deviceSecret() : undefined,
+    kaufland: settings.kaufland,
+    deviceSecret: settings.lidlPlus || settings.kaufland ? await deviceSecret() : undefined,
   });
 }

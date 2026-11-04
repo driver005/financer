@@ -17,7 +17,7 @@ const call = async (backend, op, args = {}) => JSON.parse(await backend.call("fi
     const csv =
       '"Buchungstag";"Verwendungszweck";"Beguenstigter/Zahlungspflichtiger";"Kontonummer/IBAN";"Betrag"\n' +
       '"02.03.26";"Kartenzahlung";"REWE Markt";"";"-23,47"\n';
-    const imp = await call(backend, "import_transactions", { csv_base64: toBase64(new TextEncoder().encode(csv).buffer) });
+    const imp = await call(backend, "import_file", { kind: "csv", csv_base64: toBase64(new TextEncoder().encode(csv).buffer) });
     const rows = await call(backend, "list_transactions");
     const ok = Array.isArray(rows) && rows[0]?.category === "groceries";
     log(`${ok ? "OK" : "FAIL"} imported=${imp?.imported} category=${rows[0]?.category}`);

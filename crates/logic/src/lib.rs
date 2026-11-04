@@ -716,6 +716,25 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg::<String>(&args, "s")?,
             opt(&args, "on_phone")?.unwrap_or(false),
         )),
+        "receipt_sources.sign_in_promises" => json(receipt_sources::sign_in_promises(
+            &arg::<String>(&args, "shop")?,
+            opt(&args, "on_phone")?.unwrap_or(false),
+        )),
+        "receipt_sources.is_signed_in" => json(receipt_sources::is_signed_in(&arg::<String>(
+            &args, "state",
+        )?)),
+        "receipt_sources.sign_in_state_text" => json(receipt_sources::sign_in_state_text(
+            &arg::<String>(&args, "shop")?,
+            &arg::<String>(&args, "state")?,
+            opt(&args, "connected_at")?,
+            arg(&args, "now_sec")?,
+            opt(&args, "on_phone")?.unwrap_or(false),
+        )),
+        "receipt_sources.listed_sources" => {
+            json(receipt_sources::listed_sources(&arg::<Vec<Value>>(
+                &args, "list",
+            )?))
+        }
         "receipt_sources.lidl_promises" => json(receipt_sources::lidl_promises(
             opt(&args, "on_phone")?.unwrap_or(false),
         )),
@@ -743,6 +762,15 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             opt(&args, "on_phone")?.unwrap_or(false),
         )),
         "bank_connections.is_busy" => json(bank_connections::is_busy(&arg(&args, "c")?)),
+        "bank_connections.links_once" => json(bank_connections::links_once(&arg(&args, "c")?)),
+        "bank_connections.is_running" => json(bank_connections::is_running(&arg(&args, "s")?)),
+        "bank_connections.apply_sync" => json(bank_connections::apply_sync(
+            &arg(&args, "c")?,
+            &arg(&args, "s")?,
+        )),
+        "bank_connections.sync_result_text" => {
+            json(bank_connections::sync_result_text(&arg(&args, "s")?))
+        }
         "bank_connections.is_plaid" => json(bank_connections::is_plaid(&arg(&args, "c")?)),
         "bank_connections.needs_linking" => {
             json(bank_connections::needs_linking(&arg(&args, "c")?))

@@ -20,11 +20,11 @@ describe("Api", () => {
   it("reports 401 as a token problem and keeps 409 distinguishable", async () => {
     const { api } = apiWith((op) => (op === "list_transactions" ? refusal(401, "unauthorized") : refusal(409, "still waiting")));
     await assert.rejects(api.transactions(), (e: unknown) => e instanceof ApiError && e.status === 401 && /token/.test(e.message));
-    await assert.rejects(api.confirmSync("abc"), (e: unknown) => e instanceof ApiError && e.status === 409);
+    await assert.rejects(api.syncStatus("abc"), (e: unknown) => e instanceof ApiError && e.status === 409);
   });
 
   it("keeps the problems of a refused form", async () => {
-    const { api } = apiWith(() => refusal(422, "not saved", ["port is not a number"]));
+    const { api } = apiWith(() => refusal(400, "not saved", ["port is not a number"]));
     await assert.rejects(api.saveSettings({}), (e: unknown) => e instanceof ApiError && e.problems[0] === "port is not a number");
   });
 
@@ -38,9 +38,10 @@ describe("Api", () => {
     await api.recipes({ budgetCents: 1500, tag: "vegan", limit: 5 });
     await api.affordability(8000, 7);
     await api.affordability();
-    await api.confirmSync("a/b c");
-    await api.budgetStatus(2026, 3);
-    await api.budgetStatusFor("previous", "2026-03-15");
+    await api.syncStatus("a/b c");
+    await api.budget();
+    await api.budget("previous", "2026-03-15");
+    await api.saveEnvelopes([{ category: "groceries", limit_cents: 40000 }]);
     await api.prices("milch");
     assert.deepEqual(
       calls.map((c) => [c.op, c.args]),
@@ -48,9 +49,10 @@ describe("Api", () => {
         ["recipes", { budget_cents: 1500, tag: "vegan", limit: 5 }],
         ["affordability", { budget_cents: 8000, days_per_basket: 7 }],
         ["affordability", {}],
-        ["confirm_sync", { id: "a/b c" }], // encoding it into a path is the SDK's job
-        ["budget_status", { year: 2026, month: 3 }],
-        ["budget_status", { period: "previous", date: "2026-03-15" }],
+        ["get_sync", { id: "a/b c" }], // encoding it into a path is the SDK's job
+        ["budget", { period: "current" }],
+        ["budget", { period: "previous", date: "2026-03-15" }],
+        ["put_envelopes", { body: [{ category: "groceries", limit_cents: 40000 }] }],
         ["list_prices", { item: "milch" }],
       ],
     );
@@ -59,8 +61,8 @@ describe("Api", () => {
   it("sends a bank export as the bytes it came in, base64 (it may not be UTF-8)", async () => {
     const { api, calls } = apiWith(() => ({ imported: 1 }));
     const latin1 = new Uint8Array([0x42, 0xfc, 0x63, 0x68, 0x65, 0x72]); // "Bücher" in ISO-8859-1
-    await api.importCsv(latin1.buffer);
-    assert.deepEqual(calls[0], { app: "finance", op: "import_transactions", args: { csv_base64: Buffer.from(latin1).toString("base64") } });
+    await api.importFile("csv", latin1.buffer);
+    assert.deepEqual(calls[0], { app: "finance", op: "import_file", args: { kind: "csv", csv_base64: Buffer.from(latin1).toString("base64") } });
   });
 
   it("reads the shopping contracts through the shop app, and gives an empty list when there is none", async () => {

@@ -122,7 +122,7 @@ export async function setKindEnabled(kind: NotifyKind, enabled: boolean): Promis
   return { prefs, permission };
 }
 
-export type NotifyApi = Pick<Api, "safeToSpend" | "basket" | "prices" | "calendars" | "calendarEvents">;
+export type NotifyApi = Pick<Api, "budget" | "basket" | "prices" | "calendars" | "calendarEvents">;
 
 let running: Promise<void> | null = null;
 
@@ -174,12 +174,12 @@ async function check(api: NotifyApi, now: Date): Promise<void> {
 
   if (prefs.evening || prefs.payday) {
     try {
-      const safe = await api.safeToSpend(today);
-      if (prefs.evening) {
+      const safe = (await api.budget("current", today)).safe_to_spend;
+      if (safe && prefs.evening) {
         await cancelWithPrefix(EVENING_ID_PREFIX);
         for (const p of eveningPlan(safe, nowMinutes)) await schedule(p);
       }
-      if (prefs.payday) {
+      if (safe && prefs.payday) {
         await cancelWithPrefix(PAYDAY_ID_PREFIX);
         for (const p of paydayPlan(today, safe.payday, nowMinutes)) await schedule(p);
       }

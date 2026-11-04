@@ -35,7 +35,7 @@ pub(crate) struct ConfigControl {
 
 /// A change was saved.
 #[derive(Debug, Serialize, ToSchema)]
-pub struct ConfigSaved {
+pub struct ConfigSavedDto {
     /// The keys whose value is different now.
     pub changed: Vec<String>,
     /// Things that are legal but probably not what you want.
@@ -92,9 +92,9 @@ pub async fn get_config(State(state): State<AppState>) -> Result<Json<ConfigView
     path = "/v1/server-config",
     request_body = Change,
     responses(
-        (status = 200, body = ConfigSaved),
+        (status = 200, body = ConfigSavedDto),
         (status = 409, description = "A key is decided by an environment variable, or a restart is under way", body = ConfigProblems),
-        (status = 422, description = "The change was refused", body = ConfigProblems),
+        (status = 400, description = "The change was refused", body = ConfigProblems),
         (status = 404, description = "This backend has no server configuration", body = ErrorBody),
         (status = 503, description = "The settings file cannot be written", body = ErrorBody),
     ),
@@ -118,10 +118,7 @@ pub async fn put_config(
     let update = match result {
         Ok(u) => u,
         Err(UpdateError::Invalid(problems)) => {
-            return Ok(ConfigProblems::response(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                problems,
-            ))
+            return Ok(ConfigProblems::response(StatusCode::BAD_REQUEST, problems))
         }
         Err(UpdateError::Locked(problems)) => {
             return Ok(ConfigProblems::response(StatusCode::CONFLICT, problems))
@@ -141,7 +138,7 @@ pub async fn put_config(
             restart();
         });
     }
-    Ok(Json(ConfigSaved {
+    Ok(Json(ConfigSavedDto {
         changed: update.changed,
         warnings: update.warnings,
         restarting,
