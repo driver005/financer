@@ -10,6 +10,7 @@ pub mod backup_plan;
 pub mod bank_connections;
 pub mod calendar;
 pub mod calendar_feeds;
+pub mod calendar_form;
 pub mod calendar_view;
 pub mod forecast;
 pub mod format;
@@ -839,6 +840,34 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg::<String>(&args, "today")?,
             &arg::<Vec<calendar::Occurrence>>(&args, "occurrences")?,
         )?),
+        "calendar_form.new_draft" => json(calendar_form::new_draft(
+            &arg::<String>(&args, "date")?,
+            opt(&args, "calendar_id")?,
+            opt::<String>(&args, "time")?.as_deref(),
+        )),
+        "calendar_form.rule_from_dto" => json(calendar_form::rule_from_dto(&arg(&args, "e")?)),
+        "calendar_form.draft_from_rule" => {
+            json(calendar_form::draft_from_rule(&arg(&args, "rule")?))
+        }
+        "calendar_form.move_start" => json(calendar_form::move_start(
+            &arg(&args, "d")?,
+            &arg::<String>(&args, "date")?,
+            opt::<String>(&args, "time")?.as_deref(),
+        )?),
+        "calendar_form.set_repeat_kind" => json(calendar_form::set_repeat_kind(
+            &arg(&args, "d")?,
+            &arg::<String>(&args, "kind")?,
+        )?),
+        "calendar_form.toggle_weekday" => json(calendar_form::toggle_weekday(
+            &arg(&args, "d")?,
+            &arg::<String>(&args, "code")?,
+        )),
+        "calendar_form.toggle_reminder" => json(calendar_form::toggle_reminder(
+            &arg(&args, "d")?,
+            arg(&args, "minutes")?,
+        )),
+        "calendar_form.problem" => json(calendar_form::problem(&arg(&args, "d")?)),
+        "calendar_form.to_input" => json(calendar_form::to_input(&arg(&args, "d")?)),
         other => return Err(format!("unknown function {other}")),
     };
     out
