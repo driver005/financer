@@ -93,7 +93,7 @@ impl Fixture {
     async fn list(app: &Router) -> Value {
         let (status, list) = Fixture::get(
             app,
-            &format!("/v1/meal-plan/shopping-list?week={WEEK}&date={WEEK}"),
+            &format!("/v1/shopping-list?week={WEEK}&date={WEEK}"),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{list}");
@@ -487,7 +487,7 @@ async fn nothing_priced_still_lists_what_to_buy() {
 #[tokio::test]
 async fn pantry_defaults_can_be_edited_and_drive_the_list() {
     let app = Fixture::app(&[Fixture::quote("salz", Chain::Aldi, 49)]).await;
-    let (status, pantry) = Fixture::get(&app, "/v1/meal-plan/pantry").await;
+    let (status, pantry) = Fixture::get(&app, "/v1/pantry").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(pantry["is_default"], true);
     let keys: Vec<_> = pantry["items"]
@@ -514,7 +514,7 @@ async fn pantry_defaults_can_be_edited_and_drive_the_list() {
     let (status, pantry) = Fixture::send(
         &app,
         Method::PUT,
-        "/v1/meal-plan/pantry",
+        "/v1/pantry",
         Some(json!({"items": ["oel", "oel", "mehl"]})),
     )
     .await;
@@ -524,7 +524,7 @@ async fn pantry_defaults_can_be_edited_and_drive_the_list() {
         Fixture::names(&pantry["items"]),
         vec!["Speiseöl", "Weizenmehl"]
     );
-    let (_, again) = Fixture::get(&app, "/v1/meal-plan/pantry").await;
+    let (_, again) = Fixture::get(&app, "/v1/pantry").await;
     assert_eq!(again["items"], pantry["items"]);
 
     let after = Fixture::list(&app).await;
@@ -544,7 +544,7 @@ async fn pantry_defaults_can_be_edited_and_drive_the_list() {
     let (_, empty) = Fixture::send(
         &app,
         Method::PUT,
-        "/v1/meal-plan/pantry",
+        "/v1/pantry",
         Some(json!({"items": []})),
     )
     .await;
@@ -558,13 +558,13 @@ async fn pantry_rejects_unknown_items() {
     let (status, err) = Fixture::send(
         &app,
         Method::PUT,
-        "/v1/meal-plan/pantry",
+        "/v1/pantry",
         Some(json!({"items": ["salz", "unobtainium"]})),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(err["error"].as_str().unwrap().contains("unobtainium"));
-    let (_, pantry) = Fixture::get(&app, "/v1/meal-plan/pantry").await;
+    let (_, pantry) = Fixture::get(&app, "/v1/pantry").await;
     assert_eq!(pantry["is_default"], true); // nothing was saved
 }
 
@@ -641,8 +641,8 @@ fn openapi_document_lists_the_meal_plan_routes() {
     let paths = doc["paths"].as_object().unwrap();
     for p in [
         "/v1/meal-plan",
-        "/v1/meal-plan/shopping-list",
-        "/v1/meal-plan/pantry",
+        "/v1/shopping-list",
+        "/v1/pantry",
     ] {
         assert!(paths.contains_key(p), "missing {p}");
     }
@@ -655,9 +655,9 @@ async fn meal_plan_routes_need_the_token() {
     for (method, uri) in [
         (Method::GET, "/v1/meal-plan"),
         (Method::PUT, "/v1/meal-plan"),
-        (Method::GET, "/v1/meal-plan/shopping-list"),
-        (Method::GET, "/v1/meal-plan/pantry"),
-        (Method::PUT, "/v1/meal-plan/pantry"),
+        (Method::GET, "/v1/shopping-list"),
+        (Method::GET, "/v1/pantry"),
+        (Method::PUT, "/v1/pantry"),
     ] {
         let res = app
             .clone()

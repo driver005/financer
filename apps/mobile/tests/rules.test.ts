@@ -153,14 +153,14 @@ describe("categorization API calls", () => {
         "POST /v1/rules",
         "PUT /v1/rules/7",
         "DELETE /v1/rules/7",
-        "POST /v1/rules/reorder",
-        "POST /v1/rules/apply",
+        "PUT /v1/rules/order",
+        "POST /v1/rules/applications",
         "PUT /v1/transactions/9/category",
         "GET /v1/transactions/splits",
         "PUT /v1/transactions/9/split",
         "DELETE /v1/transactions/9/split",
-        "POST /v1/transactions/categorize-unknown",
-        "POST /v1/transactions/categorize-unknown/accept",
+        "POST /v1/transactions/suggestions",
+        "PUT /v1/transactions/categories",
       ],
     );
     assert.deepEqual(calls[4].body, { ids: [3, 1] });

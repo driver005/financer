@@ -141,7 +141,7 @@ impl Grocery {
         Self::refresh_prices_now(&state).await.map(Json)
     }
 
-    /// The refresh behind `POST /v1/prices/refresh`; the server's daily scheduler calls it too.
+    /// The refresh behind `POST /v1/prices/refreshes`; the server's daily scheduler calls it too.
     pub(crate) async fn refresh_prices_now(state: &AppState) -> Result<RefreshReportDto, ApiError> {
         // pages read by a model need a configured provider; other sources do not
         let llm: Option<std::sync::Arc<dyn financer_llm::LlmProvider>> = if state
@@ -272,7 +272,7 @@ impl Grocery {
 
     pub async fn put_basket(
         State(state): State<AppState>,
-        Json(items): Json<Vec<BasketItemDto>>,
+        Json(items): Json<Vec<BasketItemInput>>,
     ) -> Result<Json<BasketDto>, ApiError> {
         let mut seen = HashSet::new();
         for i in &items {
@@ -331,7 +331,7 @@ impl Grocery {
 
     pub async fn upload_receipt(
         State(state): State<AppState>,
-        Json(up): Json<ReceiptUpload>,
+        Json(up): Json<ReceiptUploadInput>,
     ) -> Result<Json<ReceiptDto>, ApiError> {
         Self::store_receipt_text(&state, &up.text).await.map(Json)
     }
@@ -368,7 +368,7 @@ impl Grocery {
 
     pub async fn scan_receipt(
         State(state): State<AppState>,
-        Json(scan): Json<ReceiptScan>,
+        Json(scan): Json<ReceiptScanInput>,
     ) -> Result<Json<ScanDto>, ApiError> {
         if !["image/jpeg", "image/png", "image/webp", "application/pdf"]
             .contains(&scan.mime_type.as_str())
@@ -653,7 +653,7 @@ impl Grocery {
 
     pub async fn recipe_ideas(
         State(state): State<AppState>,
-        Json(req): Json<IdeasRequest>,
+        Json(req): Json<IdeasInput>,
     ) -> Result<Json<Vec<IdeaDto>>, ApiError> {
         let llm = Self::build_llm(&state).await?;
 
@@ -729,7 +729,7 @@ impl Grocery {
 
     pub async fn put_settings(
         State(state): State<AppState>,
-        Json(u): Json<SettingsUpdate>,
+        Json(u): Json<SettingsInput>,
     ) -> Result<Json<SettingsDto>, ApiError> {
         if let Some(m) = &u.habit_mode {
             if !["manual", "receipts", "spending"].contains(&m.as_str()) {
@@ -774,7 +774,7 @@ impl Grocery {
 
 /// Fetch all configured price sources and store the result. A source that fails keeps its old
 /// prices.
-#[utoipa::path(post, path = "/v1/prices/refresh", responses(
+#[utoipa::path(post, path = "/v1/prices/refreshes", responses(
     (status = 200, body = RefreshReportDto),
     (status = 503, description = "No price sources configured", body = ErrorBody)), security(("bearer" = [])))]
 pub async fn refresh_prices(
@@ -811,24 +811,24 @@ pub async fn get_basket(State(state): State<AppState>) -> Result<Json<BasketDto>
 }
 
 /// Replace your hand-maintained list of usual items (used in `manual` habit mode).
-#[utoipa::path(put, path = "/v1/basket", request_body = Vec<BasketItemDto>, responses(
+#[utoipa::path(put, path = "/v1/basket", request_body = Vec<BasketItemInput>, responses(
     (status = 200, body = BasketDto), (status = 400, description = "Unknown item, bad quantity or duplicate", body = ErrorBody)),
     security(("bearer" = [])))]
 pub async fn put_basket(
     State(state): State<AppState>,
-    Json(items): Json<Vec<BasketItemDto>>,
+    Json(items): Json<Vec<BasketItemInput>>,
 ) -> Result<Json<BasketDto>, ApiError> {
     Grocery::put_basket(State(state), Json(items)).await
 }
 
 /// Upload text recognised from a receipt photo. Your usual items are learned from receipts
 /// when the habit mode is `receipts`.
-#[utoipa::path(post, path = "/v1/receipts", request_body = ReceiptUpload, responses(
+#[utoipa::path(post, path = "/v1/receipts", request_body = ReceiptUploadInput, responses(
     (status = 200, body = ReceiptDto), (status = 400, description = "No items recognised", body = ErrorBody)),
     security(("bearer" = [])))]
 pub async fn upload_receipt(
     State(state): State<AppState>,
-    Json(up): Json<ReceiptUpload>,
+    Json(up): Json<ReceiptUploadInput>,
 ) -> Result<Json<ReceiptDto>, ApiError> {
     Grocery::upload_receipt(State(state), Json(up)).await
 }
@@ -836,7 +836,7 @@ pub async fn upload_receipt(
 /// Scan a receipt photo or a digital receipt PDF (a Rewe eBon or Lidl Plus receipt exported from
 /// their app or email): a model that can read documents (Claude or OpenAI, as configured) transcribes it
 /// and the transcript is parsed like pasted text. The photo is sent to that provider.
-#[utoipa::path(post, path = "/v1/receipts/scan", request_body = ReceiptScan, responses(
+#[utoipa::path(post, path = "/v1/receipts/scans", request_body = ReceiptScanInput, responses(
     (status = 200, body = ScanDto),
     (status = 400, description = "Not a usable image, or no items found on it", body = ErrorBody),
     (status = 502, description = "The provider failed or cannot read images", body = ErrorBody),
@@ -844,7 +844,7 @@ pub async fn upload_receipt(
     security(("bearer" = [])))]
 pub async fn scan_receipt(
     State(state): State<AppState>,
-    Json(scan): Json<ReceiptScan>,
+    Json(scan): Json<ReceiptScanInput>,
 ) -> Result<Json<ScanDto>, ApiError> {
     Grocery::scan_receipt(State(state), Json(scan)).await
 }
@@ -892,14 +892,14 @@ pub async fn recipes(
 
 /// New recipe ideas from Claude or OpenAI, based on your usual items and current offers. Only
 /// item names, the budget and your diet note are sent, never bank data.
-#[utoipa::path(post, path = "/v1/recipes/ideas", request_body = IdeasRequest, responses(
+#[utoipa::path(post, path = "/v1/recipes/ideas", request_body = IdeasInput, responses(
     (status = 200, body = Vec<IdeaDto>),
     (status = 503, description = "No API key configured for the selected provider", body = ErrorBody),
     (status = 502, description = "The provider failed or returned nothing usable", body = ErrorBody)),
     security(("bearer" = [])))]
 pub async fn recipe_ideas(
     State(state): State<AppState>,
-    Json(req): Json<IdeasRequest>,
+    Json(req): Json<IdeasInput>,
 ) -> Result<Json<Vec<IdeaDto>>, ApiError> {
     Grocery::recipe_ideas(State(state), Json(req)).await
 }
@@ -909,12 +909,12 @@ pub async fn get_settings(State(state): State<AppState>) -> Result<Json<Settings
     Grocery::get_settings(State(state)).await
 }
 
-#[utoipa::path(put, path = "/v1/settings", request_body = SettingsUpdate, responses(
+#[utoipa::path(put, path = "/v1/settings", request_body = SettingsInput, responses(
     (status = 200, body = SettingsDto), (status = 400, description = "Invalid value", body = ErrorBody)),
     security(("bearer" = [])))]
 pub async fn put_settings(
     State(state): State<AppState>,
-    Json(u): Json<SettingsUpdate>,
+    Json(u): Json<SettingsInput>,
 ) -> Result<Json<SettingsDto>, ApiError> {
     Grocery::put_settings(State(state), Json(u)).await
 }

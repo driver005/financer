@@ -669,7 +669,7 @@ mod tests {
             "/v1/spending/stores",
             "/v1/bank/connections",
             "/v1/receipts/sources",
-            "/v1/meal-plan/pantry",
+            "/v1/pantry",
         ] {
             assert!(checked.iter().any(|p| p == must), "{must} was not checked");
         }

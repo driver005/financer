@@ -44,7 +44,7 @@ impl From<StoredTransaction> for TransactionDto {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct ImportReport {
+pub struct FileImportDto {
     /// Rows stored for the first time.
     pub imported: usize,
     /// Rows already stored (same date, amount, counterparty and purpose).
@@ -85,7 +85,7 @@ impl From<RecurringPayment> for RecurringDto {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct EnvelopeDto {
+pub struct EnvelopeInput {
     #[schema(value_type = String, example = "groceries")]
     pub category: Category,
     #[schema(value_type = i64, example = 40000)]
@@ -177,7 +177,7 @@ pub struct RefreshReportDto {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct BasketItemDto {
+pub struct BasketItemInput {
     /// Catalog key, e.g. `milch`.
     pub item: String,
     /// Packs of the reference size per shopping period (1 to 99).
@@ -207,7 +207,7 @@ pub struct CatalogItemDto {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct ReceiptUpload {
+pub struct ReceiptUploadInput {
     /// Text recognised from the receipt photo.
     pub text: String,
 }
@@ -342,7 +342,7 @@ pub struct RecipeIngredientDto {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct IdeasRequest {
+pub struct IdeasInput {
     pub count: Option<usize>,
     pub diet: Option<String>,
     pub budget_cents: Option<i64>,
@@ -381,7 +381,7 @@ pub struct SettingsDto {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct SettingsUpdate {
+pub struct SettingsInput {
     pub habit_mode: Option<String>,
     pub llm_provider: Option<String>,
     pub llm_model: Option<String>,
@@ -419,7 +419,7 @@ impl PriceDto {
 // ---- bank sync ----
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct BankStatus {
+pub struct BankStatusDto {
     /// False until the server has a FinTS product id.
     pub configured: bool,
     /// Unix seconds of the last successful sync.
@@ -436,7 +436,7 @@ pub struct BankStatus {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct ReceiptScan {
+pub struct ReceiptScanInput {
     /// The photo's or PDF's bytes, base64-encoded (at most 8 MB decoded).
     pub image_base64: String,
     /// `image/jpeg`, `image/png`, `image/webp` or `application/pdf`.
@@ -499,12 +499,12 @@ pub struct ExportEvent {
 /// Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
 /// which are fetched again.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct ExportDto {
+pub struct DataDto {
     /// Format version, currently 1.
     pub version: u32,
     pub transactions: Vec<ExportTransaction>,
-    pub budget: Vec<EnvelopeDto>,
-    pub basket: Vec<BasketItemDto>,
+    pub budget: Vec<EnvelopeInput>,
+    pub basket: Vec<BasketItemInput>,
     pub receipts: Vec<ExportReceipt>,
     pub settings: ExportSettings,
     /// Added in the calendar release; older exports have none.

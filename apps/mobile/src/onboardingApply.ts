@@ -24,7 +24,7 @@ export async function applyDraft(api: ApplyApi, draft: Draft, today: string): Pr
     }
     const plan = planApply(draft, today, []);
     if (plan.envelopes !== null) {
-      const existing = await api.envelopes();
+      const existing = (await api.budget("current", today)).envelopes;
       const merged = planApply(draft, today, existing).envelopes!;
       await api.saveEnvelopes(merged);
       wrote.push("groceries limit");

@@ -21,13 +21,41 @@ fails the build when a call breaks one.
 | --- | --- |
 | `GET` a list | `200`, a bare array of named objects |
 | `GET` one thing | `200`, the object |
-| `POST` that creates | `201`, the created object |
+| `POST` that stores a new record (a rule, an event) | `201`, the created object |
 | `PUT` | `200`, the stored object |
 | `DELETE` | `204`, no body (and nothing else answers `204`) |
-| `POST` that does something (`.../sync`, `.../cancel`, `.../apply`) | `200`, the result or the new state |
+| `POST` that runs something and answers with its result (`.../applications`, `.../refreshes`, `.../scans`, `.../sync`) | `200`, the result or the new state |
 
-Bodies are named schemas (`...Input` or `...Request` going in, `...Dto` coming out) or a file
-(`text/csv`). No anonymous inline objects: they cannot be generated into a client.
+**Bodies are named schemas.** What goes in ends in `Input` (`RuleInput`, `SyncInput`), what comes out
+ends in `Dto` (`RuleDto`, `SyncDto`). The one exception is a resource you read and write whole
+(`GET` and `POST /v1/data`), whose answer may be sent back as it is. A file is `text/csv`. No
+anonymous inline objects: they cannot be generated into a client.
+
+## Nouns, not verbs
+
+A path is made of nouns. What would be a verb on a collection is the thing it makes:
+
+| instead of | it is |
+| --- | --- |
+| `POST /rules/apply` | `POST /rules/applications` |
+| `POST /rules/reorder` | `PUT /rules/order` |
+| `POST /transactions/categorize-unknown` | `POST /transactions/suggestions` |
+| `POST /transactions/categorize-unknown/accept` | `PUT /transactions/categories` |
+| `POST /prices/refresh` | `POST /prices/refreshes` |
+| `POST /backup/create`, `/backup/restore` | `POST /backups`, `POST /backups/restorations` |
+| `POST /receipts/scan` | `POST /receipts/scans` |
+| `GET /export`, `POST /import` | `GET /data`, `POST /data` |
+
+A verb is only allowed as the last segment under **one** thing, for an action on it:
+`/alerts/{id}/dismiss`, `/sync/{id}/cancel`, `/receipts/sources/{kind}/connect | finish |
+disconnect | import`. And a resource is not nested under one it is not part of: the pantry and the
+shopping list are read by the meal plan but are not parts of it (`/pantry`, `/shopping-list`).
+
+## One answer instead of five
+
+Reads that describe the same thing are one call. The budget is `GET /v1/budget` (the period, every
+envelope with what was spent, the daily number, the monthly picture), not five calls that each
+repeat the period; the limits are written with `PUT /v1/budget/envelopes`.
 
 ## Errors
 

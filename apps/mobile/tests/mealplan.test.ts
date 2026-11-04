@@ -297,10 +297,10 @@ describe("Api meal plan calls", () => {
     assert.deepEqual(calls, [
       { method: "GET", path: "/v1/meal-plan?week=2026-10-12", body: undefined },
       { method: "PUT", path: "/v1/meal-plan?week=2026-10-12", body: { days: [{ date: "2026-10-12", recipe_id: "pfannkuchen", servings: 2 }] } },
-      { method: "GET", path: "/v1/meal-plan/shopping-list?week=2026-10-12", body: undefined },
-      { method: "GET", path: "/v1/meal-plan/shopping-list?week=2026-10-12&date=2026-10-14", body: undefined },
-      { method: "GET", path: "/v1/meal-plan/pantry", body: undefined },
-      { method: "PUT", path: "/v1/meal-plan/pantry", body: { items: ["salz", "oel"] } },
+      { method: "GET", path: "/v1/shopping-list?week=2026-10-12", body: undefined },
+      { method: "GET", path: "/v1/shopping-list?week=2026-10-12&date=2026-10-14", body: undefined },
+      { method: "GET", path: "/v1/pantry", body: undefined },
+      { method: "PUT", path: "/v1/pantry", body: { items: ["salz", "oel"] } },
     ]);
   });
 });

@@ -21,12 +21,12 @@ function backendReplying(status: number, body: string) {
 }
 
 describe("encrypted backup client", () => {
-  it("sends the passphrase only in the request body of /v1/backup/create", async () => {
+  it("sends the passphrase only in the request body of /v1/backups", async () => {
     const { api, seen } = backendReplying(200, '{"data_base64":"AAAA","transactions":2,"receipts":1}');
     const r = await api.createBackup("correct horse");
     assert.deepEqual(r, { data_base64: "AAAA", transactions: 2, receipts: 1 });
     assert.equal(seen[0].method, "POST");
-    assert.equal(seen[0].pathAndQuery, "/v1/backup/create");
+    assert.equal(seen[0].pathAndQuery, "/v1/backups");
     assert.deepEqual(JSON.parse(seen[0].body), { passphrase: "correct horse" });
   });
 
@@ -37,7 +37,7 @@ describe("encrypted backup client", () => {
     );
     const r = await api.restoreBackup("correct horse", "QUJD");
     assert.equal(r.transactions_added, 2);
-    assert.equal(seen[0].pathAndQuery, "/v1/backup/restore");
+    assert.equal(seen[0].pathAndQuery, "/v1/backups/restorations");
     assert.deepEqual(JSON.parse(seen[0].body), { passphrase: "correct horse", data_base64: "QUJD" });
   });
 

@@ -89,7 +89,7 @@ async fn a_backup_round_trips_to_a_fresh_backend() {
     let (status, backup) = BackupFixture::send(
         &a,
         Method::POST,
-        "/v1/backup/create",
+        "/v1/backups",
         Some(json!({"passphrase": PASSPHRASE})),
     )
     .await;
@@ -103,7 +103,7 @@ async fn a_backup_round_trips_to_a_fresh_backend() {
     let (status, report) = BackupFixture::send(
         &b,
         Method::POST,
-        "/v1/backup/restore",
+        "/v1/backups/restorations",
         Some(json!({"passphrase": PASSPHRASE, "data_base64": data})),
     )
     .await;
@@ -116,7 +116,7 @@ async fn a_backup_round_trips_to_a_fresh_backend() {
     let (_, again) = BackupFixture::send(
         &b,
         Method::POST,
-        "/v1/backup/restore",
+        "/v1/backups/restorations",
         Some(json!({"passphrase": PASSPHRASE, "data_base64": data})),
     )
     .await;
@@ -130,7 +130,7 @@ async fn a_wrong_passphrase_or_damaged_file_fails_and_changes_nothing() {
     let (_, backup) = BackupFixture::send(
         &a,
         Method::POST,
-        "/v1/backup/create",
+        "/v1/backups",
         Some(json!({"passphrase": PASSPHRASE})),
     )
     .await;
@@ -140,7 +140,7 @@ async fn a_wrong_passphrase_or_damaged_file_fails_and_changes_nothing() {
     let (status, err) = BackupFixture::send(
         &b,
         Method::POST,
-        "/v1/backup/restore",
+        "/v1/backups/restorations",
         Some(json!({"passphrase": "wrong passphrase", "data_base64": data})),
     )
     .await;
@@ -164,7 +164,7 @@ async fn a_wrong_passphrase_or_damaged_file_fails_and_changes_nothing() {
         let (status, _) = BackupFixture::send(
             &b,
             Method::POST,
-            "/v1/backup/restore",
+            "/v1/backups/restorations",
             Some(json!({"passphrase": PASSPHRASE, "data_base64": bad})),
         )
         .await;
@@ -179,13 +179,13 @@ async fn short_passphrases_are_refused_and_routes_need_the_token() {
     let (status, _) = BackupFixture::send(
         &a,
         Method::POST,
-        "/v1/backup/create",
+        "/v1/backups",
         Some(json!({"passphrase": "short"})),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
-    for uri in ["/v1/backup/create", "/v1/backup/restore"] {
+    for uri in ["/v1/backups", "/v1/backups/restorations"] {
         let res = a
             .clone()
             .oneshot(

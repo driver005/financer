@@ -4,11 +4,13 @@ import { RemoteTransport, type ApiConfig, type Transport } from "./transport";
 export type { ApiConfig } from "./transport";
 
 export type Transaction = components["schemas"]["TransactionDto"];
-export type ImportReport = components["schemas"]["ImportReport"];
+export type ImportReport = components["schemas"]["FileImportDto"];
 export type Recurring = components["schemas"]["RecurringDto"];
-export type Envelope = components["schemas"]["EnvelopeDto"];
+export type Envelope = components["schemas"]["EnvelopeInput"];
 export type EnvelopeStatus = components["schemas"]["EnvelopeStatusDto"];
 export type Disposable = components["schemas"]["DisposableDto"];
+/** The budget in one answer: the period, its envelopes with what was spent, the daily number, the monthly picture. */
+export type Budget = components["schemas"]["BudgetDto"];
 export type BudgetPeriod = components["schemas"]["PeriodDto"];
 export type SafeToSpend = components["schemas"]["SafeToSpendDto"];
 export type Forecast = components["schemas"]["ForecastDto"];
@@ -46,9 +48,9 @@ export type CalendarEvent = components["schemas"]["EventDto"];
 export type CalendarEventInput = components["schemas"]["EventInput"];
 export type Repeat = components["schemas"]["RepeatDto"];
 export type Settings = components["schemas"]["SettingsDto"];
-export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
-export type BankStatus = components["schemas"]["BankStatus"];
-export type SyncRequest = components["schemas"]["SyncRequest"];
+export type SettingsUpdate = components["schemas"]["SettingsInput"];
+export type BankStatus = components["schemas"]["BankStatusDto"];
+export type SyncRequest = components["schemas"]["SyncInput"];
 /** A sync, whichever provider: what the person has to do next, or how it ended. */
 export type Sync = components["schemas"]["SyncDto"];
 /** A way transactions come in (csv, fints, plaid, gocardless, finapi) and whether the server has it. */
@@ -59,15 +61,15 @@ export type StoreSpend = components["schemas"]["StoreSpendDto"];
 export type StoreSpending = components["schemas"]["StoresDto"];
 export type StoresPeriod = components["schemas"]["StoresPeriod"];
 export type ScanResult =components["schemas"]["ScanDto"];
-export type ExportData = components["schemas"]["ExportDto"];
+export type ExportData = components["schemas"]["DataDto"];
 export type ImportSummary = components["schemas"]["ImportReportDto"];
 export type Rule = components["schemas"]["RuleDto"];
 export type RuleInput = components["schemas"]["RuleInput"];
-export type CategoryChanged = components["schemas"]["CategoryChanged"];
+export type CategoryChanged = components["schemas"]["CategoryChangedDto"];
 export type Split = components["schemas"]["SplitDto"];
 export type SplitInput = components["schemas"]["SplitInput"];
 export type Suggestions = components["schemas"]["SuggestionsDto"];
-export type AcceptReport = components["schemas"]["AcceptReport"];
+export type AcceptReport = components["schemas"]["CategoriesChangedDto"];
 export type Subscriptions = components["schemas"]["SubscriptionsDto"];
 export type Subscription = components["schemas"]["SubscriptionDto"];
 export type UpcomingCharge = components["schemas"]["UpcomingChargeDto"];
@@ -142,42 +144,24 @@ export class Api {
     return this.request<Recurring[]>("/v1/recurring");
   }
 
-  disposable() {
-    return this.request<Disposable>("/v1/budget/disposable");
+  /**
+   * The budget in one call: the period (payday to payday), every envelope with its limit and what was spent,
+   * the daily number (`safe_to_spend`, only for the current period) and the monthly picture (`disposable`).
+   * `date` is the local day, so a late evening is not tomorrow.
+   */
+  budget(period: "current" | "previous" = "current", date?: string) {
+    const q = new URLSearchParams({ period });
+    if (date) q.set("date", date);
+    return this.request<Budget>(`/v1/budget?${q}`);
   }
 
-  envelopes() {
-    return this.request<Envelope[]>("/v1/budget/envelopes");
-  }
-
+  /** Replace all envelope limits; answers with the envelopes of the current period. */
   saveEnvelopes(envelopes: Envelope[]) {
-    return this.request<Envelope[]>("/v1/budget/envelopes", {
+    return this.request<EnvelopeStatus[]>("/v1/budget/envelopes", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(envelopes),
     });
-  }
-
-  budgetStatus(year: number, month: number) {
-    return this.request<EnvelopeStatus[]>(`/v1/budget/status?year=${year}&month=${month}`);
-  }
-
-  /** The budget status of the current or the previous budget period (see `budgetPeriod`). */
-  budgetStatusFor(period: "current" | "previous", date?: string) {
-    const q = new URLSearchParams({ period });
-    if (date) q.set("date", date);
-    return this.request<EnvelopeStatus[]>(`/v1/budget/status?${q}`);
-  }
-
-  /** The budget period (payday to payday). `date` is the local day, so a late evening is not tomorrow. */
-  budgetPeriod(period: "current" | "previous" = "current", date?: string) {
-    const q = new URLSearchParams({ period });
-    if (date) q.set("date", date);
-    return this.request<BudgetPeriod>(`/v1/budget/period?${q}`);
-  }
-
-  safeToSpend(date?: string) {
-    return this.request<SafeToSpend>(`/v1/budget/safe-to-spend${date ? `?date=${date}` : ""}`);
   }
 
   /** Where the current budget period is heading; `date` is the local day. */
@@ -195,7 +179,7 @@ export class Api {
   }
 
   refreshPrices() {
-    return this.request<RefreshReport>("/v1/prices/refresh", { method: "POST" });
+    return this.request<RefreshReport>("/v1/prices/refreshes", { method: "POST" });
   }
 
   catalog() {
@@ -220,7 +204,7 @@ export class Api {
 
   /** Photo of a receipt: a vision model transcribes it and the server parses the transcript. */
   scanReceipt(imageBase64: string, mimeType: string) {
-    return this.json<ScanResult>("/v1/receipts/scan", "POST", { image_base64: imageBase64, mime_type: mimeType });
+    return this.json<ScanResult>("/v1/receipts/scans", "POST", { image_base64: imageBase64, mime_type: mimeType });
   }
 
   deleteReceipt(id: number) {
@@ -302,16 +286,16 @@ export class Api {
   mealShoppingList(week: string, date?: string) {
     const q = new URLSearchParams({ week });
     if (date) q.set("date", date);
-    return this.request<MealShoppingList>(`/v1/meal-plan/shopping-list?${q}`);
+    return this.request<MealShoppingList>(`/v1/shopping-list?${q}`);
   }
 
   pantry() {
-    return this.request<Pantry>("/v1/meal-plan/pantry");
+    return this.request<Pantry>("/v1/pantry");
   }
 
   /** Replaces the list of items assumed to be at home (catalog keys). */
   savePantry(items: string[]) {
-    return this.json<Pantry>("/v1/meal-plan/pantry", "PUT", { items });
+    return this.json<Pantry>("/v1/pantry", "PUT", { items });
   }
 
   settings() {
@@ -323,7 +307,7 @@ export class Api {
    * the on-phone backend, which has no such file.
    */
   serverConfig() {
-    return this.request<components["schemas"]["ConfigView"]>("/v1/server-config");
+    return this.request<components["schemas"]["ConfigDto"]>("/v1/server-config");
   }
 
   /**
@@ -331,8 +315,8 @@ export class Api {
    * `problems` when it refuses; 409 when an environment variable decides a key), then restarts to
    * apply them.
    */
-  saveServerConfig(change: components["schemas"]["Change"]) {
-    return this.json<components["schemas"]["ConfigSaved"]>("/v1/server-config", "PUT", change);
+  saveServerConfig(change: components["schemas"]["ConfigChangeInput"]) {
+    return this.json<components["schemas"]["ConfigSavedDto"]>("/v1/server-config", "PUT", change);
   }
 
   saveSettings(update: SettingsUpdate) {
@@ -355,21 +339,21 @@ export class Api {
 
   /** Everything that is yours as one document (no secrets, no prices). */
   exportData() {
-    return this.request<ExportData>("/v1/export");
+    return this.request<ExportData>("/v1/data");
   }
 
   importData(data: ExportData) {
-    return this.json<ImportSummary>("/v1/import", "POST", data);
+    return this.json<ImportSummary>("/v1/data", "POST", data);
   }
 
   /** The same data as `exportData`, encrypted with a passphrase (an `age` file, base64). */
   createBackup(passphrase: string) {
-    return this.json<EncryptedBackup>("/v1/backup/create", "POST", { passphrase });
+    return this.json<EncryptedBackup>("/v1/backups", "POST", { passphrase });
   }
 
   /** Merge an encrypted backup; a wrong passphrase or damaged file is a 400 and changes nothing. */
   restoreBackup(passphrase: string, dataBase64: string) {
-    return this.json<ImportSummary>("/v1/backup/restore", "POST", { passphrase, data_base64: dataBase64 });
+    return this.json<ImportSummary>("/v1/backups/restorations", "POST", { passphrase, data_base64: dataBase64 });
   }
 
   /** What the last login sent with a request looked like (non-secret), to prefill a form. */
@@ -510,12 +494,12 @@ export class Api {
 
   /** `ids` lists every rule once, highest priority first. */
   reorderRules(ids: number[]) {
-    return this.json<Rule[]>("/v1/rules/reorder", "POST", { ids });
+    return this.json<Rule[]>("/v1/rules/order", "PUT", { ids });
   }
 
   /** Re-run the rules over existing transactions; resolves with how many changed. */
   applyRules() {
-    return this.request<{ changed: number }>("/v1/rules/apply", { method: "POST" });
+    return this.request<{ changed: number }>("/v1/rules/applications", { method: "POST" });
   }
 
   /** `remember` also makes a rule for the merchant and applies it to its other transactions. */
@@ -537,10 +521,10 @@ export class Api {
 
   /** Asks the configured AI for categories of merchants nothing placed; sends merchant names only. */
   suggestCategories() {
-    return this.request<Suggestions>("/v1/transactions/categorize-unknown", { method: "POST" });
+    return this.request<Suggestions>("/v1/transactions/suggestions", { method: "POST" });
   }
 
   acceptSuggestions(suggestions: { merchant: string; category: string }[]) {
-    return this.json<AcceptReport>("/v1/transactions/categorize-unknown/accept", "POST", { suggestions });
+    return this.json<AcceptReport>("/v1/transactions/categories", "PUT", { suggestions });
   }
 }

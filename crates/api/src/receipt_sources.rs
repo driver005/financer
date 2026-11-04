@@ -122,7 +122,7 @@ impl From<SyncReport> for ReceiptSyncDto {
 }
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
-pub struct ReceiptSyncRequest {
+pub struct ReceiptSyncInput {
     /// Only this source (`email`, `lidl_plus`, `kaufland_card`, `folder`); all enabled ones when absent.
     pub source: Option<String>,
 }
@@ -142,7 +142,7 @@ pub struct SourceConnectDto {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct SourceFinishRequest {
+pub struct SourceFinishInput {
     pub state: String,
     /// The address the sign-in ended on, `com.lidlplus.app://callback?code=...`.
     pub callback_url: String,
@@ -289,7 +289,7 @@ impl ReceiptSourceRoutes {
 
     pub async fn sync(
         State(state): State<AppState>,
-        body: Option<Json<ReceiptSyncRequest>>,
+        body: Option<Json<ReceiptSyncInput>>,
     ) -> Result<Json<ReceiptSyncDto>, ApiError> {
         let only = match body.and_then(|b| b.0.source) {
             None => None,
@@ -358,7 +358,7 @@ impl ReceiptSourceRoutes {
     pub async fn finish(
         State(state): State<AppState>,
         Path(kind): Path<String>,
-        Json(req): Json<SourceFinishRequest>,
+        Json(req): Json<SourceFinishInput>,
     ) -> Result<Json<ReceiptSourceDto>, ApiError> {
         let kind = kind_of(&kind)?;
         if kind.flow() != "sign_in" {
@@ -421,7 +421,7 @@ impl ReceiptSourceRoutes {
     pub async fn known(
         State(state): State<AppState>,
         Path(kind): Path<String>,
-        Json(req): Json<ReceiptKnownRequest>,
+        Json(req): Json<ReceiptKnownInput>,
     ) -> Result<Json<ReceiptKnownDto>, ApiError> {
         let kind = kind_of(&kind)?;
         if kind != SourceKind::ReweApp {
@@ -439,7 +439,7 @@ impl ReceiptSourceRoutes {
     pub async fn import(
         State(state): State<AppState>,
         Path(kind): Path<String>,
-        Json(req): Json<ReceiptImportRequest>,
+        Json(req): Json<ReceiptImportInput>,
     ) -> Result<Json<ReceiptImportDto>, ApiError> {
         let kind = kind_of(&kind)?;
         let summary = match kind {
@@ -474,7 +474,7 @@ impl ReceiptSourceRoutes {
 
     async fn import_orders(
         state: &AppState,
-        req: &ReceiptImportRequest,
+        req: &ReceiptImportInput,
     ) -> Result<financer_receipt_sources::summary::RunSummary, ApiError> {
         use financer_receipt_sources::orders::{self, Order, OrderLine};
         let shop = req.shop.as_deref().unwrap_or("").trim();
@@ -514,7 +514,7 @@ impl ReceiptSourceRoutes {
 // ---- receipts a `push` source hands over ----
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct ReceiptKnownRequest {
+pub struct ReceiptKnownInput {
     /// The shop's receipt ids the app has just listed.
     pub ids: Vec<String>,
 }
@@ -550,7 +550,7 @@ pub struct ReceiptInput {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct ReceiptImportRequest {
+pub struct ReceiptImportInput {
     /// `orders_file` only: the shop's name as it should show ("Amazon"); at most 40 characters.
     pub shop: Option<String>,
     /// At most 100 receipts for `rewe_app`, 200 orders for `orders_file` (whose `time` is not used).
@@ -667,14 +667,14 @@ pub async fn get_source(
 
 /// Run the enabled receipt sources now (or just one). New receipts are linked to bank
 /// transactions where that is unambiguous. `409` while another sync is running.
-#[utoipa::path(post, path = "/v1/receipts/sync", request_body = ReceiptSyncRequest, responses(
+#[utoipa::path(post, path = "/v1/receipts/sync", request_body = ReceiptSyncInput, responses(
     (status = 200, body = ReceiptSyncDto),
     (status = 400, description = "Unknown source", body = ErrorBody),
     (status = 409, description = "A sync is already running", body = ErrorBody)),
     security(("bearer" = [])))]
 pub async fn sync_now(
     state: State<AppState>,
-    body: Option<Json<ReceiptSyncRequest>>,
+    body: Option<Json<ReceiptSyncInput>>,
 ) -> Result<Json<ReceiptSyncDto>, ApiError> {
     ReceiptSourceRoutes::sync(state, body).await
 }
@@ -697,7 +697,7 @@ pub async fn connect_source(
 
 /// `sign_in` sources: finish the sign-in with the address the shop's page ended on. Only the
 /// refresh token is stored, encrypted. The first receipts are fetched right away.
-#[utoipa::path(post, path = "/v1/receipts/sources/{kind}/finish", params(("kind" = String, Path, description = "`lidl_plus` or `kaufland_card`")), request_body = SourceFinishRequest, responses(
+#[utoipa::path(post, path = "/v1/receipts/sources/{kind}/finish", params(("kind" = String, Path, description = "`lidl_plus` or `kaufland_card`")), request_body = SourceFinishInput, responses(
     (status = 200, body = ReceiptSourceDto),
     (status = 400, description = "Unknown or expired sign-in, or an address that is not the callback", body = ErrorBody),
     (status = 404, description = "Unknown source", body = ErrorBody),
@@ -707,7 +707,7 @@ pub async fn connect_source(
 pub async fn finish_source(
     state: State<AppState>,
     kind: Path<String>,
-    body: Json<SourceFinishRequest>,
+    body: Json<SourceFinishInput>,
 ) -> Result<Json<ReceiptSourceDto>, ApiError> {
     ReceiptSourceRoutes::finish(state, kind, body).await
 }
@@ -729,7 +729,7 @@ pub async fn disconnect_source(
 
 /// `push` sources (`rewe_app`): which of the shop's receipt ids are not stored yet. The app calls
 /// it with the list it just read, so that it fetches the details of the new ones only.
-#[utoipa::path(post, path = "/v1/receipts/sources/{kind}/known", params(("kind" = String, Path, description = "`rewe_app`")), request_body = ReceiptKnownRequest, responses(
+#[utoipa::path(post, path = "/v1/receipts/sources/{kind}/known", params(("kind" = String, Path, description = "`rewe_app`")), request_body = ReceiptKnownInput, responses(
     (status = 200, body = ReceiptKnownDto),
     (status = 400, description = "Too many ids, an odd id, or a source without a list", body = ErrorBody),
     (status = 404, description = "Unknown source", body = ErrorBody)),
@@ -737,7 +737,7 @@ pub async fn disconnect_source(
 pub async fn known_receipts(
     state: State<AppState>,
     kind: Path<String>,
-    body: Json<ReceiptKnownRequest>,
+    body: Json<ReceiptKnownInput>,
 ) -> Result<Json<ReceiptKnownDto>, ApiError> {
     ReceiptSourceRoutes::known(state, kind, body).await
 }
@@ -746,7 +746,7 @@ pub async fn known_receipts(
 /// or the orders it read from a file the shop produced (`orders_file`: Amazon's data request, for
 /// example), once each, and match them to bank payments. Nothing is fetched from the shop.
 /// Experimental: see docs/RECEIPT_SOURCES.md.
-#[utoipa::path(post, path = "/v1/receipts/sources/{kind}/import", params(("kind" = String, Path, description = "`rewe_app` or `orders_file`")), request_body = ReceiptImportRequest, responses(
+#[utoipa::path(post, path = "/v1/receipts/sources/{kind}/import", params(("kind" = String, Path, description = "`rewe_app` or `orders_file`")), request_body = ReceiptImportInput, responses(
     (status = 200, body = ReceiptImportDto),
     (status = 400, description = "A receipt is malformed, there are too many, or the source takes no pushes", body = ErrorBody),
     (status = 404, description = "Unknown source", body = ErrorBody)),
@@ -754,7 +754,7 @@ pub async fn known_receipts(
 pub async fn import_receipts(
     state: State<AppState>,
     kind: Path<String>,
-    body: Json<ReceiptImportRequest>,
+    body: Json<ReceiptImportInput>,
 ) -> Result<Json<ReceiptImportDto>, ApiError> {
     ReceiptSourceRoutes::import(state, kind, body).await
 }

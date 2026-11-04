@@ -29,16 +29,10 @@ export default function Budget() {
   const { api, loaded } = useApi();
   const { data, error, reload } = useScreenData<BudgetData>(async (a) => {
     const today = localIsoDate();
-    const [disposable, envelopes, current, previous, statusNow, statusBefore] = await Promise.all([
-      a.disposable(),
-      a.envelopes(),
-      a.budgetPeriod("current", today),
-      a.budgetPeriod("previous", today),
-      a.budgetStatusFor("current", today),
-      a.budgetStatusFor("previous", today),
-    ]);
+    const [now, before] = await Promise.all([a.budget("current", today), a.budget("previous", today)]);
+    const { disposable, envelopes } = now;
     const limits = Object.fromEntries(envelopes.map((e) => [e.category, (e.limit_cents / 100).toFixed(2).replace(".", ",")]));
-    return { disposable, limits, status: { current: statusNow, previous: statusBefore }, period: { current, previous } };
+    return { disposable, limits, status: { current: now.envelopes, previous: before.envelopes }, period: { current: now.period, previous: before.period } };
   });
   const [limits, setLimits] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);

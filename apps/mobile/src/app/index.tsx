@@ -70,17 +70,18 @@ export default function Today() {
   const [note, setNote] = useState<{ title: string; text: string } | null>(null);
   const [allQuests, setAllQuests] = useState(false);
   const { data, error, busy, reload } = useScreenData<TodayData>(async (a) => {
-    const [txs, envelopes, basket, prices, receipts, safe, forecast, savingsGoal] = await Promise.all([
+    const [txs, budget, basket, prices, receipts, forecast, savingsGoal] = await Promise.all([
       a.transactions(),
-      a.envelopes(),
+      a.budget("current", localIsoDate()),
       a.basket(),
       a.prices(),
       a.receipts(),
       // the rest of the screen still works if this one fails (e.g. an older server)
-      a.safeToSpend(localIsoDate()).catch(() => null),
       a.forecast(localIsoDate()).catch(() => null),
       getSavingsGoal(),
     ]);
+    const envelopes = budget.envelopes;
+    const safe = budget.safe_to_spend ?? null;
     return {
       txs,
       safe,

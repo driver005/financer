@@ -264,12 +264,8 @@ impl AppState {
         routes::health,
         routes::list_transactions,
         routes::recurring,
-        routes::disposable,
-        routes::get_envelopes,
         routes::put_envelopes,
-        routes::budget_status,
-        budget_period::budget_period,
-        budget_period::safe_to_spend,
+        budget_period::budget,
         forecast::forecast,
         export::export_data,
         export::import_data,
@@ -344,13 +340,14 @@ impl AppState {
     ),
     components(schemas(
         dto::TransactionDto,
-        dto::ImportReport,
+        dto::FileImportDto,
         dto::SkippedRowDto,
         dto::RecurringDto,
-        dto::EnvelopeDto,
+        dto::EnvelopeInput,
         dto::EnvelopeStatusDto,
         dto::DisposableDto,
         budget_period::PeriodChoice,
+        budget_period::BudgetDto,
         budget_period::PeriodDto,
         budget_period::SafeToSpendDto,
         forecast::ForecastDto,
@@ -363,17 +360,17 @@ impl AppState {
         dto::ExportEvent,
         calendar::EventBody,
         dto::ExportSettings,
-        dto::ExportDto,
+        dto::DataDto,
         dto::ImportReportDto,
-        backup::BackupCreateRequest,
+        backup::BackupInput,
         backup::BackupDto,
-        backup::BackupRestoreRequest,
-        dto::BankStatus,
+        backup::BackupRestorationInput,
+        dto::BankStatusDto,
         bank_connections::ProviderDto,
         bank_connections::BankConnectionDto,
         bank_connections::SyncOutcomeDto,
-        bank_connections::SyncRequest,
-        bank_connections::LoginDto,
+        bank_connections::SyncInput,
+        bank_connections::LoginInput,
         bank_connections::SyncDto,
         bank_connections::ConnectionState,
         bank_connections::LinkedAccountDto,
@@ -386,24 +383,24 @@ impl AppState {
         scan::ObservationDto,
         dto::SourceStatusDto,
         dto::RefreshReportDto,
-        dto::BasketItemDto,
+        dto::BasketItemInput,
         dto::BasketDto,
         dto::BasketItemOutDto,
         dto::CatalogItemDto,
-        dto::ReceiptUpload,
+        dto::ReceiptUploadInput,
         dto::ReceiptItemDto,
         dto::ReceiptDto,
-        dto::ReceiptScan,
+        dto::ReceiptScanInput,
         receipt_sources::ReceiptSourceDto,
         receipt_sources::ReceiptSyncDto,
-        receipt_sources::ReceiptSyncRequest,
+        receipt_sources::ReceiptSyncInput,
         receipt_sources::SourceConnectDto,
-        receipt_sources::SourceFinishRequest,
-        receipt_sources::ReceiptKnownRequest,
+        receipt_sources::SourceFinishInput,
+        receipt_sources::ReceiptKnownInput,
         receipt_sources::ReceiptKnownDto,
         receipt_sources::ReceiptLineInput,
         receipt_sources::ReceiptInput,
-        receipt_sources::ReceiptImportRequest,
+        receipt_sources::ReceiptImportInput,
         receipt_sources::ReceiptImportDto,
         dto::ScanDto,
         dto::ChainAffordabilityDto,
@@ -414,32 +411,32 @@ impl AppState {
         dto::AffordabilityDto,
         dto::RecipeMatchDto,
         dto::RecipeIngredientDto,
-        dto::IdeasRequest,
+        dto::IdeasInput,
         dto::IdeaDto,
         dto::IdeaIngredientDto,
         dto::SettingsDto,
-        dto::SettingsUpdate,
+        dto::SettingsInput,
         financer_config::ConfigView,
         financer_config::GroupView,
         financer_config::KeyView,
         financer_config::FieldView,
         financer_config::Change,
-        server_config::ConfigSaved,
+        server_config::ConfigSavedDto,
         server_config::ConfigProblems,
         categorization::RuleDto,
         categorization::RuleInput,
-        categorization::RuleOrder,
-        categorization::ApplyReport,
-        categorization::CategoryChange,
-        categorization::CategoryChanged,
+        categorization::RuleOrderInput,
+        categorization::RulesAppliedDto,
+        categorization::CategoryInput,
+        categorization::CategoryChangedDto,
         categorization::SplitPartDto,
         categorization::SplitInput,
         categorization::SplitDto,
         categorization::SuggestionDto,
         categorization::SuggestionsDto,
         categorization::AcceptedSuggestion,
-        categorization::AcceptSuggestions,
-        categorization::AcceptReport,
+        categorization::CategoriesInput,
+        categorization::CategoriesChangedDto,
         watchdog::SubscriptionDto,
         watchdog::UpcomingChargeDto,
         watchdog::PriceHikeDto,
@@ -457,7 +454,7 @@ impl AppState {
         mealplan::MealPlanDto,
         mealplan::PantryItemDto,
         mealplan::PantryDto,
-        mealplan::PantryUpdate,
+        mealplan::PantryInput,
         mealplan::ShoppingItemDto,
         mealplan::ShoppingStopDto,
         mealplan::ShoppingPlanDto,
@@ -504,19 +501,12 @@ impl Api {
         let mut v1 = Router::new()
             .route("/transactions", get(routes::list_transactions))
             .route("/recurring", get(routes::recurring))
-            .route("/budget/disposable", get(routes::disposable))
-            .route(
-                "/budget/envelopes",
-                get(routes::get_envelopes).put(routes::put_envelopes),
-            )
-            .route("/budget/status", get(routes::budget_status))
-            .route("/budget/period", get(budget_period::budget_period))
-            .route("/budget/safe-to-spend", get(budget_period::safe_to_spend))
+            .route("/budget", get(budget_period::budget))
+            .route("/budget/envelopes", put(routes::put_envelopes))
             .route("/forecast", get(forecast::forecast))
-            .route("/export", get(export::export_data))
-            .route("/import", post(export::import_data))
-            .route("/backup/create", post(backup::create_backup))
-            .route("/backup/restore", post(backup::restore_backup))
+            .route("/data", get(export::export_data).post(export::import_data))
+            .route("/backups", post(backup::create_backup))
+            .route("/backups/restorations", post(backup::restore_backup))
             .route("/bank/providers", get(bank_connections::list_providers))
             .route("/bank/connections", get(bank_connections::list_connections))
             .route(
@@ -539,7 +529,7 @@ impl Api {
             .route("/prices", get(grocery::list_prices))
             .route("/prices/best", get(grocery::best_prices))
             .route("/prices/ean/{ean}", get(scan::ean_lookup))
-            .route("/prices/refresh", post(grocery::refresh_prices))
+            .route("/prices/refreshes", post(grocery::refresh_prices))
             .route("/catalog", get(grocery::catalog))
             .route("/basket", get(grocery::get_basket).put(grocery::put_basket))
             .route(
@@ -547,7 +537,7 @@ impl Api {
                 get(grocery::list_receipts).post(grocery::upload_receipt),
             )
             .route(
-                "/receipts/scan",
+                "/receipts/scans",
                 post(grocery::scan_receipt).layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
             )
             .route("/receipts/{id}", delete(grocery::delete_receipt))
@@ -589,20 +579,20 @@ impl Api {
                 "/rules",
                 get(categorization::list_rules).post(categorization::create_rule),
             )
-            .route("/rules/reorder", post(categorization::reorder_rules))
-            .route("/rules/apply", post(categorization::apply_rules))
+            .route("/rules/order", put(categorization::reorder_rules))
+            .route("/rules/applications", post(categorization::apply_rules))
             .route(
                 "/rules/{id}",
                 put(categorization::update_rule).delete(categorization::delete_rule),
             )
             .route("/transactions/splits", get(categorization::list_splits))
             .route(
-                "/transactions/categorize-unknown",
+                "/transactions/suggestions",
                 post(categorization::categorize_unknown),
             )
             .route(
-                "/transactions/categorize-unknown/accept",
-                post(categorization::accept_suggestions),
+                "/transactions/categories",
+                put(categorization::accept_suggestions),
             )
             .route(
                 "/transactions/{id}/category",
@@ -641,9 +631,9 @@ impl Api {
                 "/meal-plan",
                 get(mealplan::get_meal_plan).put(mealplan::put_meal_plan),
             )
-            .route("/meal-plan/shopping-list", get(mealplan::get_shopping_list))
+            .route("/shopping-list", get(mealplan::get_shopping_list))
             .route(
-                "/meal-plan/pantry",
+                "/pantry",
                 get(mealplan::get_pantry).put(mealplan::put_pantry),
             );
         for (name, app) in apps {

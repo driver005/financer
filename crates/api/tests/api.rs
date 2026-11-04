@@ -172,7 +172,8 @@ async fn recurring_and_disposable_income() {
     assert_eq!(rec.len(), 2);
     assert!(rec.iter().all(|r| r["cadence"] == "monthly"));
 
-    let (_, d) = ApiFixture::get_json(&app, "/v1/budget/disposable").await;
+    let (_, b) = ApiFixture::get_json(&app, "/v1/budget").await;
+    let d = &b["disposable"];
     assert_eq!(d["monthly_income_cents"], 250_000);
     assert_eq!(d["monthly_fixed_costs_cents"], 80_000);
     assert_eq!(d["disposable_cents"], 170_000);
@@ -203,8 +204,8 @@ async fn envelopes_and_status() {
     .await;
     assert_eq!(s, StatusCode::OK);
 
-    let (_, status) = ApiFixture::get_json(&app, "/v1/budget/status?year=2026&month=3").await;
-    let groceries = status
+    let (_, budget) = ApiFixture::get_json(&app, "/v1/budget?date=2026-03-20").await;
+    let groceries = budget["envelopes"]
         .as_array()
         .unwrap()
         .iter()
@@ -213,7 +214,7 @@ async fn envelopes_and_status() {
     assert_eq!(groceries["spent_cents"], 2347 + 3103);
     assert_eq!(groceries["remaining_cents"], 40000 - 2347 - 3103);
 
-    let (s, _) = ApiFixture::get_json(&app, "/v1/budget/status?year=2026&month=13").await;
+    let (s, _) = ApiFixture::get_json(&app, "/v1/budget?date=2026-13-40").await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
 
     let dup = json!([{"category": "groceries", "limit_cents": 1}, {"category": "groceries", "limit_cents": 2}]);
@@ -247,16 +248,16 @@ fn openapi_document_lists_every_route() {
     let paths = doc["paths"].as_object().unwrap();
     for p in [
         "/health",
-        "/v1/export",
-        "/v1/import",
+        "/v1/data",
+        "/v1/data",
         "/v1/bank/status",
         "/v1/prices",
         "/v1/prices/best",
-        "/v1/prices/refresh",
+        "/v1/prices/refreshes",
         "/v1/catalog",
         "/v1/basket",
         "/v1/receipts",
-        "/v1/receipts/scan",
+        "/v1/receipts/scans",
         "/v1/receipts/{id}",
         "/v1/affordability",
         "/v1/recipes",
@@ -269,9 +270,8 @@ fn openapi_document_lists_every_route() {
         "/v1/bank/sync/{id}",
         "/v1/bank/sync/{id}/cancel",
         "/v1/recurring",
-        "/v1/budget/disposable",
+        "/v1/budget",
         "/v1/budget/envelopes",
-        "/v1/budget/status",
     ] {
         assert!(paths.contains_key(p), "missing {p}");
     }

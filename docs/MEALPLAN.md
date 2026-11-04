@@ -17,7 +17,7 @@ priced per chain, and checked against what is left of the groceries budget. In t
   normalised to, see `GET /v1/catalog`). Weight and volume are treated alike (1 g is 1 ml).
 * Items on the **pantry list** are left off. The default is what the catalog marks as pantry (salt,
   pepper, sugar, oil, vinegar, stock, curry) plus flour. It is stored in the `pantry_staples`
-  setting and can be edited in the app or with `PUT /v1/meal-plan/pantry`.
+  setting and can be edited in the app or with `PUT /v1/pantry`.
 * Pricing uses the stored prices that are still valid and the same basket planner as the rest of
   the app: totals per chain, and the best split across chains only when it saves at least 0.50 EUR
   against the cheapest single chain. Items no chain has a price for are listed apart and are not in
@@ -33,8 +33,8 @@ priced per chain, and checked against what is left of the groceries budget. In t
 | --- | --- |
 | `GET /v1/meal-plan?week=` | the planned days of the week |
 | `PUT /v1/meal-plan?week=` | replace the week (`{"days": [...]}`; one meal per day) |
-| `GET /v1/meal-plan/shopping-list?week=&date=` | the priced list; `date` is the local day, used to find the budget period |
-| `GET/PUT /v1/meal-plan/pantry` | the pantry list (`{"items": ["salz", ...]}`) |
+| `GET /v1/shopping-list?week=&date=` | the priced list; `date` is the local day, used to find the budget period |
+| `GET/PUT /v1/pantry` | the pantry list (`{"items": ["salz", ...]}`) |
 
 ## Limits
 

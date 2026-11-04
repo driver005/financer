@@ -34,7 +34,7 @@ use tokio::task::AbortHandle;
 use utoipa::ToSchema;
 use zeroize::Zeroizing;
 
-use crate::dto::{BankStatus, ErrorBody, ImportReport, SkippedRowDto};
+use crate::dto::{BankStatusDto, ErrorBody, FileImportDto, SkippedRowDto};
 use crate::routes::ApiError;
 use crate::AppState;
 
@@ -254,7 +254,7 @@ pub struct BankConnectionDto {
 
 /// The online banking login of a FinTS sync that is not set up in the configuration.
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct LoginDto {
+pub struct LoginInput {
     /// Bank code (BLZ).
     pub blz: String,
     /// Online banking login name.
@@ -268,13 +268,13 @@ pub struct LoginDto {
 
 /// Start a sync: the same request for every provider.
 #[derive(Debug, Default, Deserialize, ToSchema)]
-pub struct SyncRequest {
+pub struct SyncInput {
     /// A connection of the server configuration, by name. Or leave it out and name the `kind` and
     /// (for FinTS) the `login`.
     pub connection: Option<String>,
     /// `fints` for a login sent with this request.
     pub kind: Option<String>,
-    pub login: Option<LoginDto>,
+    pub login: Option<LoginInput>,
     /// The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync
     /// only and never stored.
     pub pin: Option<String>,
@@ -1399,7 +1399,7 @@ impl BankSync {
 
     // -- the routes' logic
 
-    async fn start_request(state: &AppState, req: SyncRequest) -> Result<String, ApiError> {
+    async fn start_request(state: &AppState, req: SyncInput) -> Result<String, ApiError> {
         if let Some(name) = req.connection.as_deref().filter(|n| !n.trim().is_empty()) {
             let conn = state
                 .bank_connections
@@ -1476,7 +1476,7 @@ impl BankSync {
         state: &AppState,
         kind: &str,
         body: Bytes,
-    ) -> Result<ImportReport, ApiError> {
+    ) -> Result<FileImportDto, ApiError> {
         let kind = ProviderKind::parse(kind).ok_or(ApiError::NotFound)?;
         if kind.flow() != Flow::File {
             return Err(ApiError::BadRequest(format!(
@@ -1493,7 +1493,7 @@ impl BankSync {
             .await
             .map_err(|e| Self::api_error(kind, &e))?;
         let (imported, duplicates) = Self::store_transactions(state, parsed.transactions).await?;
-        Ok(ImportReport {
+        Ok(FileImportDto {
             imported,
             duplicates,
             skipped: parsed
@@ -1507,10 +1507,10 @@ impl BankSync {
         })
     }
 
-    async fn status(state: &AppState) -> Result<BankStatus, ApiError> {
+    async fn status(state: &AppState) -> Result<BankStatusDto, ApiError> {
         let store = &state.store;
         let date_format = time::macros::format_description!("[year]-[month]-[day]");
-        Ok(BankStatus {
+        Ok(BankStatusDto {
             configured: state.providers.has(BankProvider::Fints),
             last_sync_at: store
                 .get_setting("bank_last_sync_at")
@@ -1565,7 +1565,7 @@ pub async fn list_connections(
 /// in the background for what the person has to do (`state` is `needs_approval` or `needs_link`)
 /// and imports as soon as it is done. Poll `GET /v1/bank/sync/{id}`. Send the PIN only when the
 /// connection has no `pin_from_env`.
-#[utoipa::path(post, path = "/v1/bank/sync", request_body = SyncRequest, responses(
+#[utoipa::path(post, path = "/v1/bank/sync", request_body = SyncInput, responses(
     (status = 200, body = SyncDto),
     (status = 400, description = "PIN or login missing or refused by the bank, a kind that needs a connection", body = ErrorBody),
     (status = 404, description = "No such connection", body = ErrorBody),
@@ -1576,7 +1576,7 @@ pub async fn list_connections(
     security(("bearer" = [])))]
 pub async fn start_sync(
     State(state): State<AppState>,
-    Json(req): Json<SyncRequest>,
+    Json(req): Json<SyncInput>,
 ) -> Result<Json<SyncDto>, ApiError> {
     let id = BankSync::start_request(&state, req).await?;
     Ok(Json(BankSync::sync_dto(&state, &id).await?))
@@ -1637,7 +1637,7 @@ pub async fn disconnect_connection(
     params(("kind" = String, Path, description = "`csv`")),
     request_body(content = String, content_type = "text/csv"),
     responses(
-        (status = 200, description = "Import finished", body = ImportReport),
+        (status = 200, description = "Import finished", body = FileImportDto),
         (status = 400, description = "Not a file this provider reads", body = ErrorBody),
         (status = 404, description = "Unknown provider", body = ErrorBody),
     ),
@@ -1647,13 +1647,13 @@ pub async fn import_file(
     State(state): State<AppState>,
     Path(kind): Path<String>,
     body: Bytes,
-) -> Result<Json<ImportReport>, ApiError> {
+) -> Result<Json<FileImportDto>, ApiError> {
     Ok(Json(BankSync::import_file(&state, &kind, body).await?))
 }
 
 /// What the last login sent with a request looked like (its non-secret details), to prefill the form.
-#[utoipa::path(get, path = "/v1/bank/status", responses((status = 200, body = BankStatus)), security(("bearer" = [])))]
-pub async fn bank_status(State(state): State<AppState>) -> Result<Json<BankStatus>, ApiError> {
+#[utoipa::path(get, path = "/v1/bank/status", responses((status = 200, body = BankStatusDto)), security(("bearer" = [])))]
+pub async fn bank_status(State(state): State<AppState>) -> Result<Json<BankStatusDto>, ApiError> {
     Ok(Json(BankSync::status(&state).await?))
 }
 

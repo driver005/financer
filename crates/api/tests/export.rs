@@ -109,7 +109,7 @@ const RECEIPT: &str =
 #[tokio::test]
 async fn export_then_import_moves_everything_to_a_fresh_backend() {
     let a = ExportFixture::seeded().await;
-    let (status, exported) = ExportFixture::send(&a, Method::GET, "/v1/export", None, None).await;
+    let (status, exported) = ExportFixture::send(&a, Method::GET, "/v1/data", None, None).await;
     assert_eq!(status, StatusCode::OK);
     let doc = ExportFixture::j(&exported);
     assert_eq!(
@@ -122,7 +122,7 @@ async fn export_then_import_moves_everything_to_a_fresh_backend() {
 
     let b = ExportFixture::app().await;
     let (status, report) =
-        ExportFixture::send(&b, Method::POST, "/v1/import", Some(doc.clone()), None).await;
+        ExportFixture::send(&b, Method::POST, "/v1/data", Some(doc.clone()), None).await;
     assert_eq!(status, StatusCode::OK);
     let r = ExportFixture::j(&report);
     assert_eq!(
@@ -153,7 +153,7 @@ async fn export_then_import_moves_everything_to_a_fresh_backend() {
     assert_eq!(strip(&a_tx), strip(&b_tx));
     // the new backend exports exactly what the old one did
     let again = ExportFixture::j(
-        &ExportFixture::send(&b, Method::GET, "/v1/export", None, None)
+        &ExportFixture::send(&b, Method::GET, "/v1/data", None, None)
             .await
             .1,
     );
@@ -174,13 +174,13 @@ async fn export_then_import_moves_everything_to_a_fresh_backend() {
 async fn importing_twice_changes_nothing() {
     let a = ExportFixture::seeded().await;
     let doc = ExportFixture::j(
-        &ExportFixture::send(&a, Method::GET, "/v1/export", None, None)
+        &ExportFixture::send(&a, Method::GET, "/v1/data", None, None)
             .await
             .1,
     );
     let b = ExportFixture::app().await;
-    ExportFixture::send(&b, Method::POST, "/v1/import", Some(doc.clone()), None).await;
-    let (_, second) = ExportFixture::send(&b, Method::POST, "/v1/import", Some(doc), None).await;
+    ExportFixture::send(&b, Method::POST, "/v1/data", Some(doc.clone()), None).await;
+    let (_, second) = ExportFixture::send(&b, Method::POST, "/v1/data", Some(doc), None).await;
     let r = ExportFixture::j(&second);
     assert_eq!(
         (
@@ -210,7 +210,7 @@ async fn importing_twice_changes_nothing() {
 async fn an_invalid_file_changes_nothing() {
     let a = ExportFixture::seeded().await;
     let mut doc = ExportFixture::j(
-        &ExportFixture::send(&a, Method::GET, "/v1/export", None, None)
+        &ExportFixture::send(&a, Method::GET, "/v1/data", None, None)
             .await
             .1,
     );
@@ -218,7 +218,7 @@ async fn an_invalid_file_changes_nothing() {
 
     doc["basket"] = json!([{"item": "kaviar", "quantity": 1}]);
     assert_eq!(
-        ExportFixture::send(&b, Method::POST, "/v1/import", Some(doc.clone()), None)
+        ExportFixture::send(&b, Method::POST, "/v1/data", Some(doc.clone()), None)
             .await
             .0,
         StatusCode::BAD_REQUEST
@@ -239,7 +239,7 @@ async fn an_invalid_file_changes_nothing() {
     doc["basket"] = json!([]);
     doc["version"] = json!(2);
     assert_eq!(
-        ExportFixture::send(&b, Method::POST, "/v1/import", Some(doc.clone()), None)
+        ExportFixture::send(&b, Method::POST, "/v1/data", Some(doc.clone()), None)
             .await
             .0,
         StatusCode::BAD_REQUEST
@@ -248,7 +248,7 @@ async fn an_invalid_file_changes_nothing() {
     doc["version"] = json!(1);
     doc["receipts"][0]["receipt"] = json!({"nonsense": true});
     assert_eq!(
-        ExportFixture::send(&b, Method::POST, "/v1/import", Some(doc.clone()), None)
+        ExportFixture::send(&b, Method::POST, "/v1/data", Some(doc.clone()), None)
             .await
             .0,
         StatusCode::BAD_REQUEST
@@ -257,7 +257,7 @@ async fn an_invalid_file_changes_nothing() {
     doc["receipts"] = json!([]);
     doc["settings"]["habit_mode"] = json!("magic");
     assert_eq!(
-        ExportFixture::send(&b, Method::POST, "/v1/import", Some(doc), None)
+        ExportFixture::send(&b, Method::POST, "/v1/data", Some(doc), None)
             .await
             .0,
         StatusCode::BAD_REQUEST
@@ -279,7 +279,7 @@ async fn an_invalid_file_changes_nothing() {
 async fn the_export_contains_no_secrets() {
     let a = ExportFixture::seeded().await;
     // a finished bank sync leaves non-secret prefill settings only; make sure none of it is exported
-    let (_, body) = ExportFixture::send(&a, Method::GET, "/v1/export", None, None).await;
+    let (_, body) = ExportFixture::send(&a, Method::GET, "/v1/data", None, None).await;
     for secret in ["sk-claude-very-secret", TOKEN, "bank_", "pin"] {
         assert!(
             !body.to_lowercase().contains(&secret.to_lowercase()),
@@ -291,7 +291,7 @@ async fn the_export_contains_no_secrets() {
 #[tokio::test]
 async fn export_routes_need_the_token() {
     let a = ExportFixture::app().await;
-    for (m, uri) in [(Method::GET, "/v1/export"), (Method::POST, "/v1/import")] {
+    for (m, uri) in [(Method::GET, "/v1/data"), (Method::POST, "/v1/data")] {
         let res = a
             .clone()
             .oneshot(

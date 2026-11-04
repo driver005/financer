@@ -1,12 +1,10 @@
-use axum::extract::{Query, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use financer_core::{Budget, Disposable, RecurringDetector};
-use serde::Deserialize;
-use time::Date;
 
-use crate::budget_period::{BudgetPeriods, PeriodChoice};
+use crate::budget_period::BudgetPeriods;
 use crate::dto::*;
 use crate::AppState;
 
@@ -98,78 +96,22 @@ pub async fn recurring(State(state): State<AppState>) -> Result<Json<Vec<Recurri
     Routes::recurring(state).await
 }
 
-/// Monthly income minus fixed costs, from detected recurring payments.
-#[utoipa::path(
-    get,
-    path = "/v1/budget/disposable",
-    responses((status = 200, body = DisposableDto)),
-    security(("bearer" = []))
-)]
-pub async fn disposable(State(state): State<AppState>) -> Result<Json<DisposableDto>, ApiError> {
-    Routes::disposable(state).await
-}
-
-#[utoipa::path(
-    get,
-    path = "/v1/budget/envelopes",
-    responses((status = 200, body = Vec<EnvelopeDto>)),
-    security(("bearer" = []))
-)]
-pub async fn get_envelopes(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<EnvelopeDto>>, ApiError> {
-    Routes::get_envelopes(state).await
-}
-
 /// Replace all monthly envelopes. A category may appear once; limits must not be negative.
 #[utoipa::path(
     put,
     path = "/v1/budget/envelopes",
-    request_body = Vec<EnvelopeDto>,
+    request_body = Vec<EnvelopeInput>,
     responses(
-        (status = 200, body = Vec<EnvelopeDto>),
+        (status = 200, body = Vec<EnvelopeStatusDto>),
         (status = 400, description = "Duplicate category or negative limit", body = ErrorBody),
     ),
     security(("bearer" = []))
 )]
 pub async fn put_envelopes(
     State(state): State<AppState>,
-    Json(envelopes): Json<Vec<EnvelopeDto>>,
-) -> Result<Json<Vec<EnvelopeDto>>, ApiError> {
-    Routes::put_envelopes(state, envelopes).await
-}
-
-#[derive(Debug, Deserialize, utoipa::IntoParams)]
-pub struct MonthQuery {
-    /// With `month`: the budget period that starts in this month (the calendar month when the
-    /// payday is 1).
-    year: Option<i32>,
-    /// 1 to 12; only together with `year`.
-    month: Option<u8>,
-    /// Instead of `year` and `month`: `current` (default) or `previous` budget period.
-    period: Option<PeriodChoice>,
-    /// The day to treat as today for `period` (ISO format); defaults to today (UTC).
-    #[param(value_type = Option<String>, format = Date)]
-    date: Option<Date>,
-}
-
-/// Spent and remaining per envelope for one budget period (a calendar month unless a payday is
-/// set in the settings).
-#[utoipa::path(
-    get,
-    path = "/v1/budget/status",
-    params(MonthQuery),
-    responses(
-        (status = 200, body = Vec<EnvelopeStatusDto>),
-        (status = 400, description = "Invalid month", body = ErrorBody),
-    ),
-    security(("bearer" = []))
-)]
-pub async fn budget_status(
-    State(state): State<AppState>,
-    Query(q): Query<MonthQuery>,
+    Json(envelopes): Json<Vec<EnvelopeInput>>,
 ) -> Result<Json<Vec<EnvelopeStatusDto>>, ApiError> {
-    Routes::budget_status(state, q).await
+    Routes::put_envelopes(state, envelopes).await
 }
 
 impl Routes {
@@ -198,7 +140,7 @@ impl Routes {
         ))
     }
 
-    pub async fn disposable(state: AppState) -> Result<Json<DisposableDto>, ApiError> {
+    pub(crate) async fn disposable(state: &AppState) -> Result<DisposableDto, ApiError> {
         let txs: Vec<_> = state
             .store
             .list_transactions()
@@ -207,31 +149,17 @@ impl Routes {
             .map(|s| s.transaction)
             .collect();
         let d = Disposable::from_recurring(&RecurringDetector::detect(&txs));
-        Ok(Json(DisposableDto {
+        Ok(DisposableDto {
             monthly_income_cents: d.monthly_income,
             monthly_fixed_costs_cents: d.monthly_fixed_costs,
             disposable_cents: d.disposable,
-        }))
-    }
-
-    pub async fn get_envelopes(state: AppState) -> Result<Json<Vec<EnvelopeDto>>, ApiError> {
-        let budget = state.store.load_budget().await?;
-        Ok(Json(
-            budget
-                .envelopes
-                .into_iter()
-                .map(|(category, limit)| EnvelopeDto {
-                    category,
-                    limit_cents: limit,
-                })
-                .collect(),
-        ))
+        })
     }
 
     pub async fn put_envelopes(
         state: AppState,
-        envelopes: Vec<EnvelopeDto>,
-    ) -> Result<Json<Vec<EnvelopeDto>>, ApiError> {
+        envelopes: Vec<EnvelopeInput>,
+    ) -> Result<Json<Vec<EnvelopeStatusDto>>, ApiError> {
         let mut budget = Budget::default();
         for e in &envelopes {
             if e.limit_cents.is_negative() {
@@ -247,20 +175,22 @@ impl Routes {
             }
         }
         state.store.save_budget(&budget).await?;
-        Self::get_envelopes(state).await
+        let period = BudgetPeriods::resolve(&state, None, None, None, None).await?;
+        Ok(Json(Self::envelope_status(&state, period).await?))
     }
 
-    pub async fn budget_status(
-        state: AppState,
-        q: MonthQuery,
-    ) -> Result<Json<Vec<EnvelopeStatusDto>>, ApiError> {
-        let period = BudgetPeriods::resolve(&state, q.year, q.month, q.period, q.date).await?;
-        // split transactions count by their parts
+    /// Spent and remaining per envelope for a budget period; split transactions count by their
+    /// parts.
+    pub(crate) async fn envelope_status(
+        state: &AppState,
+        period: financer_core::BudgetPeriod,
+    ) -> Result<Vec<EnvelopeStatusDto>, ApiError> {
         let txs = state.store.list_effective_transactions().await?;
         let budget = state.store.load_budget().await?;
-        let status = budget.status(&txs, period);
-        Ok(Json(
-            status.into_iter().map(EnvelopeStatusDto::from).collect(),
-        ))
+        Ok(budget
+            .status(&txs, period)
+            .into_iter()
+            .map(EnvelopeStatusDto::from)
+            .collect())
     }
 }

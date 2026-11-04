@@ -97,6 +97,12 @@ impl PeriodFixture {
         app
     }
 
+    /// One part of the one budget answer: `period`, `envelopes`, `safe_to_spend` or `disposable`.
+    async fn part(app: &Router, part: &str, query: &str) -> (StatusCode, Value) {
+        let (s, body) = Self::get(app, &format!("/v1/budget?{query}")).await;
+        (s, body[part].clone())
+    }
+
     fn groceries_spent(status: &Value) -> Option<i64> {
         status
             .as_array()?
@@ -131,9 +137,9 @@ async fn payday_defaults_to_the_calendar_month_and_validates() {
 }
 
 #[tokio::test]
-async fn period_endpoint_follows_the_payday() {
+async fn the_period_follows_the_payday() {
     let app = PeriodFixture::app().await;
-    let (s, p) = PeriodFixture::get(&app, "/v1/budget/period?date=2026-10-11").await;
+    let (s, p) = PeriodFixture::part(&app, "period", "date=2026-10-11").await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(
         (p["start"].as_str(), p["end"].as_str(), p["days"].as_u64()),
@@ -142,7 +148,7 @@ async fn period_endpoint_follows_the_payday() {
     assert_eq!(p["days_left"], 21);
 
     PeriodFixture::set_payday(&app, 25).await;
-    let (_, p) = PeriodFixture::get(&app, "/v1/budget/period?date=2026-10-11").await;
+    let (_, p) = PeriodFixture::part(&app, "period", "date=2026-10-11").await;
     assert_eq!(p["start"], "2026-09-25");
     assert_eq!(p["end"], "2026-10-24");
     assert_eq!(p["days"], 30);
@@ -150,26 +156,26 @@ async fn period_endpoint_follows_the_payday() {
     assert_eq!(p["payday"], 25);
 
     let (_, prev) =
-        PeriodFixture::get(&app, "/v1/budget/period?period=previous&date=2026-10-11").await;
+        PeriodFixture::part(&app, "period", "period=previous&date=2026-10-11").await;
     assert_eq!(prev["start"], "2026-08-25");
     assert_eq!(prev["end"], "2026-09-24");
     assert_eq!(prev["days_left"], 0);
 
     // across the year end
-    let (_, p) = PeriodFixture::get(&app, "/v1/budget/period?date=2027-01-03").await;
+    let (_, p) = PeriodFixture::part(&app, "period", "date=2027-01-03").await;
     assert_eq!(p["start"], "2026-12-25");
     assert_eq!(p["end"], "2027-01-24");
 
     // no date means today, which is always inside the period it reports
-    let (_, p) = PeriodFixture::get(&app, "/v1/budget/period").await;
+    let (_, p) = PeriodFixture::part(&app, "period", "").await;
     assert!(p["days_left"].as_u64().unwrap() >= 1);
 
-    let (s, _) = PeriodFixture::get(&app, "/v1/budget/period?date=not-a-date").await;
+    let (s, _) = PeriodFixture::part(&app, "period", "date=not-a-date").await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
-async fn month_based_status_is_unchanged_at_payday_one_and_shifts_with_a_payday() {
+async fn envelope_status_follows_the_period_and_shifts_with_a_payday() {
     let app = PeriodFixture::with_history().await;
     let (s, _) = PeriodFixture::put(
         &app,
@@ -179,35 +185,61 @@ async fn month_based_status_is_unchanged_at_payday_one_and_shifts_with_a_payday(
     .await;
     assert_eq!(s, StatusCode::OK);
 
-    let (s, st) = PeriodFixture::get(&app, "/v1/budget/status?year=2026&month=3").await;
+    let (s, st) = PeriodFixture::part(&app, "envelopes", "date=2026-03-20").await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(PeriodFixture::groceries_spent(&st), Some(5450));
-    let (_, st) = PeriodFixture::get(&app, "/v1/budget/status?year=2026&month=2").await;
+    let (_, st) = PeriodFixture::part(&app, "envelopes", "date=2026-02-20").await;
     assert_eq!(PeriodFixture::groceries_spent(&st), Some(0));
 
     // payday 10: the "March" period runs 10 Mar to 9 Apr, so the 9 March shop belongs to February's
     PeriodFixture::set_payday(&app, 10).await;
-    let (_, st) = PeriodFixture::get(&app, "/v1/budget/status?year=2026&month=3").await;
+    let (_, st) = PeriodFixture::part(&app, "envelopes", "date=2026-03-20").await;
     assert_eq!(PeriodFixture::groceries_spent(&st), Some(0));
-    let (_, st) = PeriodFixture::get(&app, "/v1/budget/status?year=2026&month=2").await;
+    let (_, st) = PeriodFixture::part(&app, "envelopes", "date=2026-02-20").await;
     assert_eq!(PeriodFixture::groceries_spent(&st), Some(5450));
     let (_, st) =
-        PeriodFixture::get(&app, "/v1/budget/status?period=previous&date=2026-03-20").await;
+        PeriodFixture::part(&app, "envelopes", "period=previous&date=2026-03-20").await;
     assert_eq!(PeriodFixture::groceries_spent(&st), Some(5450));
     let (_, st) =
-        PeriodFixture::get(&app, "/v1/budget/status?period=current&date=2026-03-20").await;
+        PeriodFixture::part(&app, "envelopes", "period=current&date=2026-03-20").await;
     assert_eq!(PeriodFixture::groceries_spent(&st), Some(0));
 
-    // bad combinations stay 400
-    for uri in [
-        "/v1/budget/status?year=2026",
-        "/v1/budget/status?month=3",
-        "/v1/budget/status?year=2026&month=13",
-        "/v1/budget/status?year=2026&month=3&period=current",
-    ] {
+    // bad input stays 400
+    for uri in ["/v1/budget?date=not-a-date", "/v1/budget?period=sideways"] {
         let (s, _) = PeriodFixture::get(&app, uri).await;
         assert_eq!(s, StatusCode::BAD_REQUEST, "{uri}");
     }
+}
+
+#[tokio::test]
+async fn one_answer_holds_the_period_the_envelopes_the_daily_number_and_the_monthly_picture() {
+    let app = PeriodFixture::with_history().await;
+    PeriodFixture::put(
+        &app,
+        "/v1/budget/envelopes",
+        json!([{"category": "groceries", "limit_cents": 40000}]),
+    )
+    .await;
+    let (s, b) = PeriodFixture::get(&app, "/v1/budget?date=2026-03-30").await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(b["period"]["start"], "2026-03-01");
+    assert_eq!(PeriodFixture::groceries_spent(&b["envelopes"]), Some(5450));
+    assert_eq!(b["safe_to_spend"]["days_left"], 2);
+    assert_eq!(b["disposable"]["monthly_income_cents"], 250_000);
+    // the previous period has no daily number: it is over
+    let (_, b) = PeriodFixture::get(&app, "/v1/budget?period=previous&date=2026-03-30").await;
+    assert_eq!(b["period"]["start"], "2026-02-01");
+    assert!(b["safe_to_spend"].is_null());
+    assert_eq!(PeriodFixture::groceries_spent(&b["envelopes"]), Some(0));
+    // saving the limits answers with the envelopes of the period you are in
+    let (_, saved) = PeriodFixture::put(
+        &app,
+        "/v1/budget/envelopes",
+        json!([{"category": "dining", "limit_cents": 1000}]),
+    )
+    .await;
+    assert_eq!(saved[0]["category"], "dining");
+    assert!(saved[0]["spent_cents"].is_number());
 }
 
 #[tokio::test]
@@ -221,7 +253,7 @@ async fn safe_to_spend_explains_itself() {
     .await;
     assert_eq!(s, StatusCode::OK);
 
-    let (s, v) = PeriodFixture::get(&app, "/v1/budget/safe-to-spend?date=2026-03-30").await;
+    let (s, v) = PeriodFixture::part(&app, "safe_to_spend", "date=2026-03-30").await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(v["period_start"], "2026-03-01");
     assert_eq!(v["period_end"], "2026-03-31");
@@ -243,7 +275,7 @@ async fn safe_to_spend_explains_itself() {
 
     // the same day with a payday of 25 is in the period 25 Mar to 24 Apr: salary (28 Mar) is in it
     PeriodFixture::set_payday(&app, 25).await;
-    let (_, v) = PeriodFixture::get(&app, "/v1/budget/safe-to-spend?date=2026-03-30").await;
+    let (_, v) = PeriodFixture::part(&app, "safe_to_spend", "date=2026-03-30").await;
     assert_eq!(v["period_start"], "2026-03-25");
     assert_eq!(v["period_end"], "2026-04-24");
     assert_eq!(v["days_left"], 26);
@@ -256,7 +288,7 @@ async fn safe_to_spend_explains_itself() {
 #[tokio::test]
 async fn safe_to_spend_without_data_is_zero_and_says_why() {
     let app = PeriodFixture::app().await;
-    let (s, v) = PeriodFixture::get(&app, "/v1/budget/safe-to-spend?date=2026-03-10").await;
+    let (s, v) = PeriodFixture::part(&app, "safe_to_spend", "date=2026-03-10").await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(v["income_detected"], false);
     assert_eq!(v["daily_cents"], 0);
@@ -267,7 +299,7 @@ async fn safe_to_spend_without_data_is_zero_and_says_why() {
 #[tokio::test]
 async fn the_new_endpoints_need_the_token() {
     let app = PeriodFixture::app().await;
-    for uri in ["/v1/budget/period", "/v1/budget/safe-to-spend"] {
+    for uri in ["/v1/budget"] {
         let (s, _) = PeriodFixture::send(&app, Method::GET, uri, Body::empty(), None, false).await;
         assert_eq!(s, StatusCode::UNAUTHORIZED, "{uri}");
     }
