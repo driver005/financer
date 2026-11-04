@@ -14,6 +14,7 @@ pub mod game;
 pub mod grocery_view;
 pub mod mealplan;
 pub mod notify_plan;
+pub mod onboarding;
 pub mod period;
 pub mod rules;
 pub mod safe_to_spend;
@@ -497,6 +498,78 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg(&args, "basket")?,
             &arg::<String>(&args, "item")?,
         )),
+        "onboarding.steps_for" => json(onboarding::steps_for(&arg::<String>(&args, "platform")?)),
+        "onboarding.is_step_id" => json(onboarding::is_step_id(&arg::<String>(&args, "value")?)),
+        "onboarding.next_step" => json(onboarding::next_step(
+            &arg::<Vec<String>>(&args, "steps")?,
+            &arg::<String>(&args, "current")?,
+        )),
+        "onboarding.previous_step" => json(onboarding::previous_step(
+            &arg::<Vec<String>>(&args, "steps")?,
+            &arg::<String>(&args, "current")?,
+        )),
+        "onboarding.progress_of" => json(onboarding::progress_of(
+            &arg::<Vec<String>>(&args, "steps")?,
+            &arg::<String>(&args, "current")?,
+        )),
+        "onboarding.resolve_step" => json(onboarding::resolve_step(
+            &arg::<Vec<String>>(&args, "steps")?,
+            &arg::<String>(&args, "stored")?,
+        )),
+        "onboarding.sanitize_draft" => {
+            json(onboarding::sanitize_draft(&arg::<Value>(&args, "raw")?))
+        }
+        "onboarding.parse_state" => json(onboarding::parse_state(
+            opt::<String>(&args, "raw")?.as_deref(),
+        )),
+        "onboarding.clamp_household" => json(onboarding::clamp_household(
+            opt(&args, "n")?.unwrap_or(f64::NAN),
+        )),
+        "onboarding.parse_postal_code" => json(onboarding::parse_postal_code(&arg::<String>(
+            &args, "input",
+        )?)),
+        "onboarding.parse_budget" => {
+            json(onboarding::parse_budget(&arg::<String>(&args, "input")?))
+        }
+        "onboarding.monthly_grocery_cents" => json(onboarding::monthly_grocery_cents(
+            arg(&args, "cents")?,
+            &arg::<String>(&args, "cadence")?,
+        )),
+        "onboarding.validate_server" => json(onboarding::validate_server(
+            &arg::<String>(&args, "url")?,
+            &arg::<String>(&args, "token")?,
+        )),
+        "onboarding.household_factor" => json(onboarding::household_factor(
+            opt(&args, "size")?.unwrap_or(f64::NAN),
+        )),
+        "onboarding.suggest_allowance" => json(onboarding::suggest_allowance(&arg(&args, "args")?)),
+        "onboarding.grocery_limit_for" => json(onboarding::grocery_limit_for(
+            &arg(&args, "draft")?,
+            &arg::<String>(&args, "today")?,
+        )?),
+        "onboarding.parse_profile" => json(onboarding::parse_profile(
+            opt::<String>(&args, "raw")?.as_deref(),
+        )),
+        "onboarding.merge_profile" => json(onboarding::merge_profile(
+            &arg(&args, "existing")?,
+            &arg(&args, "draft")?,
+        )),
+        "onboarding.plan_apply" => json(onboarding::plan_apply(
+            &arg(&args, "draft")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<Vec<onboarding::Envelope>>(&args, "existing")?,
+        )?),
+        "onboarding.mascot_for" => json(onboarding::mascot_for(
+            &arg::<String>(&args, "step")?,
+            &arg(&args, "draft")?,
+            arg(&args, "embedded_available")?,
+        )),
+        "onboarding.recap_rows" => json(onboarding::recap_rows(
+            &arg(&args, "draft")?,
+            &arg::<String>(&args, "platform")?,
+        )),
+        "onboarding.first_quest" => json(onboarding::first_quest(&arg(&args, "draft")?)),
+        "onboarding.entry_action" => json(onboarding::entry_action(&arg(&args, "i")?)),
         other => return Err(format!("unknown function {other}")),
     };
     out
