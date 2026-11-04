@@ -60,21 +60,36 @@ CI runs them in the `sdk-web` job, which has the bindings.
 | `calendarForm` (event draft, moves, repeat, problems, request) | 173 | Rust, 5 tests; the clock-reading `nextHour` stays |
 | `charts`, `todayCharts` (trend, curve, week, shares and their sentences) | 311 | Rust, 5 tests |
 | shopping `logic/`: `format`, `weights`, `schemaEdit`, `view`, `progress` (model and throttle), `library`, `profiles`, `runs`, `searchPlan`, `sources`, `dealNotifications` | about 1,000 | Rust (`shop_*.rs`), 17 + 8 tests; the package's own 71 tests run against it in the `sdk-web` job |
+| mail `logic/`: `format`, `agenda`, `chat`, `compose`, `templates` | about 400 | Rust (`mail_format.rs`, `mail_text.rs`), 9 tests; the package's 38 tests run against it in `sdk-web`. Time zones are Rust's (`jiff` with its bundled IANA database); the device passes a small pack of its language's words (see below) |
+| `appLock`, `spendingView`, `onboardingDemo`, `calendarTones`; the stamp of `bankConnections`, `nextHour`; shopping `safeUrl`, `orderProfiles`, `offlineCache`, and the decisions inside `followJob` and `waitForRestart` | about 450 | Rust (`app_lock.rs`, `app_misc.rs`, `shop_*.rs`, `server_config.rs`) |
 
-## What is not moved
+## Dates, time zones and languages
 
-Everything below stays TypeScript on purpose, or because the rule is the device's, not the app's:
+Formatting a day or a clock "the way the phone's language does" is what `Intl` does in JavaScript, and Rust has no
+equivalent in the box. The options were: ICU4X (the Unicode consortium's Rust library; correct for every language, but it
+brings the world's locale data, several megabytes of WebAssembly in the one example we found), or splitting the job:
 
-- the mail module's `logic/` (`agenda`, `chat`, `compose`, `format`, `templates`): its days, clocks and chat rows are
-  written by the device's `Intl` in the device's language and time zone, which Rust does not have; the few rules that
-  do not depend on it (`compose`, `templates`) are too small to carry a second test setup;
-- the polling loop `followJob`, the waits (`waitForRestart`), the fetching of feeds (`loadFeeds`), the apply step of the
-  setup (`applyDraft`): they hold the network, a clock or a callback, not a rule;
-- `formatStamp` and `nextHour` (the device's time zone and clock), `safeUrl` (the platform's URL parser) and
-  `orderProfiles` (sorts the way the device's language does);
-- the shopping `notifeeSurface` and `offlineCache`, and `calendarTones`, `onboardingDemo` (device glue and plain data).
+- **Time zones are Rust's.** `jiff` with its bundled copy of the IANA database turns an instant and a zone name into a
+  calendar day and a clock, the same on every device and in the tests. Nothing depends on what the phone has installed.
+- **The words are the device's.** The screen asks `Intl` once per language for the seven short weekdays, the twelve short
+  months, how a clock is laid out (24 hours, or `07:05 AM`), and the ten digits, and hands them in as a small pack
+  (`packages/mail/src/logic/format.ts`, about 40 lines). Rust fills in the numbers. A language `Intl` knows works without
+  Rust knowing it.
 
-Judged to stay TypeScript: per-frame animation maths (`ring`: a WebAssembly call per frame costs more than it saves), a plain array filter (`spendingView`) and device storage (`savingsGoal`).
+The limit: the order of the parts of a day (`Fri 6 Nov`) is fixed, as it was in the TypeScript code.
 
-What stays TypeScript for good: the screens, and everything that asks the device (files, notifications,
-biometrics, background tasks, the clock).
+## What stays TypeScript, and why
+
+Everything that is a rule is in Rust. What is left asks the phone or waits for something, which only the JavaScript
+runtime can do:
+
+- the screens, the navigation tables and the icon and colour tables they read at import time (plain data; the SDK is
+  not loaded yet when modules are imported);
+- the loops that wait: `followJob`, `waitForRestart`, `loadFeeds`, `applyDraft` and the screens' polling. They `await` the
+  network and a timer. The decisions inside them (when to show, when to give up, when the server is back, which weeks
+  to fetch) are Rust's; only the `await` is TypeScript;
+- the count-up number (`ring.ts`) and the other animation maths: they run on the UI thread as worklets, where the
+  native module cannot be called;
+- device glue: files, notifications and Notifee (`notifeeSurface`), biometrics, the camera, storage (`savingsGoal`), the
+  clock itself and the app's state changes;
+- type glue to the UI package (`uiTone`, `asIcon`).

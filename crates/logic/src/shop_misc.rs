@@ -288,6 +288,50 @@ pub fn profile_name_problem(name: &str, existing: &[String]) -> Option<&'static 
     None
 }
 
+/// A name as a person sorts it: without case or accents, so "ärger" sits with "a" and "B" after "a".
+fn sort_key(name: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    name.nfkd()
+        .filter(|c| !('\u{300}'..='\u{36f}').contains(c))
+        .collect::<String>()
+        .to_lowercase()
+}
+
+/// The profiles with the one searches use first, then by name (Latin script: case and accents do not
+/// decide the order; a name that differs only in case puts the lowercase one first).
+pub fn order_profiles(all: &[Value]) -> Vec<Value> {
+    let name = |p: &Value| text(p, "name").unwrap_or("").to_string();
+    let mut out = all.to_vec();
+    out.sort_by(|a, b| {
+        let (x, y) = (name(a), name(b));
+        (y == DEFAULT_PROFILE)
+            .cmp(&(x == DEFAULT_PROFILE))
+            .then_with(|| {
+                sort_key(&x).cmp(&sort_key(&y)).then_with(|| {
+                    x.chars()
+                        .map(|c| (c.is_uppercase(), c))
+                        .cmp(y.chars().map(|c| (c.is_uppercase(), c)))
+                })
+            })
+    });
+    out
+}
+
+// ---- the last product page, kept for when the server cannot be reached ----
+
+/// What to keep on the device for a product page.
+pub fn serialize_cached(detail: &Value, now: f64) -> String {
+    json!({ "savedAt": now, "detail": detail }).to_string()
+}
+
+/// What was saved, or `None` when there is nothing usable (missing, damaged, or from another shape).
+pub fn parse_cached(raw: Option<&str>) -> Option<Value> {
+    let v: Value = serde_json::from_str(raw.filter(|r| !r.is_empty())?).ok()?;
+    let detail = v.get("detail")?;
+    (v.get("savedAt")?.is_number() && detail.is_object() && detail.get("product").is_some())
+        .then_some(v)
+}
+
 // ---- the history of reading runs ----
 
 pub fn phase_tone(p: &str) -> &'static str {
@@ -720,6 +764,32 @@ mod tests {
             Some("You already have one with that name.")
         );
         assert_eq!(profile_name_problem("Trip", &others), None);
+    }
+
+    #[test]
+    fn profiles_sort_like_a_person_would() {
+        let p = |n: &str| json!({ "name": n });
+        let names: Vec<String> =
+            order_profiles(&[p("work"), p("Ärger"), p("default"), p("Anna"), p("anna")])
+                .iter()
+                .map(|x| x["name"].as_str().unwrap().to_string())
+                .collect();
+        assert_eq!(names, ["default", "anna", "Anna", "Ärger", "work"]);
+    }
+
+    #[test]
+    fn a_saved_page_is_kept_only_in_its_shape() {
+        let saved = serialize_cached(&json!({ "product": { "id": "p" } }), 12.0);
+        assert_eq!(parse_cached(Some(&saved)).unwrap()["savedAt"], 12.0);
+        for bad in [
+            None,
+            Some(""),
+            Some("{"),
+            Some("{\"savedAt\":\"x\",\"detail\":{\"product\":1}}"),
+            Some("{\"savedAt\":1,\"detail\":{}}"),
+        ] {
+            assert_eq!(parse_cached(bad), None, "{bad:?}");
+        }
     }
 
     #[test]

@@ -1,5 +1,5 @@
 // Texts for prices, discounts and ages. The app is English with German number formatting, like the
-// finance app. The rules are in Rust (crates/logic, shop_format.rs); a link check stays here.
+// finance app. The rules are in Rust (crates/logic, shop_format.rs); 
 
 import { logic } from "../../../wire/src/logic";
 import type { DealInfo, Offer } from "../api/types";
@@ -19,13 +19,5 @@ export const ago = (unixSeconds: number, nowSeconds: number): string =>
 /** The contract of a plan in words: `24 months, 6 months at 9,99 €, 39,99 € to set up`. */
 export const planTerms = (o: Offer): string => logic("shop_format.plan_terms", { o });
 
-/** A link from a shop page is opened only when it is a web address. */
-export function safeUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
-  } catch {
-    return null;
-  }
-}
+/** A link from a shop page is opened only when it is a web address; it is given back in its normal form. */
+export const safeUrl = (url: string | null | undefined): string | null => logic("shop_format.safe_url", { url: url ?? null });

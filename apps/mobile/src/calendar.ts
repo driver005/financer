@@ -106,9 +106,6 @@ export const seriesStarts = (rule: Pick<EventRule, "startDate" | "repeat" | "exc
 export const expand = (rule: EventRule, from: string, to: string, tone: Tone, extra: { readOnly?: boolean; href?: string; source?: string } = {}): Occurrence[] =>
   logic("calendar.expand", { rule, from, to, tone, extra });
 
-/** Does the occurrence touch this day? */
-export const onDay = (o: Pick<Occurrence, "startDate" | "endDate">, date: string): boolean => logic("calendar.on_day", { o, date });
-
 /** Order for lists: all-day first, then by start. */
 export const byStart = (a: Occurrence, b: Occurrence): number => logic("calendar.compare_by_start", { a, b });
 

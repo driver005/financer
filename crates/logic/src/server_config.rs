@@ -674,6 +674,19 @@ pub fn saved_text(saved: &Value) -> String {
     )
 }
 
+/// After a change was saved and the server answered: `None` while it still is applying it, else how it went.
+pub fn restart_outcome(view: &Value, token: &str) -> Option<Value> {
+    if bool_of(view, "applying") {
+        return None;
+    }
+    let kind = if str_of(view, "state") == Some("rolled_back") {
+        "rolled_back"
+    } else {
+        "applied"
+    };
+    Some(json!({ "kind": kind, "view": view, "token": token }))
+}
+
 /// What to say when the server did not come back.
 pub fn timeout_text(changed_listen_address: bool) -> &'static str {
     if changed_listen_address {
@@ -753,6 +766,20 @@ mod tests {
         assert_eq!(wire_value(&list, &json!([])), Value::Null);
         let num = json!({ "path": "n", "kind": "number", "fields": [] });
         assert_eq!(wire_value(&num, &json!(" 42 ")), json!(42));
+    }
+
+    #[test]
+    fn a_restart_ends_when_the_server_stops_applying() {
+        assert_eq!(restart_outcome(&json!({ "applying": true }), "t"), None);
+        assert_eq!(
+            restart_outcome(&json!({ "applying": false, "state": "ok" }), "t").unwrap()["kind"],
+            "applied"
+        );
+        assert_eq!(
+            restart_outcome(&json!({ "applying": false, "state": "rolled_back" }), "n").unwrap()
+                ["token"],
+            "n"
+        );
     }
 
     #[test]

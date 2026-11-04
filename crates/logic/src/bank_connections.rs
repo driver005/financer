@@ -147,6 +147,23 @@ pub fn can_sync(c: &Value, typed_pin: &str) -> bool {
     !is_busy(c) && (is_plaid(c) || b(c, "pin_from_env") || !typed_pin.is_empty())
 }
 
+/// What the last attempt did, or `None` when there was none. Stamps are written in the given time zone.
+pub fn last_result_text(c: &Value, zone: &str) -> Result<Option<String>, String> {
+    let Some(r) = c.get("last_result").filter(|r| !r.is_null()) else {
+        return Ok(None);
+    };
+    let stamp = crate::app_misc::format_stamp(n(r, "at").unwrap_or(0.0), zone)?;
+    if !b(r, "ok") {
+        return Ok(Some(format!("Last attempt {stamp} failed.")));
+    }
+    let count = |key: &str| n(r, key).unwrap_or(0.0) as i64;
+    Ok(Some(format!(
+        "Last sync {stamp}: {} new, {} already known.",
+        count("imported"),
+        count("duplicates")
+    )))
+}
+
 /// When the next scheduled sync is, in words.
 pub fn next_sync_text(c: &Value, now_seconds: f64) -> Option<String> {
     if needs_linking(c) {
@@ -263,6 +280,21 @@ mod tests {
             assert!(!is_safe_link_url(Some(bad)), "{bad}");
         }
         assert!(!is_safe_link_url(None));
+    }
+
+    #[test]
+    fn the_last_attempt_is_told_in_the_zone() {
+        let ok = json!({ "last_result": { "ok": true, "at": 1_793_696_400, "imported": 3, "duplicates": 1 } });
+        assert_eq!(
+            last_result_text(&ok, "Europe/Berlin").unwrap().as_deref(),
+            Some("Last sync 03.11.2026 10:00: 3 new, 1 already known.")
+        );
+        let failed = json!({ "last_result": { "ok": false, "at": 1_793_696_400 } });
+        assert_eq!(
+            last_result_text(&failed, "UTC").unwrap().as_deref(),
+            Some("Last attempt 03.11.2026 09:00 failed.")
+        );
+        assert_eq!(last_result_text(&json!({}), "UTC").unwrap(), None);
     }
 
     #[test]

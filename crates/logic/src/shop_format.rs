@@ -146,6 +146,12 @@ pub fn plan_terms(o: &Value) -> String {
     parts.join(", ")
 }
 
+/// A link from a shop page is opened only when it is a web address; it is given back in its normal form.
+pub fn safe_url(url: Option<&str>) -> Option<String> {
+    let parsed = url::Url::parse(url.filter(|u| !u.is_empty())?).ok()?;
+    matches!(parsed.scheme(), "http" | "https").then(|| parsed.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,6 +187,28 @@ mod tests {
         );
         assert_eq!(ago(0.0, 7200.0), "2 hours ago");
         assert_eq!(ago(0.0, 30.0), "just now");
+    }
+
+    #[test]
+    fn only_web_links_are_opened() {
+        assert_eq!(
+            safe_url(Some("https://shop.example/a b")).as_deref(),
+            Some("https://shop.example/a%20b")
+        );
+        assert_eq!(
+            safe_url(Some("http://shop.example")).as_deref(),
+            Some("http://shop.example/")
+        );
+        for bad in [
+            "javascript:alert(1)",
+            "intent://x",
+            "not a url",
+            "",
+            "ftp://x.y/",
+        ] {
+            assert_eq!(safe_url(Some(bad)), None, "{bad}");
+        }
+        assert_eq!(safe_url(None), None);
     }
 
     #[test]

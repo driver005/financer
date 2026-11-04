@@ -41,7 +41,7 @@ SHOP_MOD  := packages/shopping
 SHOP_BIND ?= 127.0.0.1:8090
 SHOP_STAMP := $(SHOP_APP)/node_modules/.package-lock.json
 
-.PHONY: ui-test ui-catalog ui-catalog-export shop-setup shop-server shop-app shop-web shop-test help doctor setup token info check-port stop dev dev-postgres server server-watch web app android ios \
+.PHONY: ui-test mail-test ui-catalog ui-catalog-export shop-setup shop-server shop-app shop-web shop-test help doctor setup token info check-port stop dev dev-postgres server server-watch web app android ios \
         web-build serve db-up db-down db-reset dev-reset gen-api test lint fmt check clean
 
 help: ## Show this list
@@ -134,6 +134,9 @@ shop-test: $(SHOP_STAMP) ## Everything of the shopping assistant: Rust crates, m
 
 ui-test: ## UI package: token tests, contrast tests and the guard against raw spacing/colours
 	cd packages/ui && npm ci && npm test
+
+mail-test: ## The mail module's tests (its logic is Rust: they run against the WebAssembly build)
+	apps/mobile/scripts/enable-sdk.sh web
 	cd packages/mail && npm ci && npm test
 
 ui-catalog: ## The catalog of every UI element in the browser (phone, tablet, web; light and dark)

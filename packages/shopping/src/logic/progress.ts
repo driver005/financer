@@ -75,27 +75,34 @@ export async function followJob(jobId: string, query: string, deps: DriverDeps):
       last = await deps.poll(jobId);
       failures = 0;
     } catch {
-      failures += 1;
-      if (failures >= maxFailures) {
-        const model = progressModel(query, { phase: "failed", message: "Lost contact with the search", done: 0, total: 0, products: 0, failed: 0, percent: prev?.percent ?? 0 });
-        await deps.surface.finish(model);
+      // the rules decide when the server is given up on; the loop only waits
+      const f: { failures: number; finish: ProgressModel | null } = logic("shop_progress.follow_failed", { query, failures, max_failures: maxFailures, prev });
+      failures = f.failures;
+      if (f.finish) {
+        await deps.surface.finish(f.finish);
         return { job: last, polls, shown };
       }
       await sleep(pollMs);
       continue;
     }
     polls += 1;
-    const model = progressModel(query, last.progress);
-    if (model.finished) {
-      await deps.surface.finish(model);
+    const step: { model: ProgressModel; action: "finish" | "show" | "skip" } = logic("shop_progress.follow_ok", {
+      query,
+      progress: last.progress,
+      prev,
+      last_shown_ms: lastShown,
+      now_ms: now(),
+    });
+    if (step.action === "finish") {
+      await deps.surface.finish(step.model);
       return { job: last, polls, shown: shown + 1 };
     }
-    if (worthShowing(prev, model, lastShown, now())) {
-      await deps.surface.show(model);
+    if (step.action === "show") {
+      await deps.surface.show(step.model);
       shown += 1;
       lastShown = now();
     }
-    prev = model;
+    prev = step.model;
     await sleep(pollMs);
   }
 }

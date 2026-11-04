@@ -1755,11 +1755,13 @@ name = "financer-logic"
 version = "0.1.0"
 dependencies = [
  "financer-core",
+ "jiff",
  "regex",
  "serde",
  "serde_json",
  "time",
  "unicode-normalization",
+ "url",
 ]
 
 [[package]]
@@ -3018,6 +3020,7 @@ dependencies = [
  "defmt",
  "jiff-core",
  "jiff-static",
+ "jiff-tzdb",
  "jiff-tzdb-platform",
  "log",
  "portable-atomic",

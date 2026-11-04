@@ -134,8 +134,8 @@ export async function waitForRestart(
     } catch {
       continue;
     }
-    if (result.view.applying) continue;
-    return { kind: result.view.state === "rolled_back" ? "rolled_back" : "applied", view: result.view, token: result.token };
+    const done = logic<RestartOutcome | null>("server_config.restart_outcome", { view: result.view, token: result.token });
+    if (done) return done;
   }
   return { kind: "timeout" };
 }

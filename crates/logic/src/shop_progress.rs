@@ -111,6 +111,40 @@ pub fn worth_showing(
     prev.get("percent") != next.get("percent") || prev.get("body") != next.get("body")
 }
 
+/// A poll of the job answered: what the notification does next. `prev` is the model shown before.
+/// The answer is `{ model, action }` with the action `finish` (the run ended), `show` or `skip`.
+pub fn follow_ok(
+    query: &str,
+    progress: &Value,
+    prev: Option<&Value>,
+    last_shown_ms: f64,
+    now_ms: f64,
+    min_gap_ms: f64,
+) -> Value {
+    let model = progress_model(query, progress);
+    let action = if truthy(model.get("finished")) {
+        "finish"
+    } else if worth_showing(prev, &model, last_shown_ms, now_ms, min_gap_ms) {
+        "show"
+    } else {
+        "skip"
+    };
+    json!({ "model": model, "action": action })
+}
+
+/// A poll failed: the count of failures in a row, and the final model once the server is given up on.
+pub fn follow_failed(query: &str, failures: f64, max_failures: f64, prev: Option<&Value>) -> Value {
+    let failures = failures + 1.0;
+    let finish = (failures >= max_failures).then(|| {
+        let percent = prev.and_then(|p| num(p, "percent")).unwrap_or(0.0);
+        progress_model(
+            query,
+            &json!({ "phase": "failed", "message": "Lost contact with the search", "done": 0, "total": 0, "products": 0, "failed": 0, "percent": percent }),
+        )
+    });
+    json!({ "failures": failures, "finish": finish })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,6 +202,31 @@ mod tests {
             progress_model("phone", &s("queued", json!({})))["indeterminate"],
             true
         );
+    }
+
+    #[test]
+    fn following_a_job_shows_throttles_finishes_and_gives_up() {
+        let running = json!({ "phase": "running", "message": "Lidl", "done": 1, "total": 9, "products": 0, "failed": 0, "percent": 10 });
+        let first = follow_ok("phone", &running, None, 0.0, 0.0, 1000.0);
+        assert_eq!(first["action"], "show");
+        let again = follow_ok("phone", &running, Some(&first["model"]), 0.0, 200.0, 1000.0);
+        assert_eq!(again["action"], "skip");
+        let done = follow_ok(
+            "phone",
+            &json!({ "phase": "done", "products": 2, "percent": 100 }),
+            Some(&first["model"]),
+            0.0,
+            1.0,
+            1000.0,
+        );
+        assert_eq!(done["action"], "finish");
+        assert_eq!(
+            follow_failed("phone", 0.0, 3.0, None)["finish"],
+            Value::Null
+        );
+        let last = follow_failed("phone", 2.0, 3.0, Some(&first["model"]));
+        assert_eq!(last["finish"]["title"], "Indexing failed");
+        assert_eq!(last["finish"]["percent"].as_f64(), Some(10.0));
     }
 
     #[test]

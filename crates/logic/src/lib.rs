@@ -6,6 +6,8 @@
 //! ([`call`]): the arguments are a JSON object, the answer is JSON. The tests here are the old
 //! TypeScript tests, moved with the code.
 
+pub mod app_lock;
+pub mod app_misc;
 pub mod backup_plan;
 pub mod bank_connections;
 pub mod calendar;
@@ -18,6 +20,8 @@ pub mod format;
 pub mod game;
 pub mod grocery_view;
 pub(crate) mod js;
+pub mod mail_format;
+pub mod mail_text;
 pub mod mealplan;
 pub mod notify_plan;
 pub mod onboarding;
@@ -1122,6 +1126,205 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             arg::<f64>(&args, "last_shown_id")?,
             opt::<usize>(&args, "max")?.unwrap_or(3),
         )),
+        "mail_format.day_key" => json(mail_format::day_key(
+            arg(&args, "ts")?,
+            &arg::<String>(&args, "zone")?,
+        )?),
+        "mail_format.clock" => json(mail_format::clock(
+            arg(&args, "ts")?,
+            &arg::<String>(&args, "zone")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.local_clock" => json(mail_format::local_clock(
+            &arg::<String>(&args, "local")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )),
+        "mail_format.shift_day" => json(mail_format::shift_day(
+            &arg::<String>(&args, "key")?,
+            arg(&args, "days")?,
+        )?),
+        "mail_format.days_between" => json(mail_format::days_between(
+            &arg::<String>(&args, "a")?,
+            &arg::<String>(&args, "b")?,
+        )?),
+        "mail_format.weekday_short" => json(mail_format::weekday_short(
+            &arg::<String>(&args, "key")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.day_of_month" => {
+            json(mail_format::day_of_month(&arg::<String>(&args, "key")?))
+        }
+        "mail_format.day_text" => json(mail_format::day_text(
+            &arg::<String>(&args, "key")?,
+            &arg::<String>(&args, "today_key")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.day_label" => json(mail_format::day_label(
+            &arg::<String>(&args, "key")?,
+            &arg::<String>(&args, "today_key")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.list_time" => json(mail_format::list_time(
+            arg(&args, "ts")?,
+            arg(&args, "now_ts")?,
+            &arg::<String>(&args, "zone")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.ago" => json(mail_format::ago(arg(&args, "ts")?, arg(&args, "now_ts")?)),
+        "mail_format.agenda_days" => json(mail_format::agenda_days(
+            &arg::<Vec<Value>>(&args, "events")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.time_text" => json(mail_format::time_text(
+            &arg::<Value>(&args, "e")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.source_note" => {
+            json(mail_format::source_note(&arg::<String>(&args, "source")?))
+        }
+        "mail_format.range_end" => json(mail_format::range_end(
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "value")?,
+        )?),
+        "mail_format.parse_clock" => json(mail_format::parse_clock(&arg::<String>(&args, "text")?)),
+        "mail_format.parse_day" => json(mail_format::parse_day(
+            &arg::<String>(&args, "text")?,
+            &arg::<String>(&args, "today")?,
+        )),
+        "mail_format.chat_rows" => json(mail_format::chat_rows(
+            &arg::<Vec<Value>>(&args, "messages")?,
+            arg(&args, "now")?,
+            &arg::<String>(&args, "zone")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+            arg(&args, "show_topics")?,
+            arg(&args, "group_chat")?,
+        )?),
+        "mail_format.unread_ids" => json(mail_format::unread_ids(&arg::<Vec<Value>>(
+            &args, "messages",
+        )?)),
+        "mail_text.person_name" => json(mail_text::person_name(&arg::<Value>(&args, "a")?)),
+        "mail_text.people_text" => json(mail_text::people_text(&arg::<Vec<Value>>(&args, "list")?)),
+        "mail_text.recipient_strings" => json(mail_text::recipient_strings(&arg::<Vec<Value>>(
+            &args, "list",
+        )?)),
+        "mail_text.send_problem" => json(mail_text::send_problem(
+            &arg::<String>(&args, "to")?,
+            &arg::<String>(&args, "body")?,
+            &arg::<String>(&args, "subject")?,
+            arg(&args, "is_reply")?,
+        )),
+        "mail_text.oldest_first" => {
+            json(mail_text::oldest_first(&arg::<Vec<Value>>(&args, "list")?))
+        }
+        "mail_text.example_text" => json(mail_text::example_text(&arg::<String>(&args, "text")?)),
+        "mail_text.audience_text" => json(mail_text::audience_text(&arg::<Vec<String>>(
+            &args, "audience",
+        )?)),
+        "mail_text.parse_audience" => {
+            json(mail_text::parse_audience(&arg::<String>(&args, "text")?))
+        }
+        "mail_text.templates_of" => json(mail_text::templates_of(
+            &arg::<Vec<Value>>(&args, "all")?,
+            &arg::<String>(&args, "kind")?,
+        )),
+        "mail_text.choice_key" => json(mail_text::choice_key(&arg::<Value>(&args, "c")?)),
+        "mail_text.choice_label" => json(mail_text::choice_label(
+            &arg::<Value>(&args, "c")?,
+            &arg::<Vec<Value>>(&args, "all")?,
+        )),
+        "mail_text.first_line" => json(mail_text::first_line(&arg::<String>(&args, "text")?)),
+        "app_lock.start_state" => json(app_lock::start_state()),
+        "app_lock.settings_loaded" => json(app_lock::settings_loaded(
+            &arg(&args, "s")?,
+            arg(&args, "enabled")?,
+        )),
+        "app_lock.set_enabled" => json(app_lock::set_enabled(
+            &arg(&args, "s")?,
+            arg(&args, "enabled")?,
+        )),
+        "app_lock.went_to_background" => json(app_lock::went_to_background(
+            &arg(&args, "s")?,
+            arg(&args, "now")?,
+        )),
+        "app_lock.came_to_foreground" => json(app_lock::came_to_foreground(
+            &arg(&args, "s")?,
+            arg(&args, "now")?,
+            opt(&args, "after_ms")?.unwrap_or(app_lock::LOCK_AFTER_MS),
+        )),
+        "app_lock.unlocked" => json(app_lock::unlocked(&arg(&args, "s")?)),
+        "app_lock.is_covered" => json(app_lock::is_covered(&arg(&args, "s")?)),
+        "app_lock.lock_availability" => json(app_lock::lock_availability(
+            arg(&args, "is_web")?,
+            arg(&args, "native_module")?,
+            arg(&args, "level")?,
+        )),
+        "app_lock.unlock_outcome" => {
+            json(app_lock::unlock_outcome(&arg::<Value>(&args, "result")?))
+        }
+        "app_misc.filter_tx" => json(app_misc::filter_tx(
+            &arg::<Vec<Value>>(&args, "items")?,
+            &arg::<String>(&args, "filter")?,
+        )),
+        "app_misc.day_total" => json(app_misc::day_total(&arg::<Vec<Value>>(&args, "items")?)),
+        "app_misc.empty_filter_text" => json(app_misc::empty_filter_text(&arg::<String>(
+            &args, "filter",
+        )?)),
+        "app_misc.demo_transactions" => json(app_misc::demo_transactions(
+            &arg::<String>(&args, "today")?,
+            opt(&args, "payday")?.unwrap_or(1.0),
+            &opt::<Vec<String>>(&args, "chains")?.unwrap_or_default(),
+        )?),
+        "app_misc.demo_export" => json(app_misc::demo_export(
+            &arg::<String>(&args, "today")?,
+            opt(&args, "payday")?.unwrap_or(1.0),
+            &opt::<Vec<String>>(&args, "chains")?.unwrap_or_default(),
+        )?),
+        "app_misc.is_demo_booking" => json(app_misc::is_demo_booking(&arg::<Value>(&args, "t")?)),
+        "app_misc.demo_gate" => json(app_misc::demo_gate(&arg::<Vec<Value>>(&args, "bookings")?)),
+        "app_misc.calendar_tone" => json(app_misc::calendar_tone(&arg::<String>(&args, "value")?)),
+        "app_misc.format_stamp" => json(app_misc::format_stamp(
+            arg(&args, "unix_seconds")?,
+            &arg::<String>(&args, "zone")?,
+        )?),
+        "app_misc.next_hour" => json(app_misc::next_hour(arg(&args, "hour")?)),
+        "shop_format.safe_url" => json(shop_format::safe_url(
+            opt::<String>(&args, "url")?.as_deref(),
+        )),
+        "shop_misc.order_profiles" => {
+            json(shop_misc::order_profiles(&arg::<Vec<Value>>(&args, "all")?))
+        }
+        "shop_misc.serialize_cached" => json(shop_misc::serialize_cached(
+            &arg::<Value>(&args, "detail")?,
+            arg(&args, "now")?,
+        )),
+        "shop_misc.parse_cached" => json(shop_misc::parse_cached(
+            opt::<String>(&args, "raw")?.as_deref(),
+        )),
+        "shop_progress.follow_ok" => json(shop_progress::follow_ok(
+            &arg::<String>(&args, "query")?,
+            &arg::<Value>(&args, "progress")?,
+            opt::<Value>(&args, "prev")?.as_ref(),
+            arg(&args, "last_shown_ms")?,
+            arg(&args, "now_ms")?,
+            opt(&args, "min_gap_ms")?.unwrap_or(1000.0),
+        )),
+        "shop_progress.follow_failed" => json(shop_progress::follow_failed(
+            &arg::<String>(&args, "query")?,
+            arg(&args, "failures")?,
+            arg(&args, "max_failures")?,
+            opt::<Value>(&args, "prev")?.as_ref(),
+        )),
+        "server_config.restart_outcome" => json(server_config::restart_outcome(
+            &arg::<Value>(&args, "view")?,
+            &arg::<String>(&args, "token")?,
+        )),
+        "bank_connections.last_result_text" => json(bank_connections::last_result_text(
+            &arg(&args, "c")?,
+            &arg::<String>(&args, "zone")?,
+        )?),
         other => return Err(format!("unknown function {other}")),
     };
     out
