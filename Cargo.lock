@@ -1755,6 +1755,7 @@ name = "financer-logic"
 version = "0.1.0"
 dependencies = [
  "financer-core",
+ "regex",
  "serde",
  "serde_json",
  "time",

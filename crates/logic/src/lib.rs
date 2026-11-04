@@ -6,6 +6,7 @@
 //! ([`call`]): the arguments are a JSON object, the answer is JSON. The tests here are the old
 //! TypeScript tests, moved with the code.
 
+pub mod calendar;
 pub mod forecast;
 pub mod format;
 pub mod game;
@@ -164,6 +165,88 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
         "notify_plan.parse_price_memory" => json(notify_plan::parse_price_memory(
             opt::<String>(&args, "raw")?.as_deref(),
         )),
+        "calendar.day_number" => json(calendar::day_number(&arg::<String>(&args, "iso")?)?),
+        "calendar.from_day_number" => json(calendar::from_day_number(arg(&args, "n")?)?),
+        "calendar.iso_of" => json(calendar::iso_of(
+            arg(&args, "y")?,
+            arg(&args, "m")?,
+            arg(&args, "d")?,
+        )),
+        "calendar.add_days" => json(calendar::add_days(
+            &arg::<String>(&args, "iso")?,
+            arg(&args, "n")?,
+        )?),
+        "calendar.days_between" => json(calendar::days_between(
+            &arg::<String>(&args, "a")?,
+            &arg::<String>(&args, "b")?,
+        )?),
+        "calendar.weekday_index" => json(calendar::weekday_index(&arg::<String>(&args, "iso")?)?),
+        "calendar.start_of_week" => json(calendar::start_of_week(&arg::<String>(&args, "iso")?)?),
+        "calendar.add_months" => json(calendar::add_months(
+            &arg::<String>(&args, "iso")?,
+            arg(&args, "n")?,
+        )?),
+        "calendar.add_years" => json(calendar::add_years(
+            &arg::<String>(&args, "iso")?,
+            arg(&args, "n")?,
+        )?),
+        "calendar.month_first" => json(calendar::month_first(&arg::<String>(&args, "iso")?)?),
+        "calendar.month_last" => json(calendar::month_last(&arg::<String>(&args, "iso")?)?),
+        "calendar.week_of" => json(calendar::week_of(&arg::<String>(&args, "iso")?)?),
+        "calendar.month_grid" => json(calendar::month_grid(&arg::<String>(&args, "iso")?)?),
+        "calendar.month_title" => json(calendar::month_title(&arg::<String>(&args, "iso")?)?),
+        "calendar.long_day" => json(calendar::long_day(
+            &arg::<String>(&args, "iso")?,
+            opt::<String>(&args, "reference")?.as_deref(),
+        )?),
+        "calendar.short_day" => json(calendar::short_day(&arg::<String>(&args, "iso")?)?),
+        "calendar.week_title" => json(calendar::week_title(&arg::<String>(&args, "iso")?)?),
+        "calendar.minutes_of" => json(calendar::minutes_of(&arg::<String>(&args, "time")?)),
+        "calendar.time_of" => json(calendar::time_of(arg(&args, "minutes")?)),
+        "calendar.stamp" => json(calendar::stamp(
+            &arg::<String>(&args, "date")?,
+            opt::<String>(&args, "time")?.as_deref(),
+        )?),
+        "calendar.time_range" => json(calendar::time_range(&arg::<calendar::When>(&args, "o")?)?),
+        "calendar.series_starts" => json(calendar::series_starts(
+            &arg(&args, "rule")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )?),
+        "calendar.expand" => json(calendar::expand(
+            &arg(&args, "rule")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+            &arg::<String>(&args, "tone")?,
+            &opt(&args, "extra")?.unwrap_or_default(),
+        )?),
+        "calendar.on_day" => json(calendar::on_day(
+            &arg(&args, "o")?,
+            &arg::<String>(&args, "date")?,
+        )),
+        "calendar.compare_by_start" => json(
+            match calendar::by_start(&arg(&args, "a")?, &arg(&args, "b")?)? {
+                std::cmp::Ordering::Less => -1,
+                std::cmp::Ordering::Equal => 0,
+                std::cmp::Ordering::Greater => 1,
+            },
+        ),
+        "calendar.group_by_day" => json(calendar::group_by_day(
+            &arg::<Vec<calendar::Occurrence>>(&args, "occurrences")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )?),
+        "calendar.day_blocks" => json(calendar::day_blocks(
+            &arg::<Vec<calendar::Occurrence>>(&args, "list")?,
+            &arg::<String>(&args, "date")?,
+        )),
+        "calendar.parse_quick_add" => json(calendar::parse_quick_add(
+            &arg::<String>(&args, "text")?,
+            &arg::<String>(&args, "today")?,
+            opt::<String>(&args, "fallback_date")?.as_deref(),
+        )?),
+        "calendar.repeat_text" => json(calendar::repeat_text(opt(&args, "r")?.as_ref())?),
+        "calendar.reminder_text" => json(calendar::reminder_text(arg(&args, "minutes")?)),
         other => return Err(format!("unknown function {other}")),
     };
     out

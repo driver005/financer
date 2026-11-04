@@ -11,3 +11,4 @@ financer-core = { path = "../core" }
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
+regex = { version = "1", default-features = false, features = ["std", "unicode-case", "unicode-perl"] }

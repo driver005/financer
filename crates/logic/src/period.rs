@@ -15,7 +15,7 @@ pub struct Period {
     pub end: String,
 }
 
-const MONTH_NAMES: [&str; 12] = [
+pub(crate) const MONTH_NAMES: [&str; 12] = [
     "January",
     "February",
     "March",
