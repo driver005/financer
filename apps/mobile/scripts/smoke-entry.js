@@ -7,19 +7,19 @@ const log = (msg) => console.warn(`${TAG} ${msg}`);
 (async () => {
   try {
     const { startEmbedded, EMPTY_EMBEDDED_SETTINGS, embeddedAvailable } = require("./src/native/embedded");
-    const { EmbeddedTransport } = require("./src/api/transport");
+    const { embeddedApi } = require("./src/api/connect");
     if (!embeddedAvailable) return log("FAIL the module is not in this build");
     const backend = await startEmbedded(EMPTY_EMBEDDED_SETTINGS);
-    const t = new EmbeddedTransport(backend);
-    const health = await t.send({ method: "GET", path: "/health" });
+    // the same calls the screens make: by name, through the backend inside the app
+    const api = embeddedApi(backend);
     const csv =
       '"Buchungstag";"Verwendungszweck";"Beguenstigter/Zahlungspflichtiger";"Kontonummer/IBAN";"Betrag"\n' +
       '"02.03.26";"Kartenzahlung";"REWE Markt";"";"-23,47"\n';
-    const imp = await t.send({ method: "POST", path: "/v1/bank/import/csv", headers: { "Content-Type": "text/csv" }, body: csv });
-    const list = await t.send({ method: "GET", path: "/v1/transactions" });
-    const rows = JSON.parse(list.text);
-    const ok = health.status === 200 && health.text === "ok" && imp.status === 200 && rows[0]?.category === "groceries";
-    log(`${ok ? "OK" : "FAIL"} health=${health.status}:${health.text} import=${imp.status} category=${rows[0]?.category}`);
+    const bytes = Uint8Array.from(csv, (c) => c.charCodeAt(0)); // ASCII only
+    const imp = await api.importFile("csv", bytes.buffer);
+    const rows = await api.transactions();
+    const ok = imp.imported === 1 && rows[0]?.category === "groceries";
+    log(`${ok ? "OK" : "FAIL"} imported=${imp.imported} category=${rows[0]?.category}`);
     if (ok) {
       // The screenshot job (native.yml) reuses this build: give the app demo data and open it in
       // on-phone mode, so the next start shows every screen filled in and skips the onboarding.
@@ -28,7 +28,7 @@ const log = (msg) => console.warn(`${TAG} ${msg}`);
         const { setSecret } = require("./src/api/storage");
         const { MODE_KEY } = require("./src/api/keys");
         await setSecret(MODE_KEY, "embedded");
-        console.warn(`FINANCER_DEMO ${await seedDemo(t)}`);
+        console.warn(`FINANCER_DEMO ${await seedDemo(api)}`);
       } catch (e) {
         console.warn(`FINANCER_DEMO FAIL ${e && e.message ? e.message : e}`);
       }
