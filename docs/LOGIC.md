@@ -51,14 +51,23 @@ CI runs them in the `sdk-web` job, which has the bindings.
 | `mealplan` (weeks, plan entries, ticks, budget wording) | 280 | Rust, 6 tests |
 | `scan` (barcode check, result rows, headline) | 204 | Rust, 4 tests; the camera's repeat-read gate stays beside the camera |
 | `notifyPlan`: evening message, payday reminder, price drops | about 200 of 279 | Rust; the calendar event reminders stay beside `calendar` until that is moved |
+| `onboarding` (steps, answers, allowance, mascot, recap, entry rule) | 456 | Rust, 10 tests; the TypeScript onboarding tests run against it |
+| `serverConfig` (server settings form, what is sent, wording) | 383 | Rust, 5 tests; the restart wait (a poll and a clock) stays |
+| `receiptSources` (names, status, times, setup steps, Lidl callback) | 303 | Rust, 3 tests; the shop guides (plain content) stay |
+| `bankConnections` (state, labels, schedule wording, Plaid link check) | 169 | Rust, 2 tests; the time-zone stamp stays |
+| `calendarFeeds` (payday, charges, meals, contract ends) | 115 | Rust, 3 tests; fetching the feeds stays |
+| `calendarView` (ranges, steps, month cells, day columns, schedule days) | 186 | Rust, 3 tests; the tap handlers are attached in TypeScript |
+| `calendarForm` (event draft, moves, repeat, problems, request) | 173 | Rust, 5 tests; the clock-reading `nextHour` stays |
+| `charts`, `todayCharts` (trend, curve, week, shares and their sentences) | 311 | Rust, 5 tests |
 
 ## What is not moved yet
 
-The rest of `apps/mobile/src/*.ts` (about 2,300 lines: `onboarding`, `calendarView`/`calendarFeeds`/`calendarForm`, `mealplan`,
-`receiptSources`, `serverConfig`, `rules`, `scan`, `groceryView`, `stores`, `watchdog`, `todayCharts`, …), the shopping
-module's `logic/` (`weights`, `schemaEdit`, `view`, `progress`, …) and the mail module's `logic/`. They follow the
-same recipe: write the function in `crates/logic`, add its name to `financer_logic::call`, replace the body in
-TypeScript by a `logic(...)` entry, keep the TypeScript test (it then tests Rust) or move it to Rust.
+The shopping module's `logic/` (`weights`, `schemaEdit`, `view`, `progress`, `library`, `profiles`, `runs`,
+`searchPlan`, `sources`, `format`) and the mail module's `logic/` (`agenda`, `chat`, `compose`, `format`,
+`templates`), and the small leftovers in `apps/mobile/src` (`calendarTones`, `onboardingDemo`, the event reminders in
+`notifyPlan`). They follow the same recipe: write the function in `crates/logic`, add its name to
+`financer_logic::call`, replace the body in TypeScript by a `logic(...)` entry, keep the TypeScript test (it then tests
+Rust) or move it to Rust.
 
 Judged to stay TypeScript: per-frame animation maths (`ring`: a WebAssembly call per frame costs more than it saves), a plain array filter (`spendingView`) and device storage (`savingsGoal`).
 
