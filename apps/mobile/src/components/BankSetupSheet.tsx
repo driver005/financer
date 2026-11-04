@@ -2,7 +2,8 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Box, Button, Chip, ChipRow, Note, Sheet, Spinner, Text, TextField, ListItem } from "@financer/ui";
 
-import { Api, ApiError } from "@/api/client";
+import { ApiError } from "@/api/client";
+import { connectApi } from "@/api/connect";
 import { useApi } from "@/api/config";
 import type { BankConnection } from "@/api/client";
 import {
@@ -112,7 +113,7 @@ export function BankSetupSheet({
       const saved = await api.saveServerConfig(setupChange(view, chosen, values));
       if (saved.restarting) {
         setPhase("restarting");
-        const outcome = await waitForRestart(async () => ({ view: await new Api({ baseUrl: config.baseUrl, token: config.token }).serverConfig(), token: config.token }), sleep);
+        const outcome = await waitForRestart(async () => ({ view: await (await connectApi({ baseUrl: config.baseUrl, token: config.token })).serverConfig(), token: config.token }), sleep);
         if (outcome.kind === "timeout") {
           setError(["The server did not come back within a minute. Check that it is running, then open this menu again."]);
           return;

@@ -49,8 +49,8 @@ describe("design guard", () => {
     const bare = sources
       .filter((s) => s.path.startsWith("app/") && !s.path.startsWith("app/_") && !s.path.startsWith("app/+"))
       .filter((s) => !/<Page\b/.test(s.text) && !/<Redirect/.test(s.text))
-      // setup has its own frame, the shopping assistant is a module with its own screens (src/shop)
-      .filter((s) => s.path !== "app/shop.tsx" && s.path !== "app/onboarding.tsx")
+      // setup has its own frame, the shopping assistant and the mail client are modules with their own screens (src/shop, packages/mail)
+      .filter((s) => s.path !== "app/shop.tsx" && s.path !== "app/mail.tsx" && s.path !== "app/onboarding.tsx")
       .map((s) => s.path);
     assert.deepEqual(bare, []);
   });

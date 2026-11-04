@@ -1,0 +1,15 @@
+{
+  "name": "@financer/mail",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The mail client as a module: API client, chat/agenda/template logic and screens. Source-only; the finance app bundles it. See docs/MAIL.md.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "tsc -p tests/tsconfig.json && node --test \".test-build/mail/tests/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "~7.0.2"
+  }
+}

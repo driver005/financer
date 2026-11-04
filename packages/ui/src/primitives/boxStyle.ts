@@ -21,6 +21,8 @@ export function dimValue(d: Dim): number {
 
 export type MaxWidth = keyof typeof size.content;
 export type Basis = "auto" | "full" | "half" | "third" | "quarter";
+/** How much of the parent a box may take: most of it (a chat bubble leaves room on the other side). */
+export type Share = "most";
 
 /** React Native 0.88 types styles as read-only; a style under construction is not. */
 export type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -54,6 +56,8 @@ export type BoxProps = {
   shrink?: boolean;
   /** Width as a share of the parent. */
   basis?: Responsive<Basis>;
+  /** Never wider than this share of the parent (the box is as narrow as its content until then). */
+  share?: Share;
   /** Limit the width to a content column and centre it. */
   maxW?: MaxWidth;
   bg?: BgToken;
@@ -89,6 +93,7 @@ const JUSTIFY: Record<Justify, ViewStyle["justifyContent"]> = {
 };
 const SHEET_MAX_HEIGHT = "85%";
 const BASIS: Record<Basis, DimensionValue> = { auto: "auto", full: "100%", half: "50%", third: "33.333%", quarter: "25%" };
+const SHARE: Record<Share, DimensionValue> = { most: "80%" };
 
 export function bgColor(bg: BgToken, theme: Theme): string {
   const c = theme.colors;
@@ -141,6 +146,7 @@ export function boxStyle(p: BoxProps, theme: Theme, width: number): ViewStyle {
     style.width = "100%";
     style.alignSelf = "center";
   }
+  if (p.share) style.maxWidth = SHARE[p.share];
   if (p.maxH) style.maxHeight = SHEET_MAX_HEIGHT;
   if (p.h) style.height = size.preview;
   if (p.hidden) style.display = "none";

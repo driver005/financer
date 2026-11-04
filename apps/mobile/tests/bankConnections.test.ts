@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Api, type BankConnection, type Sync } from "../src/api/client";
-import { RemoteTransport } from "../src/api/transport";
+import { apiWith } from "./fakeWire";
 import {
   anyBusy,
   applySync,
@@ -136,12 +136,7 @@ describe("texts", () => {
 
 describe("API calls", () => {
   it("speaks one protocol for every provider", async () => {
-    const calls: { url: string; method?: string; body?: unknown; headers?: unknown }[] = [];
-    const impl = (async (url: string, init: RequestInit = {}) => {
-      calls.push({ url, method: init.method, body: init.body, headers: init.headers });
-      return { status: 200, ok: true, text: async () => JSON.stringify(conn()) } as Response;
-    }) as unknown as typeof fetch;
-    const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
+    const { api, calls } = apiWith((op) => (op === "list_providers" || op === "list_connections" ? [conn()] : conn()));
     await api.providers();
     await api.bankConnections();
     await api.startSync({ connection: "Giro Konto", pin: "1234" });
@@ -150,23 +145,22 @@ describe("API calls", () => {
     await api.syncStatus("giro konto");
     await api.cancelSync("giro konto");
     await api.disconnectConnection("Plaid Giro");
-    await api.importFile("csv", new ArrayBuffer(2));
-    assert.equal(calls[0].url, "https://x.test/v1/bank/providers");
-    assert.equal(calls[1].url, "https://x.test/v1/bank/connections");
-    // every provider starts with the same call; only the body differs
-    for (const i of [2, 3, 4]) {
-      assert.equal(calls[i].url, "https://x.test/v1/bank/sync");
-      assert.equal(calls[i].method, "POST");
-    }
-    assert.equal(calls[2].body, '{"connection":"Giro Konto","pin":"1234"}');
-    assert.equal(calls[3].body, '{"connection":"Plaid Giro"}'); // the server has the PIN, or there is none
-    assert.equal(calls[4].body, '{"kind":"fints","login":{"blz":"37050198","user_id":"u","iban":"DE89"},"pin":"1234"}');
-    assert.equal(calls[5].url, "https://x.test/v1/bank/sync/giro%20konto");
-    assert.equal(calls[6].url, "https://x.test/v1/bank/sync/giro%20konto/cancel");
-    assert.equal(calls[6].method, "POST");
-    assert.equal(calls[7].url, "https://x.test/v1/bank/connections/Plaid%20Giro/disconnect");
-    assert.equal(calls[8].url, "https://x.test/v1/bank/import/csv");
-    assert.deepEqual(calls[8].headers, { "Content-Type": "text/csv", Authorization: "Bearer t" });
+    await api.importFile("csv", new Uint8Array([0x42, 0xfc]).buffer);
+    assert.deepEqual(
+      calls.map((c) => [c.op, c.args]),
+      [
+        ["list_providers", {}],
+        ["list_connections", {}],
+        // every provider starts with the same call; only the body differs
+        ["start_sync", { body: { connection: "Giro Konto", pin: "1234" } }],
+        ["start_sync", { body: { connection: "Plaid Giro" } }], // the server has the PIN, or there is none
+        ["start_sync", { body: { kind: "fints", login: { blz: "37050198", user_id: "u", iban: "DE89" }, pin: "1234" } }],
+        ["get_sync", { id: "giro konto" }], // encoding it into a path is the SDK's job
+        ["cancel_sync", { id: "giro konto" }],
+        ["disconnect_connection", { name: "Plaid Giro" }],
+        ["import_file", { kind: "csv", csv_base64: "Qvw=" }],
+      ],
+    );
   });
 });
 

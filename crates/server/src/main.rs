@@ -520,7 +520,7 @@ impl Server {
         let mut app = Api::router_with(
             state,
             TokenHash::new(&token),
-            Self::shop_apps(&db_url).await?,
+            Self::extra_apps(&db_url).await?,
         );
         if let Some(dir) = &config.server.web_dir.value {
             tracing::info!("serving the web app from {dir}");
@@ -558,6 +558,62 @@ impl Server {
             })
             .await
             .map_err(|e| e.to_string())
+    }
+
+    /// The optional apps mounted beside the finance API (each behind its own cargo feature).
+    async fn extra_apps(finance_db_url: &str) -> Result<Vec<(&'static str, axum::Router)>, String> {
+        let mut apps = Self::shop_apps(finance_db_url).await?;
+        apps.extend(Self::mail_apps(finance_db_url).await?);
+        Ok(apps)
+    }
+
+    /// The mail client, mounted under `/v1/mail` behind the same token. Only in builds with the
+    /// `mail` feature, and switched off by `FINANCER_MAIL_ENABLED=false`. It keeps its own tables
+    /// (in the same PostgreSQL database, or in a SQLite file next to the finance one) because mail is
+    /// bulky and private and is not part of the finance export or backup. Without a mailbox
+    /// (`FINANCER_MAIL_IMAP_HOST`) the templates and the calendar still work.
+    #[cfg(feature = "mail")]
+    async fn mail_apps(finance_db_url: &str) -> Result<Vec<(&'static str, axum::Router)>, String> {
+        use financer_mail_api::store::MailStore;
+        use financer_mail_api::{MailApi, MailSetup, MailState};
+        let enabled = std::env::var("FINANCER_MAIL_ENABLED")
+            .map(|v| {
+                !matches!(
+                    v.trim().to_lowercase().as_str(),
+                    "0" | "false" | "no" | "off"
+                )
+            })
+            .unwrap_or(true);
+        if !enabled {
+            tracing::info!("the mail client is switched off (FINANCER_MAIL_ENABLED)");
+            return Ok(Vec::new());
+        }
+        let default_db = match finance_db_url.split_once('?') {
+            None if finance_db_url.starts_with("postgres") => finance_db_url.to_string(),
+            Some((url, _)) if url.starts_with("postgres") => finance_db_url.to_string(),
+            Some((path, query)) if path.ends_with(".db") => {
+                format!("{}-mail.db?{}", path.trim_end_matches(".db"), query)
+            }
+            _ => "sqlite://financer-mail.db?mode=rwc".to_string(),
+        };
+        let setup = MailSetup::from_lookup(&|k| std::env::var(k).ok(), &default_db)?;
+        let store = MailStore::connect(&setup.database_url)
+            .await
+            .map_err(|e| format!("mail database: {e}"))?;
+        let configured = setup.config.is_some();
+        let state = MailState::new(store, setup.config);
+        state
+            .ensure_default_templates()
+            .await
+            .map_err(|e| format!("mail database: {e}"))?;
+        let polling = state.spawn_poller().is_some();
+        tracing::info!(configured, polling, "mail client enabled at /v1/mail");
+        Ok(vec![("mail", MailApi::router(state))])
+    }
+
+    #[cfg(not(feature = "mail"))]
+    async fn mail_apps(_finance_db_url: &str) -> Result<Vec<(&'static str, axum::Router)>, String> {
+        Ok(Vec::new())
     }
 
     /// The shopping assistant, mounted under `/v1/shop` behind the same token. Only in builds

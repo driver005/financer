@@ -23,6 +23,7 @@ const APP_DIRS = [
   "apps/shopping/src",
   "apps/shopping/index.ts",
   "packages/shopping/src/ui",
+  "packages/mail/src/ui",
   // the finance app: its screens (src/app) and the components they are built from
   "apps/mobile/src/app",
   "apps/mobile/src/components",

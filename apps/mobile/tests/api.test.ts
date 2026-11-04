@@ -2,158 +2,90 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Api, ApiError } from "../src/api/client";
-import { EmbeddedTransport, RemoteTransport, type EmbeddedBackend } from "../src/api/transport";
-
-type Call = { url: string; init: RequestInit };
-
-function fakeFetch(responses: Array<{ status: number; body: string }>) {
-  const calls: Call[] = [];
-  const impl = (async (url: string, init: RequestInit = {}) => {
-    calls.push({ url, init });
-    const r = responses.shift() ?? { status: 500, body: "" };
-    return { status: r.status, ok: r.status < 300, text: async () => r.body } as Response;
-  }) as unknown as typeof fetch;
-  return { impl, calls };
-}
-
-describe("RemoteTransport", () => {
-  it("calls the global fetch with the global as `this` (browsers throw 'Illegal invocation' otherwise)", async () => {
-    const original = globalThis.fetch;
-    let thisSeen: unknown = "never called";
-    globalThis.fetch = function (this: unknown) {
-      thisSeen = this;
-      return Promise.resolve({ status: 200, ok: true, text: async () => "ok" } as Response);
-    } as unknown as typeof fetch;
-    try {
-      await new RemoteTransport({ baseUrl: "https://x.test", token: "t" }).send({ method: "GET", path: "/v1/x" });
-      await new RemoteTransport({ baseUrl: "https://x.test", token: "t" }).health();
-    } finally {
-      globalThis.fetch = original;
-    }
-    assert.ok(thisSeen === undefined || thisSeen === globalThis, `fetch was called with this=${String(thisSeen)}`);
-  });
-
-  it("sends the bearer token, joins the base URL and passes the body", async () => {
-    const { impl, calls } = fakeFetch([{ status: 200, body: "[]" }]);
-    const t = new RemoteTransport({ baseUrl: "https://example.test///", token: "tok" }, impl);
-    const res = await t.send({ method: "POST", path: "/v1/x?y=1", headers: { "Content-Type": "text/csv" }, body: "a;b" });
-    assert.deepEqual(res, { status: 200, text: "[]" });
-    assert.equal(calls[0].url, "https://example.test/v1/x?y=1");
-    assert.equal(calls[0].init.method, "POST");
-    assert.deepEqual(calls[0].init.headers, { Authorization: "Bearer tok", "Content-Type": "text/csv" });
-    assert.equal(calls[0].init.body, "a;b");
-  });
-
-  it("health does not send the token", async () => {
-    const { impl, calls } = fakeFetch([{ status: 200, body: "ok" }]);
-    const t = new RemoteTransport({ baseUrl: "https://example.test", token: "secret" }, impl);
-    assert.equal(await t.health(), true);
-    assert.equal(calls[0].url, "https://example.test/health");
-    assert.equal(calls[0].init.headers, undefined);
-  });
-});
-
-function fakeBackend(status: number, body: string) {
-  const seen: Array<{ method: string; pathAndQuery: string; contentType?: string; body: string }> = [];
-  const backend: EmbeddedBackend = {
-    async handle(req) {
-      seen.push({ ...req, body: new TextDecoder().decode(req.body) });
-      const bytes = new TextEncoder().encode(body);
-      return { status, contentType: "application/json", body: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer };
-    },
-  };
-  return { backend, seen };
-}
-
-describe("EmbeddedTransport", () => {
-  it("turns text bodies into bytes and maps the content type", async () => {
-    const { backend, seen } = fakeBackend(200, '{"imported":1}');
-    const res = await new EmbeddedTransport(backend).send({
-      method: "POST",
-      path: "/v1/bank/import/csv",
-      headers: { "Content-Type": "text/csv" },
-      body: "Bücher;1,00",
-    });
-    assert.deepEqual(res, { status: 200, text: '{"imported":1}' });
-    assert.deepEqual(seen[0], { method: "POST", pathAndQuery: "/v1/bank/import/csv", contentType: "text/csv", body: "Bücher;1,00" });
-  });
-
-  it("sends an empty body when there is none", async () => {
-    const { backend, seen } = fakeBackend(200, "[]");
-    await new EmbeddedTransport(backend).send({ method: "GET", path: "/v1/transactions" });
-    assert.equal(seen[0].body, "");
-    assert.equal(seen[0].contentType, undefined);
-  });
-});
+import { apiWith, refusal } from "./fakeWire";
 
 describe("Api", () => {
-  it("parses JSON from either transport", async () => {
-    const { backend } = fakeBackend(200, '[{"id":1,"counterparty":"REWE"}]');
-    const api = new Api(new EmbeddedTransport(backend));
+  it("reads the server's JSON, nulls included", async () => {
+    const { api } = apiWith(() => [{ id: 1, counterparty: "REWE", note: null }]);
     const txs = await api.transactions();
     assert.equal(txs[0].counterparty, "REWE");
+    assert.equal((txs[0] as unknown as { note: unknown }).note, null);
   });
 
-  it("turns error bodies into ApiError with the server's message", async () => {
-    const { impl } = fakeFetch([{ status: 400, body: '{"error":"set a groceries limit in the budget or pass budget_cents"}' }]);
-    const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
+  it("turns a refusal into an ApiError with the server's message", async () => {
+    const { api } = apiWith(() => refusal(400, "set a groceries limit in the budget or pass budget_cents"));
     await assert.rejects(api.affordability(), (e: unknown) => e instanceof ApiError && e.status === 400 && /groceries limit/.test(e.message));
   });
 
   it("reports 401 as a token problem and keeps 409 distinguishable", async () => {
-    const { impl } = fakeFetch([
-      { status: 401, body: "" },
-      { status: 409, body: '{"error":"still waiting"}' },
-    ]);
-    const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
+    const { api } = apiWith((op) => (op === "list_transactions" ? refusal(401, "unauthorized") : refusal(409, "still waiting")));
     await assert.rejects(api.transactions(), (e: unknown) => e instanceof ApiError && e.status === 401 && /token/.test(e.message));
     await assert.rejects(api.syncStatus("abc"), (e: unknown) => e instanceof ApiError && e.status === 409);
   });
 
-  it("handles 204 and non-JSON error bodies", async () => {
-    const { impl } = fakeFetch([
-      { status: 204, body: "" },
-      { status: 502, body: "<html>bad gateway</html>" },
-    ]);
-    const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
-    assert.equal(await api.deleteReceipt(3), undefined);
-    await assert.rejects(api.transactions(), (e: unknown) => e instanceof ApiError && e.message === "HTTP 502");
+  it("keeps the problems of a refused form", async () => {
+    const { api } = apiWith(() => refusal(400, "not saved", ["port is not a number"]));
+    await assert.rejects(api.saveSettings({}), (e: unknown) => e instanceof ApiError && e.problems[0] === "port is not a number");
   });
 
-  it("builds query strings and encodes ids", async () => {
-    const { impl, calls } = fakeFetch([
-      { status: 200, body: "[]" },
-      { status: 200, body: "{}" },
-      { status: 200, body: "{}" },
-    ]);
-    const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
+  it("handles a call that answers nothing", async () => {
+    const { api } = apiWith(() => undefined);
+    assert.equal(await api.deleteReceipt(3), undefined);
+  });
+
+  it("names the calls and passes values by name, leaving out what is not given", async () => {
+    const { api, calls } = apiWith();
     await api.recipes({ budgetCents: 1500, tag: "vegan", limit: 5 });
     await api.affordability(8000, 7);
+    await api.affordability();
     await api.syncStatus("a/b c");
-    assert.equal(calls[0].url, "https://x.test/v1/recipes?budget_cents=1500&tag=vegan&limit=5");
-    assert.equal(calls[1].url, "https://x.test/v1/affordability?budget_cents=8000&days_per_basket=7");
-    assert.equal(calls[2].url, "https://x.test/v1/bank/sync/a%2Fb%20c");
-  });
-
-  it("asks the budget in one call and saves the limits with another", async () => {
-    const { impl, calls } = fakeFetch([
-      { status: 200, body: "{}" },
-      { status: 200, body: "{}" },
-      { status: 200, body: "[]" },
-    ]);
-    const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
     await api.budget();
-    await api.budget("previous", "2026-10-11");
+    await api.budget("previous", "2026-03-15");
     await api.saveEnvelopes([{ category: "groceries", limit_cents: 40000 }]);
-    assert.equal(calls[0].url, "https://x.test/v1/budget?period=current");
-    assert.equal(calls[1].url, "https://x.test/v1/budget?period=previous&date=2026-10-11");
-    assert.equal(calls[2].url, "https://x.test/v1/budget/envelopes");
+    await api.prices("milch");
+    assert.deepEqual(
+      calls.map((c) => [c.op, c.args]),
+      [
+        ["recipes", { budget_cents: 1500, tag: "vegan", limit: 5 }],
+        ["affordability", { budget_cents: 8000, days_per_basket: 7 }],
+        ["affordability", {}],
+        ["get_sync", { id: "a/b c" }], // encoding it into a path is the SDK's job
+        ["budget", { period: "current" }],
+        ["budget", { period: "previous", date: "2026-03-15" }],
+        ["put_envelopes", { body: [{ category: "groceries", limit_cents: 40000 }] }],
+        ["list_prices", { item: "milch" }],
+      ],
+    );
   });
 
-  it("embedded health is always true; remote health asks the server", async () => {
-    assert.equal(await new Api(new EmbeddedTransport(fakeBackend(200, "").backend)).health(), true);
-    const { impl, calls } = fakeFetch([{ status: 200, body: "ok" }]);
-    assert.equal(await new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl)).health(), true);
-    assert.equal(calls[0].url, "https://x.test/health");
+  it("sends a bank export as the bytes it came in, base64 (it may not be UTF-8)", async () => {
+    const { api, calls } = apiWith(() => ({ imported: 1 }));
+    const latin1 = new Uint8Array([0x42, 0xfc, 0x63, 0x68, 0x65, 0x72]); // "Bücher" in ISO-8859-1
+    await api.importFile("csv", latin1.buffer);
+    assert.deepEqual(calls[0], { app: "finance", op: "import_file", args: { kind: "csv", csv_base64: Buffer.from(latin1).toString("base64") } });
+  });
+
+  it("reads the shopping contracts through the shop app, and gives an empty list when there is none", async () => {
+    const answers: Record<string, unknown> = {
+      "shop.categories": [
+        { id: "mobile_plan", name: "Mobile plan", kind: "subscription" },
+        { id: "smartphone", name: "Phone", kind: "product" },
+      ],
+      "shop.my_plan": { name: "Flex", ends_on: "2027-01-31" },
+    };
+    const { api, calls } = apiWith();
+    // the wire sees app and op separately
+    const wired = apiWith((op, _args, call) => answers[`${call.app}.${op}`]);
+    assert.deepEqual(await wired.api.shopContracts(), [{ category: "mobile_plan", name: "Mobile plan", plan: "Flex", endsOn: "2027-01-31" }]);
+    assert.deepEqual(wired.calls.map((c) => [c.app, c.op]), [["shop", "categories"], ["shop", "my_plan"]]);
+    const none = apiWith(() => refusal(404, "no shop"));
+    assert.deepEqual(await none.api.shopContracts(), []);
+    void api;
+    void calls;
+  });
+
+  it("health asks the server only when the connection can", async () => {
+    const { api } = apiWith();
+    assert.equal(await api.health(), true);
   });
 });

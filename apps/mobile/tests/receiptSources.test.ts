@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { Api } from "../src/api/client";
-import { RemoteTransport } from "../src/api/transport";
+import { apiWith } from "./fakeWire";
 import {
   LIDL_PROMISES,
   SOURCE_ORDER,
@@ -170,20 +169,8 @@ describe("Lidl sign-in", () => {
 });
 
 describe("API client", () => {
-  function api(handler: (req: { method: string; path: string; body?: string }) => { status: number; body: unknown }) {
-    const calls: { method: string; path: string; body?: string }[] = [];
-    const fetchFn = (async (url: string, init: { method: string; body?: string }) => {
-      const path = url.replace("http://server", "");
-      calls.push({ method: init.method, path, body: init.body });
-      const r = handler({ method: init.method, path, body: init.body });
-      return { status: r.status, text: async () => (r.body === undefined ? "" : JSON.stringify(r.body)) };
-    }) as unknown as typeof fetch;
-    const a = new Api(new RemoteTransport({ baseUrl: "http://server", token: "t" }, fetchFn));
-    return { a, calls };
-  }
-
   it("calls the receipt source endpoints, the same for every source", async () => {
-    const { a, calls } = api(({ path }) => ({ status: 200, body: path.endsWith("/v1/receipts/sources") ? [] : { ok: true } }));
+    const { api: a, calls } = apiWith((op) => (op === "list_sources" ? [] : op === "disconnect_source" ? undefined : { ok: true }));
     await a.receiptSources();
     await a.receiptSource("lidl_plus");
     await a.syncReceipts();
@@ -195,26 +182,20 @@ describe("API client", () => {
     await a.importReceipts("rewe_app", []);
     await a.importReceipts("orders_file", [], "Amazon");
     assert.deepEqual(
-      calls.map((c) => `${c.method} ${c.path}`),
+      calls.map((c) => [c.op, c.args]),
       [
-        "GET /v1/receipts/sources",
-        "GET /v1/receipts/sources/lidl_plus",
-        "POST /v1/receipts/sync",
-        "POST /v1/receipts/sync",
-        "POST /v1/receipts/sources/kaufland_card/connect",
-        "POST /v1/receipts/sources/lidl_plus/finish",
-        "POST /v1/receipts/sources/lidl_plus/disconnect",
-        "POST /v1/receipts/sources/rewe_app/known",
-        "POST /v1/receipts/sources/rewe_app/import",
-        "POST /v1/receipts/sources/orders_file/import",
+        ["list_sources", {}],
+        ["get_source", { kind: "lidl_plus" }],
+        ["sync_now", {}],
+        ["sync_now", { body: { source: "folder" } }],
+        ["connect_source", { kind: "kaufland_card" }],
+        ["finish_source", { kind: "lidl_plus", body: { state: "st", callback_url: "com.lidlplus.app://callback?code=A" } }],
+        ["disconnect_source", { kind: "lidl_plus" }],
+        ["known_receipts", { kind: "rewe_app", body: { ids: ["a", "b"] } }],
+        ["import_receipts", { kind: "rewe_app", body: { receipts: [] } }], // no shop for a REWE push
+        ["import_receipts", { kind: "orders_file", body: { shop: "Amazon", receipts: [] } }],
       ],
     );
-    assert.equal(calls[2].body, undefined);
-    assert.deepEqual(JSON.parse(calls[3].body ?? "{}"), { source: "folder" });
-    assert.deepEqual(JSON.parse(calls[5].body ?? "{}"), { state: "st", callback_url: "com.lidlplus.app://callback?code=A" });
-    assert.deepEqual(JSON.parse(calls[7].body ?? "{}"), { ids: ["a", "b"] });
-    assert.deepEqual(JSON.parse(calls[8].body ?? "{}"), { receipts: [] }, "no shop for a REWE push");
-    assert.deepEqual(JSON.parse(calls[9].body ?? "{}"), { shop: "Amazon", receipts: [] });
   });
 
   it("reads the states of the one source list", () => {

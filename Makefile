@@ -125,7 +125,7 @@ shop-web: $(SHOP_STAMP) ## The shopping app in the browser (needs: make shop-ser
 
 shop-test: $(SHOP_STAMP) ## Everything of the shopping assistant: Rust crates, module tests, type check
 	cargo test -p financer-shop-core -p financer-shop-sources -p financer-shop-store -p financer-shop-api -p financer-shop-server
-	cargo test -p financer-server --features shop
+	cargo test -p financer-server --features shop,mail
 	cd $(SHOP_MOD) && npm test
 	cd $(SHOP_APP) && npm run typecheck
 
@@ -134,6 +134,7 @@ shop-test: $(SHOP_STAMP) ## Everything of the shopping assistant: Rust crates, m
 ui-test: ## UI package: token tests, contrast tests and the guard against raw spacing/colours
 	cd packages/ui && npm ci && npm test
 	cd $(SHOP_MOD) && npm ci && npm test
+	cd packages/mail && npm ci && npm test
 
 ui-catalog: ## The catalog of every UI element in the browser (phone, tablet, web; light and dark)
 	cd apps/catalog && npm ci && npx expo start --web

@@ -1,7 +1,8 @@
 import type { components } from "./schema";
-import { RemoteTransport, type ApiConfig, type Transport } from "./transport";
+import { CallError, type Caller } from "../../../../packages/wire/src";
 
-export type { ApiConfig } from "./transport";
+/** Where a server is and the token it accepts. */
+export type ApiConfig = { baseUrl: string; token: string };
 
 export type Transaction = components["schemas"]["TransactionDto"];
 export type ImportReport = components["schemas"]["FileImportDto"];
@@ -50,11 +51,11 @@ export type Repeat = components["schemas"]["RepeatDto"];
 export type Settings = components["schemas"]["SettingsDto"];
 export type SettingsUpdate = components["schemas"]["SettingsInput"];
 export type BankStatus = components["schemas"]["BankStatusDto"];
-export type SyncRequest = components["schemas"]["SyncInput"];
 /** A sync, whichever provider: what the person has to do next, or how it ended. */
 export type Sync = components["schemas"]["SyncDto"];
 /** A way transactions come in (csv, fints, plaid, gocardless, finapi) and whether the server has it. */
 export type ProviderInfo = components["schemas"]["ProviderDto"];
+export type SyncRequest = components["schemas"]["SyncInput"];
 export type BankConnection = components["schemas"]["BankConnectionDto"];
 export type ConnectionState = components["schemas"]["ConnectionState"];
 export type StoreSpend = components["schemas"]["StoreSpendDto"];
@@ -79,69 +80,46 @@ export type AlertList = components["schemas"]["AlertsDto"];
 export type EncryptedBackup = components["schemas"]["BackupDto"];
 export type Chain = "aldi" | "lidl" | "kaufland" | "rewe";
 
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    /** One entry per problem when the server refused a change (saving the server settings). */
-    public problems: string[] = [],
-  ) {
-    super(message);
+export class ApiError extends CallError {
+  constructor(status: number, message: string, problems: string[] = []) {
+    super(status, status === 401 ? "Wrong or missing API token" : message, problems);
   }
 }
 
-/** Thin typed client for the Financer REST API (the same API the embedded backend serves). */
+type Page = { period: StoresPeriod; n?: number; date?: string };
+
+/**
+ * The Financer API as the screens use it. Every method names a call of the Rust SDK (the operation id
+ * of the server's OpenAPI document) and passes its values by name; the paths, the encoding and the
+ * checking of the answer are the SDK's (crates/sdk, docs/SDK.md).
+ */
 export class Api {
-  private transport: Transport;
+  /** `ping` answers whether the server is reachable (open endpoint, no token). */
+  constructor(
+    private caller: Caller,
+    private ping: () => Promise<boolean> = async () => true,
+  ) {}
 
-  /** `new Api(config)` talks to a server over HTTP; pass a [`Transport`] for the on-phone backend. */
-  constructor(configOrTransport: ApiConfig | Transport) {
-    this.transport = "send" in configOrTransport ? configOrTransport : new RemoteTransport(configOrTransport);
-  }
-
-  private async request<T>(path: string, init: { method?: string; headers?: Record<string, string>; body?: string | ArrayBuffer } = {}): Promise<T> {
-    const res = await this.transport.send({ method: init.method ?? "GET", path, headers: init.headers, body: init.body });
-    if (res.status < 200 || res.status >= 300) {
-      let message = `HTTP ${res.status}`;
-      let problems: string[] = [];
-      try {
-        const body = JSON.parse(res.text);
-        if (typeof body?.error === "string") message = body.error;
-        if (Array.isArray(body?.problems)) problems = body.problems.filter((p: unknown) => typeof p === "string");
-      } catch {
-        // body was not JSON; keep the status message
-      }
-      throw new ApiError(res.status, res.status === 401 ? "Wrong or missing API token" : message, problems);
-    }
-    if (res.status === 204 || res.text === "") return undefined as T;
-    return JSON.parse(res.text) as T;
-  }
-
-  private json<T>(path: string, method: string, body: unknown) {
-    return this.request<T>(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  private op<T>(op: string, args?: Record<string, unknown>) {
+    return this.caller.call<T>(op, args);
   }
 
   /** Open endpoint: checks the server is reachable, without needing the token. */
-  async health(): Promise<boolean> {
-    if (this.transport instanceof RemoteTransport) return this.transport.health();
-    return true;
+  health(): Promise<boolean> {
+    return this.ping();
   }
 
   transactions() {
-    return this.request<Transaction[]>("/v1/transactions");
+    return this.op<Transaction[]>("list_transactions");
   }
 
-  /** Hand a file to a provider with the `file` flow (`csv`: the Sparkasse CSV-CAMT export). */
+  /** Hand a file to a provider with the `file` flow (`csv`: the bank's export, as the bytes it came in; it may not be UTF-8). */
   importFile(kind: "csv", bytes: ArrayBuffer) {
-    return this.request<ImportReport>(`/v1/bank/import/${encodeURIComponent(kind)}`, {
-      method: "POST",
-      headers: { "Content-Type": "text/csv" },
-      body: bytes,
-    });
+    return this.op<ImportReport>("import_file", { kind, csv_base64: toBase64(bytes) });
   }
 
   recurring() {
-    return this.request<Recurring[]>("/v1/recurring");
+    return this.op<Recurring[]>("recurring");
   }
 
   /**
@@ -150,156 +128,139 @@ export class Api {
    * `date` is the local day, so a late evening is not tomorrow.
    */
   budget(period: "current" | "previous" = "current", date?: string) {
-    const q = new URLSearchParams({ period });
-    if (date) q.set("date", date);
-    return this.request<Budget>(`/v1/budget?${q}`);
+    return this.op<Budget>("budget", { period, date });
   }
 
   /** Replace all envelope limits; answers with the envelopes of the current period. */
   saveEnvelopes(envelopes: Envelope[]) {
-    return this.request<EnvelopeStatus[]>("/v1/budget/envelopes", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(envelopes),
-    });
+    return this.op<EnvelopeStatus[]>("put_envelopes", { body: envelopes });
   }
 
   /** Where the current budget period is heading; `date` is the local day. */
   forecast(date?: string) {
-    return this.request<Forecast>(`/v1/forecast${date ? `?date=${date}` : ""}`);
+    return this.op<Forecast>("forecast", { date });
   }
 
   prices(item?: string) {
-    return this.request<Price[]>(`/v1/prices${item ? `?item=${encodeURIComponent(item)}` : ""}`);
+    return this.op<Price[]>("list_prices", { item });
   }
 
   /** What a scanned barcode (EAN-8, EAN-13, UPC-A) costs per chain. 400 for an invalid barcode. */
   eanLookup(ean: string) {
-    return this.request<EanLookup>(`/v1/prices/ean/${encodeURIComponent(ean)}`);
+    return this.op<EanLookup>("ean_lookup", { ean });
   }
 
   refreshPrices() {
-    return this.request<RefreshReport>("/v1/prices/refreshes", { method: "POST" });
+    return this.op<RefreshReport>("refresh_prices");
   }
 
   catalog() {
-    return this.request<CatalogItem[]>("/v1/catalog");
+    return this.op<CatalogItem[]>("catalog");
   }
 
   basket() {
-    return this.request<Basket>("/v1/basket");
+    return this.op<Basket>("get_basket");
   }
 
   saveBasket(items: BasketItem[]) {
-    return this.json<Basket>("/v1/basket", "PUT", items);
+    return this.op<Basket>("put_basket", { body: items });
   }
 
   receipts() {
-    return this.request<Receipt[]>("/v1/receipts");
+    return this.op<Receipt[]>("list_receipts");
   }
 
   uploadReceipt(text: string) {
-    return this.json<Receipt>("/v1/receipts", "POST", { text });
+    return this.op<Receipt>("upload_receipt", { body: { text } });
   }
 
   /** Photo of a receipt: a vision model transcribes it and the server parses the transcript. */
   scanReceipt(imageBase64: string, mimeType: string) {
-    return this.json<ScanResult>("/v1/receipts/scans", "POST", { image_base64: imageBase64, mime_type: mimeType });
+    return this.op<ScanResult>("scan_receipt", { body: { image_base64: imageBase64, mime_type: mimeType } });
   }
 
   deleteReceipt(id: number) {
-    return this.request<void>(`/v1/receipts/${id}`, { method: "DELETE" });
+    return this.op<void>("delete_receipt", { id });
   }
 
   /** Every receipt source (mailbox, folder, Lidl Plus, Kaufland Card, REWE, orders file), its `flow` and how it is doing. */
   receiptSources() {
-    return this.request<ReceiptSource[]>("/v1/receipts/sources");
+    return this.op<ReceiptSource[]>("list_sources");
   }
 
   /** One source. */
   receiptSource(kind: SourceKind) {
-    return this.request<ReceiptSource>(`/v1/receipts/sources/${kind}`);
+    return this.op<ReceiptSource>("get_source", { kind });
   }
 
   /** Run the enabled sources now, or just one. */
   syncReceipts(source?: string) {
-    return source ? this.json<ReceiptSync>("/v1/receipts/sync", "POST", { source }) : this.request<ReceiptSync>("/v1/receipts/sync", { method: "POST" });
+    return this.op<ReceiptSync>("sync_now", source ? { body: { source } } : {});
   }
 
   /** `sign_in` sources: begin the sign-in; the returned address is the shop's own page. */
   connectSource(kind: SourceKind) {
-    return this.request<SourceConnect>(`/v1/receipts/sources/${kind}/connect`, { method: "POST" });
+    return this.op<SourceConnect>("connect_source", { kind });
   }
 
   /** `sign_in` sources: finish the sign-in with the address the page redirected to. */
   finishSource(kind: SourceKind, state: string, callbackUrl: string) {
-    return this.json<ReceiptSource>(`/v1/receipts/sources/${kind}/finish`, "POST", { state, callback_url: callbackUrl });
+    return this.op<ReceiptSource>("finish_source", { kind, body: { state, callback_url: callbackUrl } });
   }
 
   /** Forget the connection (a stored token, or the note of the last push). Receipts already stored stay. */
   disconnectSource(kind: SourceKind) {
-    return this.request<ReceiptSource>(`/v1/receipts/sources/${kind}/disconnect`, { method: "POST" });
+    return this.op<ReceiptSource>("disconnect_source", { kind });
   }
 
   /** `push` sources: which of the shop's receipt ids (read in the app's browser window) are not stored yet. */
   knownReceipts(kind: SourceKind, ids: string[]) {
-    return this.json<components["schemas"]["ReceiptKnownDto"]>(`/v1/receipts/sources/${kind}/known`, "POST", { ids });
+    return this.op<components["schemas"]["ReceiptKnownDto"]>("known_receipts", { kind, body: { ids } });
   }
 
   /** `push` sources: store the receipts the app read (REWE's web shop) or the orders it read from a file (`shop` names the web shop, for `orders_file`). */
   importReceipts(kind: SourceKind, receipts: ReceiptInput[], shop?: string) {
-    return this.json<ReceiptImport>(`/v1/receipts/sources/${kind}/import`, "POST", shop === undefined ? { receipts } : { shop, receipts });
+    return this.op<ReceiptImport>("import_receipts", { kind, body: shop === undefined ? { receipts } : { shop, receipts } });
   }
 
   affordability(budgetCents?: number, daysPerBasket?: number) {
-    const q = new URLSearchParams();
-    if (budgetCents !== undefined) q.set("budget_cents", String(budgetCents));
-    if (daysPerBasket !== undefined) q.set("days_per_basket", String(daysPerBasket));
-    const qs = q.toString();
-    return this.request<Affordability>(`/v1/affordability${qs ? `?${qs}` : ""}`);
+    return this.op<Affordability>("affordability", { budget_cents: budgetCents, days_per_basket: daysPerBasket });
   }
 
   recipes(opts: { budgetCents?: number; tag?: string; limit?: number } = {}) {
-    const q = new URLSearchParams();
-    if (opts.budgetCents !== undefined) q.set("budget_cents", String(opts.budgetCents));
-    if (opts.tag) q.set("tag", opts.tag);
-    if (opts.limit) q.set("limit", String(opts.limit));
-    const qs = q.toString();
-    return this.request<RecipeMatch[]>(`/v1/recipes${qs ? `?${qs}` : ""}`);
+    return this.op<RecipeMatch[]>("recipes", { budget_cents: opts.budgetCents, tag: opts.tag || undefined, limit: opts.limit || undefined });
   }
 
   ideas(req: { count?: number; diet?: string; budget_cents?: number }) {
-    return this.json<Idea[]>("/v1/recipes/ideas", "POST", req);
+    return this.op<Idea[]>("recipe_ideas", { body: req });
   }
 
   /** The meals planned for the week that contains `week` (Monday to Sunday). */
   mealPlan(week: string) {
-    return this.request<MealPlan>(`/v1/meal-plan?week=${encodeURIComponent(week)}`);
+    return this.op<MealPlan>("get_meal_plan", { week });
   }
 
   /** Replaces the plan of the week; days that are not listed become empty. */
   saveMealPlan(week: string, days: MealDayInput[]) {
-    return this.json<MealPlan>(`/v1/meal-plan?week=${encodeURIComponent(week)}`, "PUT", { days });
+    return this.op<MealPlan>("put_meal_plan", { week, body: { days } });
   }
 
   /** Ingredients of the week's meals, priced per chain and checked against the groceries budget. `date` is the local day. */
   mealShoppingList(week: string, date?: string) {
-    const q = new URLSearchParams({ week });
-    if (date) q.set("date", date);
-    return this.request<MealShoppingList>(`/v1/shopping-list?${q}`);
+    return this.op<MealShoppingList>("get_shopping_list", { week, date });
   }
 
   pantry() {
-    return this.request<Pantry>("/v1/pantry");
+    return this.op<Pantry>("get_pantry");
   }
 
   /** Replaces the list of items assumed to be at home (catalog keys). */
   savePantry(items: string[]) {
-    return this.json<Pantry>("/v1/pantry", "PUT", { items });
+    return this.op<Pantry>("put_pantry", { body: { items } });
   }
 
   settings() {
-    return this.request<Settings>("/v1/settings");
+    return this.op<Settings>("get_settings");
   }
 
   /**
@@ -307,7 +268,7 @@ export class Api {
    * the on-phone backend, which has no such file.
    */
   serverConfig() {
-    return this.request<components["schemas"]["ConfigDto"]>("/v1/server-config");
+    return this.op<components["schemas"]["ConfigDto"]>("get_config");
   }
 
   /**
@@ -316,59 +277,59 @@ export class Api {
    * apply them.
    */
   saveServerConfig(change: components["schemas"]["ConfigChangeInput"]) {
-    return this.json<components["schemas"]["ConfigSavedDto"]>("/v1/server-config", "PUT", change);
+    return this.op<components["schemas"]["ConfigSavedDto"]>("put_config", { body: change });
   }
 
   saveSettings(update: SettingsUpdate) {
-    return this.json<Settings>("/v1/settings", "PUT", update);
+    return this.op<Settings>("put_settings", { body: update });
   }
 
   /** Calendar of expected charges for the next `days` days, price hikes, duplicates and stopped subscriptions. */
   subscriptions(days?: number) {
-    return this.request<Subscriptions>(`/v1/subscriptions${days ? `?days=${days}` : ""}`);
+    return this.op<Subscriptions>("subscriptions", { days: days || undefined });
   }
 
   /** Anomaly alerts; dismissed ones only with `includeDismissed`. */
   alerts(includeDismissed = false) {
-    return this.request<AlertList>(`/v1/alerts${includeDismissed ? "?include_dismissed=true" : ""}`);
+    return this.op<AlertList>("alerts", { include_dismissed: includeDismissed || undefined });
   }
 
   dismissAlert(id: string) {
-    return this.request<{ id: string; dismissed: boolean }>(`/v1/alerts/${encodeURIComponent(id)}/dismiss`, { method: "POST" });
+    return this.op<{ id: string; dismissed: boolean }>("dismiss_alert", { id });
   }
 
   /** Everything that is yours as one document (no secrets, no prices). */
   exportData() {
-    return this.request<ExportData>("/v1/data");
+    return this.op<ExportData>("export_data");
   }
 
   importData(data: ExportData) {
-    return this.json<ImportSummary>("/v1/data", "POST", data);
+    return this.op<ImportSummary>("import_data", { body: data });
   }
 
   /** The same data as `exportData`, encrypted with a passphrase (an `age` file, base64). */
   createBackup(passphrase: string) {
-    return this.json<EncryptedBackup>("/v1/backups", "POST", { passphrase });
+    return this.op<EncryptedBackup>("create_backup", { body: { passphrase } });
   }
 
   /** Merge an encrypted backup; a wrong passphrase or damaged file is a 400 and changes nothing. */
   restoreBackup(passphrase: string, dataBase64: string) {
-    return this.json<ImportSummary>("/v1/backups/restorations", "POST", { passphrase, data_base64: dataBase64 });
+    return this.op<ImportSummary>("restore_backup", { body: { passphrase, data_base64: dataBase64 } });
   }
 
   /** What the last login sent with a request looked like (non-secret), to prefill a form. */
   bankStatus() {
-    return this.request<BankStatus>("/v1/bank/status");
+    return this.op<BankStatus>("bank_status");
   }
 
   /** Every way transactions come in, how each works (`file`, `approval`, `link`) and whether this server has it. */
   providers() {
-    return this.request<ProviderInfo[]>("/v1/bank/providers");
+    return this.op<ProviderInfo[]>("list_providers");
   }
 
   /** The bank connections of the server's financer.toml, without secrets. Empty when none is configured. */
   bankConnections() {
-    return this.request<BankConnection[]>("/v1/bank/connections");
+    return this.op<BankConnection[]>("list_connections");
   }
 
   /**
@@ -378,44 +339,37 @@ export class Api {
    * `pin` only when the connection has no `pin_from_env`.
    */
   startSync(req: SyncRequest) {
-    return this.json<Sync>("/v1/bank/sync", "POST", req);
+    return this.op<Sync>("start_sync", { body: req });
   }
 
   /** Where a sync stands. Ask while its `state` is `syncing`, `needs_approval` or `needs_link`. */
   syncStatus(id: string) {
-    return this.request<Sync>(`/v1/bank/sync/${encodeURIComponent(id)}`);
+    return this.op<Sync>("get_sync", { id });
   }
 
   /** Stop waiting for an approval or a sign-in. */
   cancelSync(id: string) {
-    return this.request<Sync>(`/v1/bank/sync/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+    return this.op<Sync>("cancel_sync", { id });
   }
 
   /** Plaid, GoCardless, finAPI: forget the connection (the server tells the provider and deletes its access). Imported transactions stay. */
   disconnectConnection(name: string) {
-    return this.request<BankConnection>(`/v1/bank/connections/${encodeURIComponent(name)}/disconnect`, { method: "POST" });
+    return this.op<BankConnection>("disconnect_connection", { name });
   }
 
   /** Spending per supermarket chain for the current/previous budget period or the last `n` periods. `date` is the local day. */
   storeSpending(period: StoresPeriod = "current", opts: { n?: number; date?: string } = {}) {
-    return this.request<StoreSpending>(`/v1/spending/stores?${Api.storeQuery(period, opts)}`);
+    return this.op<StoreSpending>("store_spending", Api.storeArgs({ period, ...opts }));
   }
 
   /** The bookings behind one chain's total (`other` = groceries no chain matched), newest first. */
   storeTransactions(chain: string, period: StoresPeriod = "current", opts: { n?: number; date?: string } = {}) {
-    return this.request<Transaction[]>(
-      `/v1/spending/stores/${encodeURIComponent(chain)}/transactions?${Api.storeQuery(period, opts)}`,
-    );
+    return this.op<Transaction[]>("store_transactions", { chain, ...Api.storeArgs({ period, ...opts }) });
   }
 
-  private static storeQuery(period: StoresPeriod, opts: { n?: number; date?: string }) {
-    const q = new URLSearchParams({ period });
-    if (period === "last_n" && opts.n) q.set("n", String(opts.n));
-    if (opts.date) q.set("date", opts.date);
-    return q;
+  private static storeArgs(p: Page) {
+    return { period: p.period, n: p.period === "last_n" && p.n ? p.n : undefined, date: p.date || undefined };
   }
-
-  // ---- categorization: rules, corrections, splits, AI suggestions ----
 
   /**
    * Where the shopping assistant's current subscription plans end (a phone or internet contract).
@@ -424,10 +378,10 @@ export class Api {
    */
   async shopContracts(): Promise<{ category: string; name: string; plan: string | null; endsOn: string }[]> {
     try {
-      const categories = await this.request<{ id: string; name: string; kind: string }[]>("/v1/shop/categories");
+      const categories = await this.caller.call<{ id: string; name: string; kind: string }[]>("shop.categories");
       const out: { category: string; name: string; plan: string | null; endsOn: string }[] = [];
       for (const c of categories.filter((x) => x.kind === "subscription")) {
-        const plan = await this.request<{ name?: string | null; ends_on?: string | null } | null>(`/v1/shop/my/${encodeURIComponent(c.id)}`);
+        const plan = await this.caller.call<{ name?: string | null; ends_on?: string | null } | null>("shop.my_plan", { category: c.id });
         if (plan?.ends_on) out.push({ category: c.id, name: c.name, plan: plan.name ?? null, endsOn: plan.ends_on });
       }
       return out;
@@ -439,92 +393,101 @@ export class Api {
   // ---- calendar ----
 
   calendars() {
-    return this.request<Calendar[]>("/v1/calendar/calendars");
+    return this.op<Calendar[]>("list_calendars");
   }
 
   createCalendar(calendar: CalendarInput) {
-    return this.json<Calendar>("/v1/calendar/calendars", "POST", calendar);
+    return this.op<Calendar>("create_calendar", { body: calendar });
   }
 
   updateCalendar(id: number, calendar: CalendarInput) {
-    return this.json<Calendar>(`/v1/calendar/calendars/${id}`, "PUT", calendar);
+    return this.op<Calendar>("update_calendar", { id, body: calendar });
   }
 
   deleteCalendar(id: number) {
-    return this.request<void>(`/v1/calendar/calendars/${id}`, { method: "DELETE" });
+    return this.op<void>("delete_calendar", { id });
   }
 
   /** Events that can show between two days (`YYYY-MM-DD`, inclusive); repeating ones come as one rule. */
   calendarEvents(from: string, to: string) {
-    return this.request<CalendarEvent[]>(`/v1/calendar/events?from=${from}&to=${to}`);
+    return this.op<CalendarEvent[]>("list_events", { from, to });
   }
 
   createEvent(event: CalendarEventInput) {
-    return this.json<CalendarEvent>("/v1/calendar/events", "POST", event);
+    return this.op<CalendarEvent>("create_event", { body: event });
   }
 
   updateEvent(id: number, event: CalendarEventInput) {
-    return this.json<CalendarEvent>(`/v1/calendar/events/${id}`, "PUT", event);
+    return this.op<CalendarEvent>("update_event", { id, body: event });
   }
 
   deleteEvent(id: number) {
-    return this.request<void>(`/v1/calendar/events/${id}`, { method: "DELETE" });
+    return this.op<void>("delete_event", { id });
   }
 
   /** Delete one occurrence of a repeating event. */
   skipOccurrence(id: number, date: string) {
-    return this.json<CalendarEvent>(`/v1/calendar/events/${id}/exceptions`, "POST", { date });
+    return this.op<CalendarEvent>("add_exception", { id, body: { date } });
   }
 
+  // ---- categorization: rules, corrections, splits, AI suggestions ----
+
   rules() {
-    return this.request<Rule[]>("/v1/rules");
+    return this.op<Rule[]>("list_rules");
   }
 
   createRule(rule: RuleInput) {
-    return this.json<Rule>("/v1/rules", "POST", rule);
+    return this.op<Rule>("create_rule", { body: rule });
   }
 
   updateRule(id: number, rule: RuleInput) {
-    return this.json<Rule>(`/v1/rules/${id}`, "PUT", rule);
+    return this.op<Rule>("update_rule", { id, body: rule });
   }
 
   deleteRule(id: number) {
-    return this.request<void>(`/v1/rules/${id}`, { method: "DELETE" });
+    return this.op<void>("delete_rule", { id });
   }
 
   /** `ids` lists every rule once, highest priority first. */
   reorderRules(ids: number[]) {
-    return this.json<Rule[]>("/v1/rules/order", "PUT", { ids });
+    return this.op<Rule[]>("reorder_rules", { body: { ids } });
   }
 
   /** Re-run the rules over existing transactions; resolves with how many changed. */
   applyRules() {
-    return this.request<{ changed: number }>("/v1/rules/applications", { method: "POST" });
+    return this.op<{ changed: number }>("apply_rules");
   }
 
   /** `remember` also makes a rule for the merchant and applies it to its other transactions. */
   setCategory(id: number, category: string, remember: boolean) {
-    return this.json<CategoryChanged>(`/v1/transactions/${id}/category`, "PUT", { category, remember });
+    return this.op<CategoryChanged>("set_category", { id, body: { category, remember } });
   }
 
   splits() {
-    return this.request<Split[]>("/v1/transactions/splits");
+    return this.op<Split[]>("list_splits");
   }
 
   putSplit(id: number, split: SplitInput) {
-    return this.json<Split>(`/v1/transactions/${id}/split`, "PUT", split);
+    return this.op<Split>("put_split", { id, body: split });
   }
 
   deleteSplit(id: number) {
-    return this.request<void>(`/v1/transactions/${id}/split`, { method: "DELETE" });
+    return this.op<void>("delete_split", { id });
   }
 
   /** Asks the configured AI for categories of merchants nothing placed; sends merchant names only. */
   suggestCategories() {
-    return this.request<Suggestions>("/v1/transactions/suggestions", { method: "POST" });
+    return this.op<Suggestions>("categorize_unknown");
   }
 
   acceptSuggestions(suggestions: { merchant: string; category: string }[]) {
-    return this.json<AcceptReport>("/v1/transactions/categories", "PUT", { suggestions });
+    return this.op<AcceptReport>("accept_suggestions", { body: { suggestions } });
   }
+}
+
+function toBase64(bytes: ArrayBuffer): string {
+  const view = new Uint8Array(bytes);
+  let binary = "";
+  for (let i = 0; i < view.length; i += 0x8000) binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
+  return btoa(binary);
 }

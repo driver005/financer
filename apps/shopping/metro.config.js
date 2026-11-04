@@ -7,7 +7,9 @@ const { getDefaultConfig } = require("expo/metro-config");
 const config = getDefaultConfig(__dirname);
 const shared = path.resolve(__dirname, "../../packages");
 
-config.watchFolders = [...(config.watchFolders ?? []), shared];
+config.watchFolders = [...(config.watchFolders ?? []), shared, path.resolve(__dirname, "../sdk-bindings")];
+// The Rust SDK as WebAssembly (apps/sdk-bindings, docs/SDK.md) is loaded as an asset.
+config.resolver.assetExts = [...config.resolver.assetExts, "wasm"];
 // the design system, by its package name
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules ?? {}),

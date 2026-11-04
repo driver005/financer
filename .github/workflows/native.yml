@@ -12,8 +12,12 @@ on:
       - "Cargo.lock"
       - "apps/embedded-bindings/**"
       - "apps/mobile/scripts/enable-embedded.sh"
+      - "apps/mobile/scripts/enable-sdk.sh"
+      - "apps/sdk-bindings/**"
+      - "packages/wire/**"
       - "apps/shopping/**"
       - "packages/shopping/**"
+      - "packages/mail/**"
       - "packages/ui/**"
       - ".github/workflows/native.yml"
   workflow_dispatch:
@@ -99,6 +103,8 @@ jobs:
       - run: npm ci
       - name: Build the Rust library and generate the bindings
         run: scripts/enable-embedded.sh android
+      - name: Build the Rust SDK and generate its bindings (every request of the app goes through it)
+        run: scripts/enable-sdk.sh android .
         env:
           # CI-only entry that starts the backend at app launch (read by the android-emulator job)
           FINANCER_SMOKE: "1"
@@ -145,6 +151,8 @@ jobs:
       - run: npm ci
       - name: Build the Rust library and generate the bindings
         run: scripts/enable-embedded.sh ios
+      - name: Build the Rust SDK and generate its bindings (every request of the app goes through it)
+        run: scripts/enable-sdk.sh ios .
       - name: Typecheck against the generated bindings
         run: npm run typecheck
       - name: Generate the native iOS project and install the pods
@@ -189,6 +197,8 @@ jobs:
       - run: npm ci
       - name: Build the Rust library and generate the bindings
         run: scripts/enable-embedded.sh android
+      - name: Build the Rust SDK and generate its bindings (every request of the app goes through it)
+        run: ../mobile/scripts/enable-sdk.sh android .
       - name: Typecheck against the generated bindings
         run: npm run typecheck
       - name: Generate the native Android project
@@ -236,6 +246,8 @@ jobs:
       - run: npm ci
       - name: Build the Rust library and generate the bindings
         run: scripts/enable-embedded.sh ios
+      - name: Build the Rust SDK and generate its bindings (every request of the app goes through it)
+        run: ../mobile/scripts/enable-sdk.sh ios .
       - name: Typecheck against the generated bindings
         run: npm run typecheck
       - name: Generate the native iOS project and install the pods

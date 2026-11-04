@@ -35,6 +35,7 @@ SQLite. The same backend can also run inside the phone (see [docs/EMBEDDED.md](d
 | Weekly meal plan with shopping list | plan, merged ingredients, pantry, per-chain totals and best split, budget check; tested on the in-memory store, **Postgres not run**, not part of the JSON export ([docs/MEALPLAN.md](docs/MEALPLAN.md)) |
 | Forecast and trophies | end-of-period forecast and derived streak freezes, badges and weekly bests; unit-tested, screens not run on a device ([docs/FORECAST_AND_TROPHIES.md](docs/FORECAST_AND_TROPHIES.md)) |
 | Notifications, version stamping, dependency and nightly checks | notification planning logic tested, **scheduling and permissions never run**; release builds carry the tag's version; Android release signing is **untested** |
+| Mail | a chat-style mail client (`docs/MAIL.md`, server built with `--features mail`): mail grouped into one chat per person and one thread per topic, newsletters apart, quoted replies, signatures, greetings and closings left out of the bubbles; invitations and appointments written in German or English sentences become calendar events by themselves; greeting and closing templates ("Lieber Max," ... "VG Paul") chosen by recipient and put around your text at the end; IMAP read-only, SMTP over TLS. Grouping, quote and template logic, invitation and date parsing, the sync, the API and SMTP delivery are tested with hand-written mails, a fake IMAP server and a scripted SMTP server; the screens were driven in a real browser (light, dark, phone, wide) against the real server and a demo mailbox. **No real mailbox or outgoing server was contacted and the screens were never run on a phone.** Text appointments are guesses and are marked for checking ([docs/MAIL.md](docs/MAIL.md)) |
 | Shopping assistant (second app: search engine and comparison for products and subscriptions) | Rust crates for ranking, extensible categories and criteria, formulas, deal detection, plan costs, search, page/feed/sitemap reading, an on-demand and a continuous crawler, deal notifications (ntfy, Expo push, webhook), a standalone server and a bundled build; the app module with a progress notification for index runs. Tested with fake shops and, for the crawler, a local web server over real HTTP; the screens were driven in a real browser against the real server. **No real shop was read, the notifiers never sent anything, the on-phone backend and the screens were never run on a phone, and the progress notification (Notifee on Android, a text bar elsewhere) never ran on a device** ([docs/SHOP.md](docs/SHOP.md)) |
 | Calendar (month, week, 3 days, day, schedule; events with repeats, reminders and several calendars) and feed calendars from money, meals and shopping | store and API tested on SQLite (repeat rules, exceptions, validation, export/import); the date, repeat, layout and quick-add logic unit-tested; the screens were driven in a desktop browser against the real server at phone and laptop sizes. **Local reminders and the screens were never run on a phone**, one occurrence of a series cannot be edited alone, no time zones or `.ics` ([docs/CALENDAR.md](docs/CALENDAR.md)) |
 | Kaufland Card receipts (unofficial sign-in on Kaufland's own page, off by default) | written from the public Bonfire project's description of the protocol and tested only against fake answers (sign-in, token refresh, receipt list, conversion, API, phone backend switch). **Never run against a real Kaufland account**, Kaufland's receipt host is said to be certificate-pinned, and it may break at any app update ([docs/RECEIPT_SOURCES.md](docs/RECEIPT_SOURCES.md)) |
@@ -122,11 +123,17 @@ crates/config     financer.toml and environment configuration of the server
 crates/server     hosted binary
 crates/embedded   the same backend as a library for the phone (UniFFI), including the shopping backend
 crates/shop-*     the shopping assistant: core (ranking, schemas), sources (crawler), store, api, server
+crates/sdk        the Rust client of the server's APIs (finance, shop, mail) and the entry to the app logic; the apps reach every server through it (UniFFI: natively and as WebAssembly)
+crates/logic      the app's own logic in Rust (formatting, budget periods, card wording, streaks and badges; docs/LOGIC.md)
+crates/mail-*     the mail client: core (chats, topics, templates, events), store, api (IMAP sync, SMTP, routes)
 apps/mobile       Expo app (routes in src/app); carries the shopping assistant when built with EXPO_PUBLIC_SHOPPING=1
 apps/shopping     the shopping assistant as an app of its own
 packages/shopping the shopping assistant as a module (client, logic, screens), used by both apps
+apps/sdk-bindings the generated TypeScript of the SDK (docs/SDK.md)
+packages/wire     the TypeScript side of the SDK: calls by name, the platform loaders (no logic)
+packages/mail     the mail client as a module (client, logic, screens), opened from the finance app's Settings
 deploy/           Dockerfile, compose, Caddyfile
-docs/             SHOP.md, CONFIG.md, RECEIPT_SOURCES.md, STORES.md, CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
+docs/             SDK.md, LOGIC.md, MAIL.md, SHOP.md, CONFIG.md, RECEIPT_SOURCES.md, STORES.md, CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
 ```
 
 ## Security notes

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { Note as Message, TextField } from "@financer/ui";
 
-import { Api } from "@/api/client";
+import { connectApi } from "@/api/connect";
 import { useApi } from "@/api/config";
 import { ChoiceCard, FieldLabel, Note, StepFrame } from "@/components/onboarding/Frame";
 import type { StepCtx } from "@/components/onboarding/types";
@@ -53,7 +53,7 @@ export function DataStep({ ctx }: { ctx: StepCtx }) {
     setStatus(null);
     try {
       // the same check as Settings: reachable, a Financer server, and the token works
-      const probe = new Api({ baseUrl: check.normalized, token: token.trim() });
+      const probe = await connectApi({ baseUrl: check.normalized, token: token.trim() });
       if (!(await probe.health())) throw new Error("The server answered, but not as a Financer server");
       await probe.transactions();
       await save({ baseUrl: check.normalized, token: token.trim() });

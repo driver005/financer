@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Api, type StoreSpend, type StoreSpending } from "../src/api/client";
-import { RemoteTransport } from "../src/api/transport";
+import { apiWith } from "./fakeWire";
 import {
   barFraction,
   changeText,
@@ -147,24 +147,22 @@ describe("views and the API", () => {
     assert.deepEqual(viewQuery("last3"), { period: "last_n", n: 3 });
   });
 
-  it("asks the server with the right URLs", async () => {
-    const calls: string[] = [];
-    const impl = (async (url: string) => {
-      calls.push(url);
-      return { status: 200, ok: true, text: async () => "[]" } as Response;
-    }) as unknown as typeof fetch;
-    const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
+  it("names the calls with the period, the count (only for last_n) and the day", async () => {
+    const { api, calls } = apiWith(() => []);
     await api.storeSpending("current", { date: "2026-10-11" });
     await api.storeSpending("last_n", { n: 3, date: "2026-10-11" });
     await api.storeSpending("previous", { n: 3 }); // n only counts for last_n
     await api.storeTransactions("bio-company", "previous", { date: "2026-10-11" });
     await api.storeTransactions("other");
-    assert.deepEqual(calls, [
-      "https://x.test/v1/spending/stores?period=current&date=2026-10-11",
-      "https://x.test/v1/spending/stores?period=last_n&n=3&date=2026-10-11",
-      "https://x.test/v1/spending/stores?period=previous",
-      "https://x.test/v1/spending/stores/bio-company/transactions?period=previous&date=2026-10-11",
-      "https://x.test/v1/spending/stores/other/transactions?period=current",
-    ]);
+    assert.deepEqual(
+      calls.map((c) => [c.op, c.args]),
+      [
+        ["store_spending", { period: "current", date: "2026-10-11" }],
+        ["store_spending", { period: "last_n", n: 3, date: "2026-10-11" }],
+        ["store_spending", { period: "previous" }],
+        ["store_transactions", { chain: "bio-company", period: "previous", date: "2026-10-11" }],
+        ["store_transactions", { chain: "other", period: "current" }],
+      ],
+    );
   });
 });

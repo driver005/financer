@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Api, type MealShoppingList } from "../src/api/client";
-import type { Transport } from "../src/api/transport";
+import { apiWith } from "./fakeWire";
 import {
   addDays,
   budgetVerdict,
@@ -279,28 +279,24 @@ describe("wording", () => {
 });
 
 describe("Api meal plan calls", () => {
-  it("asks for the right paths and sends the plan as JSON", async () => {
-    const calls: Array<{ method: string; path: string; body?: unknown }> = [];
-    const transport: Transport = {
-      async send(req) {
-        calls.push({ method: req.method, path: req.path, body: typeof req.body === "string" ? JSON.parse(req.body) : undefined });
-        return { status: 200, text: "{}" };
-      },
-    };
-    const api = new Api(transport);
+  it("names the calls and passes the week, the date and the plan by name", async () => {
+    const { api, calls } = apiWith();
     await api.mealPlan("2026-10-12");
     await api.saveMealPlan("2026-10-12", [{ date: "2026-10-12", recipe_id: "pfannkuchen", servings: 2 }]);
     await api.mealShoppingList("2026-10-12");
     await api.mealShoppingList("2026-10-12", "2026-10-14");
     await api.pantry();
     await api.savePantry(["salz", "oel"]);
-    assert.deepEqual(calls, [
-      { method: "GET", path: "/v1/meal-plan?week=2026-10-12", body: undefined },
-      { method: "PUT", path: "/v1/meal-plan?week=2026-10-12", body: { days: [{ date: "2026-10-12", recipe_id: "pfannkuchen", servings: 2 }] } },
-      { method: "GET", path: "/v1/shopping-list?week=2026-10-12", body: undefined },
-      { method: "GET", path: "/v1/shopping-list?week=2026-10-12&date=2026-10-14", body: undefined },
-      { method: "GET", path: "/v1/pantry", body: undefined },
-      { method: "PUT", path: "/v1/pantry", body: { items: ["salz", "oel"] } },
-    ]);
+    assert.deepEqual(
+      calls.map((c) => [c.op, c.args]),
+      [
+        ["get_meal_plan", { week: "2026-10-12" }],
+        ["put_meal_plan", { week: "2026-10-12", body: { days: [{ date: "2026-10-12", recipe_id: "pfannkuchen", servings: 2 }] } }],
+        ["get_shopping_list", { week: "2026-10-12" }],
+        ["get_shopping_list", { week: "2026-10-12", date: "2026-10-14" }],
+        ["get_pantry", {}],
+        ["put_pantry", { body: { items: ["salz", "oel"] } }],
+      ],
+    );
   });
 });

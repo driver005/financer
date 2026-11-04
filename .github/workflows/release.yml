@@ -389,7 +389,7 @@ jobs:
   # Two flavours besides the finance-only files above (docs/SHOP.md):
   #   shop   - the shopping assistant on its own (apps/shopping, financer-shop-server)
   #   bundle - the finance app with the shopping assistant inside (apps/mobile built with
-  #            EXPO_PUBLIC_SHOPPING=1, financer-server built with --features shop)
+  #            EXPO_PUBLIC_SHOPPING=1, financer-server built with --features shop,mail)
 
   shop-web:
     if: github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'shop'
@@ -471,7 +471,7 @@ jobs:
         run: cargo build --release --locked -p financer-shop-server
       - name: Build the finance server with the shopping assistant
         if: matrix.variant == 'bundle'
-        run: cargo build --release --locked -p financer-server --features shop
+        run: cargo build --release --locked -p financer-server --features shop,mail
       - uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.variant == 'shop' && 'shop-web-files' || 'bundle-web-files' }}
@@ -500,7 +500,7 @@ jobs:
           # the shopping assistant on its own
           - { image: financer-shop-server, file: deploy/Dockerfile.shop, args: "" }
           # the finance server with the shopping assistant inside
-          - { image: financer-bundle-server, file: deploy/Dockerfile, args: "FEATURES=shop" }
+          - { image: financer-bundle-server, file: deploy/Dockerfile, args: "FEATURES=shop,mail" }
     steps:
       - uses: actions/checkout@v7
       - name: Stamp the tag's version
