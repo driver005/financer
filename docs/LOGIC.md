@@ -42,6 +42,8 @@ CI runs them in the `sdk-web` job, which has the bindings.
 | `forecast` (card wording) | 151 | Rust |
 | `game` (streaks, freezes, badges, XP, mascot) | 501 | Rust; TypeScript tests kept as the specification |
 | `calendar` (dates, series, day layout, quick-add sentences) | 468 | Rust, 8 tests; the TypeScript calendar tests (241 lines) run against it |
+| `stores` (Stores screen wording) | 110 | Rust, 6 tests |
+| `watchdog` (subscriptions and alerts wording, week grouping) | 180 | Rust, 7 tests |
 | `notifyPlan`: evening message, payday reminder, price drops | about 200 of 279 | Rust; the calendar event reminders stay beside `calendar` until that is moved |
 
 ## What is not moved yet
@@ -51,6 +53,8 @@ The rest of `apps/mobile/src/*.ts` (about 4,500 lines: `onboarding`, `calendarVi
 module's `logic/` (`weights`, `schemaEdit`, `view`, `progress`, …) and the mail module's `logic/`. They follow the
 same recipe: write the function in `crates/logic`, add its name to `financer_logic::call`, replace the body in
 TypeScript by a `logic(...)` entry, keep the TypeScript test (it then tests Rust) or move it to Rust.
+
+Judged to stay TypeScript: per-frame animation maths (`ring`: a WebAssembly call per frame costs more than it saves), a plain array filter (`spendingView`) and device storage (`savingsGoal`).
 
 What stays TypeScript for good: the screens, and everything that asks the device (files, notifications,
 biometrics, background tasks, the clock).

@@ -13,6 +13,8 @@ pub mod game;
 pub mod notify_plan;
 pub mod period;
 pub mod safe_to_spend;
+pub mod stores;
+pub mod watchdog;
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -247,6 +249,53 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
         )?),
         "calendar.repeat_text" => json(calendar::repeat_text(opt(&args, "r")?.as_ref())?),
         "calendar.reminder_text" => json(calendar::reminder_text(arg(&args, "minutes")?)),
+        "stores.format_permille" => json(stores::format_permille(arg(&args, "permille")?)),
+        "stores.change_tone" => json(stores::change_tone(&arg(&args, "row")?)),
+        "stores.change_text" => json(stores::change_text(&arg(&args, "row")?)),
+        "stores.bar_fraction" => json(stores::bar_fraction(
+            arg(&args, "total_cents")?,
+            &arg::<Vec<i64>>(&args, "totals")?,
+        )),
+        "stores.visits_text" => json(stores::visits_text(arg(&args, "visits")?)),
+        "stores.last_visit_text" => json(stores::last_visit_text(
+            opt::<String>(&args, "last_visit")?.as_deref(),
+            &arg::<String>(&args, "today")?,
+        )?),
+        "stores.compare_text" => json(stores::compare_text(&arg(&args, "r")?)),
+        "stores.total_text" => json(stores::total_text(&arg(&args, "r")?)),
+        "stores.unmatched_hint" => json(stores::unmatched_hint(&arg(&args, "r")?)),
+        "stores.row_label" => json(stores::row_label(&arg(&args, "row")?)),
+        "watchdog.week_start" => json(watchdog::week_start(&arg::<String>(&args, "iso")?)?),
+        "watchdog.short_date" => json(watchdog::short_date(&arg::<String>(&args, "iso")?)),
+        "watchdog.group_by_week" => json(watchdog::group_by_week(
+            &arg::<Vec<Value>>(&args, "upcoming")?,
+            &arg::<String>(&args, "as_of")?,
+        )?),
+        "watchdog.cadence_label" => {
+            json(watchdog::cadence_label(&arg::<String>(&args, "cadence")?))
+        }
+        "watchdog.percent_text" => json(watchdog::percent_text(arg(&args, "bp")?)),
+        "watchdog.hike_text" => json(watchdog::hike_text(&arg(&args, "h")?)),
+        "watchdog.badges_for" => json(watchdog::badges_for(
+            &arg(&args, "item")?,
+            &arg::<Vec<Value>>(&args, "price_hikes")?,
+            &arg::<Vec<Value>>(&args, "duplicates")?,
+        )),
+        "watchdog.duplicate_text" => json(watchdog::duplicate_text(&arg(&args, "d")?)),
+        "watchdog.stale_text" => json(watchdog::stale_text(&arg(&args, "s")?)),
+        "watchdog.alert_kind_label" => {
+            json(watchdog::alert_kind_label(&arg::<String>(&args, "kind")?))
+        }
+        "watchdog.severity_rank" => {
+            json(watchdog::severity_rank(&arg::<String>(&args, "severity")?))
+        }
+        "watchdog.alert_text" => json(watchdog::alert_text(&arg(&args, "a")?)),
+        "watchdog.sort_alerts" => json(watchdog::sort_alerts(&arg::<Vec<Value>>(&args, "alerts")?)),
+        "watchdog.next_charge_text" => json(watchdog::next_charge_text(
+            &arg::<Vec<Value>>(&args, "upcoming")?,
+            &arg::<String>(&args, "as_of")?,
+            arg(&args, "within_days")?,
+        )?),
         other => return Err(format!("unknown function {other}")),
     };
     out
