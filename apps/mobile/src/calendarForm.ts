@@ -1,11 +1,11 @@
 /**
  * The event editor's draft: what the form edits, how it starts (a new event on a day or at a time,
  * or an existing occurrence), whether it is valid, and the request it turns into. The rules are in
- * Rust (crates/logic, calendar_form.rs); the clock-reading `nextHour` stays here.
+ * Rust (crates/logic, calendar_form.rs); `nextHour` passes the device's hour.
  */
 import type { CalendarEvent, CalendarEventInput } from "./api/client";
 import { logic } from "../../../packages/wire/src/logic";
-import { timeOf, type EventRule, type Occurrence, type Repeat, type RepeatKind } from "./calendar";
+import type { EventRule, Repeat, RepeatKind } from "./calendar";
 
 export type Draft = {
   /** Set when editing an existing event. */
@@ -28,9 +28,7 @@ export type Draft = {
 export const REMINDER_CHOICES = [0, 10, 30, 60, 1440, 10_080] as const;
 
 /** Default when a new event is made without a time (a tap on the add button): the next whole hour. */
-export function nextHour(now: Date): string {
-  return timeOf(Math.min(23 * 60, (now.getHours() + 1) * 60));
-}
+export const nextHour = (now: Date): string => logic("app_misc.next_hour", { hour: now.getHours() });
 
 /** A new event on a day, at a time when given, one hour long. */
 export const newDraft = (date: string, calendarId: number | null, time?: string | null): Draft =>
@@ -57,8 +55,3 @@ export const problem = (d: Draft): string | null => logic("calendar_form.problem
 
 /** The request body for saving the draft. Call only when `problem` is null. */
 export const toInput = (d: Draft): CalendarEventInput => logic("calendar_form.to_input", { d });
-
-/** The occurrence the editor opened from, for the "this event" wording. */
-export function isSeries(o: Pick<Occurrence, "repeats">): boolean {
-  return o.repeats;
-}

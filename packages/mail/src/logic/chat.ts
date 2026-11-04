@@ -1,7 +1,9 @@
-// A conversation as a list of rows: day dividers, topic dividers and bubbles.
+// A conversation as a list of rows: day dividers, topic dividers and bubbles. The rules are in Rust
+// (crates/logic, mail_format.rs).
 
+import { logic } from "../../../wire/src/logic";
 import type { ChatMessage } from "../api/types";
-import { clock, dayKey, dayLabel, type Fmt } from "./format";
+import { packOf, zoneOf, type Fmt } from "./format";
 
 export type ChatRow =
   | { kind: "day"; key: string; label: string }
@@ -18,30 +20,10 @@ export type ChatRowOptions = {
   groupChat: boolean;
 };
 
-const sameTopic = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-
-export function chatRows(messages: ChatMessage[], o: ChatRowOptions): ChatRow[] {
+export const chatRows = (messages: ChatMessage[], o: ChatRowOptions): ChatRow[] => {
   const f = o.fmt ?? {};
-  const today = dayKey(o.now, f);
-  const rows: ChatRow[] = [];
-  let day = "";
-  let topic: string | null = null;
-  for (const m of messages) {
-    const d = dayKey(m.at, f);
-    if (d !== day) {
-      day = d;
-      rows.push({ kind: "day", key: `day-${d}`, label: dayLabel(d, today, f) });
-    }
-    if (o.showTopics && m.topic && (topic === null || !sameTopic(topic, m.topic))) {
-      rows.push({ kind: "topic", key: `topic-${m.id}`, label: m.topic });
-    }
-    if (m.topic) topic = m.topic;
-    rows.push({ kind: "message", key: `m-${m.id}`, message: m, time: clock(m.at, f), showSender: o.groupChat && !m.mine });
-  }
-  return rows;
-}
+  return logic("mail_format.chat_rows", { messages, now: o.now, zone: zoneOf(f), pack: packOf(f), show_topics: o.showTopics, group_chat: o.groupChat });
+};
 
 /** Ids of the messages not read yet. */
-export function unreadIds(messages: ChatMessage[]): number[] {
-  return messages.filter((m) => m.unread).map((m) => m.id);
-}
+export const unreadIds = (messages: ChatMessage[]): number[] => logic("mail_format.unread_ids", { messages });

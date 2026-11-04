@@ -127,10 +127,8 @@ jobs:
         run: |
           npm ci --prefix packages/ui
           npm test --prefix packages/ui
-      - name: Mail client module tests (its screens are type checked with the catalog below)
-        run: |
-          npm ci --prefix packages/mail
-          npm test --prefix packages/mail
+      - name: Mail module dependencies (its screens are type checked with the catalog; its tests run in sdk-web, which has the Rust SDK)
+        run: npm ci --prefix packages/mail
       - name: Catalog type check and web bundle
         working-directory: apps/catalog
         run: |
@@ -160,6 +158,8 @@ jobs:
             apps/mobile/package-lock.json
             apps/shopping/package-lock.json
             apps/sdk-bindings/package-lock.json
+            packages/shopping/package-lock.json
+            packages/mail/package-lock.json
       - run: npm ci --prefix apps/mobile
       - run: npm ci --prefix apps/shopping
       - run: apps/mobile/scripts/enable-sdk.sh web
@@ -167,6 +167,14 @@ jobs:
       - name: Finance app tests (the app logic that moved to Rust runs in them, through the SDK)
         working-directory: apps/mobile
         run: npm test
+      - name: Shopping module tests (its logic moved to Rust and runs in them, through the SDK)
+        run: |
+          npm ci --prefix packages/shopping
+          npm test --prefix packages/shopping
+      - name: Mail module tests (its logic moved to Rust and runs in them, through the SDK; its screens are type checked with the catalog in the ui job)
+        run: |
+          npm ci --prefix packages/mail
+          npm test --prefix packages/mail
       - name: Finance app bundles with the SDK, with the shop inside and without it
         working-directory: apps/mobile
         run: |
@@ -196,11 +204,7 @@ jobs:
             packages/shopping/package-lock.json
             apps/shopping/package-lock.json
             apps/mobile/package-lock.json
-      - name: Module tests
-        run: |
-          npm ci --prefix packages/shopping
-          npm test --prefix packages/shopping
-      - name: Standalone app type check (its web bundle is in sdk-web, which has the Rust SDK)
+      - name: Standalone app type check (its module tests and web bundle are in sdk-web, which has the Rust SDK)
         working-directory: apps/shopping
         run: |
           npm ci

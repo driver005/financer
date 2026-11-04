@@ -11,4 +11,7 @@ financer-core = { path = "../core" }
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
+url = { version = "2", default-features = false, features = ["std"] }
+unicode-normalization = { version = "0.1", default-features = false }
 regex = { version = "1", default-features = false, features = ["std", "unicode-case", "unicode-perl"] }

@@ -23,10 +23,6 @@ export type BuildInfo = { platform: Platform; embeddedAvailable: boolean };
 
 /** The steps for this build, in order ("safety" only exists in the phone app). */
 export const stepsFor = (build: BuildInfo): StepId[] => logic("onboarding.steps_for", { platform: build.platform });
-
-export const isStepId = (value: unknown): value is StepId =>
-  typeof value === "string" && logic<boolean>("onboarding.is_step_id", { value });
-
 /** The step after `current`, or `null` at the end (or when `current` is not in the list). */
 export const nextStep = (steps: StepId[], current: StepId): StepId | null => logic("onboarding.next_step", { steps, current });
 
@@ -93,12 +89,7 @@ export function serializeState(state: OnboardingState): string {
 }
 
 // ---- validation ----
-
-export const HOUSEHOLD_MIN = 1;
 export const HOUSEHOLD_MAX = 8;
-/** 10.000 EUR: far above any grocery budget, there to catch a typo like an extra zero. */
-export const MAX_BUDGET_CENTS = 1_000_000;
-
 export const clampHousehold = (n: number): number => logic("onboarding.clamp_household", { n });
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -129,15 +120,6 @@ export const INTENSITIES: IntensityInfo[] = [
   { id: "regular", label: "Regular", blurb: "Plan the shop and skip the extras.", factor: 0.85, icon: "flash" },
   { id: "serious", label: "Serious", blurb: "Every cent counts. Offers and own brands.", factor: 0.7, icon: "fire" },
 ];
-
-/** A round planning figure for one adult's groceries per day, used only when no budget was entered. Not a statistic. */
-export const BASE_DAILY_PER_PERSON_CENTS = 650;
-/** Each person after the first adds 85% of the first (packs and staples are shared). */
-export const EXTRA_PERSON_WEIGHT = 0.85;
-export const MIN_ALLOWANCE_CENTS = 100;
-
-export const householdFactor = (size: number): number => logic("onboarding.household_factor", { size });
-
 /** The daily grocery allowance (cents) a savings level suggests, rounded to 10 cents. */
 export const suggestAllowance = (args: {
   intensity: Intensity;

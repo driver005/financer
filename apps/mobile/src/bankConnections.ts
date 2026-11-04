@@ -3,8 +3,8 @@
  * financer.toml, each with a provider: FinTS (the server logs in, waits for the approval in the
  * banking app and imports), or Plaid, GoCardless or finAPI (you sign in once on the provider's page;
  * after that there is no PIN and no approval). The card only shows the state and starts or cancels
- * a sync. The rules are in Rust (crates/logic, bank_connections.rs); the time-zone stamp and the
- * waiting loop stay here, with the device.
+ * a sync. The rules are in Rust (crates/logic, bank_connections.rs); the device's time zone is
+ * passed in, and the waiting loop stays here.
  */
 import { logic } from "../../../packages/wire/src/logic";
 import type { BankConnection, Sync } from "./api/client";
@@ -49,25 +49,14 @@ export const needsTypedPin = (c: BankConnection): boolean => logic("bank_connect
 /** Whether the main button can be pressed with what has been typed. */
 export const canSync = (c: BankConnection, typedPin: string): boolean => logic("bank_connections.can_sync", { c, typed_pin: typedPin });
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
+/** The device's time zone, which the stamps are written in. */
+const deviceZone = (): string => new Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
 
 /** `12.10.2026 14:03` in the device's time zone. */
-export function formatStamp(unixSeconds: number): string {
-  const d = new Date(unixSeconds * 1000);
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+export const formatStamp = (unixSeconds: number): string => logic("app_misc.format_stamp", { unix_seconds: unixSeconds, zone: deviceZone() });
 
 /** What the last attempt did, or `null` when there was none. */
-export function lastResultText(c: BankConnection): string | null {
-  const r = c.last_result;
-  if (!r) return null;
-  if (!r.ok) return `Last attempt ${formatStamp(r.at)} failed.`;
-  const imported = r.imported ?? 0;
-  const known = r.duplicates ?? 0;
-  return `Last sync ${formatStamp(r.at)}: ${imported} new, ${known} already known.`;
-}
+export const lastResultText = (c: BankConnection): string | null => logic("bank_connections.last_result_text", { c, zone: deviceZone() });
 
 /** When the next scheduled sync is, in words. */
 export const nextSyncText = (c: BankConnection, nowSeconds: number): string | null =>

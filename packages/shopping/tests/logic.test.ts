@@ -271,7 +271,9 @@ describe("sources editor", () => {
     assert.ok(problems.some((m) => /pages need a list of urls/.test(m)));
     assert.ok(problems.some((m) => /sitemap needs/.test(m)));
     assert.ok(problems.some((m) => /kind must be/.test(m)));
-    assert.deepEqual(checkSources("{nope"), { ok: false, problems: [`Not valid JSON: ${(() => { try { JSON.parse("{nope"); return ""; } catch (e) { return (e as Error).message; } })()}`] });
+    const broken = checkSources("{nope");
+    assert.equal(broken.ok, false);
+    assert.ok(!broken.ok && broken.problems.length === 1 && broken.problems[0].startsWith("Not valid JSON: "));
     assert.deepEqual(checkSources("{}"), { ok: false, problems: ["The sources must be a list: [ { ... }, { ... } ]"] });
   });
 });

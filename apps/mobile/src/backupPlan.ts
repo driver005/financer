@@ -14,9 +14,6 @@ export type BackupSettings = {
   /** URI of a folder the user picked, where copies are written as well (if the platform allows). */
   folderUri: string | null;
 };
-
-export const DEFAULT_BACKUP_SETTINGS: BackupSettings = { schedule: "off", folderUri: null };
-
 /** Read stored settings, tolerating anything (missing, old, hand-edited, corrupt). */
 export const parseBackupSettings = (raw: string | null | undefined): BackupSettings => logic("backup_plan.parse_backup_settings", { raw: raw ?? null });
 
@@ -38,8 +35,4 @@ export const isBackupDue = (schedule: BackupSchedule, newestMs: number | null, n
 
 /** Automatic backups to delete so that only the newest `keep` remain. Other files are never touched. */
 export const autoBackupsToDelete = (names: string[], keep: number = KEEP_AUTO_BACKUPS): string[] => logic("backup_plan.auto_backups_to_delete", { names, keep });
-
-/** Passphrase rules shared by the screen and the server (which needs at least 8 characters). */
-export const MIN_PASSPHRASE_LENGTH = 8;
-
 export const passphraseProblem = (passphrase: string, confirm?: string): string | null => logic("backup_plan.passphrase_problem", { passphrase, confirm: confirm ?? null });

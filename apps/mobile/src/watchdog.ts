@@ -22,14 +22,6 @@ export const shortDate = (iso: string): string => logic("watchdog.short_date", {
 
 /** Calendar entries grouped by week ("Overdue", "This week", "Next week", "05.10. - 11.10."). */
 export const groupByWeek = (upcoming: UpcomingCharge[], asOf: string): WeekGroup[] => logic("watchdog.group_by_week", { upcoming, as_of: asOf });
-
-export const CADENCE_LABEL: Record<string, string> = {
-  weekly: "weekly",
-  monthly: "monthly",
-  quarterly: "quarterly",
-  yearly: "yearly",
-};
-
 export const cadenceLabel = (cadence: string): string => logic("watchdog.cadence_label", { cadence });
 
 /** `2002` basis points -> `+20,0 %` */
@@ -46,21 +38,9 @@ export const badgesFor = (item: UpcomingCharge, report: Pick<Subscriptions, "pri
 export const duplicateText = (d: Subscriptions["duplicates"][number]): string => logic("watchdog.duplicate_text", { d });
 
 export const staleText = (s: Subscriptions["stale"][number]): string => logic("watchdog.stale_text", { s });
-
-export const ALERT_KIND_LABEL: Record<string, string> = {
-  duplicate_charge: "Possible duplicate charge",
-  unusual_amount: "Unusual amount",
-  new_merchant: "New merchant",
-  large_for_category: "Large for its category",
-};
-
 export const alertKindLabel = (kind: string): string => logic("watchdog.alert_kind_label", { kind });
 
 export const SEVERITY_LABEL: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };
-
-/** Higher first. */
-export const severityRank = (severity: string): number => logic("watchdog.severity_rank", { severity });
-
 /** Explanation of an alert in the app's wording; unknown kinds fall back to the server's English `reason`. */
 export const alertText = (a: Alert): string => logic("watchdog.alert_text", { a });
 

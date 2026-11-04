@@ -12,13 +12,6 @@ export type BreakdownRow = {
 };
 
 export const breakdownRows = (s: SafeToSpend): BreakdownRow[] => logic("safe_to_spend.breakdown_rows", { s });
-
-/** `14 days left in this period` / `the last day of this period`. */
-export const daysLeftText = (daysLeft: number): string => logic("safe_to_spend.days_left_text", { days_left: daysLeft });
-
 export type PaceInfo = { tone: "good" | "warn" | "muted"; title: string; detail: string };
 
 export const paceInfo = (s: SafeToSpend): PaceInfo => logic("safe_to_spend.pace_info", { s });
-
-/** The one-sentence summary under the big number. */
-export const headlineHint = (s: SafeToSpend): string => logic("safe_to_spend.headline_hint", { s });

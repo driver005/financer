@@ -27,9 +27,9 @@ pub const BASE_DAILY_PER_PERSON_CENTS: f64 = 650.0;
 pub const EXTRA_PERSON_WEIGHT: f64 = 0.85;
 pub const MIN_ALLOWANCE_CENTS: i64 = 100;
 const AVG_DAYS_PER_MONTH: f64 = 365.0 / 12.0;
-const CHAINS: [&str; 4] = ["lidl", "aldi", "kaufland", "rewe"];
+pub(crate) const CHAINS: [&str; 4] = ["lidl", "aldi", "kaufland", "rewe"];
 
-fn chain_name(c: &str) -> &str {
+pub(crate) fn chain_name(c: &str) -> &str {
     match c {
         "lidl" => "Lidl",
         "aldi" => "Aldi",

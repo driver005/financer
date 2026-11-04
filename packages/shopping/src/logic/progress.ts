@@ -1,11 +1,12 @@
-// The progress notification of an index run. The planning here is pure; `native/progressNotifier`
-// shows what it decides. A notification cannot show a real bar everywhere:
+// The progress notification of an index run. The planning is in Rust (crates/logic,
+// shop_progress.rs); the polling loop is here and `native/progressNotifier` shows what it decides. A notification cannot show a real bar everywhere:
 //
 //  - Android with Notifee: a true determinate bar (and a foreground service that keeps the run alive).
 //  - Otherwise (iOS, Expo Go, the web): a sticky text notification with a bar made of blocks.
 //
 // `ProgressModel.bar` is that text bar; `ProgressModel.percent` feeds the real one.
 
+import { logic } from "../../../wire/src/logic";
 import type { JobView, Phase, ProgressState } from "../api/types";
 
 export type ProgressModel = {
@@ -22,57 +23,18 @@ export type ProgressModel = {
   phase: Phase;
 };
 
-const FULL = "▰";
-const EMPTY = "▱";
-const SEGMENTS = 10;
+/** `▰▰▰▱▱▱▱▱▱▱ 30 %` */
+export const textBar = (percent: number): string => logic("shop_progress.text_bar", { percent });
 
-export function textBar(percent: number): string {
-  const p = Math.min(100, Math.max(0, Math.round(percent)));
-  const filled = Math.round((p / 100) * SEGMENTS);
-  return `${FULL.repeat(filled)}${EMPTY.repeat(SEGMENTS - filled)} ${p} %`;
-}
-
-export function progressModel(query: string, s: ProgressState): ProgressModel {
-  const finished = s.phase === "done" || s.phase === "failed" || s.phase === "cancelled";
-  const base = { percent: s.percent, ongoing: !finished, bar: textBar(s.percent), finished, phase: s.phase };
-  switch (s.phase) {
-    case "done": {
-      const n = s.products;
-      return {
-        ...base,
-        title: "Search index ready",
-        body: n === 0 ? `Nothing found for "${query}"` : `${n} ${n === 1 ? "product" : "products"} indexed for "${query}"`,
-        indeterminate: false,
-      };
-    }
-    case "failed":
-      return { ...base, title: "Indexing failed", body: s.message || "No source could be read", indeterminate: false };
-    case "cancelled":
-      return { ...base, title: "Indexing stopped", body: `Stopped searching for "${query}"`, indeterminate: false };
-    case "queued":
-      return { ...base, title: "Preparing search", body: `"${query}"`, indeterminate: true };
-    default:
-      return {
-        ...base,
-        title: "Reading shops",
-        body: s.total > 0 ? `${s.message} · page ${s.done} of ${s.total}` : s.message,
-        indeterminate: s.total === 0,
-      };
-  }
-}
+export const progressModel = (query: string, s: ProgressState): ProgressModel => logic("shop_progress.progress_model", { query, s });
 
 /**
  * Whether a new model is worth showing. Notifications that change many times a second get
  * throttled by the system and drain the battery, so: always show the first and the last, and in
  * between only when the percent moved and a second has passed.
  */
-export function worthShowing(prev: ProgressModel | null, next: ProgressModel, lastShownMs: number, nowMs: number, minGapMs = 1000): boolean {
-  if (!prev) return true;
-  if (next.finished) return true;
-  if (prev.phase !== next.phase) return true;
-  if (nowMs - lastShownMs < minGapMs) return false;
-  return prev.percent !== next.percent || prev.body !== next.body;
-}
+export const worthShowing = (prev: ProgressModel | null, next: ProgressModel, lastShownMs: number, nowMs: number, minGapMs = 1000): boolean =>
+  logic("shop_progress.worth_showing", { prev, next, last_shown_ms: lastShownMs, now_ms: nowMs, min_gap_ms: minGapMs });
 
 /** What shows a notification. Implementations live in `native/`. */
 export interface ProgressSurface {
@@ -113,27 +75,34 @@ export async function followJob(jobId: string, query: string, deps: DriverDeps):
       last = await deps.poll(jobId);
       failures = 0;
     } catch {
-      failures += 1;
-      if (failures >= maxFailures) {
-        const model = progressModel(query, { phase: "failed", message: "Lost contact with the search", done: 0, total: 0, products: 0, failed: 0, percent: prev?.percent ?? 0 });
-        await deps.surface.finish(model);
+      // the rules decide when the server is given up on; the loop only waits
+      const f: { failures: number; finish: ProgressModel | null } = logic("shop_progress.follow_failed", { query, failures, max_failures: maxFailures, prev });
+      failures = f.failures;
+      if (f.finish) {
+        await deps.surface.finish(f.finish);
         return { job: last, polls, shown };
       }
       await sleep(pollMs);
       continue;
     }
     polls += 1;
-    const model = progressModel(query, last.progress);
-    if (model.finished) {
-      await deps.surface.finish(model);
+    const step: { model: ProgressModel; action: "finish" | "show" | "skip" } = logic("shop_progress.follow_ok", {
+      query,
+      progress: last.progress,
+      prev,
+      last_shown_ms: lastShown,
+      now_ms: now(),
+    });
+    if (step.action === "finish") {
+      await deps.surface.finish(step.model);
       return { job: last, polls, shown: shown + 1 };
     }
-    if (worthShowing(prev, model, lastShown, now())) {
-      await deps.surface.show(model);
+    if (step.action === "show") {
+      await deps.surface.show(step.model);
       shown += 1;
       lastShown = now();
     }
-    prev = model;
+    prev = step.model;
     await sleep(pollMs);
   }
 }

@@ -6,9 +6,6 @@
  */
 import type { Idea, MealDay, MealDayInput, MealShoppingList, RecipeMatch } from "./api/client";
 import { logic } from "../../../packages/wire/src/logic";
-
-export const MAX_SERVINGS = 20;
-
 export const chainName = (chain: string): string => logic("mealplan.chain_name", { chain });
 
 // ---- weeks ----

@@ -58,17 +58,16 @@ const REWE_RECEIPT = [
 
 const LIDL_RECEIPT = ["LIDL", "Bananen  1,29 B", "Milch 1,5%  1,09 B", "Brot  2,49 B", "Butter  2,19 B", "SUMME EUR  7,06", ""].join("\n");
 
-/** Imports the demo data through the app's finance API (`Api`, over the backend inside the app). */
-async function seedDemo(api) {
-  const text = demoCsv();
-  // the bank export goes in as the bytes it came in; UTF-8 here
-  const bytes = Uint8Array.from(unescape(encodeURIComponent(text)), (c) => c.charCodeAt(0));
-  const csv = await api.importFile("csv", bytes.buffer);
-  const receipts = [];
-  for (const receipt of [REWE_RECEIPT, LIDL_RECEIPT]) {
-    receipts.push((await api.uploadReceipt(receipt)).id != null ? "ok" : "none");
+/** Imports the demo data through `call(op, args)`, a function that makes one finance call of the backend and gives the answer. */
+async function seedDemo(call) {
+  const { toBase64 } = require("../src/native/base64");
+  const csv = await call("import_file", { kind: "csv", csv_base64: toBase64(new TextEncoder().encode(demoCsv()).buffer) });
+  let receipts = 0;
+  for (const text of [REWE_RECEIPT, LIDL_RECEIPT]) {
+    await call("upload_receipt", { body: { text } });
+    receipts += 1;
   }
-  return `csv=${csv.imported} receipts=${receipts.join(",")}`;
+  return `imported=${csv?.imported} receipts=${receipts}`;
 }
 
 module.exports = { demoCsv, seedDemo };

@@ -12,10 +12,6 @@ export const formatCents = (cents: number): string => logic("format.format_cents
 export const formatMoney = (cents: number, opts: { signed?: boolean } = {}): string => logic("format.format_money", { cents, signed: opts.signed ?? false });
 
 export type MoneyTone = "income" | "expense" | "zero";
-
-/** Which colour role an amount takes: income (green), expense (the normal text colour or red) or none. */
-export const moneyTone = (cents: number): MoneyTone => logic("format.money_tone", { cents });
-
 /** How a screen reader should say an amount: `minus 23,47 euros`. */
 export const spokenMoney = (cents: number): string => logic("format.spoken_money", { cents });
 

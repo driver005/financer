@@ -14,13 +14,6 @@ export type CategoryName = (typeof CATEGORIES)[number];
 
 export type MatchKind = "contains" | "equals" | "starts_with";
 export type RuleSign = "expense" | "income";
-
-export const MATCH_KIND_LABEL: Record<MatchKind, string> = {
-  contains: "contains",
-  equals: "is exactly",
-  starts_with: "starts with",
-};
-
 /** The shape the API stores for a rule (`RuleDto`/`RuleInput`, with the enum fields narrowed). */
 export type RuleFields = {
   pattern: string;

@@ -6,6 +6,8 @@
 //! ([`call`]): the arguments are a JSON object, the answer is JSON. The tests here are the old
 //! TypeScript tests, moved with the code.
 
+pub mod app_lock;
+pub mod app_misc;
 pub mod backup_plan;
 pub mod bank_connections;
 pub mod calendar;
@@ -17,6 +19,9 @@ pub mod forecast;
 pub mod format;
 pub mod game;
 pub mod grocery_view;
+pub(crate) mod js;
+pub mod mail_format;
+pub mod mail_text;
 pub mod mealplan;
 pub mod notify_plan;
 pub mod onboarding;
@@ -27,6 +32,12 @@ pub mod safe_to_spend;
 pub mod scan;
 pub mod server_config;
 pub mod settings_plan;
+pub mod shop_format;
+pub mod shop_misc;
+pub mod shop_progress;
+pub mod shop_schema;
+pub mod shop_view;
+pub mod shop_weights;
 pub mod stores;
 pub mod watchdog;
 
@@ -949,6 +960,399 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             arg(&args, "total")?,
             &arg::<Vec<charts::Share>>(&args, "shares")?,
         )),
+        "shop_format.format_cents" => json(shop_format::format_cents(arg::<f64>(&args, "cents")?)),
+        "shop_format.format_price" => json(shop_format::format_price(
+            opt::<f64>(&args, "cents")?,
+            opt::<bool>(&args, "per_month")?.unwrap_or(false),
+        )),
+        "shop_format.format_percent" => {
+            json(shop_format::format_percent(arg::<f64>(&args, "pct")?))
+        }
+        "shop_format.saving_text" => json(shop_format::saving_text(
+            arg::<f64>(&args, "per_month_cents")?,
+            arg::<f64>(&args, "over_horizon_cents")?,
+            arg::<f64>(&args, "months")?,
+            opt::<String>(&args, "current")?.as_deref(),
+        )),
+        "shop_format.verdict_text" => json(shop_format::verdict_text(&arg::<String>(&args, "v")?)),
+        "shop_format.deal_line" => json(shop_format::deal_line(&arg::<Value>(&args, "d")?)),
+        "shop_format.ago" => json(shop_format::ago(
+            arg::<f64>(&args, "unix_seconds")?,
+            arg::<f64>(&args, "now_seconds")?,
+        )),
+        "shop_format.cheapest_offer" => json(shop_format::cheapest_offer(&arg::<Vec<Value>>(
+            &args, "offers",
+        )?)),
+        "shop_format.plan_terms" => json(shop_format::plan_terms(&arg::<Value>(&args, "o")?)),
+        "shop_weights.default_weight" => {
+            json(shop_weights::default_weight(&arg::<Value>(&args, "c")?))
+        }
+        "shop_weights.weight_for" => json(shop_weights::weight_for(
+            &arg::<Value>(&args, "c")?,
+            &arg::<String>(&args, "level")?,
+        )),
+        "shop_weights.level_of" => json(shop_weights::level_of(
+            &arg::<Value>(&args, "c")?,
+            arg::<f64>(&args, "weight")?,
+        )),
+        "shop_weights.current_level" => json(shop_weights::current_level(
+            &arg::<Value>(&args, "c")?,
+            &arg::<Value>(&args, "profile")?,
+        )),
+        "shop_weights.set_level" => json(shop_weights::set_level(
+            &arg::<Value>(&args, "profile")?,
+            &arg::<Value>(&args, "c")?,
+            &arg::<String>(&args, "level")?,
+        )),
+        "shop_weights.reset_weights" => json(shop_weights::reset_weights(&arg::<Value>(
+            &args, "profile",
+        )?)),
+        "shop_weights.ratable" => json(shop_weights::ratable(
+            &arg::<Value>(&args, "schema")?,
+            &arg::<Value>(&args, "profile")?,
+        )),
+        "shop_weights.group_label" => json(shop_weights::group_label(&arg::<String>(&args, "id")?)),
+        "shop_weights.groups" => json(shop_weights::groups(&arg::<Vec<Value>>(&args, "criteria")?)),
+        "shop_weights.presets_for" => json(shop_weights::presets_for(
+            &arg::<Value>(&args, "schema")?,
+            &arg::<Value>(&args, "base")?,
+        )),
+        "shop_schema.slug_key" => json(shop_schema::slug_key(&arg::<String>(&args, "label")?)),
+        "shop_schema.unique_key" => json(shop_schema::unique_key(
+            &arg::<String>(&args, "base")?,
+            &arg::<Vec<String>>(&args, "taken")?,
+        )),
+        "shop_schema.new_category" => json(shop_schema::new_category(
+            &arg::<String>(&args, "name")?,
+            opt::<String>(&args, "extends_id")?.as_deref(),
+        )),
+        "shop_schema.add_attribute" => json(shop_schema::add_attribute(
+            &arg::<Value>(&args, "schema")?,
+            &arg::<String>(&args, "label")?,
+            &arg::<String>(&args, "kind")?,
+            opt::<String>(&args, "unit")?.as_deref(),
+        )),
+        "shop_schema.add_alias" => json(shop_schema::add_alias(
+            &arg::<Value>(&args, "schema")?,
+            &arg::<String>(&args, "key")?,
+            &arg::<String>(&args, "alias")?,
+        )),
+        "shop_schema.remove_alias" => json(shop_schema::remove_alias(
+            &arg::<Value>(&args, "schema")?,
+            &arg::<String>(&args, "key")?,
+            &arg::<String>(&args, "alias")?,
+        )),
+        "shop_schema.add_criterion" => json(shop_schema::add_criterion(
+            &arg::<Value>(&args, "schema")?,
+            &arg::<String>(&args, "label")?,
+            &arg::<Value>(&args, "t")?,
+            arg::<f64>(&args, "weight")?,
+        )?),
+        "shop_schema.remove_criterion" => json(shop_schema::remove_criterion(
+            &arg::<Value>(&args, "schema")?,
+            &arg::<String>(&args, "key")?,
+        )),
+        "shop_schema.set_criterion_weight" => json(shop_schema::set_criterion_weight(
+            &arg::<Value>(&args, "schema")?,
+            &arg::<String>(&args, "key")?,
+            arg::<f64>(&args, "weight")?,
+        )),
+        "shop_schema.formula_problem" => {
+            json(shop_schema::formula_problem(&arg::<String>(&args, "expr")?))
+        }
+        "shop_schema.formula_names" => {
+            json(shop_schema::formula_names(&arg::<Value>(&args, "schema")?))
+        }
+        "shop_view.sort_items" => json(shop_view::sort_items(
+            &arg::<Vec<Value>>(&args, "items")?,
+            &arg::<String>(&args, "key")?,
+        )),
+        "shop_view.is_monthly" => json(shop_view::is_monthly(&arg::<Value>(&args, "item")?)),
+        "shop_view.best_offer" => json(shop_view::best_offer(&arg::<Value>(&args, "item")?)),
+        "shop_view.deal_badges" => json(shop_view::deal_badges(
+            opt::<String>(&args, "verdict")?.as_deref(),
+        )),
+        "shop_view.saving_note" => json(shop_view::saving_note(
+            &arg::<Value>(&args, "item")?,
+            arg::<f64>(&args, "months")?,
+        )),
+        "shop_view.understood" => json(shop_view::understood(&arg::<Value>(&args, "parsed")?)),
+        "shop_view.compare_view" => json(shop_view::compare_view(
+            &arg::<Value>(&args, "c")?,
+            &arg::<Value>(&args, "images")?,
+        )),
+        "shop_view.understood_line" => {
+            json(shop_view::understood_line(&arg::<Value>(&args, "parsed")?))
+        }
+        "shop_view.best_saving" => {
+            json(shop_view::best_saving(&arg::<Vec<Value>>(&args, "items")?))
+        }
+        "shop_view.saving_share" => json(shop_view::saving_share(
+            arg::<f64>(&args, "per_month_cents")?,
+            opt::<f64>(&args, "current_monthly_cents")?,
+        )),
+        "shop_view.budget_presets" => json(shop_view::budget_presets(
+            opt::<String>(&args, "kind")?.as_deref(),
+        )),
+        "shop_view.deal_filters" => {
+            json(shop_view::deal_filters(&arg::<Vec<Value>>(&args, "deals")?))
+        }
+        "shop_view.filter_deals" => json(shop_view::filter_deals(
+            &arg::<Vec<Value>>(&args, "deals")?,
+            &arg::<String>(&args, "filter")?,
+        )),
+        "shop_progress.text_bar" => json(shop_progress::text_bar(arg::<f64>(&args, "percent")?)),
+        "shop_progress.progress_model" => json(shop_progress::progress_model(
+            &arg::<String>(&args, "query")?,
+            &arg::<Value>(&args, "s")?,
+        )),
+        "shop_progress.worth_showing" => json(shop_progress::worth_showing(
+            opt::<Value>(&args, "prev")?.as_ref(),
+            &arg::<Value>(&args, "next")?,
+            arg::<f64>(&args, "last_shown_ms")?,
+            arg::<f64>(&args, "now_ms")?,
+            opt::<f64>(&args, "min_gap_ms")?.unwrap_or(1000.0),
+        )),
+        "shop_misc.parse_cents" => json(shop_misc::parse_cents(&arg::<String>(&args, "input")?)),
+        "shop_misc.parse_attribute" => json(shop_misc::parse_attribute(
+            &arg::<Value>(&args, "def")?,
+            &arg::<String>(&args, "input")?,
+        )),
+        "shop_misc.build_product" => json(shop_misc::build_product(
+            &arg::<Value>(&args, "form")?,
+            &arg::<Vec<Value>>(&args, "defs")?,
+            arg::<bool>(&args, "plan")?,
+        )),
+        "shop_misc.profile_summary" => json(shop_misc::profile_summary(&arg::<Value>(&args, "p")?)),
+        "shop_misc.profile_name_problem" => json(shop_misc::profile_name_problem(
+            &arg::<String>(&args, "name")?,
+            &arg::<Vec<String>>(&args, "existing")?,
+        )),
+        "shop_misc.phase_tone" => json(shop_misc::phase_tone(&arg::<String>(&args, "p")?)),
+        "shop_misc.is_active" => json(shop_misc::is_active(&arg::<Value>(&args, "j")?)),
+        "shop_misc.order_runs" => json(shop_misc::order_runs(&arg::<Vec<Value>>(&args, "jobs")?)),
+        "shop_misc.run_summary" => json(shop_misc::run_summary(&arg::<Value>(&args, "j")?)),
+        "shop_misc.run_problems" => json(shop_misc::run_problems(&arg::<Value>(&args, "j")?)),
+        "shop_misc.next_step" => json(shop_misc::next_step(
+            &arg::<Value>(&args, "r")?,
+            arg::<bool>(&args, "integrated")?,
+        )),
+        "shop_misc.suggestion_text" => {
+            json(shop_misc::suggestion_text(&arg::<String>(&args, "reason")?))
+        }
+        "shop_misc.index_request_for" => json(shop_misc::index_request_for(
+            &arg::<Value>(&args, "req")?,
+            opt::<Value>(&args, "r")?.as_ref(),
+        )),
+        "shop_misc.chips_for" => json(shop_misc::chips_for(&arg::<Value>(&args, "r")?)),
+        "shop_misc.check_sources" => {
+            json(shop_misc::check_sources(&arg::<String>(&args, "input")?))
+        }
+        "shop_misc.notice_for" => json(shop_misc::notice_for(&arg::<Value>(&args, "n")?)),
+        "shop_misc.plan_deal_notices" => json(shop_misc::plan_deal_notices(
+            &arg::<Vec<Value>>(&args, "items")?,
+            arg::<f64>(&args, "last_shown_id")?,
+            opt::<usize>(&args, "max")?.unwrap_or(3),
+        )),
+        "mail_format.day_key" => json(mail_format::day_key(
+            arg(&args, "ts")?,
+            &arg::<String>(&args, "zone")?,
+        )?),
+        "mail_format.clock" => json(mail_format::clock(
+            arg(&args, "ts")?,
+            &arg::<String>(&args, "zone")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.local_clock" => json(mail_format::local_clock(
+            &arg::<String>(&args, "local")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )),
+        "mail_format.shift_day" => json(mail_format::shift_day(
+            &arg::<String>(&args, "key")?,
+            arg(&args, "days")?,
+        )?),
+        "mail_format.days_between" => json(mail_format::days_between(
+            &arg::<String>(&args, "a")?,
+            &arg::<String>(&args, "b")?,
+        )?),
+        "mail_format.weekday_short" => json(mail_format::weekday_short(
+            &arg::<String>(&args, "key")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.day_of_month" => {
+            json(mail_format::day_of_month(&arg::<String>(&args, "key")?))
+        }
+        "mail_format.day_text" => json(mail_format::day_text(
+            &arg::<String>(&args, "key")?,
+            &arg::<String>(&args, "today_key")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.day_label" => json(mail_format::day_label(
+            &arg::<String>(&args, "key")?,
+            &arg::<String>(&args, "today_key")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.list_time" => json(mail_format::list_time(
+            arg(&args, "ts")?,
+            arg(&args, "now_ts")?,
+            &arg::<String>(&args, "zone")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.ago" => json(mail_format::ago(arg(&args, "ts")?, arg(&args, "now_ts")?)),
+        "mail_format.agenda_days" => json(mail_format::agenda_days(
+            &arg::<Vec<Value>>(&args, "events")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.time_text" => json(mail_format::time_text(
+            &arg::<Value>(&args, "e")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+        )?),
+        "mail_format.source_note" => {
+            json(mail_format::source_note(&arg::<String>(&args, "source")?))
+        }
+        "mail_format.range_end" => json(mail_format::range_end(
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "value")?,
+        )?),
+        "mail_format.parse_clock" => json(mail_format::parse_clock(&arg::<String>(&args, "text")?)),
+        "mail_format.parse_day" => json(mail_format::parse_day(
+            &arg::<String>(&args, "text")?,
+            &arg::<String>(&args, "today")?,
+        )),
+        "mail_format.chat_rows" => json(mail_format::chat_rows(
+            &arg::<Vec<Value>>(&args, "messages")?,
+            arg(&args, "now")?,
+            &arg::<String>(&args, "zone")?,
+            &arg::<mail_format::Pack>(&args, "pack")?,
+            arg(&args, "show_topics")?,
+            arg(&args, "group_chat")?,
+        )?),
+        "mail_format.unread_ids" => json(mail_format::unread_ids(&arg::<Vec<Value>>(
+            &args, "messages",
+        )?)),
+        "mail_text.person_name" => json(mail_text::person_name(&arg::<Value>(&args, "a")?)),
+        "mail_text.people_text" => json(mail_text::people_text(&arg::<Vec<Value>>(&args, "list")?)),
+        "mail_text.recipient_strings" => json(mail_text::recipient_strings(&arg::<Vec<Value>>(
+            &args, "list",
+        )?)),
+        "mail_text.send_problem" => json(mail_text::send_problem(
+            &arg::<String>(&args, "to")?,
+            &arg::<String>(&args, "body")?,
+            &arg::<String>(&args, "subject")?,
+            arg(&args, "is_reply")?,
+        )),
+        "mail_text.oldest_first" => {
+            json(mail_text::oldest_first(&arg::<Vec<Value>>(&args, "list")?))
+        }
+        "mail_text.example_text" => json(mail_text::example_text(&arg::<String>(&args, "text")?)),
+        "mail_text.audience_text" => json(mail_text::audience_text(&arg::<Vec<String>>(
+            &args, "audience",
+        )?)),
+        "mail_text.parse_audience" => {
+            json(mail_text::parse_audience(&arg::<String>(&args, "text")?))
+        }
+        "mail_text.templates_of" => json(mail_text::templates_of(
+            &arg::<Vec<Value>>(&args, "all")?,
+            &arg::<String>(&args, "kind")?,
+        )),
+        "mail_text.choice_key" => json(mail_text::choice_key(&arg::<Value>(&args, "c")?)),
+        "mail_text.choice_label" => json(mail_text::choice_label(
+            &arg::<Value>(&args, "c")?,
+            &arg::<Vec<Value>>(&args, "all")?,
+        )),
+        "mail_text.first_line" => json(mail_text::first_line(&arg::<String>(&args, "text")?)),
+        "app_lock.start_state" => json(app_lock::start_state()),
+        "app_lock.settings_loaded" => json(app_lock::settings_loaded(
+            &arg(&args, "s")?,
+            arg(&args, "enabled")?,
+        )),
+        "app_lock.set_enabled" => json(app_lock::set_enabled(
+            &arg(&args, "s")?,
+            arg(&args, "enabled")?,
+        )),
+        "app_lock.went_to_background" => json(app_lock::went_to_background(
+            &arg(&args, "s")?,
+            arg(&args, "now")?,
+        )),
+        "app_lock.came_to_foreground" => json(app_lock::came_to_foreground(
+            &arg(&args, "s")?,
+            arg(&args, "now")?,
+            opt(&args, "after_ms")?.unwrap_or(app_lock::LOCK_AFTER_MS),
+        )),
+        "app_lock.unlocked" => json(app_lock::unlocked(&arg(&args, "s")?)),
+        "app_lock.is_covered" => json(app_lock::is_covered(&arg(&args, "s")?)),
+        "app_lock.lock_availability" => json(app_lock::lock_availability(
+            arg(&args, "is_web")?,
+            arg(&args, "native_module")?,
+            arg(&args, "level")?,
+        )),
+        "app_lock.unlock_outcome" => {
+            json(app_lock::unlock_outcome(&arg::<Value>(&args, "result")?))
+        }
+        "app_misc.filter_tx" => json(app_misc::filter_tx(
+            &arg::<Vec<Value>>(&args, "items")?,
+            &arg::<String>(&args, "filter")?,
+        )),
+        "app_misc.day_total" => json(app_misc::day_total(&arg::<Vec<Value>>(&args, "items")?)),
+        "app_misc.empty_filter_text" => json(app_misc::empty_filter_text(&arg::<String>(
+            &args, "filter",
+        )?)),
+        "app_misc.demo_transactions" => json(app_misc::demo_transactions(
+            &arg::<String>(&args, "today")?,
+            opt(&args, "payday")?.unwrap_or(1.0),
+            &opt::<Vec<String>>(&args, "chains")?.unwrap_or_default(),
+        )?),
+        "app_misc.demo_export" => json(app_misc::demo_export(
+            &arg::<String>(&args, "today")?,
+            opt(&args, "payday")?.unwrap_or(1.0),
+            &opt::<Vec<String>>(&args, "chains")?.unwrap_or_default(),
+        )?),
+        "app_misc.is_demo_booking" => json(app_misc::is_demo_booking(&arg::<Value>(&args, "t")?)),
+        "app_misc.demo_gate" => json(app_misc::demo_gate(&arg::<Vec<Value>>(&args, "bookings")?)),
+        "app_misc.calendar_tone" => json(app_misc::calendar_tone(&arg::<String>(&args, "value")?)),
+        "app_misc.format_stamp" => json(app_misc::format_stamp(
+            arg(&args, "unix_seconds")?,
+            &arg::<String>(&args, "zone")?,
+        )?),
+        "app_misc.next_hour" => json(app_misc::next_hour(arg(&args, "hour")?)),
+        "shop_format.safe_url" => json(shop_format::safe_url(
+            opt::<String>(&args, "url")?.as_deref(),
+        )),
+        "shop_misc.order_profiles" => {
+            json(shop_misc::order_profiles(&arg::<Vec<Value>>(&args, "all")?))
+        }
+        "shop_misc.serialize_cached" => json(shop_misc::serialize_cached(
+            &arg::<Value>(&args, "detail")?,
+            arg(&args, "now")?,
+        )),
+        "shop_misc.parse_cached" => json(shop_misc::parse_cached(
+            opt::<String>(&args, "raw")?.as_deref(),
+        )),
+        "shop_progress.follow_ok" => json(shop_progress::follow_ok(
+            &arg::<String>(&args, "query")?,
+            &arg::<Value>(&args, "progress")?,
+            opt::<Value>(&args, "prev")?.as_ref(),
+            arg(&args, "last_shown_ms")?,
+            arg(&args, "now_ms")?,
+            opt(&args, "min_gap_ms")?.unwrap_or(1000.0),
+        )),
+        "shop_progress.follow_failed" => json(shop_progress::follow_failed(
+            &arg::<String>(&args, "query")?,
+            arg(&args, "failures")?,
+            arg(&args, "max_failures")?,
+            opt::<Value>(&args, "prev")?.as_ref(),
+        )),
+        "server_config.restart_outcome" => json(server_config::restart_outcome(
+            &arg::<Value>(&args, "view")?,
+            &arg::<String>(&args, "token")?,
+        )),
+        "bank_connections.last_result_text" => json(bank_connections::last_result_text(
+            &arg(&args, "c")?,
+            &arg::<String>(&args, "zone")?,
+        )?),
         other => return Err(format!("unknown function {other}")),
     };
     out

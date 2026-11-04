@@ -27,9 +27,5 @@ export const shortDate = (iso: string): string => logic("forecast.short_date", {
 
 /** Whole days from `from` to `to` (both `YYYY-MM-DD`). */
 export const daysBetween = (from: string, to: string): number => logic("forecast.days_between", { from, to });
-
-/** The sentence about the grocery budget, or `null` when there is no grocery limit. */
-export const groceryText = (f: Forecast): string | null => logic("forecast.grocery_text", { f });
-
 /** Everything the forecast card shows. */
 export const forecastView = (f: Forecast): ForecastView => logic("forecast.forecast_view", { f });

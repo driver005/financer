@@ -4,7 +4,7 @@
  * calendar_view.rs); the tap handlers are attached here.
  */
 import { logic } from "../../../packages/wire/src/logic";
-import { minutesOf, onDay, weekOf, type Occurrence, type Tone } from "./calendar";
+import { minutesOf, weekOf, type Occurrence, type Tone } from "./calendar";
 
 export type CalendarView = "month" | "week" | "3day" | "day" | "schedule";
 
@@ -28,10 +28,6 @@ export const step = (view: CalendarView, anchor: string, direction: 1 | -1): str
 
 /** The title above the view. */
 export const titleFor = (view: CalendarView, anchor: string): string => logic("calendar_view.title_for", { view, anchor });
-
-/** How many events a month cell lists on a wide screen before "+N more". */
-export const MONTH_CELL_ITEMS = 3;
-
 type Open = (o: Occurrence) => void;
 
 /** The rules answer with plain data; a tap handler for each item is attached here, by the key of its occurrence. */
@@ -126,8 +122,4 @@ export function agendaDays(from: string, to: string, today: string, occurrences:
 export function nowMinutes(now: Date): number {
   return minutesOf(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
 }
-
-/** Does the occurrence belong on this day (for the detail list under a month on a phone)? */
-export const happensOn = onDay;
-
 export { weekOf };

@@ -15,25 +15,11 @@ export { daysInMonth };
 export type Tone = "accent" | "success" | "warning" | "danger" | "info" | "neutral";
 export type RepeatKind = "none" | "daily" | "weekly" | "monthly" | "yearly";
 export const WEEKDAY_CODES = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"] as const;
-export const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 export const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
-
-/** Events whose starts are this close (minutes) would hide each other's titles, so they sit side by side. */
-export const SAME_START_MINUTES = 30;
-/** The shortest a block is drawn, so a 5-minute event can still be seen and tapped. */
-export const MIN_BLOCK_MINUTES = 30;
 
 // ---- dates ----
 
-export function parseDate(iso: string): { y: number; m: number; d: number } {
-  const [y, m, d] = iso.split("-").map(Number);
-  return { y, m, d };
-}
-
-/** Whole days since 1970-01-01. */
-export const dayNumber = (iso: string): number => logic("calendar.day_number", { iso });
 export const fromDayNumber = (n: number): string => logic("calendar.from_day_number", { n });
-export const isoOf = (y: number, m: number, d: number): string => logic("calendar.iso_of", { y, m, d });
 export const addDays = (iso: string, n: number): string => logic("calendar.add_days", { iso, n });
 export const daysBetween = (a: string, b: string): number => logic("calendar.days_between", { a, b });
 /** 0 = Monday ... 6 = Sunday. */
@@ -41,9 +27,7 @@ export const weekdayIndex = (iso: string): number => logic("calendar.weekday_ind
 export const startOfWeek = (iso: string): string => logic("calendar.start_of_week", { iso });
 /** Moves by whole months; a day that the target month lacks becomes its last day (31 Jan + 1 month = 28 Feb). */
 export const addMonths = (iso: string, n: number): string => logic("calendar.add_months", { iso, n });
-export const addYears = (iso: string, n: number): string => logic("calendar.add_years", { iso, n });
 export const monthFirst = (iso: string): string => logic("calendar.month_first", { iso });
-export const monthLast = (iso: string): string => logic("calendar.month_last", { iso });
 /** The seven days of the week that holds `iso`, Monday first. */
 export const weekOf = (iso: string): string[] => logic("calendar.week_of", { iso });
 /** The weeks that show a month, Monday first: the days of the month plus the neighbours that fill the rows. */
@@ -121,9 +105,6 @@ export const seriesStarts = (rule: Pick<EventRule, "startDate" | "repeat" | "exc
 /** The occurrences of an event that show between `from` and `to` (inclusive), with multi-day ones that started earlier. */
 export const expand = (rule: EventRule, from: string, to: string, tone: Tone, extra: { readOnly?: boolean; href?: string; source?: string } = {}): Occurrence[] =>
   logic("calendar.expand", { rule, from, to, tone, extra });
-
-/** Does the occurrence touch this day? */
-export const onDay = (o: Pick<Occurrence, "startDate" | "endDate">, date: string): boolean => logic("calendar.on_day", { o, date });
 
 /** Order for lists: all-day first, then by start. */
 export const byStart = (a: Occurrence, b: Occurrence): number => logic("calendar.compare_by_start", { a, b });
