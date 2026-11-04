@@ -41,6 +41,7 @@ CI runs them in the `sdk-web` job, which has the bindings.
 | `safeToSpend` (card wording) | 75 | Rust |
 | `forecast` (card wording) | 151 | Rust |
 | `game` (streaks, freezes, badges, XP, mascot) | 501 | Rust; TypeScript tests kept as the specification |
+| `notifyPlan`: evening message, payday reminder, price drops | about 200 of 279 | Rust; the calendar event reminders stay beside `calendar` until that is moved |
 
 ## What is not moved yet
 

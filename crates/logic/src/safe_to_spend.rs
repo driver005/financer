@@ -17,6 +17,12 @@ pub enum Pace {
 /// The part of the server's answer the card reads.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SafeToSpend {
+    #[serde(default)]
+    pub today: String,
+    #[serde(default)]
+    pub period_end: String,
+    #[serde(default)]
+    pub daily_cents: i64,
     pub days_left: i64,
     pub available_cents: i64,
     pub income_detected: bool,
@@ -145,6 +151,9 @@ mod tests {
 
     fn base() -> SafeToSpend {
         SafeToSpend {
+            today: "2026-10-11".into(),
+            period_end: "2026-10-24".into(),
+            daily_cents: 9214,
             days_left: 14,
             available_cents: 129000,
             income_detected: true,

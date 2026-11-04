@@ -9,6 +9,7 @@
 pub mod forecast;
 pub mod format;
 pub mod game;
+pub mod notify_plan;
 pub mod period;
 pub mod safe_to_spend;
 
@@ -137,6 +138,32 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
         )),
         "game.badge_ids" => json(game::badge_ids()),
         "game.constants" => json(game::constants()),
+        "notify_plan.evening_plan" => json(notify_plan::evening_plan(
+            &arg(&args, "safe")?,
+            arg(&args, "now_minutes")?,
+            opt(&args, "time")?,
+            opt(&args, "days")?,
+        )?),
+        "notify_plan.payday_plan" => json(notify_plan::payday_plan(
+            &arg::<String>(&args, "today")?,
+            arg(&args, "payday")?,
+            arg(&args, "now_minutes")?,
+            opt(&args, "time")?,
+            opt(&args, "count")?,
+        )?),
+        "notify_plan.find_price_drops" => json(notify_plan::find_price_drops(
+            &arg::<Vec<notify_plan::Tracked>>(&args, "items")?,
+            &arg::<Vec<notify_plan::Price>>(&args, "prices")?,
+            &arg(&args, "memory")?,
+        )),
+        "notify_plan.price_drop_message" => json(notify_plan::price_drop_message(&arg::<
+            Vec<notify_plan::PriceDrop>,
+        >(
+            &args, "drops",
+        )?)),
+        "notify_plan.parse_price_memory" => json(notify_plan::parse_price_memory(
+            opt::<String>(&args, "raw")?.as_deref(),
+        )),
         other => return Err(format!("unknown function {other}")),
     };
     out
