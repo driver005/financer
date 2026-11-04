@@ -77,11 +77,11 @@ app is set up with now.
 ## Demo data
 
 *Try with demo data* imports about four months of invented bookings through the existing
-`POST /v1/import` (`src/onboardingDemo.ts`): a salary on your payday (so income is recognised as
+`POST /v1/data` (`src/onboardingDemo.ts`): a salary on your payday (so income is recognised as
 recurring), rent, a streaming subscription, a transit pass and grocery trips at your stores.
 
 * Every booking's counterparty starts with `[DEMO]` and its purpose says it is demo data.
-* Only bookings are sent. `/v1/import` replaces the budget and the usual-items list when the file has
+* Only bookings are sent. `/v1/data` replaces the budget and the usual-items list when the file has
   any, which belong to you, so the demo file leaves them empty.
 * It is only offered while the backend has **no bookings at all** (`demoGate`), so it never mixes
   with real data without you knowing. Importing a CSV after loading demo data warns first.

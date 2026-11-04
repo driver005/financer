@@ -183,7 +183,15 @@
 #language = "de"
 #poll_hours = 12
 #
-# 3. Watched folder: PDF, text, HTML or .eml receipts dropped into a folder on the server.
+# 3. Kaufland Card (experimental, unofficial, off by default): same idea as Lidl Plus, signing in on
+#    Kaufland's own page. Only receipts you get digitally exist ("Papierbon sparen" in the Kaufland app).
+#[receipts.kaufland]
+#enabled = false
+#country = "DE"
+#language = "de"
+#poll_hours = 12
+#
+# 4. Watched folder: PDF, text, HTML or .eml receipts dropped into a folder on the server.
 #[receipts.folder]
 #path = "/data/receipts"    # relative paths are relative to this file
 #poll_seconds = 60

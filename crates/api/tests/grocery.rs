@@ -116,7 +116,7 @@ impl Fixture {
 #[tokio::test]
 async fn refresh_needs_sources() {
     let app = Fixture::app_with(|s| s).await;
-    let (status, body) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let (status, body) = Fixture::send(&app, Method::POST, "/v1/prices/refreshes", None).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert!(body["error"].as_str().unwrap().contains("no price sources"));
 }
@@ -124,7 +124,7 @@ async fn refresh_needs_sources() {
 #[tokio::test]
 async fn refresh_normalizes_and_prices_are_comparable() {
     let app = Fixture::app().await;
-    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refreshes", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(report["stored"], 5);
     assert_eq!(report["unmatched"], 1); // the Playstation
@@ -162,7 +162,7 @@ async fn a_failing_source_keeps_its_old_prices() {
             .with_price_sources(Fixture::sources())
     })
     .await;
-    Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    Fixture::send(&app, Method::POST, "/v1/prices/refreshes", None).await;
 
     http.routes.lock().unwrap().insert(
         "https://lidl.test/offers".into(),
@@ -171,7 +171,7 @@ async fn a_failing_source_keeps_its_old_prices() {
             body: String::new(),
         }),
     );
-    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refreshes", None).await;
     assert_eq!(status, StatusCode::OK);
     let lidl = report["sources"]
         .as_array()
@@ -189,7 +189,7 @@ async fn a_failing_source_keeps_its_old_prices() {
 #[tokio::test]
 async fn basket_validation_and_affordability() {
     let app = Fixture::app().await;
-    Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    Fixture::send(&app, Method::POST, "/v1/prices/refreshes", None).await;
 
     for bad in [
         json!([{"item": "kaviar", "quantity": 1}]),
@@ -249,7 +249,7 @@ async fn basket_validation_and_affordability() {
 #[tokio::test]
 async fn affordability_defaults_to_the_groceries_envelope() {
     let app = Fixture::app().await;
-    Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    Fixture::send(&app, Method::POST, "/v1/prices/refreshes", None).await;
     // no limit yet
     let (status, body) = Fixture::get(&app, "/v1/affordability").await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -367,7 +367,7 @@ async fn receipts_feed_the_basket() {
 #[tokio::test]
 async fn recipes_rank_by_what_you_buy() {
     let app = Fixture::app().await;
-    Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    Fixture::send(&app, Method::POST, "/v1/prices/refreshes", None).await;
     Fixture::send(&app, Method::PUT, "/v1/basket", Some(json!([
         {"item":"nudeln","quantity":1},{"item":"tomaten-passiert","quantity":1},{"item":"zwiebeln","quantity":1},{"item":"knoblauch","quantity":1}
     ]))).await;
@@ -542,7 +542,7 @@ async fn catalog_and_best_prices() {
         .iter()
         .any(|i| i["key"] == "milch" && i["reference_pack"] == "1 l"));
 
-    Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    Fixture::send(&app, Method::POST, "/v1/prices/refreshes", None).await;
     Fixture::send(
         &app,
         Method::PUT,
@@ -642,7 +642,7 @@ async fn scanning_a_photo_transcribes_parses_and_stores() {
     let (status, body) = Fixture::send(
         &app,
         Method::POST,
-        "/v1/receipts/scan",
+        "/v1/receipts/scans",
         Some(Fixture::scan_body()),
     )
     .await;
@@ -681,7 +681,7 @@ async fn scan_rejects_bad_input_before_calling_the_model() {
         json!({"image_base64": "A".repeat(11_500_000), "mime_type": "image/png"}),
     ] {
         assert_eq!(
-            Fixture::send(&app, Method::POST, "/v1/receipts/scan", Some(bad))
+            Fixture::send(&app, Method::POST, "/v1/receipts/scans", Some(bad))
                 .await
                 .0,
             StatusCode::BAD_REQUEST
@@ -699,7 +699,7 @@ async fn scan_handles_non_receipts_and_empty_transcripts() {
     let (status, body) = Fixture::send(
         &app,
         Method::POST,
-        "/v1/receipts/scan",
+        "/v1/receipts/scans",
         Some(Fixture::scan_body()),
     )
     .await;
@@ -711,7 +711,7 @@ async fn scan_handles_non_receipts_and_empty_transcripts() {
     let (status, body) = Fixture::send(
         &app,
         Method::POST,
-        "/v1/receipts/scan",
+        "/v1/receipts/scans",
         Some(Fixture::scan_body()),
     )
     .await;
@@ -735,7 +735,7 @@ async fn scan_needs_a_key_and_a_model_that_can_see() {
         Fixture::send(
             &app,
             Method::POST,
-            "/v1/receipts/scan",
+            "/v1/receipts/scans",
             Some(Fixture::scan_body())
         )
         .await
@@ -761,7 +761,7 @@ async fn scan_needs_a_key_and_a_model_that_can_see() {
     let (status, body) = Fixture::send(
         &app,
         Method::POST,
-        "/v1/receipts/scan",
+        "/v1/receipts/scans",
         Some(Fixture::scan_body()),
     )
     .await;
@@ -807,7 +807,7 @@ async fn llm_page_sources_fill_prices_when_a_provider_is_configured() {
             }))
     })
     .await;
-    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refreshes", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         report["stored"], 2,
@@ -837,7 +837,7 @@ async fn llm_page_sources_without_a_key_report_why() {
         is_offer: true,
     }];
     let app = Fixture::app_with(move |s| s.with_http(http).with_price_sources(sources)).await;
-    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refresh", None).await;
+    let (status, report) = Fixture::send(&app, Method::POST, "/v1/prices/refreshes", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(report["stored"], 0);
     assert!(report["sources"][0]["error"]
@@ -852,7 +852,7 @@ async fn digital_receipts_as_pdf_are_read_like_photos() {
     let (status, body) = Fixture::send(
         &app,
         Method::POST,
-        "/v1/receipts/scan",
+        "/v1/receipts/scans",
         Some(json!({"image_base64": "JVBERi0xLjQ=", "mime_type": "application/pdf"})),
     )
     .await;

@@ -366,17 +366,17 @@ async fn the_calendar_is_part_of_the_export_and_importing_twice_adds_nothing() {
         )),
     )
     .await;
-    let (s, export) = Fixture::call(&app, Method::GET, "/v1/export", None).await;
+    let (s, export) = Fixture::call(&app, Method::GET, "/v1/data", None).await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(export["events"].as_array().unwrap().len(), 2);
     assert_eq!(export["events"][1]["calendar"], "Work");
 
     // a fresh backend gets the calendars and events, once
     let fresh = Fixture::app().await;
-    let (s, report) = Fixture::call(&fresh, Method::POST, "/v1/import", Some(export.clone())).await;
+    let (s, report) = Fixture::call(&fresh, Method::POST, "/v1/data", Some(export.clone())).await;
     assert_eq!(s, StatusCode::OK, "{report}");
     assert_eq!(report["events_added"], 2);
-    let (_, report) = Fixture::call(&fresh, Method::POST, "/v1/import", Some(export)).await;
+    let (_, report) = Fixture::call(&fresh, Method::POST, "/v1/data", Some(export)).await;
     assert_eq!(report["events_added"], 0);
     let (_, cals) = Fixture::call(&fresh, Method::GET, "/v1/calendar/calendars", None).await;
     assert_eq!(cals.as_array().unwrap().len(), 2);

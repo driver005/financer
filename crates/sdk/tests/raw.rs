@@ -96,12 +96,7 @@ async fn reads_and_writes_the_finance_api() {
     // a body that is not JSON keeps its type
     let csv = "Buchungstag;Valutadatum;Buchungstext;Verwendungszweck;Beguenstigter/Zahlungspflichtiger;Kontonummer/IBAN;BIC (SWIFT-Code);Betrag;Waehrung\n";
     let r = c
-        .send(req(
-            "POST",
-            "/v1/transactions/import",
-            Some("text/csv"),
-            csv,
-        ))
+        .send(req("POST", "/v1/bank/import/csv", Some("text/csv"), csv))
         .await
         .unwrap();
     assert_eq!(r.status, 200, "{}", text(&r.body));
@@ -117,10 +112,7 @@ async fn reads_and_writes_the_finance_api() {
         .await
         .unwrap();
     assert_eq!(r.status, 200, "{}", text(&r.body));
-    let r = c
-        .send(req("GET", "/v1/budget/envelopes", None, ""))
-        .await
-        .unwrap();
+    let r = c.send(req("GET", "/v1/budget", None, "")).await.unwrap();
     assert!(text(&r.body).contains("40000"));
 }
 

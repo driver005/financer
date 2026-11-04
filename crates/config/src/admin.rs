@@ -82,7 +82,7 @@ pub struct GroupView {
 
 /// The whole settings screen.
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema), schema(as = ConfigDto))]
 pub struct ConfigView {
     /// Where the app's edits are kept.
     pub settings_file: String,
@@ -103,7 +103,7 @@ pub struct ConfigView {
 /// What to change: `set` writes values (`null` clears one), `reset` removes the app's value so the
 /// file's, or the default, applies again.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema), schema(as = ConfigChangeInput))]
 pub struct Change {
     #[serde(default)]
     pub set: BTreeMap<String, Value>,

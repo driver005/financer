@@ -28,9 +28,10 @@ pub use env::{Env, MapEnv, ProcessEnv};
 pub use file::{BankAccount, FileConfig, OneOrMany, StoreAlias};
 pub use interpolate::Interpolator;
 pub use load::{
-    AuthSettings, BankSettings, Config, DatabaseSettings, FileLayer, LlmSettings, Loaded, Loader,
-    PlaidSettings, PricesSettings, ProviderChoice, Secret, ServerSettings, Setting, Source,
-    DEFAULT_BIND, DEFAULT_DATABASE_URL, DEFAULT_FILE, DEFAULT_REFRESH_HOURS, MIN_TOKEN_LEN,
+    AuthSettings, BankSettings, Config, DatabaseSettings, FileLayer, FinapiSettings,
+    GoCardlessSettings, LlmSettings, Loaded, Loader, PlaidSettings, PricesSettings, ProviderChoice,
+    Secret, ServerSettings, Setting, Source, DEFAULT_BIND, DEFAULT_DATABASE_URL, DEFAULT_FILE,
+    DEFAULT_REFRESH_HOURS, MIN_TOKEN_LEN,
 };
 pub use overlay::Overlay;
 pub use render::Renderer;

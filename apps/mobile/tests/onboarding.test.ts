@@ -240,7 +240,7 @@ describe("applying the answers", () => {
   it("calls the API with the settings and the merged envelopes", async () => {
     const calls: unknown[] = [];
     const api = {
-      envelopes: async () => [{ category: "dining", limit_cents: 5000 }],
+      budget: async () => ({ envelopes: [{ category: "dining", limit_cents: 5000 }] }),
       saveEnvelopes: async (e: unknown) => {
         calls.push(["envelopes", e]);
         return e;
@@ -249,7 +249,7 @@ describe("applying the answers", () => {
         calls.push(["settings", s]);
         return {};
       },
-    } as unknown as Pick<Api, "envelopes" | "saveEnvelopes" | "saveSettings">;
+    } as unknown as Pick<Api, "budget" | "saveEnvelopes" | "saveSettings">;
     const r = await applyDraft(api, { payday: 25, habitMode: "spending", dailyAllowanceCents: 700 }, "2026-10-12");
     assert.equal(r.ok, true);
     assert.deepEqual(calls[0], ["settings", { payday: 25, habit_mode: "spending" }]);
@@ -265,21 +265,21 @@ describe("applying the answers", () => {
 
   it("does not touch the backend when nothing was answered", async () => {
     const api = {
-      envelopes: async () => assert.fail("no read"),
+      budget: async () => assert.fail("no read"),
       saveEnvelopes: async () => assert.fail("no write"),
       saveSettings: async () => assert.fail("no write"),
-    } as unknown as Pick<Api, "envelopes" | "saveEnvelopes" | "saveSettings">;
+    } as unknown as Pick<Api, "budget" | "saveEnvelopes" | "saveSettings">;
     assert.deepEqual(await applyDraft(api, {}, "2026-10-12"), { ok: true, wrote: [] });
   });
 
   it("reports a failure instead of throwing", async () => {
     const api = {
-      envelopes: async () => [],
+      budget: async () => ({ envelopes: [] }),
       saveEnvelopes: async () => {
         throw new Error("HTTP 500");
       },
       saveSettings: async () => ({}),
-    } as unknown as Pick<Api, "envelopes" | "saveEnvelopes" | "saveSettings">;
+    } as unknown as Pick<Api, "budget" | "saveEnvelopes" | "saveSettings">;
     assert.deepEqual(await applyDraft(api, { dailyAllowanceCents: 700 }, "2026-10-12"), { ok: false, error: "HTTP 500" });
   });
 });

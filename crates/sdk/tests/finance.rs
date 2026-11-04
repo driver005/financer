@@ -102,7 +102,7 @@ fn every_call_and_type_of_the_api_exists() {
             calls += 1;
         }
     }
-    assert_eq!(calls, 77);
+    assert_eq!(calls, 75);
     for name in doc["components"]["schemas"].as_object().unwrap().keys() {
         assert!(
             GENERATED.contains(&format!("pub struct {name} {{"))
@@ -116,13 +116,13 @@ fn every_call_and_type_of_the_api_exists() {
 async fn the_bank_export_in_and_the_transactions_out() {
     let s = sdk().await;
     assert!(s.list_transactions().await.unwrap().is_empty());
-    let report = s.import_transactions(csv()).await.unwrap();
+    let report = s.import_file("csv".into(), csv()).await.unwrap();
     assert_eq!(
         (report.imported, report.duplicates, report.skipped.len()),
         (5, 0, 0)
     );
     assert_eq!(
-        s.import_transactions(csv()).await.unwrap().duplicates,
+        s.import_file("csv".into(), csv()).await.unwrap().duplicates,
         5,
         "the same export again adds nothing"
     );
@@ -139,35 +139,41 @@ async fn the_bank_export_in_and_the_transactions_out() {
 #[tokio::test]
 async fn budget_calls_with_path_and_query_values_and_an_enum() {
     let s = sdk().await;
-    s.import_transactions(csv()).await.unwrap();
+    s.import_file("csv".into(), csv()).await.unwrap();
     let saved = s
-        .put_envelopes(vec![EnvelopeDto {
+        .put_envelopes(vec![EnvelopeInput {
             category: "groceries".into(),
             limit_cents: 40000,
         }])
         .await
         .unwrap();
     assert_eq!(saved[0].limit_cents, 40000);
-    assert_eq!(s.get_envelopes().await.unwrap(), saved);
-    let status = s
-        .budget_status(Some(2026), Some(3), None, None)
+    let previous = s
+        .budget(Some(PeriodChoice::Previous), Some("2026-03-15".into()))
         .await
         .unwrap();
-    assert_eq!(status[0].category, "groceries");
-    assert_eq!(status[0].spent_cents, 2347);
-    let period = s
-        .budget_period(Some(PeriodChoice::Previous), Some("2026-03-15".into()))
-        .await
-        .unwrap();
-    assert!(!period.start.is_empty());
-    let current = s
-        .budget_period(None, Some("2026-03-15".into()))
-        .await
-        .unwrap();
-    assert!(current.start >= period.start);
-    s.safe_to_spend(Some("2026-03-15".into())).await.unwrap();
+    assert_eq!(previous.envelopes[0].category, "groceries");
+    assert!(!previous.period.start.is_empty());
+    assert!(
+        previous.safe_to_spend.is_none(),
+        "the daily number is for the period you are in"
+    );
+    let current = s.budget(None, Some("2026-03-15".into())).await.unwrap();
+    assert!(current.period.start >= previous.period.start);
+    assert!(current.safe_to_spend.is_some());
+    assert!(
+        current.disposable.monthly_income_cents >= 0,
+        "the monthly picture comes with the budget"
+    );
+    assert_eq!(
+        current
+            .envelopes
+            .iter()
+            .map(|e| e.limit_cents)
+            .collect::<Vec<_>>(),
+        saved.iter().map(|e| e.limit_cents).collect::<Vec<_>>()
+    );
     s.forecast(Some("2026-03-15".into())).await.unwrap();
-    s.disposable().await.unwrap();
 }
 
 #[tokio::test]
@@ -217,7 +223,7 @@ async fn settings_basket_receipts_and_the_export_round_trip() {
     let s = sdk().await;
     let before = s.get_settings().await.unwrap();
     let after = s
-        .put_settings(SettingsUpdate {
+        .put_settings(SettingsInput {
             habit_mode: Some("receipts".into()),
             llm_model: None,
             llm_provider: None,
@@ -231,7 +237,7 @@ async fn settings_basket_receipts_and_the_export_round_trip() {
     let catalog = s.catalog().await.unwrap();
     assert!(!catalog.is_empty());
     let basket = s
-        .put_basket(vec![BasketItemDto {
+        .put_basket(vec![BasketItemInput {
             item: catalog[0].key.clone(),
             quantity: 2,
         }])
@@ -240,7 +246,7 @@ async fn settings_basket_receipts_and_the_export_round_trip() {
     assert_eq!(basket.items[0].quantity, 2);
 
     let r = s
-        .upload_receipt(ReceiptUpload {
+        .upload_receipt(ReceiptUploadInput {
             text: "REWE\n02.03.2026\nMILCH 1,09\nBROT 2,49\nSUMME 3,58".into(),
         })
         .await
@@ -248,7 +254,7 @@ async fn settings_basket_receipts_and_the_export_round_trip() {
     assert!(r.id.is_some());
     assert_eq!(s.list_receipts().await.unwrap().len(), 1);
 
-    s.import_transactions(csv()).await.unwrap();
+    s.import_file("csv".into(), csv()).await.unwrap();
     let exported = s.export_data().await.unwrap();
     assert_eq!(
         (exported.transactions.len(), exported.receipts.len()),
@@ -290,13 +296,12 @@ async fn the_servers_reasons_and_path_values_that_need_escaping() {
     );
     // no bank is set up on this server: a refusal with a reason, not a crash
     match s
-        .start_sync(SyncRequest {
-            bic: None,
-            blz: "12345678".into(),
+        .start_sync(SyncInput {
+            connection: Some("Giro".into()),
             days: None,
-            iban: "DE89370400440532013000".into(),
-            pin: "1234".into(),
-            user_id: "u".into(),
+            kind: None,
+            login: None,
+            pin: Some("1234".into()),
         })
         .await
         .unwrap_err()
@@ -326,8 +331,8 @@ async fn the_wire_entry_takes_json_and_answers_the_servers_own_text() {
     let report = wire
         .call(
             "finance".into(),
-            "import_transactions".into(),
-            serde_json::json!({ "csv_base64": base64::engine::general_purpose::STANDARD.encode(csv.as_bytes()) }).to_string(),
+            "import_file".into(),
+            serde_json::json!({ "kind": "csv", "csv_base64": base64::engine::general_purpose::STANDARD.encode(csv.as_bytes()) }).to_string(),
         )
         .await
         .unwrap();
@@ -338,14 +343,12 @@ async fn the_wire_entry_takes_json_and_answers_the_servers_own_text() {
     let status = wire
         .call(
             "finance".into(),
-            "budget_status".into(),
-            serde_json::json!({ "year": 2026, "month": 3 }).to_string(),
+            "budget".into(),
+            serde_json::json!({ "period": "previous", "date": "2026-03-15" }).to_string(),
         )
         .await
         .unwrap();
-    assert!(serde_json::from_str::<serde_json::Value>(&status)
-        .unwrap()
-        .is_array());
+    assert!(serde_json::from_str::<serde_json::Value>(&status).unwrap()["envelopes"].is_array());
 
     // a request body is `body`
     let saved = wire
@@ -384,7 +387,7 @@ async fn the_wire_entry_takes_json_and_answers_the_servers_own_text() {
     let refused = wire
         .call(
             "finance".into(),
-            "budget_period".into(),
+            "budget".into(),
             r#"{"date":"not-a-date"}"#.into(),
         )
         .await;

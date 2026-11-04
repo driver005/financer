@@ -9,8 +9,62 @@ de-duplication) is the same for every kind.
 | --- | --- | --- | --- |
 | `fints` (default) | bank code, login, IBAN, a PIN (typed, or an environment variable) | approve a pushTAN in your banking app | German banks that still offer FinTS, no third party |
 | `plaid` | nothing in the file; you sign in once on Plaid's page | nothing | banks Plaid covers (Germany and other EU countries, UK, US, Canada), unattended scheduled syncs |
+| `gocardless` | the bank's institution id; you sign in once on your bank's page | nothing | European banks through GoCardless Bank Account Data, unattended scheduled syncs |
+| `finapi` | nothing in the file; you pick the bank and sign in once on finAPI's page | nothing | German banks through finAPI, unattended scheduled syncs |
 
-FinTS is described in `docs/FINTS.md`. This page is about Plaid and about how to add a provider.
+A CSV export of your online banking (`kind` `csv`) always works too and needs no provider setup.
+
+FinTS is described in `docs/FINTS.md`. This page is about the one API every source shares, about
+Plaid, GoCardless and finAPI, and about how to add a provider.
+
+## One API for every source
+
+All five sources live in one crate, `crates/openbanking`, behind one `Provider` trait, and the API
+talks to all of them the same way, so an app or an SDK never has a per-provider call. Each has a
+**flow**, which is all a client needs to know:
+
+| flow | providers | what the client does |
+| --- | --- | --- |
+| `file` | `csv` | `POST /v1/bank/import/{kind}` with the file |
+| `approval` | `fints` | start a sync with a login and a PIN, the person approves in the banking app |
+| `link` | `plaid`, `gocardless`, `finapi` | start a sync, the person signs in once on `link_url` |
+
+| call | what it does |
+| --- | --- |
+| `GET /v1/bank/providers` | every source, its flow, whether this server has it set up |
+| `GET /v1/bank/connections` | the connections of the server configuration, with their state |
+| `POST /v1/bank/sync` | start a sync: `{"connection": "name", "pin"?}`, or for FinTS `{"kind": "fints", "login": {...}, "pin"}` |
+| `GET /v1/bank/sync/{id}` | where it stands: `state` is `syncing`, `needs_approval` (approve in the banking app), `needs_link` (open `link_url`), `idle` or `error`; `result` once it ended |
+| `POST /v1/bank/sync/{id}/cancel` | stop waiting for an approval or a sign-in |
+| `POST /v1/bank/import/{kind}` | hand over a file (`csv`) |
+| `POST /v1/bank/connections/{name}/disconnect` | forget the stored access of a `link` provider |
+
+The server does the waiting: after `POST /v1/bank/sync` it polls the provider itself and imports
+as soon as the person is done, so a client only asks `GET /v1/bank/sync/{id}` now and then (or not at
+all). The id of a configured connection is its lower-case name; a login sent with the request gets
+an id of its own, which stays readable for an hour.
+
+## Choosing what to connect in the app
+
+The **Spending** screen is where the transactions come from. With no bank connection set up it shows
+a **Set up** button (also the bank icon at the top, and the empty state). It opens a menu:
+
+- **CSV import** picks a file right away.
+- **Sparkasse (FinTS)** opens the sync screen.
+- **GoCardless**, **Plaid**, **finAPI** ask for what the server still lacks (its keys, and a name for
+  the connection; for GoCardless also the bank's institution id), save that into the server's
+  settings and wait for the server to restart. Keys the server already has, or that an
+  environment variable decides, are not asked for again. The keys stay on the server.
+
+Above the transactions a row of chips switches between the sources: CSV import, Sparkasse,
+GoCardless, Plaid, finAPI. Each has a panel with its state, the linked accounts, the last result and
+its main button (*Connect via ...* the first time, which opens the provider's page in the browser,
+then *Sync now*). You can use several sources side by side. A booking that arrives twice with identical date, amount,
+counterparty and purpose is imported once; two providers that describe the same booking in
+different words can show it twice, so connect one source per account.
+
+The on-phone (embedded) backend has no server settings, so there only CSV import and FinTS are
+available.
 
 ## Plaid
 
@@ -109,22 +163,87 @@ import, and that no secret appears in a listing, a message or a debug print.
 on it: run the sandbox flow once, check the Plaid dashboard's *Hosted Link* setting, and watch the
 first real sync. Plaid's exact field names were taken from its public documentation; if Plaid
 changes one, the sync reports "an answer this app does not understand" with the path, and
-`crates/plaid/src/types.rs` is the one place to adjust.
+`crates/openbanking/src/plaid/types.rs` is the one place to adjust.
 
 The on-phone (embedded) backend does not read `financer.toml`, so Plaid connections are a feature
 of the hosted server for now.
 
+## GoCardless Bank Account Data
+
+GoCardless Bank Account Data (formerly Nordigen) reads your bank over PSD2. The server trades the
+secret id and key for a token, creates a *requisition* for the bank you named (`institution`), and
+the app opens the requisition's link. You sign in to your bank there; the server polls the
+requisition until it is linked, keeps its id (sealed) and reads accounts, balances and booked
+transactions from then on.
+
+- **Availability.** GoCardless stopped accepting new sign-ups for this product in July 2025. The
+  keys must come from an account that already existed. If you have none, use finAPI, Plaid or a CSV
+  import instead.
+- **Consent runs out.** The bank's consent lasts about 90 days (it can be shorter). When it ends the
+  connection shows "your bank access ran out"; press *Connect* once more.
+- **Rate limits.** GoCardless limits reads per account and day (a handful; check your agreement). Keep
+  `sync_every_hours` at 6 or more; a refusal is shown as "allows only a few reads per day".
+- **Bank id.** The institution id (`SPARKASSE_...`) comes from GoCardless's institutions list for your
+  country (its institutions endpoint, `/api/v2/institutions/?country=de`, as far as its documentation
+  was known).
+- **Only euro, only booked.** Pending bookings and other currencies are skipped (counted as
+  skipped), as with the other providers.
+
+## finAPI
+
+finAPI is a German aggregator. For each connection the server creates a finAPI *user* with a random
+id and password that only this server knows, opens a *web form* where you pick your bank and sign
+in, and reads accounts and transactions with that user afterwards. Disconnecting deletes the user,
+which removes everything finAPI holds for it.
+
+- **Needs a customer agreement.** finAPI is a business product; the sandbox works with test banks,
+  `environment = "live"` needs a contract and approved access.
+- **Sealed.** The user id and password are kept sealed with the server secret, like the other
+  credentials.
+- **Euro only.** Other currencies are skipped and not added to the balance.
+
+## What was tested for GoCardless and finAPI, and what was not
+
+Tested without a network, against scripted stand-ins: the request shapes, the token reuse, the
+linking flow (waiting, finished, rejected, expired, cancelled), paging, sealed storage,
+scheduling, sign-in-again after a consent ran out, wrong keys, rate limits, disconnect,
+de-duplication against a CSV import, and that no key, token or password appears in a listing, a
+message or a debug print.
+
+**Not tested against the real services.** There is no GoCardless or finAPI account behind this
+repository, and neither service's documentation could be opened while this was written. The
+request and answer shapes follow the public descriptions as far as they were known:
+
+- GoCardless: `crates/openbanking/src/gocardless.rs`.
+- finAPI: `crates/openbanking/src/finapi.rs`. The least certain part is the web form: its address
+  (`webform-sandbox.finapi.io` / `webform-live.finapi.io`, overridable in `FinapiConfig`), the
+  request body of `POST /api/webForms/bankConnectionImport` and the status names
+  (`COMPLETED`, `ABORTED`, ...).
+
+If a field differs, the sync reports "an answer this app does not understand" with the path, and
+those two files are the only places to adjust. Run the sandbox flow once and watch the first sync
+before you rely on either.
+
 ## Adding another provider
 
-A provider has to answer three questions, which map to three functions:
+A provider implements `Provider` (`crates/openbanking/src/lib.rs`); everything else is shared:
 
-1. *How do I get permission?* FinTS asks for a PIN and a TAN; Plaid shows a page. Add the new
-   `BankProvider` variant (`crates/api/src/bank_connections.rs`) and branch in `BankSync::start`.
-2. *How do I fetch?* Return `financer_fints::BankData` (booked transactions, balance, skipped
-   count). Everything after that is shared: `BankSync::import` de-duplicates and categorises.
-3. *How do I forget?* Store the credential with `SecretBox` (never plain), and drop it on
-   disconnect.
+- `begin` starts a sign-in or a login and says what the person has to do (`Step::Link` with a page,
+  `Step::Approval` with a message, or `Step::Fetching`);
+- `poll` waits for it and hands over a credential (`Poll::Linked`) or, for an approval flow, the
+  data (`Poll::Data`);
+- `fetch` reads with a stored credential; `import` reads a file; `revoke` and `cancel` clean up.
 
-Put the HTTP calls behind a small trait (see `PlaidHttp`) so tests run without a network, and
-add the `kind` to `crates/config` (`validate.rs`) so a typo is an error with the key's name.
-`crates/api/tests/bank_plaid.rs` is a good template for the integration tests.
+`crates/api/src/bank_connections.rs` is the one engine that drives any of them: the states, the
+background polling, sealing the credential with `SecretBox` (never plain), the schedule, the
+de-duplicating import, disconnect. So a new provider is its client plus:
+
+1. a `ProviderKind` variant (with its `Flow`) in `crates/openbanking/src/types.rs`;
+2. its keys and its `kind` in `crates/config` (`validate.rs`, `schema.rs`), so a typo is an error
+   with the key's name;
+3. registering it in `crates/server/src/main.rs` (`AppState::with_provider`);
+4. an entry in `SOURCES` in `apps/mobile/src/bankSetup.ts`, so the Spending screen offers it.
+
+Put its HTTP calls behind `OpenHttp` so tests run without a network (`testing::FakeHttp` scripts the
+answers); `crates/api/tests/bank_plaid.rs` and `bank_open.rs` are templates for the integration
+tests.

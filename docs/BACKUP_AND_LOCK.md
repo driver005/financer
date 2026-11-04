@@ -11,8 +11,8 @@ one passphrase-encrypted file.
   (ChaCha20-Poly1305, work factor 2^17), from the pure-Rust `age` crate (no system libraries, so it
   cross-compiles to Android and iOS). It also opens with the standard tool: `age -d backup.age`.
   When opening a file, a work factor above 2^20 is refused so a hostile file cannot exhaust memory.
-- **API.** `POST /v1/backup/create` `{passphrase}` returns `{data_base64, transactions, receipts}`;
-  `POST /v1/backup/restore` `{passphrase, data_base64}` merges the data exactly like `/v1/import`
+- **API.** `POST /v1/backups` `{passphrase}` returns `{data_base64, transactions, receipts}`;
+  `POST /v1/backups/restorations` `{passphrase, data_base64}` merges the data exactly like `/v1/data`
   (duplicates skipped, so restoring twice changes nothing) and returns the same report. The app
   transport carries only text, hence base64 inside JSON. The passphrase must have at least 8
   characters, is never stored or logged, and is not part of any response or error. A wrong

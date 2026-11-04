@@ -14,6 +14,7 @@ export type StartConfig = {
   lidlCountry: string | undefined;
   lidlLanguage: string | undefined;
   lidlPollHours: number | undefined;
+  kaufland: boolean;
   deviceSecret: string | undefined;
 };
 

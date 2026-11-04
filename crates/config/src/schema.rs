@@ -253,7 +253,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "bank",
         title: "Bank providers",
-        hint: "FinTS and Plaid, the two ways to connect a bank.",
+        hint: "FinTS, Plaid, GoCardless and finAPI: the ways to connect a bank.",
         icon: "bank-outline",
     },
     Group {
@@ -281,6 +281,12 @@ pub const GROUPS: &[Group] = &[
         icon: "receipt-text-outline",
     },
     Group {
+        id: "kaufland",
+        title: "Receipts: Kaufland Card",
+        hint: "Experimental and unofficial.",
+        icon: "receipt-text-outline",
+    },
+    Group {
         id: "folder",
         title: "Receipts: watched folder",
         hint: "Receipts dropped into a folder on the server.",
@@ -294,9 +300,14 @@ const ACCOUNT_FIELDS: &[Field] = &[
         .help("Shown in the app. Must be unique.")
         .placeholder("Girokonto"),
     Field::new("kind", "Provider", Kind::Choice)
-        .options(&["fints", "plaid"])
+        .options(&["fints", "plaid", "gocardless", "finapi"])
         .default("fints")
-        .help("FinTS talks to your bank directly (PIN and an approval in the banking app); Plaid has you sign in once on its page."),
+        .help("FinTS talks to your bank directly (PIN and an approval in the banking app); Plaid, GoCardless and finAPI have you sign in once on their page."),
+    Field::new("institution", "Bank (institution id)", Kind::Text)
+        .required()
+        .help("The GoCardless institution id of your bank, from its institutions list (for example SPARKASSE_...). The other providers let you pick the bank on their page.")
+        .placeholder("SPARKASSE_...")
+        .when("kind", "gocardless"),
     Field::new("bank_code", "Bank code", Kind::Text)
         .required()
         .help("The 8-digit bank code (BLZ).")
@@ -325,7 +336,7 @@ const ACCOUNT_FIELDS: &[Field] = &[
         .when("kind", "fints"),
     Field::new("account_ids", "Accounts to read", Kind::List)
         .help("Optional: read only these accounts (the ids the app shows once the bank is linked). Leave empty to read every linked account.")
-        .when("kind", "plaid"),
+        .when("kind", "plaid,gocardless,finapi"),
     Field::new("sync_every_hours", "Sync every (hours)", Kind::Int)
         .range(0, 24 * 366)
         .default("0")
@@ -471,8 +482,35 @@ pub const KEYS: &[Key] = &[
         .help("Where Plaid's page sends the browser when you are done (https only). Optional; without it the page just says you can close it.")
         .placeholder("https://example.org/done"),
     // -------------------------------------------------------------------------------- accounts
+    Key::new("bank.gocardless.secret_id", "bank", "GoCardless secret id", Kind::Secret)
+        .help("From the Bank Account Data portal of GoCardless (bankaccountdata.gocardless.com). GoCardless no longer takes new sign-ups for it, so this only works with an account that already exists.")
+        .env("FINANCER_GOCARDLESS_SECRET_ID"),
+    Key::new("bank.gocardless.secret_key", "bank", "GoCardless secret key", Kind::Secret)
+        .help("The secret key that belongs to the secret id.")
+        .env("FINANCER_GOCARDLESS_SECRET_KEY"),
+    Key::new("bank.gocardless.language", "bank", "GoCardless language", Kind::Text)
+        .help("Language of the bank's sign-in page, as a two-letter code.")
+        .default("de")
+        .placeholder("de"),
+    Key::new("bank.gocardless.redirect_uri", "bank", "GoCardless return address", Kind::Text)
+        .help("Where the bank's page sends the browser when you are done (https only). Optional.")
+        .placeholder("https://example.org/done"),
+    Key::new("bank.finapi.client_id", "bank", "finAPI client id", Kind::Secret)
+        .help("From your finAPI client (finapi.io). Needs a finAPI customer agreement; the sandbox works with test banks.")
+        .env("FINANCER_FINAPI_CLIENT_ID"),
+    Key::new("bank.finapi.client_secret", "bank", "finAPI client secret", Kind::Secret)
+        .help("The secret that belongs to the client id, for the environment chosen below.")
+        .env("FINANCER_FINAPI_CLIENT_SECRET"),
+    Key::new("bank.finapi.environment", "bank", "finAPI environment", Kind::Choice)
+        .help("sandbox is finAPI's test banks; live is for your real bank.")
+        .options(&["sandbox", "live"])
+        .env("FINANCER_FINAPI_ENV")
+        .default("sandbox"),
+    Key::new("bank.finapi.redirect_uri", "bank", "finAPI return address", Kind::Text)
+        .help("Where the web form sends the browser when you are done (https only). Optional.")
+        .placeholder("https://example.org/done"),
     Key::new("bank.accounts", "accounts", "Accounts", Kind::Table)
-        .help("One entry per account to sync automatically. A FinTS sync always needs your approval in the banking app; a Plaid account needs neither PIN nor approval once you have signed in.")
+        .help("One entry per account to sync automatically. A FinTS sync always needs your approval in the banking app; a Plaid, GoCardless or finAPI account needs neither PIN nor approval once you have signed in.")
         .fields(ACCOUNT_FIELDS),
     // -------------------------------------------------------------------------------- stores
     Key::new("stores", "stores", "Store names", Kind::Table)
@@ -549,6 +587,39 @@ pub const KEYS: &[Key] = &[
         .help("Only if Lidl changes the built-in value."),
     Key::new("receipts.lidl_plus.scope", "lidl", "Scope override", Kind::Text)
         .help("Only if Lidl changes the built-in value."),
+    // -------------------------------------------------------------------------------- kaufland
+    Key::new("receipts.kaufland.enabled", "kaufland", "Kaufland Card", Kind::Bool)
+        .help("Experimental and unofficial: it may stop working whenever Kaufland changes something. You sign in on Kaufland's own page from Settings > Receipt sources; only a refresh token is kept, encrypted.")
+        .env("FINANCER_RECEIPTS_KAUFLAND")
+        .default("off"),
+    Key::new("receipts.kaufland.country", "kaufland", "Country", Kind::Text)
+        .help("Two-letter country code of your Kaufland account.")
+        .env("FINANCER_RECEIPTS_KAUFLAND_COUNTRY")
+        .default("DE"),
+    Key::new("receipts.kaufland.language", "kaufland", "Language", Kind::Text)
+        .help("Two-letter language code.")
+        .env("FINANCER_RECEIPTS_KAUFLAND_LANGUAGE")
+        .default("de"),
+    Key::new("receipts.kaufland.poll_hours", "kaufland", "Check every (hours)", Kind::Int)
+        .env("FINANCER_RECEIPTS_KAUFLAND_POLL_HOURS")
+        .default("12")
+        .range(1, 24 * 14),
+    Key::new("receipts.kaufland.client_id", "kaufland", "Client id override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.loyalty_client_id", "kaufland", "Receipt client id override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.authorize_url", "kaufland", "Sign-in address override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.token_url", "kaufland", "Token address override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.userinfo_url", "kaufland", "Account address override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.api_url", "kaufland", "Receipts address override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.redirect_uri", "kaufland", "Return address override", Kind::Text)
+        .help("Only if Kaufland changes the built-in value."),
+    Key::new("receipts.kaufland.app_version", "kaufland", "App version override", Kind::Text)
+        .help("The app version sent along with receipt requests; only if Kaufland starts refusing the built-in one."),
     // -------------------------------------------------------------------------------- folder
     Key::new("receipts.folder.enabled", "folder", "Watch the folder", Kind::Bool)
         .help("Switch the source off without deleting its settings.")

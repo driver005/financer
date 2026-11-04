@@ -20,26 +20,26 @@ const MAX_ITEMS: usize = 200_000;
 pub struct ExportRoutes;
 
 /// Download everything that is yours as one JSON document (no secrets, no prices).
-#[utoipa::path(get, path = "/v1/export", responses((status = 200, body = ExportDto)), security(("bearer" = [])))]
-pub async fn export_data(State(state): State<AppState>) -> Result<Json<ExportDto>, ApiError> {
+#[utoipa::path(get, path = "/v1/data", responses((status = 200, body = DataDto)), security(("bearer" = [])))]
+pub async fn export_data(State(state): State<AppState>) -> Result<Json<DataDto>, ApiError> {
     ExportRoutes::export_data(state).await
 }
 
 /// Merge an export into this backend. Transactions and receipts already present (same
 /// fingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items
 /// list replace the current ones when the export has any; settings are applied if present.
-#[utoipa::path(post, path = "/v1/import", request_body = ExportDto, responses(
+#[utoipa::path(post, path = "/v1/data", request_body = DataDto, responses(
     (status = 200, body = ImportReportDto),
     (status = 400, description = "Not a valid export", body = ErrorBody)), security(("bearer" = [])))]
 pub async fn import_data(
     State(state): State<AppState>,
-    Json(data): Json<ExportDto>,
+    Json(data): Json<DataDto>,
 ) -> Result<Json<ImportReportDto>, ApiError> {
     ExportRoutes::import_data(state, data).await
 }
 
 impl ExportRoutes {
-    pub async fn export_data(state: AppState) -> Result<Json<ExportDto>, ApiError> {
+    pub async fn export_data(state: AppState) -> Result<Json<DataDto>, ApiError> {
         let store = &state.store;
         let transactions = store
             .list_transactions()
@@ -62,7 +62,7 @@ impl ExportRoutes {
             .await?
             .envelopes
             .into_iter()
-            .map(|(category, limit)| EnvelopeDto {
+            .map(|(category, limit)| EnvelopeInput {
                 category,
                 limit_cents: limit,
             })
@@ -71,7 +71,7 @@ impl ExportRoutes {
             .usual_items()
             .await?
             .into_iter()
-            .map(|i| BasketItemDto {
+            .map(|i| BasketItemInput {
                 item: i.item,
                 quantity: i.quantity,
             })
@@ -112,7 +112,7 @@ impl ExportRoutes {
                 visible: c.visible,
             })
             .collect();
-        Ok(Json(ExportDto {
+        Ok(Json(DataDto {
             version: FORMAT_VERSION,
             transactions,
             budget,
@@ -130,7 +130,7 @@ impl ExportRoutes {
 
     pub async fn import_data(
         state: AppState,
-        data: ExportDto,
+        data: DataDto,
     ) -> Result<Json<ImportReportDto>, ApiError> {
         if data.version != FORMAT_VERSION {
             return Err(ApiError::BadRequest(format!(

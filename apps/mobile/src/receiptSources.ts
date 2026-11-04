@@ -1,13 +1,13 @@
 /**
- * The Receipt sources screen: names and texts for the three sources, the status pill, "last synced"
- * wording, setup help, and reading the Lidl callback address. The wording is in Rust
+ * The Receipt sources screen: names and texts for the sources, the status pill, "last synced"
+ * wording, setup help, and reading the callback address of a shop's sign-in. The wording is in Rust
  * (crates/logic, receipt_sources.rs); the types and the shop guides (plain content) are here.
  */
 import { logic } from "../../../packages/wire/src/logic";
 
-export type SourceKey = "email" | "lidl_plus" | "folder";
+export type SourceKey = "email" | "lidl_plus" | "kaufland_card" | "folder";
 
-export const SOURCE_ORDER: readonly SourceKey[] = ["email", "lidl_plus", "folder"];
+export const SOURCE_ORDER: readonly SourceKey[] = ["email", "lidl_plus", "kaufland_card", "folder"];
 
 /** The fields of a source the helpers read (a subset of `ReceiptSource`). */
 export type SourceLike = {
@@ -67,8 +67,14 @@ export const syncResultText = (imported: number, linked: number): string => logi
  */
 export const setupSteps = (s: string, onPhone = false): string[] => logic("receipt_sources.setup_steps", { s, on_phone: onPhone });
 
-/** The short, plain statements shown on the Lidl Plus card. */
-export const lidlPromises = (onPhone = false): string[] => logic("receipt_sources.lidl_promises", { on_phone: onPhone });
+/** The shops whose receipts come in by signing in on the shop's own page. */
+export type SignInShop = "Lidl" | "Kaufland";
+
+/** The short, plain statements shown on the sign-in card of a shop. */
+export const signInPromises = (shop: SignInShop, onPhone = false): string[] => logic("receipt_sources.sign_in_promises", { shop, on_phone: onPhone });
+
+/** The statements of the Lidl Plus card. */
+export const lidlPromises = (onPhone = false): string[] => signInPromises("Lidl", onPhone);
 
 /** Where "Disconnect" says the saved sign-in is deleted from. */
 export const disconnectedText = (onPhone: boolean): string => logic("receipt_sources.disconnected_text", { on_phone: onPhone });
@@ -92,9 +98,19 @@ export const extractCallbackUrl = (input: string, scheme: string): string | null
 /** Does the address carry a sign-in result (a code or an error)? */
 export const callbackHasResult = (url: string): boolean => logic("receipt_sources.callback_has_result", { url });
 
+/** A source you sign in to is connected once it has a token: any state but "not connected", "switched off" and "sign in again". */
+export const isSignedIn = (state: string): boolean => logic("receipt_sources.is_signed_in", { state });
+
+/** The one-line state of the sign-in card of a shop. */
+export const signInStateText = (shop: SignInShop, state: string, connectedAt: number | null | undefined, nowSec: number, onPhone = false): string =>
+  logic("receipt_sources.sign_in_state_text", { shop, state, connected_at: connectedAt ?? null, now_sec: nowSec, on_phone: onPhone });
+
 /** The one-line state of the Lidl card. */
 export const lidlStateText = (state: string, connectedAt: number | null | undefined, nowSec: number, onPhone = false): string =>
-  logic("receipt_sources.lidl_state_text", { state, connected_at: connectedAt ?? null, now_sec: nowSec, on_phone: onPhone });
+  signInStateText("Lidl", state, connectedAt, nowSec, onPhone);
+
+/** The sources that run on a schedule or that you sign in to: the ones with a card of their own in the list. */
+export const listedSources = <T extends { flow: string }>(list: readonly T[]): T[] => logic("receipt_sources.listed_sources", { list });
 
 // ---- shops that have an app but no way in ----
 
@@ -107,8 +123,8 @@ export type ShopGuide = {
 };
 
 /**
- * REWE, Kaufland, Penny and ALDI. None of them offers a public interface for receipts, so Financer
- * does not sign in to their apps; this says for each what does work. REWE mails the eBon as a PDF
+ * REWE, Kaufland, Penny and ALDI. None of them offers a public interface for receipts. Kaufland has
+ * an unofficial sign-in of its own (the card above); for the others this says what does work. REWE mails the eBon as a PDF
  * (the email source reads it); Kaufland and Penny keep the digital receipt inside their app; ALDI
  * is not known to offer one. Written from what the shops publish (checked on 2026-11-03), so a
  * shop may have changed it; the app itself is the authority.
@@ -116,20 +132,20 @@ export type ShopGuide = {
 export const SHOP_GUIDES: readonly ShopGuide[] = [
   {
     shop: "REWE",
-    summary: "The eBon comes by email as a PDF. Financer reads it from your mailbox.",
+    summary: "The eBon comes by email as a PDF, or you read it from REWE's web shop in a window of the app (below).",
     steps: [
       "In the REWE app (or your account on rewe.de) switch on the eBon and hold the app to the scanner at the till. Without that scan you get a paper receipt, and a missing eBon cannot be sent again.",
-      "REWE mails the eBon as a PDF to the address of your REWE account.",
-      "Connect that mailbox under Email above (needs your own server). Receipts then arrive by themselves.",
+      "By email: REWE mails the eBon as a PDF to the address of your REWE account. Connect that mailbox under Email above (needs your own server).",
+      "Or in the app: tap Read my REWE receipts below, sign in on REWE's own page in the window and the new receipts are read. Unofficial; needs the phone app.",
     ],
   },
   {
     shop: "Kaufland",
-    summary: "The digital receipt stays inside the Kaufland app. Financer cannot sign in there.",
+    summary: "The Kaufland Card above signs in on Kaufland's own page and reads your digital receipts. Unofficial.",
     steps: [
-      "In the Kaufland app, with your Kaufland Card, switch on the paperless receipt (\"Papierbon sparen\").",
-      "Open the receipt in the app and take a screenshot.",
-      "In Financer open Receipts and scan the screenshot. Kaufland receipts that reach your mailbox are picked up by the Email source.",
+      "In the Kaufland app, with your Kaufland Card, switch on the paperless receipt (\"Papierbon sparen\"); only receipts bought that way exist digitally.",
+      "Switch the Kaufland Card on (the card above) and tap Connect. You sign in on Kaufland's own page.",
+      "If Kaufland stops accepting it, scan a screenshot of the receipt under Receipts instead.",
     ],
   },
   {

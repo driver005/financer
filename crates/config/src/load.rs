@@ -133,6 +133,8 @@ pub struct LlmSettings {
 pub struct BankSettings {
     pub fints_product_id: Setting<Option<Secret>>,
     pub plaid: PlaidSettings,
+    pub gocardless: GoCardlessSettings,
+    pub finapi: FinapiSettings,
     pub accounts: Vec<BankAccount>,
     /// Where the list of accounts came from.
     pub accounts_source: Source,
@@ -158,6 +160,43 @@ impl PlaidSettings {
     /// Both the client id and the secret are set.
     pub fn configured(&self) -> bool {
         self.client_id.value.is_some() && self.secret.value.is_some()
+    }
+}
+
+/// `[bank.gocardless]` with the `FINANCER_GOCARDLESS_*` variables applied.
+#[derive(Debug, Clone)]
+pub struct GoCardlessSettings {
+    pub secret_id: Setting<Option<Secret>>,
+    pub secret_key: Setting<Option<Secret>>,
+    pub language: String,
+    pub redirect_uri: Option<String>,
+}
+
+impl GoCardlessSettings {
+    pub const DEFAULT_LANGUAGE: &'static str = "de";
+
+    /// Both the secret id and the secret key are set.
+    pub fn configured(&self) -> bool {
+        self.secret_id.value.is_some() && self.secret_key.value.is_some()
+    }
+}
+
+/// `[bank.finapi]` with the `FINANCER_FINAPI_*` variables applied.
+#[derive(Debug, Clone)]
+pub struct FinapiSettings {
+    pub client_id: Setting<Option<Secret>>,
+    pub client_secret: Setting<Option<Secret>>,
+    /// `sandbox` or `live`.
+    pub environment: Setting<String>,
+    pub redirect_uri: Option<String>,
+}
+
+impl FinapiSettings {
+    pub const DEFAULT_ENVIRONMENT: &'static str = "sandbox";
+
+    /// Both the client id and the client secret are set.
+    pub fn configured(&self) -> bool {
+        self.client_id.value.is_some() && self.client_secret.value.is_some()
     }
 }
 
@@ -359,6 +398,10 @@ impl Loader {
             Some("bank.fints_product_id")
         } else if literal(&file.bank.plaid.secret) {
             Some("bank.plaid.secret")
+        } else if literal(&file.bank.gocardless.secret_key) {
+            Some("bank.gocardless.secret_key")
+        } else if literal(&file.bank.finapi.client_secret) {
+            Some("bank.finapi.client_secret")
         } else {
             None
         }
@@ -591,6 +634,8 @@ impl Loader {
         };
 
         let plaid_file = file.bank.plaid;
+        let gocardless_file = file.bank.gocardless;
+        let finapi_file = file.bank.finapi;
         let bank = BankSettings {
             fints_product_id: Self::secret(
                 env,
@@ -621,6 +666,39 @@ impl Loader {
                     .map(|l| l.to_ascii_lowercase())
                     .unwrap_or_else(|| PlaidSettings::DEFAULT_LANGUAGE.to_string()),
                 redirect_uri: Self::non_empty(plaid_file.redirect_uri),
+            },
+            gocardless: GoCardlessSettings {
+                secret_id: Self::secret(
+                    env,
+                    "FINANCER_GOCARDLESS_SECRET_ID",
+                    gocardless_file.secret_id,
+                ),
+                secret_key: Self::secret(
+                    env,
+                    "FINANCER_GOCARDLESS_SECRET_KEY",
+                    gocardless_file.secret_key,
+                ),
+                language: Self::non_empty(gocardless_file.language)
+                    .map(|l| l.to_ascii_lowercase())
+                    .unwrap_or_else(|| GoCardlessSettings::DEFAULT_LANGUAGE.to_string()),
+                redirect_uri: Self::non_empty(gocardless_file.redirect_uri),
+            },
+            finapi: FinapiSettings {
+                client_id: Self::secret(env, "FINANCER_FINAPI_CLIENT_ID", finapi_file.client_id),
+                client_secret: Self::secret(
+                    env,
+                    "FINANCER_FINAPI_CLIENT_SECRET",
+                    finapi_file.client_secret,
+                ),
+                environment: Self::pick(
+                    env,
+                    "FINANCER_FINAPI_ENV",
+                    Self::non_empty(finapi_file.environment).map(|e| e.to_ascii_lowercase()),
+                    FinapiSettings::DEFAULT_ENVIRONMENT.to_string(),
+                    |s| Ok(s.trim().to_ascii_lowercase()),
+                    &mut errors,
+                ),
+                redirect_uri: Self::non_empty(finapi_file.redirect_uri),
             },
             accounts_source: Self::list_source(overlay, "bank.accounts", &file.bank.accounts),
             accounts: file.bank.accounts,
@@ -656,6 +734,8 @@ impl Loader {
         crate::Validator::receipts(&receipts.value, env, &mut warnings);
         crate::Validator::accounts(&bank.accounts, env, &mut errors, &mut warnings);
         crate::Validator::plaid(&bank, &mut errors, &mut warnings);
+        crate::Validator::gocardless(&bank, &mut errors, &mut warnings);
+        crate::Validator::finapi(&bank, &mut errors, &mut warnings);
         if bank.accounts.iter().any(|a| a.kind == "fints") && bank.fints_product_id.value.is_none()
         {
             warnings.push(
@@ -763,6 +843,31 @@ impl Loader {
             &mut config.bank.plaid.environment,
             overlay,
             &["bank.plaid.environment"],
+        );
+        mark(
+            &mut config.bank.gocardless.secret_id,
+            overlay,
+            &["bank.gocardless.secret_id"],
+        );
+        mark(
+            &mut config.bank.gocardless.secret_key,
+            overlay,
+            &["bank.gocardless.secret_key"],
+        );
+        mark(
+            &mut config.bank.finapi.client_id,
+            overlay,
+            &["bank.finapi.client_id"],
+        );
+        mark(
+            &mut config.bank.finapi.client_secret,
+            overlay,
+            &["bank.finapi.client_secret"],
+        );
+        mark(
+            &mut config.bank.finapi.environment,
+            overlay,
+            &["bank.finapi.environment"],
         );
         if config.receipts.source == Source::File && overlay.has_below("receipts.") {
             config.receipts.source = Source::App;

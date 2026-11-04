@@ -30,6 +30,10 @@
             {
               "scheme": "com.lidlplus.app",
               "host": "callback"
+            },
+            {
+              "scheme": "com.kaufland.kaufland",
+              "host": "oauth"
             }
           ]
         }
@@ -74,6 +78,21 @@
         "expo-notifications",
         {
           "color": "#4f46e5"
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsFileWithMaxCount": 1,
+            "NSExtensionActivationSupportsImageWithMaxCount": 1,
+            "NSExtensionActivationSupportsText": true
+          },
+          "androidIntentFilters": [
+            "application/pdf",
+            "image/*",
+            "text/*"
+          ]
         }
       ]
     ],

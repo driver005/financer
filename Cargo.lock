@@ -1650,9 +1650,8 @@ dependencies = [
  "base64 0.23.1",
  "financer-config",
  "financer-core",
- "financer-fints",
  "financer-llm",
- "financer-plaid",
+ "financer-openbanking",
  "financer-prices",
  "financer-receipt-sources",
  "financer-receipts",
@@ -1705,7 +1704,7 @@ dependencies = [
  "async-trait",
  "axum",
  "financer-api",
- "financer-fints",
+ "financer-openbanking",
  "financer-prices",
  "financer-receipt-sources",
  "financer-sdk",
@@ -1719,22 +1718,6 @@ dependencies = [
  "tower",
  "uniffi",
  "uuid",
-]
-
-[[package]]
-name = "financer-fints"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "csv",
- "financer-core",
- "fints-rs",
- "rust_decimal",
- "serde_json",
- "thiserror 2.0.21",
- "time",
- "tokio",
 ]
 
 [[package]]
@@ -1820,18 +1803,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "financer-plaid"
+name = "financer-openbanking"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
+ "csv",
  "financer-core",
+ "fints-rs",
  "reqwest 0.13.5",
+ "rust_decimal",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
  "time",
  "tokio",
  "tracing",
+ "uuid",
  "zeroize",
 ]
 
@@ -1940,10 +1928,9 @@ dependencies = [
  "financer-api",
  "financer-config",
  "financer-core",
- "financer-fints",
  "financer-llm",
  "financer-mail-api",
- "financer-plaid",
+ "financer-openbanking",
  "financer-prices",
  "financer-receipt-sources",
  "financer-shop-api",
@@ -4287,6 +4274,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",

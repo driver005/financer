@@ -78,7 +78,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/backup/create": {
+    "/v1/backups": {
         parameters: {
             query?: never;
             header?: never;
@@ -87,7 +87,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create a passphrase-encrypted backup of everything that is yours (see `/v1/export`). */
+        /** Create a passphrase-encrypted backup of everything that is yours (see `/v1/data`). */
         post: operations["create_backup"];
         delete?: never;
         options?: never;
@@ -95,7 +95,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/backup/restore": {
+    "/v1/backups/restorations": {
         parameters: {
             query?: never;
             header?: never;
@@ -105,7 +105,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Decrypt a backup and merge it like `/v1/import`. A wrong passphrase or damaged file is a
+         * Decrypt a backup and merge it like `/v1/data`. A wrong passphrase or damaged file is a
          *     400 and changes nothing.
          */
         post: operations["restore_backup"];
@@ -135,23 +135,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/bank/connections/{name}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Stop waiting for an approval. */
-        post: operations["cancel_connection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/bank/connections/{name}/disconnect": {
         parameters: {
             query?: never;
@@ -162,8 +145,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Plaid: forget the connection. Tells Plaid to drop it and deletes the stored access token, so
-         *     the next sync starts with signing in again. The imported transactions stay.
+         * Plaid, GoCardless, finAPI: forget the connection. Tells the provider to drop it and deletes the
+         *     stored access, so the next sync starts with signing in again. The imported transactions stay.
          */
         post: operations["disconnect_connection"];
         delete?: never;
@@ -172,7 +155,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/bank/connections/{name}/sync": {
+    "/v1/bank/import/{kind}": {
         parameters: {
             query?: never;
             header?: never;
@@ -182,10 +165,31 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Start a sync for one connection: logs in, then waits (in the background) for your approval in
-         *     the banking app and imports. Send the PIN only when `pin_from_env` is false.
+         * Import a file of a provider with the `file` flow (`csv`: the Sparkasse CSV-CAMT export).
+         *     Transactions are categorized, and rows that were imported before are skipped, so uploading an
+         *     overlapping period is safe.
          */
-        post: operations["sync_connection"];
+        post: operations["import_file"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/bank/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The ways transactions come in (a CSV file, FinTS, Plaid, GoCardless, finAPI), how each works, and
+         *     whether this server has it set up.
+         */
+        get: operations["list_providers"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -199,6 +203,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** What the last login sent with a request looked like (its non-secret details), to prefill the form. */
         get: operations["bank_status"];
         put?: never;
         post?: never;
@@ -217,7 +222,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Log in to the bank and ask for approval. Approve in your Sparkasse app, then call confirm. */
+        /**
+         * Start a sync, whichever provider: name a `connection` of the server configuration, or for FinTS
+         *     a `kind` with a `login`. The server logs in or asks the provider for a sign-in page, then waits
+         *     in the background for what the person has to do (`state` is `needs_approval` or `needs_link`)
+         *     and imports as soon as it is done. Poll `GET /v1/bank/sync/{id}`. Send the PIN only when the
+         *     connection has no `pin_from_env`.
+         */
         post: operations["start_sync"];
         delete?: never;
         options?: never;
@@ -225,7 +236,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/bank/sync/{id}/confirm": {
+    "/v1/bank/sync/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where a sync stands: waiting for an approval or a sign-in, running, or how it ended (`result`).
+         *     A connection can be asked by its name; an unknown or expired login answers 404.
+         */
+        get: operations["get_sync"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/bank/sync/{id}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -234,11 +265,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Check whether you approved in the banking app; if so, import. Answers 409 while still
-         *     waiting: keep calling every few seconds.
-         */
-        post: operations["confirm_sync"];
+        /** Stop waiting for an approval or a sign-in. */
+        post: operations["cancel_sync"];
         delete?: never;
         options?: never;
         head?: never;
@@ -262,15 +290,20 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/budget/disposable": {
+    "/v1/budget": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Monthly income minus fixed costs, from detected recurring payments. */
-        get: operations["disposable"];
+        /**
+         * The budget in one answer: the period you are in (or the previous one, `period=previous`), what
+         *     was spent against each envelope in it, what you can spend per day for the rest of it, and
+         *     monthly income minus fixed costs from your recurring payments. `date` is the day to treat as
+         *     today (the app sends its local date so that a late evening is not already "tomorrow").
+         */
+        get: operations["budget"];
         put?: never;
         post?: never;
         delete?: never;
@@ -286,66 +319,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_envelopes"];
+        get?: never;
         /** Replace all monthly envelopes. A category may appear once; limits must not be negative. */
         put: operations["put_envelopes"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/budget/period": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The budget period you are in (or the previous one), from your payday setting. */
-        get: operations["budget_period"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/budget/safe-to-spend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * What you can spend per day for the rest of the period, with the breakdown: expected income,
-         *     recurring costs still to come, planned envelope money not yet spent, and spending so far.
-         */
-        get: operations["safe_to_spend"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/budget/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Spent and remaining per envelope for one budget period (a calendar month unless a payday is
-         *     set in the settings).
-         */
-        get: operations["budget_status"];
-        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -463,7 +439,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/export": {
+    "/v1/data": {
         parameters: {
             query?: never;
             header?: never;
@@ -473,7 +449,12 @@ export interface paths {
         /** Download everything that is yours as one JSON document (no secrets, no prices). */
         get: operations["export_data"];
         put?: never;
-        post?: never;
+        /**
+         * Merge an export into this backend. Transactions and receipts already present (same
+         *     fingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items
+         *     list replace the current ones when the export has any; settings are applied if present.
+         */
+        post: operations["import_data"];
         delete?: never;
         options?: never;
         head?: never;
@@ -494,27 +475,6 @@ export interface paths {
         get: operations["forecast"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/import": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Merge an export into this backend. Transactions and receipts already present (same
-         *     fingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items
-         *     list replace the current ones when the export has any; settings are applied if present.
-         */
-        post: operations["import_data"];
         delete?: never;
         options?: never;
         head?: never;
@@ -542,7 +502,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/meal-plan/pantry": {
+    "/v1/pantry": {
         parameters: {
             query?: never;
             header?: never;
@@ -553,27 +513,6 @@ export interface paths {
         get: operations["get_pantry"];
         /** Replace the pantry list. */
         put: operations["put_pantry"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/meal-plan/shopping-list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the
-         *     servings and converted to packs), pantry items left off, priced per chain with the best split
-         *     and checked against what is left of the groceries budget.
-         */
-        get: operations["get_shopping_list"];
-        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -636,7 +575,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/prices/refresh": {
+    "/v1/prices/refreshes": {
         parameters: {
             query?: never;
             header?: never;
@@ -676,81 +615,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/receipts/lidl": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Disconnect Lidl Plus: the stored token is deleted. Receipts already imported stay. */
-        delete: operations["lidl_disconnect"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/lidl/finish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Finish the sign-in with the address Lidl's page ended on. Only the refresh token is stored,
-         *     encrypted. The first receipts are fetched right away.
-         */
-        post: operations["lidl_finish"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/lidl/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Start a Lidl Plus sign-in. Returns the address of Lidl's own sign-in page; nothing is sent to
-         *     Lidl by this call. Experimental and unofficial: see docs/RECEIPT_SOURCES.md.
-         */
-        post: operations["lidl_start"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/lidl/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Whether Lidl Plus is connected, when it last synced and how many receipts came from it. */
-        get: operations["lidl_status"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/receipts/scan": {
+    "/v1/receipts/scans": {
         parameters: {
             query?: never;
             header?: never;
@@ -779,12 +644,133 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The receipt sources: the mailbox, the Lidl Plus account and the watched folder, with state,
-         *     last run, receipts imported and the last error. Never contains a password or token.
+         * Every receipt source and how it is doing: the mailbox and the watched folder (`server`), Lidl
+         *     Plus and the Kaufland Card (`sign_in`), REWE in the app and an orders file (`push`). Never
+         *     contains a password or token.
          */
         get: operations["list_sources"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One source: its state, when it last ran, how many receipts came from it, the last error. */
+        get: operations["get_source"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * `sign_in` sources: start the sign-in. Returns the address of the shop's own sign-in page;
+         *     nothing is sent to the shop by this call. Experimental and unofficial: see
+         *     docs/RECEIPT_SOURCES.md.
+         */
+        post: operations["connect_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Forget the connection: a stored token is deleted (`sign_in`), or the note of the last push
+         *     (`rewe_app`). Receipts already stored stay.
+         */
+        post: operations["disconnect_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * `sign_in` sources: finish the sign-in with the address the shop's page ended on. Only the
+         *     refresh token is stored, encrypted. The first receipts are fetched right away.
+         */
+        post: operations["finish_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * `push` sources: store the receipts the app read (REWE's web shop in its own window, `rewe_app`)
+         *     or the orders it read from a file the shop produced (`orders_file`: Amazon's data request, for
+         *     example), once each, and match them to bank payments. Nothing is fetched from the shop.
+         *     Experimental: see docs/RECEIPT_SOURCES.md.
+         */
+        post: operations["import_receipts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/receipts/sources/{kind}/known": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * `push` sources (`rewe_app`): which of the shop's receipt ids are not stored yet. The app calls
+         *     it with the list it just read, so that it fetches the details of the new ones only.
+         */
+        post: operations["known_receipts"];
         delete?: never;
         options?: never;
         head?: never;
@@ -902,7 +888,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/rules/apply": {
+    "/v1/rules/applications": {
         parameters: {
             query?: never;
             header?: never;
@@ -922,7 +908,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/rules/reorder": {
+    "/v1/rules/order": {
         parameters: {
             query?: never;
             header?: never;
@@ -930,9 +916,9 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
         /** Set the priority order of all rules. */
-        post: operations["reorder_rules"];
+        put: operations["reorder_rules"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -991,6 +977,27 @@ export interface paths {
         };
         get: operations["get_settings"];
         put: operations["put_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/shopping-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the
+         *     servings and converted to packs), pantry items left off, priced per chain with the best split
+         *     and checked against what is left of the groceries budget.
+         */
+        get: operations["get_shopping_list"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1073,7 +1080,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/transactions/categorize-unknown": {
+    "/v1/transactions/categories": {
         parameters: {
             query?: never;
             header?: never;
@@ -1081,54 +1088,12 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
-        /**
-         * Ask your Claude or OpenAI model to suggest categories for merchants still left as
-         *     uncategorized or other. Only distinct merchant names (letters only) and the allowed
-         *     categories are sent; never amounts, dates, IBANs or purposes. Nothing is changed until you
-         *     accept suggestions.
-         */
-        post: operations["categorize_unknown"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/transactions/categorize-unknown/accept": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         /**
          * Accept suggestions: one rule per merchant, then the rules are applied to existing
          *     transactions.
          */
-        post: operations["accept_suggestions"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/transactions/import": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Import a Sparkasse CSV-CAMT export. Transactions are categorized, and rows that were
-         *     imported before are skipped, so re-uploading an overlapping period is safe.
-         */
-        post: operations["import_transactions"];
+        put: operations["accept_suggestions"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1146,6 +1111,28 @@ export interface paths {
         get: operations["list_splits"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask your Claude or OpenAI model to suggest categories for merchants still left as
+         *     uncategorized or other. Only distinct merchant names (letters only) and the allowed
+         *     categories are sent; never amounts, dates, IBANs or purposes. Nothing is changed until you
+         *     accept suggestions.
+         */
+        post: operations["categorize_unknown"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1197,15 +1184,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        AcceptReport: {
-            /** @description Rules created or updated (one per accepted merchant). */
-            rules_saved: number;
-            /** @description Transactions that changed category as a result. */
-            transactions_changed: number;
-        };
-        AcceptSuggestions: {
-            suggestions: components["schemas"]["AcceptedSuggestion"][];
-        };
         AcceptedSuggestion: {
             /** @example dining */
             category: string;
@@ -1269,32 +1247,28 @@ export interface components {
             /** @description Alerts that are not dismissed (also when `include_dismissed` is set). */
             unread_count: number;
         };
-        ApplyReport: {
-            /** @description Transactions whose category changed. Transactions you categorized by hand are skipped. */
-            changed: number;
-        };
-        BackupCreateRequest: {
-            /** @description At least 8 characters. Not stored anywhere: without it the backup cannot be opened. */
-            passphrase: string;
-        };
         BackupDto: {
             /** @description The encrypted backup (an `age` file), base64-encoded. */
             data_base64: string;
             receipts: number;
             transactions: number;
         };
-        BackupRestoreRequest: {
+        BackupInput: {
+            /** @description At least 8 characters. Not stored anywhere: without it the backup cannot be opened. */
+            passphrase: string;
+        };
+        BackupRestorationInput: {
             /** @description The encrypted backup, base64-encoded, as returned by the create endpoint. */
             data_base64: string;
             passphrase: string;
         };
         /** @description A configured connection. The login is masked; the PIN is never part of it. */
         BankConnectionDto: {
-            /** @description Plaid: the accounts that were linked (put their ids in `account_ids` to read only some). */
+            /** @description The accounts that were linked (put their ids in `account_ids` to read only some). */
             accounts: components["schemas"]["LinkedAccountDto"][];
             /**
              * Format: int64
-             * @description Unix seconds after which a sync waiting for approval, or Plaid's sign-in page, is given up.
+             * @description Unix seconds after which a sync waiting for approval, or for a sign-in, is given up.
              */
             approval_expires_at?: number | null;
             /** Format: int64 */
@@ -1303,7 +1277,9 @@ export interface components {
             balance_date?: string | null;
             bank_code: string;
             iban_masked: string;
-            /** @description `fints` or `plaid`. */
+            /** @description What to poll and cancel it by (`/v1/bank/sync/{id}`). */
+            id: string;
+            /** @description `fints`, `plaid`, `gocardless` or `finapi`. */
             kind: string;
             last_result?: components["schemas"]["SyncOutcomeDto"] | null;
             /**
@@ -1311,11 +1287,11 @@ export interface components {
              * @description Unix seconds of the last successful sync.
              */
             last_sync_at?: number | null;
-            /** @description Plaid, in `needs_link`: the page to open in the browser to sign in to your bank. */
+            /** @description In `needs_link`: the page to open in the browser to sign in to your bank. */
             link_url?: string | null;
             /**
-             * @description Plaid: false until you have signed in to your bank once (press Sync now to start that);
-             *     always true for FinTS.
+             * @description False until you have signed in to your bank once (start a sync to do that); always true
+             *     for FinTS.
              */
             linked: boolean;
             login_masked: string;
@@ -1334,8 +1310,8 @@ export interface components {
             pin_from_env: boolean;
             state: components["schemas"]["ConnectionState"];
             /**
-             * @description A scheduled sync is due but cannot start by itself because the server has no PIN: press
-             *     Sync now and type it.
+             * @description A scheduled sync is due but cannot start by itself because the server has no PIN: start a
+             *     sync and type it.
              */
             sync_due: boolean;
             /**
@@ -1344,7 +1320,7 @@ export interface components {
              */
             sync_every_hours: number;
         };
-        BankStatus: {
+        BankStatusDto: {
             /** Format: int64 */
             balance_cents?: number | null;
             /** Format: date */
@@ -1367,7 +1343,7 @@ export interface components {
             /** @description `manual`, `receipts` or `starter` (a generic basket used until habits are known). */
             source: string;
         };
-        BasketItemDto: {
+        BasketItemInput: {
             /** @description Catalog key, e.g. `milch`. */
             item: string;
             /**
@@ -1382,6 +1358,21 @@ export interface components {
             /** Format: int32 */
             quantity: number;
             reference_pack: string;
+        };
+        /**
+         * @description The budget: the period you are in (or the one before), what was spent against each envelope in
+         *     it, what is left to spend per day, and the monthly picture from your recurring payments.
+         */
+        BudgetDto: {
+            /** @description Monthly income minus fixed costs, from detected recurring payments. */
+            disposable: components["schemas"]["DisposableDto"];
+            /**
+             * @description Every envelope with its limit, what was spent in `period` and what is left. A calendar month
+             *     unless a payday is set in the settings.
+             */
+            envelopes: components["schemas"]["EnvelopeStatusDto"][];
+            period: components["schemas"]["PeriodDto"];
+            safe_to_spend?: components["schemas"]["SafeToSpendDto"] | null;
         };
         CalendarDto: {
             /** Format: int64 */
@@ -1401,7 +1392,22 @@ export interface components {
             name: string;
             reference_pack: string;
         };
-        CategoryChange: {
+        CategoriesChangedDto: {
+            /** @description Rules created or updated (one per accepted merchant). */
+            rules_saved: number;
+            /** @description Transactions that changed category as a result. */
+            transactions_changed: number;
+        };
+        CategoriesInput: {
+            suggestions: components["schemas"]["AcceptedSuggestion"][];
+        };
+        CategoryChangedDto: {
+            /** @description Other transactions that changed category because of that rule. */
+            others_changed: number;
+            rule?: components["schemas"]["RuleDto"] | null;
+            transaction: components["schemas"]["TransactionDto"];
+        };
+        CategoryInput: {
             /** @example groceries */
             category: string;
             /**
@@ -1409,12 +1415,6 @@ export interface components {
              *     transactions.
              */
             remember?: boolean;
-        };
-        CategoryChanged: {
-            /** @description Other transactions that changed category because of that rule. */
-            others_changed: number;
-            rule?: components["schemas"]["RuleDto"] | null;
-            transaction: components["schemas"]["TransactionDto"];
         };
         ChainAffordabilityDto: {
             /** Format: int64 */
@@ -1482,30 +1482,14 @@ export interface components {
          * @description What to change: `set` writes values (`null` clears one), `reset` removes the app's value so the
          *     file's, or the default, applies again.
          */
-        Change: {
+        ConfigChangeInput: {
             reset?: string[];
             set?: {
                 [key: string]: unknown;
             };
         };
-        /** @description A change was refused; nothing was saved. */
-        ConfigProblems: {
-            /** @description The problems as one text. */
-            error: string;
-            /** @description One entry per problem, naming the key. */
-            problems: string[];
-        };
-        /** @description A change was saved. */
-        ConfigSaved: {
-            /** @description The keys whose value is different now. */
-            changed: string[];
-            /** @description The server is restarting to apply the change (a few seconds). False when nothing changed. */
-            restarting: boolean;
-            /** @description Things that are legal but probably not what you want. */
-            warnings: string[];
-        };
         /** @description The whole settings screen. */
-        ConfigView: {
+        ConfigDto: {
             /**
              * @description A change is saved but the server has not yet started with it. The app waits for this to
              *     turn false (or `state` to turn `rolled_back`) after it saved something.
@@ -1523,11 +1507,46 @@ export interface components {
             /** @description The server may write that file; without it nothing can be saved. */
             writable: boolean;
         };
+        /** @description A change was refused; nothing was saved. */
+        ConfigProblems: {
+            /** @description The problems as one text. */
+            error: string;
+            /** @description One entry per problem, naming the key. */
+            problems: string[];
+        };
+        /** @description A change was saved. */
+        ConfigSavedDto: {
+            /** @description The keys whose value is different now. */
+            changed: string[];
+            /** @description The server is restarting to apply the change (a few seconds). False when nothing changed. */
+            restarting: boolean;
+            /** @description Things that are legal but probably not what you want. */
+            warnings: string[];
+        };
         /**
          * @description Where a connection is in a sync.
          * @enum {string}
          */
         ConnectionState: "idle" | "syncing" | "needs_approval" | "needs_link" | "error";
+        /**
+         * @description Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
+         *     which are fetched again.
+         */
+        DataDto: {
+            basket: components["schemas"]["BasketItemInput"][];
+            budget: components["schemas"]["EnvelopeInput"][];
+            /** @description Added in the calendar release; older exports have none. */
+            calendars?: components["schemas"]["ExportCalendar"][];
+            events?: components["schemas"]["ExportEvent"][];
+            receipts: components["schemas"]["ExportReceipt"][];
+            settings: components["schemas"]["ExportSettings"];
+            transactions: components["schemas"]["ExportTransaction"][];
+            /**
+             * Format: int32
+             * @description Format version, currently 1.
+             */
+            version: number;
+        };
         DisposableDto: {
             /** Format: int64 */
             disposable_cents: number;
@@ -1581,7 +1600,7 @@ export interface components {
             /** @description Chains sharing the lowest price when there is a tie. */
             tied_cheapest: string[];
         };
-        EnvelopeDto: {
+        EnvelopeInput: {
             /** @example groceries */
             category: string;
             /**
@@ -1694,25 +1713,6 @@ export interface components {
             tone: string;
             visible: boolean;
         };
-        /**
-         * @description Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
-         *     which are fetched again.
-         */
-        ExportDto: {
-            basket: components["schemas"]["BasketItemDto"][];
-            budget: components["schemas"]["EnvelopeDto"][];
-            /** @description Added in the calendar release; older exports have none. */
-            calendars?: components["schemas"]["ExportCalendar"][];
-            events?: components["schemas"]["ExportEvent"][];
-            receipts: components["schemas"]["ExportReceipt"][];
-            settings: components["schemas"]["ExportSettings"];
-            transactions: components["schemas"]["ExportTransaction"][];
-            /**
-             * Format: int32
-             * @description Format version, currently 1.
-             */
-            version: number;
-        };
         /** @description An event in an export; its calendar is named, since ids differ between backends. */
         ExportEvent: components["schemas"]["EventBody"] & {
             calendar: string;
@@ -1762,6 +1762,14 @@ export interface components {
              */
             when_field?: string | null;
             when_value?: string | null;
+        };
+        FileImportDto: {
+            /** @description Rows already stored (same date, amount, counterparty and purpose). */
+            duplicates: number;
+            /** @description Rows stored for the first time. */
+            imported: number;
+            /** @description Rows that could not be read, with the reason. */
+            skipped: components["schemas"]["SkippedRowDto"][];
         };
         /** @description The end-of-period projection. Amounts are integer cents. */
         ForecastDto: {
@@ -1867,19 +1875,11 @@ export interface components {
             amount: string;
             name: string;
         };
-        IdeasRequest: {
+        IdeasInput: {
             /** Format: int64 */
             budget_cents?: number | null;
             count?: number | null;
             diet?: string | null;
-        };
-        ImportReport: {
-            /** @description Rows already stored (same date, amount, counterparty and purpose). */
-            duplicates: number;
-            /** @description Rows stored for the first time. */
-            imported: number;
-            /** @description Rows that could not be read, with the reason. */
-            skipped: components["schemas"]["SkippedRowDto"][];
         };
         ImportReportDto: {
             basket_items: number;
@@ -1921,56 +1921,27 @@ export interface components {
             /** @description Said before saving. */
             warning?: string | null;
         };
-        LidlFinishRequest: {
-            /** @description The address the sign-in ended on, `com.lidlplus.app://callback?code=...`. */
-            callback_url: string;
-            state: string;
-        };
-        LidlStartDto: {
-            /** @description Open this address in a browser: it is Lidl's own sign-in page. */
-            authorization_url: string;
-            /**
-             * @description The address scheme Lidl's page redirects to after sign-in (`com.lidlplus.app`); an app can
-             *     watch for it, a person can copy the address from the browser.
-             */
-            callback_scheme: string;
-            /** Format: int64 */
-            expires_in_seconds: number;
-            redirect_uri: string;
-            /** @description Send this back with the final address to `POST /v1/receipts/lidl/finish`. */
-            state: string;
-        };
-        LidlStatusDto: {
-            /**
-             * Format: int64
-             * @description Unix seconds of the sign-in.
-             */
-            connected_at?: number | null;
-            /** @description Lidl Plus is switched on in the server configuration. */
-            enabled: boolean;
-            last_error?: string | null;
-            /**
-             * Format: int64
-             * @description Unix seconds of the last receipt sync.
-             */
-            last_sync?: number | null;
-            /**
-             * Format: int64
-             * @description Receipts imported from Lidl Plus.
-             */
-            receipts: number;
-            /** @description `disabled`, `never`, `connected` or `needs_signin`. */
-            state: string;
-        };
-        /** @description An account Plaid reported for a linked connection. */
+        /** @description An account the provider reported for a linked connection. */
         LinkedAccountDto: {
             /** @description Put this in `account_ids` of the connection to read only some accounts. */
             id: string;
             /** @description For example `depository` or `credit`. */
             kind: string;
-            /** @description The last digits of the account number, when Plaid has them. */
+            /** @description The last digits of the account number, when the provider has them. */
             mask?: string | null;
             name: string;
+        };
+        /** @description The online banking login of a FinTS sync that is not set up in the configuration. */
+        LoginInput: {
+            /** @description Leave empty to use the bank's own BIC. */
+            bic?: string | null;
+            /** @description Bank code (BLZ). */
+            blz: string;
+            /** @description Only for a bank that is not in the built-in list (then the BIC is needed too). */
+            fints_url?: string | null;
+            iban: string;
+            /** @description Online banking login name. */
+            user_id: string;
         };
         MealBudgetDto: {
             /**
@@ -2084,13 +2055,13 @@ export interface components {
             /** @description Items assumed to be at home; they are left off the shopping list. */
             items: components["schemas"]["PantryItemDto"][];
         };
+        PantryInput: {
+            /** @description Catalog keys (see `GET /v1/catalog`). */
+            items: string[];
+        };
         PantryItemDto: {
             item: string;
             name: string;
-        };
-        PantryUpdate: {
-            /** @description Catalog keys (see `GET /v1/catalog`). */
-            items: string[];
         };
         /**
          * @description Which period to look at when no year and month are given.
@@ -2198,6 +2169,24 @@ export interface components {
              */
             since: string;
         };
+        /** @description A source of transactions and how to talk to it. */
+        ProviderDto: {
+            /** @description This server has it set up (its keys, or for FinTS the product id). */
+            available: boolean;
+            /**
+             * Format: int32
+             * @description Connections of this kind in the server configuration.
+             */
+            connections: number;
+            /**
+             * @description `file` (send a file to `/v1/bank/import/{kind}`), `approval` (a PIN, then an approval in the
+             *     banking app, for every sync) or `link` (sign in once on the provider's page).
+             */
+            flow: string;
+            /** @description `csv`, `fints`, `plaid`, `gocardless` or `finapi`. */
+            kind: string;
+            label: string;
+        };
         ReceiptDto: {
             /** @example rewe */
             chain?: string | null;
@@ -2222,6 +2211,44 @@ export interface components {
              */
             transaction_id?: number | null;
         };
+        ReceiptImportDto: {
+            /** Format: int32 */
+            duplicates: number;
+            /** Format: int32 */
+            imported: number;
+            /**
+             * Format: int64
+             * @description Receipts matched to a bank payment by this import.
+             */
+            linked: number;
+            notes: string[];
+            /** Format: int32 */
+            skipped: number;
+        };
+        ReceiptImportInput: {
+            /** @description At most 100 receipts for `rewe_app`, 200 orders for `orders_file` (whose `time` is not used). */
+            receipts: components["schemas"]["ReceiptInput"][];
+            /** @description `orders_file` only: the shop's name as it should show ("Amazon"); at most 40 characters. */
+            shop?: string | null;
+        };
+        ReceiptInput: {
+            /**
+             * @description Local day of the purchase, `YYYY-MM-DD`.
+             * @example 2026-03-02
+             */
+            date: string;
+            /** @description The shop's id of the receipt (for an order, its order number). */
+            id: string;
+            lines: components["schemas"]["ReceiptLineInput"][];
+            store?: string | null;
+            /** @description Local time, `HH:MM`. */
+            time?: string | null;
+            /**
+             * Format: int64
+             * @description The printed total in cents; the sum of the lines when absent.
+             */
+            total_cents?: number | null;
+        };
         ReceiptItemDto: {
             /** @description Catalog key when recognised. */
             item?: string | null;
@@ -2231,7 +2258,28 @@ export interface components {
             quantity: number;
             text: string;
         };
-        ReceiptScan: {
+        ReceiptKnownDto: {
+            /** @description The ids that are not stored yet: fetch and push only these. */
+            unknown: string[];
+        };
+        ReceiptKnownInput: {
+            /** @description The shop's receipt ids the app has just listed. */
+            ids: string[];
+        };
+        ReceiptLineInput: {
+            name: string;
+            /**
+             * Format: int32
+             * @description 1 to 99.
+             */
+            quantity: number;
+            /**
+             * Format: int64
+             * @description What the line cost in cents (negative for a refund).
+             */
+            total_cents: number;
+        };
+        ReceiptScanInput: {
             /** @description The photo's or PDF's bytes, base64-encoded (at most 8 MB decoded). */
             image_base64: string;
             /** @description `image/jpeg`, `image/png`, `image/webp` or `application/pdf`. */
@@ -2241,9 +2289,16 @@ export interface components {
         ReceiptSourceDto: {
             /** @description Has a setting in the server configuration (Lidl Plus always counts). */
             configured: boolean;
+            /**
+             * Format: int64
+             * @description Unix seconds of the sign-in (a `sign_in` source).
+             */
+            connected_at?: number | null;
             /** @description Where it reads from (mail server and folder, folder path, account region); never a login. */
             detail?: string | null;
             enabled: boolean;
+            /** @description How its receipts get in: `server`, `sign_in` or `push`. */
+            flow: string;
             /**
              * Format: int64
              * @description Receipts from this source in the database.
@@ -2266,7 +2321,7 @@ export interface components {
             next_run?: number | null;
             /** @description Remarks from the last run, e.g. why a mail or file was skipped. */
             notes: string[];
-            /** @description `email`, `lidl_plus` or `folder`. */
+            /** @description `email`, `lidl_plus`, `kaufland_card`, `folder`, `rewe_app` or `orders_file`. */
             source: string;
             /** @description `disabled`, `waiting`, `running`, `ok`, `error`, `not_connected` or `needs_signin`. */
             state: string;
@@ -2284,11 +2339,11 @@ export interface components {
             linked: number;
             sources: components["schemas"]["ReceiptSourceDto"][];
         };
-        ReceiptSyncRequest: {
-            /** @description Only this source (`email`, `lidl_plus`, `folder`); all enabled ones when absent. */
+        ReceiptSyncInput: {
+            /** @description Only this source (`email`, `lidl_plus`, `kaufland_card`, `folder`); all enabled ones when absent. */
             source?: string | null;
         };
-        ReceiptUpload: {
+        ReceiptUploadInput: {
             /** @description Text recognised from the receipt photo. */
             text: string;
         };
@@ -2416,9 +2471,13 @@ export interface components {
             /** @example expense */
             sign?: string | null;
         };
-        RuleOrder: {
+        RuleOrderInput: {
             /** @description Every rule id exactly once, highest priority first. */
             ids: number[];
+        };
+        RulesAppliedDto: {
+            /** @description Transactions whose category changed. Transactions you categorized by hand are skipped. */
+            changed: number;
         };
         /** @description The daily number and everything behind it. Amounts are integer cents. */
         SafeToSpendDto: {
@@ -2508,7 +2567,7 @@ export interface components {
             /** @description Number of configured price sources. */
             price_sources: number;
         };
-        SettingsUpdate: {
+        SettingsInput: {
             habit_mode?: string | null;
             llm_model?: string | null;
             llm_provider?: string | null;
@@ -2591,6 +2650,26 @@ export interface components {
             /** Format: int64 */
             line: number;
             reason: string;
+        };
+        /** @description Starting a sign-in on a shop's own page. */
+        SourceConnectDto: {
+            /** @description Open this address in a browser: it is the shop's own sign-in page. */
+            authorization_url: string;
+            /**
+             * @description The address scheme the shop's page redirects to after sign-in (`com.lidlplus.app`); an app
+             *     can watch for it, a person can copy the address from the browser.
+             */
+            callback_scheme: string;
+            /** Format: int64 */
+            expires_in_seconds: number;
+            redirect_uri: string;
+            /** @description Send this back with the final address to `POST /v1/receipts/sources/{kind}/finish`. */
+            state: string;
+        };
+        SourceFinishInput: {
+            /** @description The address the sign-in ended on, `com.lidlplus.app://callback?code=...`. */
+            callback_url: string;
+            state: string;
         };
         SourceStatusDto: {
             error?: string | null;
@@ -2759,7 +2838,7 @@ export interface components {
             /** @description Subscriptions that are still running. */
             active: components["schemas"]["SubscriptionDto"][];
             /** Format: date */
-            as_of: string;
+            date: string;
             /**
              * Format: int64
              * @description How many days ahead `upcoming` looks.
@@ -2790,17 +2869,42 @@ export interface components {
             merchants_sent: number;
             suggestions: components["schemas"]["SuggestionDto"][];
         };
-        SyncDone: {
-            /** Format: int64 */
-            balance_cents?: number | null;
-            /** Format: date */
-            balance_date?: string | null;
-            duplicates: number;
-            imported: number;
-            /** @description Transactions left out (pending, or not in EUR). */
-            skipped: number;
+        /**
+         * @description A sync, started or running or finished. Poll `GET /v1/bank/sync/{id}` while `state` is
+         *     `syncing`, `needs_approval` or `needs_link`.
+         */
+        SyncDto: {
+            /** @description The configured connection it belongs to; absent for a login sent with the request. */
+            connection?: string | null;
+            /**
+             * Format: int64
+             * @description Unix seconds after which the wait is given up.
+             */
+            expires_at?: number | null;
+            id: string;
+            kind: string;
+            /** @description In `needs_link`: the page to open in the browser. */
+            link_url?: string | null;
+            /** @description The bank's approval text in `needs_approval`, the reason in `error`. */
+            message?: string | null;
+            result?: components["schemas"]["SyncOutcomeDto"] | null;
+            state: components["schemas"]["ConnectionState"];
         };
-        SyncNowRequest: {
+        /** @description Start a sync: the same request for every provider. */
+        SyncInput: {
+            /**
+             * @description A connection of the server configuration, by name. Or leave it out and name the `kind` and
+             *     (for FinTS) the `login`.
+             */
+            connection?: string | null;
+            /**
+             * Format: int32
+             * @description Days of history for a login sent with the request (default 90, 1 to 365).
+             */
+            days?: number | null;
+            /** @description `fints` for a login sent with this request. */
+            kind?: string | null;
+            login?: components["schemas"]["LoginInput"] | null;
             /**
              * @description The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync
              *     only and never stored.
@@ -2814,6 +2918,10 @@ export interface components {
              * @description Unix seconds.
              */
             at: number;
+            /** Format: int64 */
+            balance_cents?: number | null;
+            /** Format: date */
+            balance_date?: string | null;
             /** Format: int32 */
             duplicates?: number | null;
             /** Format: int32 */
@@ -2823,29 +2931,6 @@ export interface components {
             ok: boolean;
             /** Format: int32 */
             skipped?: number | null;
-        };
-        SyncRequest: {
-            /** @description Leave empty to use the bank's own BIC. */
-            bic?: string | null;
-            /** @description Bank code (BLZ). */
-            blz: string;
-            /**
-             * Format: int32
-             * @description Days of history to fetch (default 90, 1 to 365).
-             */
-            days?: number | null;
-            iban: string;
-            /** @description Online banking PIN. Held in memory until you approve, never stored or logged. */
-            pin: string;
-            /** @description Online banking login name. */
-            user_id: string;
-        };
-        SyncStarted: {
-            /** @description Text from the bank, e.g. "Bitte bestätigen Sie die Anfrage in Ihrer S-pushTAN-App". */
-            challenge: string;
-            /** @description True if the bank needs no approval; confirm right away. */
-            no_tan_required: boolean;
-            sync_id: string;
         };
         TransactionDto: {
             /**
@@ -2973,7 +3058,7 @@ export interface operations {
                  * @description Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.
                  * @example 2026-03-02
                  */
-                as_of: string | null;
+                date: string | null;
             };
             cookie?: never;
         };
@@ -3029,7 +3114,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BackupCreateRequest"];
+                "application/json": components["schemas"]["BackupInput"];
             };
         };
         responses: {
@@ -3061,7 +3146,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BackupRestoreRequest"];
+                "application/json": components["schemas"]["BackupRestorationInput"];
             };
         };
         responses: {
@@ -3103,46 +3188,6 @@ export interface operations {
             };
         };
     };
-    cancel_connection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description connection name */
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BankConnectionDto"];
-                };
-            };
-            /** @description No such connection */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Logging in right now */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
     disconnect_connection: {
         parameters: {
             query?: never;
@@ -3163,7 +3208,7 @@ export interface operations {
                     "application/json": components["schemas"]["BankConnectionDto"];
                 };
             };
-            /** @description Not a Plaid connection */
+            /** @description A FinTS connection has nothing to forget */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3183,19 +3228,99 @@ export interface operations {
             };
         };
     };
-    sync_connection: {
+    import_file: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description connection name */
-                name: string;
+                /** @description `csv` */
+                kind: string;
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": components["schemas"]["SyncNowRequest"] | null;
+                "text/csv": string;
+            };
+        };
+        responses: {
+            /** @description Import finished */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileImportDto"];
+                };
+            };
+            /** @description Not a file this provider reads */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown provider */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_providers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderDto"][];
+                };
+            };
+        };
+    };
+    bank_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankStatusDto"];
+                };
+            };
+        };
+    };
+    start_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncInput"];
             };
         };
         responses: {
@@ -3204,10 +3329,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BankConnectionDto"];
+                    "application/json": components["schemas"]["SyncDto"];
                 };
             };
-            /** @description PIN missing, or rejected by the bank */
+            /** @description PIN or login missing or refused by the bank, a kind that needs a connection */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3243,7 +3368,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Could not reach the bank */
+            /** @description Could not reach the bank or the provider */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -3252,7 +3377,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description No FinTS product id configured */
+            /** @description The provider is not set up on the server */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3263,81 +3388,12 @@ export interface operations {
             };
         };
     };
-    bank_status: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BankStatus"];
-                };
-            };
-        };
-    };
-    start_sync: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SyncRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SyncStarted"];
-                };
-            };
-            /** @description Rejected by the bank, or a TAN method that is not supported */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Could not reach the bank */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description No FinTS product id configured */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    confirm_sync: {
+    get_sync: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description sync_id */
+                /** @description `id` of a connection or of a started sync */
                 id: string;
             };
             cookie?: never;
@@ -3349,16 +3405,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SyncDone"];
-                };
-            };
-            /** @description Rejected by the bank */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["SyncDto"];
                 };
             };
             /** @description Unknown or expired sync */
@@ -3370,8 +3417,30 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Not approved yet */
-            409: {
+        };
+    };
+    cancel_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `id` of a connection or of a started sync */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncDto"];
+                };
+            };
+            /** @description Unknown or expired sync */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3379,8 +3448,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Could not reach the bank */
-            502: {
+            /** @description Logging in or fetching right now */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3418,7 +3487,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BasketItemDto"][];
+                "application/json": components["schemas"]["BasketItemInput"][];
             };
         };
         responses: {
@@ -3441,77 +3510,7 @@ export interface operations {
             };
         };
     };
-    disposable: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DisposableDto"];
-                };
-            };
-        };
-    };
-    get_envelopes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EnvelopeDto"][];
-                };
-            };
-        };
-    };
-    put_envelopes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EnvelopeDto"][];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EnvelopeDto"][];
-                };
-            };
-            /** @description Duplicate category or negative limit */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    budget_period: {
+    budget: {
         parameters: {
             query?: never;
             header?: never;
@@ -3534,32 +3533,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PeriodDto"];
-                };
-            };
-        };
-    };
-    safe_to_spend: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /**
-                 * @description The day to treat as today, ISO format. Defaults to today (UTC).
-                 * @example 2026-10-11
-                 */
-                date: string | null;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SafeToSpendDto"];
+                    "application/json": components["schemas"]["BudgetDto"];
                 };
             };
             /** @description Invalid date */
@@ -3573,26 +3547,18 @@ export interface operations {
             };
         };
     };
-    budget_status: {
+    put_envelopes: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                /**
-                 * @description With `month`: the budget period that starts in this month (the calendar month when the
-                 *     payday is 1).
-                 */
-                year: number | null;
-                /** @description 1 to 12; only together with `year`. */
-                month: number | null;
-                /** @description Instead of `year` and `month`: `current` (default) or `previous` budget period. */
-                period: components["schemas"]["PeriodChoice"] | null;
-                /** @description The day to treat as today for `period` (ISO format); defaults to today (UTC). */
-                date: string | null;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvelopeInput"][];
+            };
+        };
         responses: {
             200: {
                 headers: {
@@ -3602,7 +3568,7 @@ export interface operations {
                     "application/json": components["schemas"]["EnvelopeStatusDto"][];
                 };
             };
-            /** @description Invalid month */
+            /** @description Duplicate category or negative limit */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3994,7 +3960,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExportDto"];
+                    "application/json": components["schemas"]["DataDto"];
+                };
+            };
+        };
+    };
+    import_data: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReportDto"];
+                };
+            };
+            /** @description Not a valid export */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -4023,38 +4021,6 @@ export interface operations {
                 };
             };
             /** @description Invalid date */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    import_data: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ExportDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportReportDto"];
-                };
-            };
-            /** @description Not a valid export */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4165,7 +4131,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PantryUpdate"];
+                "application/json": components["schemas"]["PantryInput"];
             };
         };
         responses: {
@@ -4178,45 +4144,6 @@ export interface operations {
                 };
             };
             /** @description Unknown item or too many items */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    get_shopping_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /**
-                 * @description Any day of the week to shop for. Defaults to the current week.
-                 * @example 2026-10-12
-                 */
-                week: string | null;
-                /**
-                 * @description The day to treat as today when looking up the groceries budget left. Defaults to today (UTC).
-                 * @example 2026-10-12
-                 */
-                date: string | null;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShoppingListDto"];
-                };
-            };
-            /** @description Week out of range */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4355,7 +4282,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReceiptUpload"];
+                "application/json": components["schemas"]["ReceiptUploadInput"];
             };
         };
         responses: {
@@ -4378,130 +4305,6 @@ export interface operations {
             };
         };
     };
-    lidl_disconnect: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Disconnected */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Lidl Plus is not switched on */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    lidl_finish: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LidlFinishRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LidlStatusDto"];
-                };
-            };
-            /** @description Unknown or expired sign-in, or an address that is not the callback */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Lidl Plus is not switched on */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Lidl did not accept the code or could not be reached */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    lidl_start: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LidlStartDto"];
-                };
-            };
-            /** @description Lidl Plus is not switched on */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    lidl_status: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LidlStatusDto"];
-                };
-            };
-        };
-    };
     scan_receipt: {
         parameters: {
             query?: never;
@@ -4511,7 +4314,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReceiptScan"];
+                "application/json": components["schemas"]["ReceiptScanInput"];
             };
         };
         responses: {
@@ -4571,6 +4374,285 @@ export interface operations {
             };
         };
     };
+    get_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `email`, `lidl_plus`, `kaufland_card`, `folder`, `rewe_app` or `orders_file` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptSourceDto"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    connect_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `lidl_plus` or `kaufland_card` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceConnectDto"];
+                };
+            };
+            /** @description Not a source you sign in to */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The source is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    disconnect_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `lidl_plus`, `kaufland_card` or `rewe_app` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptSourceDto"];
+                };
+            };
+            /** @description Nothing to disconnect for this source */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The source is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    finish_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `lidl_plus` or `kaufland_card` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceFinishInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptSourceDto"];
+                };
+            };
+            /** @description Unknown or expired sign-in, or an address that is not the callback */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The source is not switched on */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The shop did not accept the code or could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    import_receipts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `rewe_app` or `orders_file` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiptImportInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptImportDto"];
+                };
+            };
+            /** @description A receipt is malformed, there are too many, or the source takes no pushes */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    known_receipts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `rewe_app` */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiptKnownInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptKnownDto"];
+                };
+            };
+            /** @description Too many ids, an odd id, or a source without a list */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     sync_now: {
         parameters: {
             query?: never;
@@ -4578,9 +4660,9 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": components["schemas"]["ReceiptSyncRequest"] | null;
+                "application/json": components["schemas"]["ReceiptSyncInput"];
             };
         };
         responses: {
@@ -4677,7 +4759,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IdeasRequest"];
+                "application/json": components["schemas"]["IdeasInput"];
             };
         };
         responses: {
@@ -4793,7 +4875,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApplyReport"];
+                    "application/json": components["schemas"]["RulesAppliedDto"];
                 };
             };
         };
@@ -4807,7 +4889,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RuleOrder"];
+                "application/json": components["schemas"]["RuleOrderInput"];
             };
         };
         responses: {
@@ -4918,7 +5000,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigView"];
+                    "application/json": components["schemas"]["ConfigDto"];
                 };
             };
             /** @description This backend has no server configuration (the on-phone one) */
@@ -4941,7 +5023,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Change"];
+                "application/json": components["schemas"]["ConfigChangeInput"];
             };
         };
         responses: {
@@ -4950,7 +5032,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigSaved"];
+                    "application/json": components["schemas"]["ConfigSavedDto"];
+                };
+            };
+            /** @description The change was refused */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigProblems"];
                 };
             };
             /** @description This backend has no server configuration */
@@ -4964,15 +5055,6 @@ export interface operations {
             };
             /** @description A key is decided by an environment variable, or a restart is under way */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfigProblems"];
-                };
-            };
-            /** @description The change was refused */
-            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5019,7 +5101,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SettingsUpdate"];
+                "application/json": components["schemas"]["SettingsInput"];
             };
         };
         responses: {
@@ -5032,6 +5114,45 @@ export interface operations {
                 };
             };
             /** @description Invalid value */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_shopping_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Any day of the week to shop for. Defaults to the current week.
+                 * @example 2026-10-12
+                 */
+                week: string | null;
+                /**
+                 * @description The day to treat as today when looking up the groceries budget left. Defaults to today (UTC).
+                 * @example 2026-10-12
+                 */
+                date: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShoppingListDto"];
+                };
+            };
+            /** @description Week out of range */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5140,7 +5261,7 @@ export interface operations {
                  * @description Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.
                  * @example 2026-03-02
                  */
-                as_of: string | null;
+                date: string | null;
             };
             cookie?: never;
         };
@@ -5171,6 +5292,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransactionDto"][];
+                };
+            };
+        };
+    };
+    accept_suggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoriesInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoriesChangedDto"];
+                };
+            };
+            /** @description A merchant without letters or a category suggestions cannot use */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_splits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SplitDto"][];
                 };
             };
         };
@@ -5212,90 +5384,6 @@ export interface operations {
             };
         };
     };
-    accept_suggestions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AcceptSuggestions"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AcceptReport"];
-                };
-            };
-            /** @description A merchant without letters or a category suggestions cannot use */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    import_transactions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "text/csv": string;
-            };
-        };
-        responses: {
-            /** @description Import finished */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportReport"];
-                };
-            };
-            /** @description Not a Sparkasse CSV export */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    list_splits: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SplitDto"][];
-                };
-            };
-        };
-    };
     set_category: {
         parameters: {
             query?: never;
@@ -5308,7 +5396,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CategoryChange"];
+                "application/json": components["schemas"]["CategoryInput"];
             };
         };
         responses: {
@@ -5317,7 +5405,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CategoryChanged"];
+                    "application/json": components["schemas"]["CategoryChangedDto"];
                 };
             };
             /** @description Nothing to remember: the transaction has no merchant name */

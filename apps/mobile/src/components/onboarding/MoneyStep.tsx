@@ -39,7 +39,7 @@ export function MoneyStep({ ctx }: { ctx: StepCtx }) {
       const bytes = await pickFileBytes(["text/csv", "text/comma-separated-values", "application/vnd.ms-excel", "text/plain"]);
       if (bytes === null) return;
       setBusy(true);
-      const r = await api.importCsv(bytes);
+      const r = await api.importFile("csv", bytes);
       update({ csvImported: (draft.csvImported ?? 0) + r.imported });
       const skipped = r.skipped.length ? `, ${r.skipped.length} unreadable` : "";
       setMessage({ error: false, text: `Imported ${r.imported} new bookings, ${r.duplicates} already known${skipped}.` });

@@ -19,23 +19,64 @@ pub const DEFAULT_PASSWORD_ENV: &str = "FINANCER_IMAP_PASSWORD";
 pub enum SourceKind {
     Email,
     LidlPlus,
+    KauflandCard,
     Folder,
+    /// REWE receipts the app pushes (see [`crate::rewe`]); not one of the sources that run on a
+    /// schedule, so it is not in [`SourceKind::ALL`].
+    ReweApp,
+    /// Online orders imported from a file (Amazon's data export and the like); also pushed, not scheduled.
+    OrdersFile,
 }
 
 impl SourceKind {
-    pub const ALL: [SourceKind; 3] = [SourceKind::Email, SourceKind::LidlPlus, SourceKind::Folder];
+    pub const ALL: [SourceKind; 4] = [
+        SourceKind::Email,
+        SourceKind::LidlPlus,
+        SourceKind::KauflandCard,
+        SourceKind::Folder,
+    ];
 
-    /// `email`, `lidl_plus` or `folder`.
+    /// `email`, `lidl_plus`, `kaufland_card` or `folder`.
     pub fn key(self) -> &'static str {
         match self {
             SourceKind::Email => "email",
             SourceKind::LidlPlus => "lidl_plus",
+            SourceKind::KauflandCard => "kaufland_card",
             SourceKind::Folder => "folder",
+            SourceKind::ReweApp => "rewe_app",
+            SourceKind::OrdersFile => "orders_file",
         }
     }
 
+    /// The sources that run on a schedule, by key.
     pub fn from_key(key: &str) -> Option<SourceKind> {
         Self::ALL.into_iter().find(|k| k.key() == key)
+    }
+
+    /// Every source, scheduled or pushed.
+    pub const EVERY: [SourceKind; 6] = [
+        SourceKind::Email,
+        SourceKind::LidlPlus,
+        SourceKind::KauflandCard,
+        SourceKind::Folder,
+        SourceKind::ReweApp,
+        SourceKind::OrdersFile,
+    ];
+
+    /// Any source by key, scheduled or pushed.
+    pub fn from_any_key(key: &str) -> Option<SourceKind> {
+        Self::EVERY.into_iter().find(|k| k.key() == key)
+    }
+
+    /// How its receipts get in: `server` (the server reads a mailbox or a folder), `sign_in` (you
+    /// sign in on the shop's own page, the server reads on a schedule) or `push` (the app hands
+    /// the receipts over).
+    pub fn flow(self) -> &'static str {
+        match self {
+            SourceKind::Email | SourceKind::Folder => "server",
+            SourceKind::LidlPlus | SourceKind::KauflandCard => "sign_in",
+            SourceKind::ReweApp | SourceKind::OrdersFile => "push",
+        }
     }
 }
 
@@ -244,6 +285,52 @@ impl LidlPlusConfig {
     }
 }
 
+/// `[receipts.kaufland]`: the Kaufland Card, experimental, unofficial, off by default.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct KauflandCardConfig {
+    pub enabled: bool,
+    /// Two-letter country code of your Kaufland account (`DE`, ...).
+    pub country: String,
+    /// Language code (`de`, `en`, ...).
+    pub language: String,
+    pub poll_hours: u64,
+    /// Overrides for the constants in `kaufland::consts` (only if Kaufland changes them).
+    pub client_id: Option<String>,
+    pub loyalty_client_id: Option<String>,
+    pub authorize_url: Option<String>,
+    pub token_url: Option<String>,
+    pub userinfo_url: Option<String>,
+    pub api_url: Option<String>,
+    pub redirect_uri: Option<String>,
+    pub app_version: Option<String>,
+}
+
+impl Default for KauflandCardConfig {
+    fn default() -> Self {
+        KauflandCardConfig {
+            enabled: false,
+            country: "DE".into(),
+            language: "de".into(),
+            poll_hours: 12,
+            client_id: None,
+            loyalty_client_id: None,
+            authorize_url: None,
+            token_url: None,
+            userinfo_url: None,
+            api_url: None,
+            redirect_uri: None,
+            app_version: None,
+        }
+    }
+}
+
+impl KauflandCardConfig {
+    pub fn poll_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.poll_hours.clamp(1, 24 * 14) * 3600)
+    }
+}
+
 /// What to do with a file after importing it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -284,6 +371,7 @@ impl FolderConfig {
 pub struct ReceiptSourcesConfig {
     pub email: Option<EmailConfig>,
     pub lidl_plus: LidlPlusConfig,
+    pub kaufland: KauflandCardConfig,
     pub folder: Option<FolderConfig>,
 }
 
@@ -292,6 +380,7 @@ impl ReceiptSourcesConfig {
     pub fn any_enabled(&self) -> bool {
         self.email.as_ref().is_some_and(|e| e.enabled)
             || self.lidl_plus.enabled
+            || self.kaufland.enabled
             || self.folder.as_ref().is_some_and(|f| f.enabled)
     }
 
@@ -320,6 +409,16 @@ impl ReceiptSourcesConfig {
             if c.language.trim().len() != 2 || !c.language.bytes().all(|b| b.is_ascii_alphabetic())
             {
                 out.push("receipts.lidl_plus.language must be a two-letter code such as de".into());
+            }
+        }
+        if self.kaufland.enabled {
+            let c = &self.kaufland;
+            if c.country.trim().len() != 2 || !c.country.bytes().all(|b| b.is_ascii_alphabetic()) {
+                out.push("receipts.kaufland.country must be a two-letter code such as DE".into());
+            }
+            if c.language.trim().len() != 2 || !c.language.bytes().all(|b| b.is_ascii_alphabetic())
+            {
+                out.push("receipts.kaufland.language must be a two-letter code such as de".into());
             }
         }
         if let Some(f) = self.folder.as_ref().filter(|f| f.enabled) {
@@ -351,6 +450,8 @@ impl ReceiptSourcesConfig {
     ///   `FINANCER_IMAP_PASSWORD`), `_SENDERS` (`rewe=rewe.de,rewe-group.com;lidl=lidl.de`)
     /// - Lidl Plus: `FINANCER_RECEIPTS_LIDL_PLUS` (`1` enables, `0` disables),
     ///   `FINANCER_RECEIPTS_LIDL_COUNTRY`, `_LANGUAGE`, `_POLL_HOURS`
+    /// - Kaufland Card: `FINANCER_RECEIPTS_KAUFLAND` (`1` enables, `0` disables),
+    ///   `FINANCER_RECEIPTS_KAUFLAND_COUNTRY`, `_LANGUAGE`, `_POLL_HOURS`
     /// - folder: `FINANCER_RECEIPTS_FOLDER` (the path; creates the section), `_FOLDER_POLL_SECONDS`,
     ///   `_FOLDER_ON_DONE` (`keep`/`move`)
     pub fn apply_env(
@@ -485,6 +586,23 @@ impl ReceiptSourcesConfig {
             var("FINANCER_RECEIPTS_LIDL_POLL_HOURS"),
         )? {
             self.lidl_plus.poll_hours = h;
+        }
+
+        // Kaufland Card
+        if let Some(v) = var("FINANCER_RECEIPTS_KAUFLAND") {
+            self.kaufland.enabled = flag(&v);
+        }
+        if let Some(c) = var("FINANCER_RECEIPTS_KAUFLAND_COUNTRY") {
+            self.kaufland.country = c.to_uppercase();
+        }
+        if let Some(c) = var("FINANCER_RECEIPTS_KAUFLAND_LANGUAGE") {
+            self.kaufland.language = c.to_lowercase();
+        }
+        if let Some(h) = num(
+            "FINANCER_RECEIPTS_KAUFLAND_POLL_HOURS",
+            var("FINANCER_RECEIPTS_KAUFLAND_POLL_HOURS"),
+        )? {
+            self.kaufland.poll_hours = h;
         }
 
         // folder

@@ -118,6 +118,7 @@ impl Renderer {
             &c.bank.fints_product_id,
         );
         Self::plaid(&mut out, c);
+        Self::open_banking(&mut out, c);
         Self::accounts(&mut out, c);
         Self::stores(&mut out, c);
         Self::receipts(&mut out, c);
@@ -188,6 +189,35 @@ impl Renderer {
             ("tickets_url", &l.tickets_url),
             ("redirect_uri", &l.redirect_uri),
             ("scope", &l.scope),
+        ];
+        for (name, v) in overridden {
+            if let Some(v) = v {
+                let _ = writeln!(
+                    out,
+                    "{name} = {}   # overrides the built-in value",
+                    Self::q(v)
+                );
+            }
+        }
+        let _ = writeln!(
+            out,
+            "# the refresh token is kept encrypted in the database, never in this file"
+        );
+        let k = &r.kaufland;
+        let _ = writeln!(out, "\n[receipts.kaufland]   # {src}");
+        let _ = writeln!(out, "enabled = {}", k.enabled);
+        let _ = writeln!(out, "country = {}", Self::q(&k.country));
+        let _ = writeln!(out, "language = {}", Self::q(&k.language));
+        let _ = writeln!(out, "poll_hours = {}", k.poll_hours);
+        let overridden = [
+            ("client_id", &k.client_id),
+            ("loyalty_client_id", &k.loyalty_client_id),
+            ("authorize_url", &k.authorize_url),
+            ("token_url", &k.token_url),
+            ("userinfo_url", &k.userinfo_url),
+            ("api_url", &k.api_url),
+            ("redirect_uri", &k.redirect_uri),
+            ("app_version", &k.app_version),
         ];
         for (name, v) in overridden {
             if let Some(v) = v {
@@ -286,12 +316,68 @@ impl Renderer {
         let _ = writeln!(out, "language = {}", Self::q(&p.language));
     }
 
+    /// `[bank.gocardless]` and `[bank.finapi]`: shown only when something about them is set. The
+    /// keys are never printed.
+    fn open_banking(out: &mut String, c: &Config) {
+        let g = &c.bank.gocardless;
+        if g.configured()
+            || g.secret_id.value.is_some()
+            || g.secret_key.value.is_some()
+            || c.bank.accounts.iter().any(|a| a.kind == "gocardless")
+        {
+            let _ = writeln!(out, "\n[bank.gocardless]");
+            Self::line(
+                out,
+                "secret_id",
+                Self::secret(&g.secret_id.value),
+                &g.secret_id,
+            );
+            Self::line(
+                out,
+                "secret_key",
+                Self::secret(&g.secret_key.value),
+                &g.secret_key,
+            );
+            let _ = writeln!(out, "language = {}", Self::q(&g.language));
+        }
+        let f = &c.bank.finapi;
+        if f.configured()
+            || f.client_id.value.is_some()
+            || f.client_secret.value.is_some()
+            || c.bank.accounts.iter().any(|a| a.kind == "finapi")
+        {
+            let _ = writeln!(out, "\n[bank.finapi]");
+            Self::line(
+                out,
+                "client_id",
+                Self::secret(&f.client_id.value),
+                &f.client_id,
+            );
+            Self::line(
+                out,
+                "client_secret",
+                Self::secret(&f.client_secret.value),
+                &f.client_secret,
+            );
+            Self::line(
+                out,
+                "environment",
+                Self::q(&f.environment.value),
+                &f.environment,
+            );
+        }
+    }
+
     fn accounts(out: &mut String, c: &Config) {
         for a in &c.bank.accounts {
             let _ = writeln!(out, "\n[[bank.accounts]]   # {}", c.bank.accounts_source);
             let _ = writeln!(out, "name = {}", Self::q(&a.name));
             let _ = writeln!(out, "kind = {}", Self::q(&a.kind));
-            if a.kind == "plaid" {
+            if a.kind != "fints" {
+                if let Some(institution) = a.institution.as_deref().filter(|i| !i.trim().is_empty())
+                {
+                    let _ = writeln!(out, "institution = {}", Self::q(institution));
+                }
                 if !a.account_ids.is_empty() {
                     let _ = writeln!(
                         out,

@@ -2,8 +2,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Button, Card, Group, Note, Row, Section, Spinner, Text, TextField, ToggleRow } from "@financer/ui";
 
-import { ApiError } from "@/api/client";
-import { liveSyncMissing } from "@/bankConnections";
+import { isRunning, liveSyncMissing, syncResultText, waitForSync } from "@/bankConnections";
 import { useApi } from "@/api/config";
 import { deleteSecret, getSecret, setSecret } from "@/api/storage";
 import { Empty, Loading, NeedsSetup } from "@/components/Status";
@@ -13,8 +12,7 @@ import { useScreenData } from "@/hooks";
 import { blzProblem, ibanProblem } from "@/settingsPlan";
 
 const PIN_KEY = "financer.bank-pin";
-const POLL_MS = 3000;
-const GIVE_UP_MS = 10 * 60 * 1000;
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 type Phase = { kind: "idle" } | { kind: "waiting"; challenge: string } | { kind: "done"; text: string } | { kind: "error"; text: string };
 
@@ -30,6 +28,7 @@ export default function Sync() {
   const [rememberPin, setRememberPin] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const cancelled = useRef(false);
+  const idRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (status) {
@@ -57,26 +56,26 @@ export default function Sync() {
     try {
       if (rememberPin) await setSecret(PIN_KEY, pin);
       else await deleteSecret(PIN_KEY);
-      const started = await api.startSync({ blz, user_id: userId, pin, iban });
-      setPhase({ kind: "waiting", challenge: started.no_tan_required ? "" : started.challenge });
-
-      const deadline = Date.now() + GIVE_UP_MS;
-      while (!cancelled.current && Date.now() < deadline) {
-        try {
-          const done = await api.confirmSync(started.sync_id);
-          const balance = done.balance_cents != null ? ` Balance ${formatCents(done.balance_cents)}${done.balance_date ? ` (${formatDate(done.balance_date)})` : ""}.` : "";
-          setPhase({ kind: "done", text: `Imported ${done.imported} new transactions, ${done.duplicates} were already known.${balance}` });
-          await reload();
-          return;
-        } catch (e) {
-          if (e instanceof ApiError && e.status === 409) {
-            await new Promise((r) => setTimeout(r, POLL_MS));
-            continue;
-          }
-          throw e;
-        }
+      // the same call as for every provider: a login sent with the request
+      const started = await api.startSync({ kind: "fints", login: { blz, user_id: userId, iban }, pin });
+      idRef.current = started.id;
+      const final = await waitForSync(started, (id) => api.syncStatus(id), sleep, {
+        cancelled: () => cancelled.current,
+        onUpdate: (s) => {
+          if (isRunning(s)) setPhase({ kind: "waiting", challenge: s.state === "needs_approval" ? (s.message ?? "") : "" });
+        },
+      });
+      if (cancelled.current) return;
+      if (isRunning(final)) {
+        setPhase({ kind: "error", text: "Timed out waiting for the approval. Start again." });
+        return;
       }
-      if (!cancelled.current) setPhase({ kind: "error", text: "Timed out waiting for the approval. Start again." });
+      const text = syncResultText(final) ?? "Sync failed";
+      if (final.state === "error") setPhase({ kind: "error", text });
+      else {
+        setPhase({ kind: "done", text });
+        await reload();
+      }
     } catch (e) {
       setPhase({ kind: "error", text: e instanceof Error ? e.message : "Sync failed" });
     }
@@ -130,6 +129,7 @@ export default function Sync() {
                 variant="ghost"
                 onPress={() => {
                   cancelled.current = true;
+                  if (idRef.current) void api.cancelSync(idRef.current).catch(() => {});
                   setPhase({ kind: "idle" });
                 }}
               />

@@ -12,21 +12,25 @@ also clamps a payday above the month's length to its last day (so 31 means "last
 month"), which keeps the periods gap-free even for hand-edited data; the API never stores such a
 value.
 
-Every place that used a calendar month now uses the period: the envelope status
-(`GET /v1/budget/status`), spent-by-category, and the "what can I buy" groceries budget.
+Every place that used a calendar month now uses the period: the envelope status, spent-by-category,
+and the "what can I buy" groceries budget.
 
-* `GET /v1/budget/status?year=2026&month=3` is unchanged at payday 1. With another payday it means
-  "the period that starts in that month" (payday 10: 10 Mar to 9 Apr).
-* `GET /v1/budget/status?period=current|previous[&date=YYYY-MM-DD]` asks for the running or the
-  previous period. With none of year, month or period it returns the current one.
-* `GET /v1/budget/period?period=current|previous[&date=...]` returns payday, start, end, length
-  and days left.
+`GET /v1/budget[?period=current|previous][&date=YYYY-MM-DD]` is the one answer for the budget:
+
+* `period`: payday, start, end, length and days left, for the running period (default) or the one
+  before it. `date` is the day to treat as today; the period is the one that contains it (a month
+  with payday 1; with payday 10, `date=2026-03-20` is the period 10 Mar to 9 Apr).
+* `envelopes`: every envelope with its limit, what was spent in that period and what is left.
+* `safe_to_spend`: the daily number below, only for the running period.
+* `disposable`: monthly income minus fixed costs, from the recurring payments.
+
+`PUT /v1/budget/envelopes` replaces the limits and answers with the envelopes of the running period.
 
 The app passes its own local date as `date`, so the late evening is not already "tomorrow" in UTC.
 
 ## Safe to spend
 
-`GET /v1/budget/safe-to-spend[?date=...]`. The formula is documented at the top of
+`safe_to_spend` of `GET /v1/budget`. The formula is documented at the top of
 `crates/core/src/safe_to_spend.rs`:
 
 ```

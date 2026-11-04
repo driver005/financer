@@ -91,19 +91,19 @@ impl RuleInput {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct RuleOrder {
+pub struct RuleOrderInput {
     /// Every rule id exactly once, highest priority first.
     pub ids: Vec<i64>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct ApplyReport {
+pub struct RulesAppliedDto {
     /// Transactions whose category changed. Transactions you categorized by hand are skipped.
     pub changed: usize,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct CategoryChange {
+pub struct CategoryInput {
     #[schema(value_type = String, example = "groceries")]
     pub category: Category,
     /// Also create (or update) a rule for this merchant and apply it to its other
@@ -113,7 +113,7 @@ pub struct CategoryChange {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct CategoryChanged {
+pub struct CategoryChangedDto {
     pub transaction: TransactionDto,
     /// The rule that was created or updated when `remember` was set.
     pub rule: Option<RuleDto>,
@@ -188,12 +188,12 @@ pub struct AcceptedSuggestion {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct AcceptSuggestions {
+pub struct CategoriesInput {
     pub suggestions: Vec<AcceptedSuggestion>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct AcceptReport {
+pub struct CategoriesChangedDto {
     /// Rules created or updated (one per accepted merchant).
     pub rules_saved: usize,
     /// Transactions that changed category as a result.
@@ -362,7 +362,7 @@ impl Categorization {
 
     pub async fn reorder_rules(
         state: AppState,
-        order: RuleOrder,
+        order: RuleOrderInput,
     ) -> Result<Json<Vec<RuleDto>>, ApiError> {
         if !state.store.reorder_rules(&order.ids).await? {
             return Err(ApiError::BadRequest(
@@ -372,8 +372,8 @@ impl Categorization {
         Self::list_rules(state).await
     }
 
-    pub async fn apply_rules(state: AppState) -> Result<Json<ApplyReport>, ApiError> {
-        Ok(Json(ApplyReport {
+    pub async fn apply_rules(state: AppState) -> Result<Json<RulesAppliedDto>, ApiError> {
+        Ok(Json(RulesAppliedDto {
             changed: state.store.apply_rules().await?,
         }))
     }
@@ -381,8 +381,8 @@ impl Categorization {
     pub async fn set_category(
         state: AppState,
         id: i64,
-        change: CategoryChange,
-    ) -> Result<Json<CategoryChanged>, ApiError> {
+        change: CategoryInput,
+    ) -> Result<Json<CategoryChangedDto>, ApiError> {
         let tx = state
             .store
             .get_transaction(id)
@@ -414,7 +414,7 @@ impl Categorization {
             .get_transaction(id)
             .await?
             .ok_or(ApiError::NotFound)?;
-        Ok(Json(CategoryChanged {
+        Ok(Json(CategoryChangedDto {
             transaction: transaction.into(),
             rule,
             others_changed,
@@ -524,8 +524,8 @@ impl Categorization {
 
     pub async fn accept_suggestions(
         state: AppState,
-        body: AcceptSuggestions,
-    ) -> Result<Json<AcceptReport>, ApiError> {
+        body: CategoriesInput,
+    ) -> Result<Json<CategoriesChangedDto>, ApiError> {
         let mut checked = Vec::new();
         for s in &body.suggestions {
             if NameNormalizer::normalize(&s.merchant).is_empty() {
@@ -552,7 +552,7 @@ impl Categorization {
         } else {
             state.store.apply_rules().await?
         };
-        Ok(Json(AcceptReport {
+        Ok(Json(CategoriesChangedDto {
             rules_saved: checked.len(),
             transactions_changed,
         }))
@@ -628,9 +628,9 @@ pub async fn delete_rule(
 
 /// Set the priority order of all rules.
 #[utoipa::path(
-    post,
-    path = "/v1/rules/reorder",
-    request_body = RuleOrder,
+    put,
+    path = "/v1/rules/order",
+    request_body = RuleOrderInput,
     responses(
         (status = 200, body = Vec<RuleDto>),
         (status = 400, description = "The ids are not every rule exactly once", body = ErrorBody),
@@ -639,7 +639,7 @@ pub async fn delete_rule(
 )]
 pub async fn reorder_rules(
     State(state): State<AppState>,
-    Json(order): Json<RuleOrder>,
+    Json(order): Json<RuleOrderInput>,
 ) -> Result<Json<Vec<RuleDto>>, ApiError> {
     Categorization::reorder_rules(state, order).await
 }
@@ -648,11 +648,11 @@ pub async fn reorder_rules(
 /// their category. Returns how many changed.
 #[utoipa::path(
     post,
-    path = "/v1/rules/apply",
-    responses((status = 200, body = ApplyReport)),
+    path = "/v1/rules/applications",
+    responses((status = 200, body = RulesAppliedDto)),
     security(("bearer" = []))
 )]
-pub async fn apply_rules(State(state): State<AppState>) -> Result<Json<ApplyReport>, ApiError> {
+pub async fn apply_rules(State(state): State<AppState>) -> Result<Json<RulesAppliedDto>, ApiError> {
     Categorization::apply_rules(state).await
 }
 
@@ -662,9 +662,9 @@ pub async fn apply_rules(State(state): State<AppState>) -> Result<Json<ApplyRepo
     put,
     path = "/v1/transactions/{id}/category",
     params(("id" = i64, Path, description = "Transaction id")),
-    request_body = CategoryChange,
+    request_body = CategoryInput,
     responses(
-        (status = 200, body = CategoryChanged),
+        (status = 200, body = CategoryChangedDto),
         (status = 400, description = "Nothing to remember: the transaction has no merchant name", body = ErrorBody),
         (status = 404, description = "No such transaction", body = ErrorBody),
     ),
@@ -673,8 +673,8 @@ pub async fn apply_rules(State(state): State<AppState>) -> Result<Json<ApplyRepo
 pub async fn set_category(
     State(state): State<AppState>,
     Path(id): Path<i64>,
-    Json(change): Json<CategoryChange>,
-) -> Result<Json<CategoryChanged>, ApiError> {
+    Json(change): Json<CategoryInput>,
+) -> Result<Json<CategoryChangedDto>, ApiError> {
     Categorization::set_category(state, id, change).await
 }
 
@@ -735,7 +735,7 @@ pub async fn delete_split(
 /// accept suggestions.
 #[utoipa::path(
     post,
-    path = "/v1/transactions/categorize-unknown",
+    path = "/v1/transactions/suggestions",
     responses(
         (status = 200, body = SuggestionsDto),
         (status = 503, description = "No API key configured for the selected provider", body = ErrorBody),
@@ -752,18 +752,18 @@ pub async fn categorize_unknown(
 /// Accept suggestions: one rule per merchant, then the rules are applied to existing
 /// transactions.
 #[utoipa::path(
-    post,
-    path = "/v1/transactions/categorize-unknown/accept",
-    request_body = AcceptSuggestions,
+    put,
+    path = "/v1/transactions/categories",
+    request_body = CategoriesInput,
     responses(
-        (status = 200, body = AcceptReport),
+        (status = 200, body = CategoriesChangedDto),
         (status = 400, description = "A merchant without letters or a category suggestions cannot use", body = ErrorBody),
     ),
     security(("bearer" = []))
 )]
 pub async fn accept_suggestions(
     State(state): State<AppState>,
-    Json(body): Json<AcceptSuggestions>,
-) -> Result<Json<AcceptReport>, ApiError> {
+    Json(body): Json<CategoriesInput>,
+) -> Result<Json<CategoriesChangedDto>, ApiError> {
     Categorization::accept_suggestions(state, body).await
 }
