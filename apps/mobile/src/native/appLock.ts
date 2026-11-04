@@ -45,16 +45,23 @@ export type LockView = {
   notice: string | null;
 };
 
-let view: LockView = {
-  // nothing to protect on the web: never cover the page there
-  state: isWeb ? settingsLoaded(startState(), false) : startState(),
-  availability: isWeb ? lockAvailability(true, false, 0) : null,
-  notice: null,
-};
+// Built on first use, not when this file is imported: the start state comes from the Rust SDK, and
+// the files that import this one are loaded before the SDK is (see SdkGate).
+let view: LockView | null = null;
+
+function current(): LockView {
+  view ??= {
+    // nothing to protect on the web: never cover the page there
+    state: isWeb ? settingsLoaded(startState(), false) : startState(),
+    availability: isWeb ? lockAvailability(true, false, 0) : null,
+    notice: null,
+  };
+  return view;
+}
 const listeners = new Set<() => void>();
 
 function update(patch: Partial<LockView>) {
-  view = { ...view, ...patch };
+  view = { ...current(), ...patch };
   listeners.forEach((l) => l());
 }
 
@@ -65,7 +72,7 @@ function subscribe(listener: () => void) {
 
 /** Subscribe a component to the lock state. */
 export function useAppLock(): LockView {
-  return useSyncExternalStore(subscribe, () => view, () => view);
+  return useSyncExternalStore(subscribe, current, current);
 }
 
 export function isAppCovered(v: LockView): boolean {
@@ -113,10 +120,10 @@ export async function startAppLock(): Promise<void> {
   let previous = AppState.currentState;
   AppState.addEventListener("change", (next) => {
     if (next === "background") {
-      update({ state: wentToBackground(view.state, Date.now()) });
+      update({ state: wentToBackground(current().state, Date.now()) });
     } else if (next === "active") {
       const cameBack = previous === "background";
-      update({ state: cameToForeground(view.state, Date.now()) });
+      update({ state: cameToForeground(current().state, Date.now()) });
       if (cameBack) {
         foregroundTick += 1;
         tickListeners.forEach((l) => l());
@@ -140,7 +147,7 @@ export async function startAppLock(): Promise<void> {
     notice = "The app lock was switched off because this phone no longer has a screen lock or fingerprint set up.";
     await deleteSecret(LOCK_KEY).catch(() => {});
   }
-  update({ state: settingsLoaded(view.state, enabled), availability, notice });
+  update({ state: settingsLoaded(current().state, enabled), availability, notice });
 }
 
 let authenticating = false;
@@ -163,18 +170,18 @@ async function authenticate(prompt: string): Promise<AuthResult> {
  * ended, so cancelling does not make the prompt come straight back.
  */
 export async function unlockApp(auto = false): Promise<void> {
-  if (authenticating || !view.state.locked) return;
+  if (authenticating || !current().state.locked) return;
   if (auto && Date.now() - lastAttemptEnded < 3000) return;
   authenticating = true;
   try {
     const result = await authenticate("Unlock Financer");
     const outcome = unlockOutcome(result);
     if (outcome === "unlocked") {
-      update({ state: unlocked(view.state) });
+      update({ state: unlocked(current().state) });
     } else if (outcome === "lock_unavailable") {
       await deleteSecret(LOCK_KEY).catch(() => {});
       update({
-        state: setEnabled(view.state, false),
+        state: setEnabled(current().state, false),
         availability: await checkAvailability(),
         notice: "The app lock was switched off because this phone no longer has a screen lock or fingerprint set up.",
       });
@@ -210,7 +217,7 @@ export async function setAppLockEnabled(enabled: boolean): Promise<{ ok: boolean
     }
     if (enabled) await setSecret(LOCK_KEY, "1");
     else await deleteSecret(LOCK_KEY);
-    update({ state: setEnabled(view.state, enabled), notice: null });
+    update({ state: setEnabled(current().state, enabled), notice: null });
     return { ok: true, message: null };
   } catch {
     return { ok: false, message: "Could not save the setting." };
