@@ -1,0 +1,23 @@
+[
+  {
+    "id": "tx-0001",
+    "store": {"id": "DE1234", "name": "Kaufland Köln-Ehrenfeld", "street": "Beispielstr. 1", "city": "Köln"},
+    "timestamp": "2026-03-02T17:05:11+01:00",
+    "currency": "EUR",
+    "sum": 547,
+    "positions": [
+      {"name": "Vollmilch 3,5%", "quantity": 2, "price": 109, "total": 218},
+      {"name": "Bio Bananen", "quantity": 1, "price": 149, "total": 149},
+      {"name": "Spaghetti 500g", "quantity": 1, "price": 180, "total": 180}
+    ],
+    "refundPositions": []
+  },
+  {
+    "id": "tx-0002",
+    "store": {"id": "DE5678", "name": "Düsseldorf", "city": "Düsseldorf"},
+    "timestamp": "2026-03-03T08:30:00Z",
+    "currency": "EUR",
+    "positions": [{"name": "Butter 250g", "quantity": 1, "price": 299, "total": 299}],
+    "refundPositions": [{"name": "Pfand Rückgabe", "quantity": 1, "total": 25}]
+  }
+]

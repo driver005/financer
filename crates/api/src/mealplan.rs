@@ -126,7 +126,7 @@ pub struct PantryDto {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct PantryUpdate {
+pub struct PantryInput {
     /// Catalog keys (see `GET /v1/catalog`).
     pub items: Vec<String>,
 }
@@ -518,7 +518,7 @@ impl MealPlans {
 
     pub async fn put_pantry(
         State(state): State<AppState>,
-        Json(u): Json<PantryUpdate>,
+        Json(u): Json<PantryInput>,
     ) -> Result<Json<PantryDto>, ApiError> {
         if u.items.len() > MAX_PANTRY_ITEMS {
             return Err(ApiError::BadRequest(format!(
@@ -732,7 +732,7 @@ pub async fn put_meal_plan(
 /// The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the
 /// servings and converted to packs), pantry items left off, priced per chain with the best split
 /// and checked against what is left of the groceries budget.
-#[utoipa::path(get, path = "/v1/meal-plan/shopping-list", params(ShoppingQuery), responses(
+#[utoipa::path(get, path = "/v1/shopping-list", params(ShoppingQuery), responses(
     (status = 200, body = ShoppingListDto), (status = 400, description = "Week out of range", body = ErrorBody)),
     security(("bearer" = [])))]
 pub async fn get_shopping_list(
@@ -743,18 +743,18 @@ pub async fn get_shopping_list(
 }
 
 /// Items assumed to be at home (salt, oil, flour...); the shopping list leaves them off.
-#[utoipa::path(get, path = "/v1/meal-plan/pantry", responses((status = 200, body = PantryDto)), security(("bearer" = [])))]
+#[utoipa::path(get, path = "/v1/pantry", responses((status = 200, body = PantryDto)), security(("bearer" = [])))]
 pub async fn get_pantry(State(state): State<AppState>) -> Result<Json<PantryDto>, ApiError> {
     MealPlans::get_pantry(State(state)).await
 }
 
 /// Replace the pantry list.
-#[utoipa::path(put, path = "/v1/meal-plan/pantry", request_body = PantryUpdate, responses(
+#[utoipa::path(put, path = "/v1/pantry", request_body = PantryInput, responses(
     (status = 200, body = PantryDto), (status = 400, description = "Unknown item or too many items", body = ErrorBody)),
     security(("bearer" = [])))]
 pub async fn put_pantry(
     State(state): State<AppState>,
-    Json(u): Json<PantryUpdate>,
+    Json(u): Json<PantryInput>,
 ) -> Result<Json<PantryDto>, ApiError> {
     MealPlans::put_pantry(State(state), Json(u)).await
 }

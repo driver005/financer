@@ -16,7 +16,7 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::dto::{ErrorBody, ExportDto, ImportReportDto};
+use crate::dto::{DataDto, ErrorBody, ImportReportDto};
 use crate::export::ExportRoutes;
 use crate::routes::ApiError;
 use crate::AppState;
@@ -34,14 +34,14 @@ const MAX_BACKUP_BYTES: usize = 7 * 1024 * 1024;
 const WRONG_OR_DAMAGED: &str = "Wrong passphrase, or this is not an intact Financer backup.";
 
 #[derive(Deserialize, ToSchema)]
-pub struct BackupCreateRequest {
+pub struct BackupInput {
     /// At least 8 characters. Not stored anywhere: without it the backup cannot be opened.
     pub passphrase: String,
 }
 
-impl fmt::Debug for BackupCreateRequest {
+impl fmt::Debug for BackupInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BackupCreateRequest")
+        f.debug_struct("BackupInput")
             .field("passphrase", &"<redacted>")
             .finish()
     }
@@ -56,15 +56,15 @@ pub struct BackupDto {
 }
 
 #[derive(Deserialize, ToSchema)]
-pub struct BackupRestoreRequest {
+pub struct BackupRestorationInput {
     pub passphrase: String,
     /// The encrypted backup, base64-encoded, as returned by the create endpoint.
     pub data_base64: String,
 }
 
-impl fmt::Debug for BackupRestoreRequest {
+impl fmt::Debug for BackupRestorationInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BackupRestoreRequest")
+        f.debug_struct("BackupRestorationInput")
             .field("passphrase", &"<redacted>")
             .field("data_base64_len", &self.data_base64.len())
             .finish()
@@ -116,35 +116,32 @@ impl BackupCrypto {
 /// cannot annotate methods.
 pub struct BackupRoutes;
 
-/// Create a passphrase-encrypted backup of everything that is yours (see `/v1/export`).
-#[utoipa::path(post, path = "/v1/backup/create", request_body = BackupCreateRequest, responses(
+/// Create a passphrase-encrypted backup of everything that is yours (see `/v1/data`).
+#[utoipa::path(post, path = "/v1/backups", request_body = BackupInput, responses(
     (status = 200, body = BackupDto),
     (status = 400, description = "Passphrase too short", body = ErrorBody)), security(("bearer" = [])))]
 pub async fn create_backup(
     State(state): State<AppState>,
-    Json(req): Json<BackupCreateRequest>,
+    Json(req): Json<BackupInput>,
 ) -> Result<Json<BackupDto>, ApiError> {
     BackupRoutes::create(state, req).await
 }
 
-/// Decrypt a backup and merge it like `/v1/import`. A wrong passphrase or damaged file is a
+/// Decrypt a backup and merge it like `/v1/data`. A wrong passphrase or damaged file is a
 /// 400 and changes nothing.
-#[utoipa::path(post, path = "/v1/backup/restore", request_body = BackupRestoreRequest, responses(
+#[utoipa::path(post, path = "/v1/backups/restorations", request_body = BackupRestorationInput, responses(
     (status = 200, body = ImportReportDto),
     (status = 400, description = "Wrong passphrase, damaged file or not a valid backup", body = ErrorBody)),
     security(("bearer" = [])))]
 pub async fn restore_backup(
     State(state): State<AppState>,
-    Json(req): Json<BackupRestoreRequest>,
+    Json(req): Json<BackupRestorationInput>,
 ) -> Result<Json<ImportReportDto>, ApiError> {
     BackupRoutes::restore(state, req).await
 }
 
 impl BackupRoutes {
-    pub async fn create(
-        state: AppState,
-        req: BackupCreateRequest,
-    ) -> Result<Json<BackupDto>, ApiError> {
+    pub async fn create(state: AppState, req: BackupInput) -> Result<Json<BackupDto>, ApiError> {
         Self::check_passphrase(&req.passphrase)?;
         let export = ExportRoutes::export_data(state).await?.0;
         let (transactions, receipts) = (export.transactions.len(), export.receipts.len());
@@ -166,7 +163,7 @@ impl BackupRoutes {
 
     pub async fn restore(
         state: AppState,
-        req: BackupRestoreRequest,
+        req: BackupRestorationInput,
     ) -> Result<Json<ImportReportDto>, ApiError> {
         let wrong = || ApiError::BadRequest(WRONG_OR_DAMAGED.into());
         let b64 = req.data_base64.trim();
@@ -185,7 +182,7 @@ impl BackupRoutes {
         .map_err(|_| ApiError::Internal)?
         .map_err(|_| wrong())?;
         // authenticated, so it was made by someone who knew the passphrase; import still validates it
-        let export: ExportDto = serde_json::from_slice(&plain).map_err(|_| wrong())?;
+        let export: DataDto = serde_json::from_slice(&plain).map_err(|_| wrong())?;
         ExportRoutes::import_data(state, export).await
     }
 
@@ -265,11 +262,11 @@ mod tests {
 
     #[test]
     fn debug_output_hides_the_passphrase() {
-        let r = BackupCreateRequest {
+        let r = BackupInput {
             passphrase: "hunter2hunter2".into(),
         };
         assert!(!format!("{r:?}").contains("hunter2"));
-        let r = BackupRestoreRequest {
+        let r = BackupRestorationInput {
             passphrase: "hunter2hunter2".into(),
             data_base64: "AAAA".into(),
         };

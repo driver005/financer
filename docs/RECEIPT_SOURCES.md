@@ -9,6 +9,7 @@ sources, each **off until you configure it**:
 | **Email** | receipt mails (REWE eBon as PDF, other shops' mails) from your mailbox over IMAP | the main route |
 | **Folder** | PDF, text, HTML or `.eml` files dropped into a folder on the server | simple and robust |
 | **Lidl Plus** | your Lidl Plus receipts, after you sign in on Lidl's own page | **experimental and unofficial** |
+| **Kaufland Card** | digital receipts of your Kaufland Card, after you sign in on Kaufland's own page | experimental and unofficial, see below |
 
 All three feed the same receipts list as the manual ones, so the usual-items learning, the
 receipts screen and the matching below treat them alike. A receipt knows where it came from
@@ -109,13 +110,13 @@ terms; that is your decision.
 **How the sign-in works (and what Financer sees)**
 
 1. In the app, **Connect Lidl Plus**. The server creates a random PKCE verifier and state and
-   returns the address of **Lidl's own sign-in page** (`POST /v1/receipts/lidl/start`). Nothing is
+   returns the address of **Lidl's own sign-in page** (`POST /v1/receipts/sources/lidl_plus/connect`). Nothing is
    sent to Lidl by this step.
 2. You sign in **on Lidl's page**, in a browser sheet (iOS: `ASWebAuthenticationSession`; Android:
    a custom tab). Financer never sees your password, your phone number or your SMS code.
 3. Lidl's page ends by redirecting to `com.lidlplus.app://callback?code=...`. On a phone the sheet
    hands that address to the app; the app sends it to the server
-   (`POST /v1/receipts/lidl/finish`), which exchanges the one-time code (with the verifier) for
+   (`POST /v1/receipts/sources/lidl_plus/finish`), which exchanges the one-time code (with the verifier) for
    tokens.
 4. **Only the refresh token is stored**, encrypted. From then on the server refreshes access
    tokens and reads new receipts every `poll_hours`, without a browser.
@@ -133,7 +134,7 @@ Receipt sources screen (`src/app/+native-intent.tsx`). This **competes with the 
 is installed, Android may offer to open the address in either app; choose Financer. On iOS an
 authentication session accepts any callback scheme.
 
-**Disconnect** (`DELETE /v1/receipts/lidl`, or the button) deletes the token and what the source
+**Disconnect** (`POST /v1/receipts/sources/lidl_plus/disconnect`, or the button) deletes the token and what the source
 remembered. Receipts already imported stay. If Lidl stops accepting the saved sign-in, the status
 becomes *Sign in again* and nothing more is requested until you do.
 
@@ -178,16 +179,26 @@ the spending-per-store view can show item-level detail later; nothing reads it f
 
 ## Endpoints
 
+One family of calls for every source, with the source as the `{kind}` (`email`, `lidl_plus`,
+`kaufland_card`, `folder`, `rewe_app`, `orders_file`), the way the bank providers work
+(`docs/API_STYLE.md`). Each source has a **flow**: `server` (the server reads a mailbox or a
+folder), `sign_in` (you sign in on the shop's own page) or `push` (the app hands the receipts over).
+
 | | |
 |---|---|
-| `GET /v1/receipts/sources` | each source: `state` (`disabled`, `waiting`, `running`, `ok`, `error`, `not_connected`, `needs_signin`), last run, last success, next run, last error, receipts imported (last run and in total), notes, where it reads from. No secrets. |
-| `POST /v1/receipts/sync` | run now; optional body `{"source": "email" \| "lidl_plus" \| "folder"}`; `409` while a run is going |
-| `POST /v1/receipts/lidl/start` | `authorization_url`, `state`, `callback_scheme`, `redirect_uri`, `expires_in_seconds` (15 minutes) |
-| `POST /v1/receipts/lidl/finish` | `{state, callback_url}`; stores the encrypted token, runs the first sync |
-| `GET /v1/receipts/lidl/status` | `disabled`, `never`, `connected` or `needs_signin`, connected-at, last sync, receipts |
-| `DELETE /v1/receipts/lidl` | disconnect |
+| `GET /v1/receipts/sources` | every source: `flow`, `state` (`disabled`, `waiting`, `running`, `ok`, `error`, `not_connected`, `needs_signin`), connected-at, last run, last success, next run, last error, receipts imported (last run and in total), notes, where it reads from. No secrets. |
+| `GET /v1/receipts/sources/{kind}` | the same for one source |
+| `POST /v1/receipts/sync` | run the scheduled sources now; optional body `{"source": "email" \| "lidl_plus" \| "kaufland_card" \| "folder"}`; `409` while a run is going |
+| `POST /v1/receipts/sources/{kind}/connect` | `sign_in`: `authorization_url`, `state`, `callback_scheme`, `redirect_uri`, `expires_in_seconds` (15 minutes) |
+| `POST /v1/receipts/sources/{kind}/finish` | `sign_in`: `{state, callback_url}`; stores the encrypted token, runs the first sync, answers with the source |
+| `POST /v1/receipts/sources/{kind}/disconnect` | forget the stored token (`sign_in`) or the note of the last push (`rewe_app`); answers with the source |
+| `POST /v1/receipts/sources/{kind}/known` | `push` (`rewe_app`): `{ids}`, answers which are not stored yet |
+| `POST /v1/receipts/sources/{kind}/import` | `push`: `{receipts, shop?}` (`rewe_app` at most 100 receipts of 500 lines; `orders_file` at most 200 orders, `shop` names the web shop) |
 
-Without a configured source every source reports `disabled`; the Lidl endpoints answer `409`.
+A call that does not fit the source's flow answers `400` and says what the source is. Without a
+configured source every scheduled source reports `disabled`; the `sign_in` calls answer `409`.
+
+
 
 ## Security notes
 
@@ -262,8 +273,8 @@ None of the four has a public interface for receipts, and Financer does not sign
 
 | Shop | What the shop offers | What works in Financer |
 | --- | --- | --- |
-| REWE | eBon in the REWE app or account; the PDF is mailed to the account's address and kept under "Meine Einkäufe" | the **Email** source reads the PDF. The REWE app's own interface is protected (Cloudflare mutual TLS since March 2024, certificates from the APK), so an app sign-in is not an option |
-| Kaufland | digital receipt in the Kaufland app with the Kaufland Card ("Papierbon sparen") | screenshot of the receipt, scanned under Receipts; the Email source picks up any receipt mail that does arrive |
+| REWE | eBon in the REWE app or account; the PDF is mailed to the account's address and kept under "Meine Einkäufe" | the **Email** source reads the PDF; or the **REWE window** below (unofficial). The REWE app's own interface is protected (Cloudflare mutual TLS since March 2024, certificates from the APK), so only the web shop is used |
+| Kaufland | digital receipt in the Kaufland app with the Kaufland Card ("Papierbon sparen") | the **Kaufland Card** source below (unofficial sign-in); or a screenshot of the receipt, scanned under Receipts |
 | Penny | eBon in the PENNY app (off until switched on) | same as Kaufland |
 | ALDI | no digital receipt found | photograph the paper receipt |
 
@@ -282,4 +293,92 @@ What other people have worked out (read in their public code on 2026-11-03, none
 - **Penny and ALDI**: nothing found.
 
 None of this is an official interface; it can stop working at any app update and may go against the shops' terms
-of use. Nothing of it is built into Financer yet. The guide in Settings > Receipt sources shows the table above.
+of use. The Kaufland sign-in and the REWE window (below) are built into Financer. The guide in Settings > Receipt sources shows the table above.
+
+## Kaufland Card (experimental, unofficial, off by default)
+
+Works like Lidl Plus: switch it on (`[receipts.kaufland] enabled = true` or `FINANCER_RECEIPTS_KAUFLAND=1` on a
+server; a switch in the card on the phone), tap Connect in Settings > Receipt sources and sign in on Kaufland's own
+page (`account.kaufland.com`). The password never reaches Financer; only the refresh token is kept, encrypted with
+the same key as the Lidl Plus one, together with your customer id. New receipts are read from
+`p.crm-dynamics.schwarz/api/v2/customers/{user}/transactions` (20 per page, newest first; a page of known receipts
+ends the run; at most 200 new ones per run) every 12 hours (`poll_hours`).
+
+- Every address, client id and the app version are in `crates/receipt-sources/src/kaufland/consts.rs` and can be
+  overridden under `[receipts.kaufland]` (Settings > Server settings shows the keys).
+- The protocol is taken from the public project Bonfire (see above); it is **not** an official interface, **was not
+  run against a real Kaufland account** (only against fake answers shaped like Bonfire's description), and the
+  receipt host is said to be certificate-pinned for the real app, which may keep a program like this out. Amounts are
+  read as whole cents, as Bonfire documents; refunds become negative lines. If a receipt cannot be read it is noted
+  and not tried again.
+- Only receipts you get digitally exist (the "Papierbon sparen" switch in the Kaufland app).
+- It may break at any app update and may go against Kaufland's terms of use. Switch it off or disconnect any time;
+  disconnecting deletes the token and keeps the receipts already imported.
+
+## REWE eBon in a window of the app (experimental, unofficial, phone app only)
+
+Settings > Receipt sources > REWE eBon > Read my REWE receipts opens REWE's web shop (`shop.rewe.de`) in a window
+of the app (`react-native-webview`). You sign in there, on REWE's own page. Once signed in, a small script that
+**the app runs inside that page** asks the shop's own address `/api/receipts/` for the list of receipts and then
+fetches the new ones (30 per run, one every 0.4 seconds); the app sends them to your server, which stores each once
+(by REWE's receipt id), matches them to bank payments and treats a copy that also arrived as the mailed PDF eBon as
+the same purchase.
+
+- **No cookie is copied.** The page's own session does the authentication inside the window, so the session cookie
+  never leaves it, whether scripts can read it or not. (Reading cookies out of Chrome is not an option: not from a
+  phone app, and on a computer Chrome 127 and later block it.) Your password is only typed on REWE's page.
+- **Only REWE's pages load** in the window (`*.rewe.de` over https), and the app only believes messages that come from
+  `shop.rewe.de` itself. A receipt id is only used in the script or the address when it consists of letters, digits,
+  `-` and `_`.
+- **Nothing runs by itself**: receipts are read when you open the window. While you are still signed in to REWE
+  there, that happens right away; when the session has run out, you sign in again. There is no background schedule.
+- The server side is `POST /v1/receipts/sources/rewe_app/known` (which ids are new) and `.../import` (at most 100
+  receipts of at most 500 lines, validated); `GET /v1/receipts/sources/rewe_app` tells when it last happened.
+- The shape of REWE's answers (`items` with `receiptId`, `receiptTimestamp`, `receiptTotalPrice`; a receipt's
+  `articles` with `productName`, `quantity`, `totalPrice`, all prices in cents) comes from the public project
+  `grocy-rewe-connect`. It is **not** an official interface and **was not run against a real REWE account**; the
+  scripts were run in a desktop browser against a stand-in server with that shape, and the window itself was never
+  run on a phone. Lines without a product name (deposit, counter goods) are left out, so a receipt with such lines is
+  flagged as not adding up to its total.
+- It needs a new build of the phone app, because `react-native-webview` is a native module. It may break at any
+  change of REWE's web shop and may go against REWE's terms of use.
+
+## The other supermarkets and online shops
+
+Looked up on 2026-11-03 (what the shops and the press say; none of it tried with an account):
+
+| Shop | What exists | What works in Financer |
+| --- | --- | --- |
+| dm | digital receipt in the "Mein dm" app since 2021 | in-app only; **share** it to Financer (below) |
+| Rossmann | digital receipt in the Rossmann app since May 2025 (technology: anybill, which can also save a receipt as a PDF) | **share** the PDF or a screenshot |
+| Penny | eBon in the PENNY app since April 2026 (off until switched on) | **share** |
+| Edeka, Netto | receipts inside the Edeka app; Netto unclear | **share** |
+| Aldi | no digital receipt found | photograph the paper receipt |
+| Amazon | no connection for private customers: "Login with Amazon" only gives name, e-mail and postal code; the official way to the order history is "request your data" (a CSV after a few days to about a month) | **Online orders** import below |
+| eBay | no buyer export; the API only returns what you won in the last 60 days; the official data request exists | the same CSV import, if the file has the usual columns |
+
+From 1 January 2028 a draft law makes the digital receipt the standard (a QR code at the till, e-mail or app, no
+shop app needed). Nothing is known about the format yet.
+
+### Online orders from a file (Settings > Receipt sources > Online orders)
+
+Pick the CSV, see what was found, import. The columns are found by their **heading**, not their place (Amazon renamed
+"Total Amount" to "Total Owed" between versions), English or German: order number, order date, product name, quantity
+and an amount (the total, or the unit price times the quantity). Rows with the same order number become one order;
+cancelled rows, other currencies, rows without an amount or a readable date are left out and counted in the preview.
+A file whose columns are not found is refused with the headings it has. The orders are stored as receipts of the shop
+(`orders_file`), once per shop and order number, and matched to bank payments. The file is read on the phone; the server
+only receives the orders (`POST /v1/receipts/sources/orders_file/import`, at most 200 orders of 200 lines).
+
+It was tested with files shaped like the documented Amazon export and run end to end in a desktop browser against the
+real server; **it was not tried with a real Amazon file**, whose exact columns differ between versions.
+
+### Share to Financer (phone app only)
+
+The share menu of the phone gets a Financer entry (`expo-share-intent`): share a receipt (PDF, JPEG, PNG or text)
+from the dm, Rossmann, Edeka, Netto or Penny app, a PDF invoice, or an order CSV. The Share screen says what it is and
+reads it only after you tap the button: a receipt goes through the same reading as a scanned one (your configured AI
+provider, the items stored once), a CSV opens the order import. A link cannot be read, and HEIC photos are refused with
+the reason. iOS gets a share extension (a second target in the Xcode project); Android gets intent filters for PDF,
+images and text. **It needs a new native build, was never run on a phone**, and the iOS extension may need extra signing
+setup for device builds.

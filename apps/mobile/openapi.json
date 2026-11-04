@@ -128,7 +128,7 @@
             }
           },
           {
-            "name": "as_of",
+            "name": "date",
             "in": "path",
             "description": "Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.",
             "required": true,
@@ -205,18 +205,18 @@
         ]
       }
     },
-    "/v1/backup/create": {
+    "/v1/backups": {
       "post": {
         "tags": [
           "backup"
         ],
-        "summary": "Create a passphrase-encrypted backup of everything that is yours (see `/v1/export`).",
+        "summary": "Create a passphrase-encrypted backup of everything that is yours (see `/v1/data`).",
         "operationId": "create_backup",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/BackupCreateRequest"
+                "$ref": "#/components/schemas/BackupInput"
               }
             }
           },
@@ -250,18 +250,18 @@
         ]
       }
     },
-    "/v1/backup/restore": {
+    "/v1/backups/restorations": {
       "post": {
         "tags": [
           "backup"
         ],
-        "summary": "Decrypt a backup and merge it like `/v1/import`. A wrong passphrase or damaged file is a\n400 and changes nothing.",
+        "summary": "Decrypt a backup and merge it like `/v1/data`. A wrong passphrase or damaged file is a\n400 and changes nothing.",
         "operationId": "restore_backup",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/BackupRestoreRequest"
+                "$ref": "#/components/schemas/BackupRestorationInput"
               }
             }
           },
@@ -323,68 +323,12 @@
         ]
       }
     },
-    "/v1/bank/connections/{name}/cancel": {
-      "post": {
-        "tags": [
-          "bank_connections"
-        ],
-        "summary": "Stop waiting for an approval.",
-        "operationId": "cancel_connection",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "description": "connection name",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BankConnectionDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such connection",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Logging in right now",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/v1/bank/connections/{name}/disconnect": {
       "post": {
         "tags": [
           "bank_connections"
         ],
-        "summary": "Plaid: forget the connection. Tells Plaid to drop it and deletes the stored access token, so\nthe next sync starts with signing in again. The imported transactions stay.",
+        "summary": "Plaid, GoCardless, finAPI: forget the connection. Tells the provider to drop it and deletes the\nstored access, so the next sync starts with signing in again. The imported transactions stay.",
         "operationId": "disconnect_connection",
         "parameters": [
           {
@@ -408,7 +352,7 @@
             }
           },
           "400": {
-            "description": "Not a Plaid connection",
+            "description": "A FinTS connection has nothing to forget",
             "content": {
               "application/json": {
                 "schema": {
@@ -435,18 +379,18 @@
         ]
       }
     },
-    "/v1/bank/connections/{name}/sync": {
+    "/v1/bank/import/{kind}": {
       "post": {
         "tags": [
           "bank_connections"
         ],
-        "summary": "Start a sync for one connection: logs in, then waits (in the background) for your approval in\nthe banking app and imports. Send the PIN only when `pin_from_env` is false.",
-        "operationId": "sync_connection",
+        "summary": "Import a file of a provider with the `file` flow (`csv`: the Sparkasse CSV-CAMT export).\nTransactions are categorized, and rows that were imported before are skipped, so uploading an\noverlapping period is safe.",
+        "operationId": "import_file",
         "parameters": [
           {
-            "name": "name",
+            "name": "kind",
             "in": "path",
-            "description": "connection name",
+            "description": "`csv`",
             "required": true,
             "schema": {
               "type": "string"
@@ -455,32 +399,135 @@
         ],
         "requestBody": {
           "content": {
-            "application/json": {
+            "text/csv": {
               "schema": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/SyncNowRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Import finished",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileImportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a file this provider reads",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
               }
             }
           }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/providers": {
+      "get": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "The ways transactions come in (a CSV file, FinTS, Plaid, GoCardless, finAPI), how each works, and\nwhether this server has it set up.",
+        "operationId": "list_providers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/status": {
+      "get": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "What the last login sent with a request looked like (its non-secret details), to prefill the form.",
+        "operationId": "bank_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankStatusDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/sync": {
+      "post": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "Start a sync, whichever provider: name a `connection` of the server configuration, or for FinTS\na `kind` with a `login`. The server logs in or asks the provider for a sign-in page, then waits\nin the background for what the person has to do (`state` is `needs_approval` or `needs_link`)\nand imports as soon as it is done. Poll `GET /v1/bank/sync/{id}`. Send the PIN only when the\nconnection has no `pin_from_env`.",
+        "operationId": "start_sync",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncInput"
+              }
+            }
+          },
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BankConnectionDto"
+                  "$ref": "#/components/schemas/SyncDto"
                 }
               }
             }
           },
           "400": {
-            "description": "PIN missing, or rejected by the bank",
+            "description": "PIN or login missing or refused by the bank, a kind that needs a connection",
             "content": {
               "application/json": {
                 "schema": {
@@ -520,7 +567,7 @@
             }
           },
           "502": {
-            "description": "Could not reach the bank",
+            "description": "Could not reach the bank or the provider",
             "content": {
               "application/json": {
                 "schema": {
@@ -530,7 +577,7 @@
             }
           },
           "503": {
-            "description": "No FinTS product id configured",
+            "description": "The provider is not set up on the server",
             "content": {
               "application/json": {
                 "schema": {
@@ -547,107 +594,18 @@
         ]
       }
     },
-    "/v1/bank/status": {
+    "/v1/bank/sync/{id}": {
       "get": {
         "tags": [
-          "bank"
+          "bank_connections"
         ],
-        "operationId": "bank_status",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BankStatus"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/bank/sync": {
-      "post": {
-        "tags": [
-          "bank"
-        ],
-        "summary": "Log in to the bank and ask for approval. Approve in your Sparkasse app, then call confirm.",
-        "operationId": "start_sync",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SyncRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SyncStarted"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Rejected by the bank, or a TAN method that is not supported",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Could not reach the bank",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "No FinTS product id configured",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/bank/sync/{id}/confirm": {
-      "post": {
-        "tags": [
-          "bank"
-        ],
-        "summary": "Check whether you approved in the banking app; if so, import. Answers 409 while still\nwaiting: keep calling every few seconds.",
-        "operationId": "confirm_sync",
+        "summary": "Where a sync stands: waiting for an approval or a sign-in, running, or how it ended (`result`).\nA connection can be asked by its name; an unknown or expired login answers 404.",
+        "operationId": "get_sync",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "sync_id",
+            "description": "`id` of a connection or of a started sync",
             "required": true,
             "schema": {
               "type": "string"
@@ -659,17 +617,53 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SyncDone"
+                  "$ref": "#/components/schemas/SyncDto"
                 }
               }
             }
           },
-          "400": {
-            "description": "Rejected by the bank",
+          "404": {
+            "description": "Unknown or expired sync",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/sync/{id}/cancel": {
+      "post": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "Stop waiting for an approval or a sign-in.",
+        "operationId": "cancel_sync",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "`id` of a connection or of a started sync",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncDto"
                 }
               }
             }
@@ -685,17 +679,7 @@
             }
           },
           "409": {
-            "description": "Not approved yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Could not reach the bank",
+            "description": "Logging in or fetching right now",
             "content": {
               "application/json": {
                 "schema": {
@@ -747,7 +731,7 @@
               "schema": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/BasketItemDto"
+                  "$ref": "#/components/schemas/BasketItemInput"
                 }
               }
             }
@@ -782,114 +766,13 @@
         ]
       }
     },
-    "/v1/budget/disposable": {
-      "get": {
-        "tags": [
-          "routes"
-        ],
-        "summary": "Monthly income minus fixed costs, from detected recurring payments.",
-        "operationId": "disposable",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DisposableDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/budget/envelopes": {
-      "get": {
-        "tags": [
-          "routes"
-        ],
-        "operationId": "get_envelopes",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/EnvelopeDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "put": {
-        "tags": [
-          "routes"
-        ],
-        "summary": "Replace all monthly envelopes. A category may appear once; limits must not be negative.",
-        "operationId": "put_envelopes",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/EnvelopeDto"
-                }
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/EnvelopeDto"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Duplicate category or negative limit",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/budget/period": {
+    "/v1/budget": {
       "get": {
         "tags": [
           "budget_period"
         ],
-        "summary": "The budget period you are in (or the previous one), from your payday setting.",
-        "operationId": "budget_period",
+        "summary": "The budget in one answer: the period you are in (or the previous one, `period=previous`), what\nwas spent against each envelope in it, what you can spend per day for the rest of it, and\nmonthly income minus fixed costs from your recurring payments. `date` is the day to treat as\ntoday (the app sends its local date so that a late evening is not already \"tomorrow\").",
+        "operationId": "budget",
         "parameters": [
           {
             "name": "period",
@@ -927,48 +810,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PeriodDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/budget/safe-to-spend": {
-      "get": {
-        "tags": [
-          "budget_period"
-        ],
-        "summary": "What you can spend per day for the rest of the period, with the breakdown: expected income,\nrecurring costs still to come, planned envelope money not yet spent, and spending so far.",
-        "operationId": "safe_to_spend",
-        "parameters": [
-          {
-            "name": "date",
-            "in": "path",
-            "description": "The day to treat as today, ISO format. Defaults to today (UTC).",
-            "required": true,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "format": "date"
-            },
-            "example": "2026-10-11"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SafeToSpendDto"
+                  "$ref": "#/components/schemas/BudgetDto"
                 }
               }
             }
@@ -991,71 +833,26 @@
         ]
       }
     },
-    "/v1/budget/status": {
-      "get": {
+    "/v1/budget/envelopes": {
+      "put": {
         "tags": [
           "routes"
         ],
-        "summary": "Spent and remaining per envelope for one budget period (a calendar month unless a payday is\nset in the settings).",
-        "operationId": "budget_status",
-        "parameters": [
-          {
-            "name": "year",
-            "in": "path",
-            "description": "With `month`: the budget period that starts in this month (the calendar month when the\npayday is 1).",
-            "required": true,
-            "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "int32"
-            }
-          },
-          {
-            "name": "month",
-            "in": "path",
-            "description": "1 to 12; only together with `year`.",
-            "required": true,
-            "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "int32",
-              "minimum": 0
-            }
-          },
-          {
-            "name": "period",
-            "in": "path",
-            "description": "Instead of `year` and `month`: `current` (default) or `previous` budget period.",
-            "required": true,
-            "schema": {
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/PeriodChoice"
-                },
-                {
-                  "type": "null"
+        "summary": "Replace all monthly envelopes. A category may appear once; limits must not be negative.",
+        "operationId": "put_envelopes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/EnvelopeInput"
                 }
-              ]
+              }
             }
           },
-          {
-            "name": "date",
-            "in": "path",
-            "description": "The day to treat as today for `period` (ISO format); defaults to today (UTC).",
-            "required": true,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "format": "date"
-            }
-          }
-        ],
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -1070,7 +867,7 @@
             }
           },
           "400": {
-            "description": "Invalid month",
+            "description": "Duplicate category or negative limit",
             "content": {
               "application/json": {
                 "schema": {
@@ -1619,7 +1416,7 @@
         ]
       }
     },
-    "/v1/export": {
+    "/v1/data": {
       "get": {
         "tags": [
           "export"
@@ -1631,7 +1428,50 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExportDto"
+                  "$ref": "#/components/schemas/DataDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Merge an export into this backend. Transactions and receipts already present (same\nfingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items\nlist replace the current ones when the export has any; settings are applied if present.",
+        "operationId": "import_data",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a valid export",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -1676,51 +1516,6 @@
           },
           "400": {
             "description": "Invalid date",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/import": {
-      "post": {
-        "tags": [
-          "export"
-        ],
-        "summary": "Merge an export into this backend. Transactions and receipts already present (same\nfingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items\nlist replace the current ones when the export has any; settings are applied if present.",
-        "operationId": "import_data",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExportDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportReportDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Not a valid export",
             "content": {
               "application/json": {
                 "schema": {
@@ -1847,7 +1642,7 @@
         ]
       }
     },
-    "/v1/meal-plan/pantry": {
+    "/v1/pantry": {
       "get": {
         "tags": [
           "mealplan"
@@ -1881,7 +1676,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PantryUpdate"
+                "$ref": "#/components/schemas/PantryInput"
               }
             }
           },
@@ -1899,71 +1694,6 @@
           },
           "400": {
             "description": "Unknown item or too many items",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/meal-plan/shopping-list": {
-      "get": {
-        "tags": [
-          "mealplan"
-        ],
-        "summary": "The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the\nservings and converted to packs), pantry items left off, priced per chain with the best split\nand checked against what is left of the groceries budget.",
-        "operationId": "get_shopping_list",
-        "parameters": [
-          {
-            "name": "week",
-            "in": "path",
-            "description": "Any day of the week to shop for. Defaults to the current week.",
-            "required": true,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "format": "date"
-            },
-            "example": "2026-10-12"
-          },
-          {
-            "name": "date",
-            "in": "path",
-            "description": "The day to treat as today when looking up the groceries budget left. Defaults to today (UTC).",
-            "required": true,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "format": "date"
-            },
-            "example": "2026-10-12"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ShoppingListDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Week out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -2096,7 +1826,7 @@
         ]
       }
     },
-    "/v1/prices/refresh": {
+    "/v1/prices/refreshes": {
       "post": {
         "tags": [
           "grocery"
@@ -2167,7 +1897,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ReceiptUpload"
+                "$ref": "#/components/schemas/ReceiptUploadInput"
               }
             }
           },
@@ -2201,161 +1931,7 @@
         ]
       }
     },
-    "/v1/receipts/lidl": {
-      "delete": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Disconnect Lidl Plus: the stored token is deleted. Receipts already imported stay.",
-        "operationId": "lidl_disconnect",
-        "responses": {
-          "204": {
-            "description": "Disconnected"
-          },
-          "409": {
-            "description": "Lidl Plus is not switched on",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/lidl/finish": {
-      "post": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Finish the sign-in with the address Lidl's page ended on. Only the refresh token is stored,\nencrypted. The first receipts are fetched right away.",
-        "operationId": "lidl_finish",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LidlFinishRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LidlStatusDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Unknown or expired sign-in, or an address that is not the callback",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Lidl Plus is not switched on",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Lidl did not accept the code or could not be reached",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/lidl/start": {
-      "post": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Start a Lidl Plus sign-in. Returns the address of Lidl's own sign-in page; nothing is sent to\nLidl by this call. Experimental and unofficial: see docs/RECEIPT_SOURCES.md.",
-        "operationId": "lidl_start",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LidlStartDto"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Lidl Plus is not switched on",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/lidl/status": {
-      "get": {
-        "tags": [
-          "receipt_sources"
-        ],
-        "summary": "Whether Lidl Plus is connected, when it last synced and how many receipts came from it.",
-        "operationId": "lidl_status",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LidlStatusDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/receipts/scan": {
+    "/v1/receipts/scans": {
       "post": {
         "tags": [
           "grocery"
@@ -2366,7 +1942,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ReceiptScan"
+                "$ref": "#/components/schemas/ReceiptScanInput"
               }
             }
           },
@@ -2425,7 +2001,7 @@
         "tags": [
           "receipt_sources"
         ],
-        "summary": "The receipt sources: the mailbox, the Lidl Plus account and the watched folder, with state,\nlast run, receipts imported and the last error. Never contains a password or token.",
+        "summary": "Every receipt source and how it is doing: the mailbox and the watched folder (`server`), Lidl\nPlus and the Kaufland Card (`sign_in`), REWE in the app and an orders file (`push`). Never\ncontains a password or token.",
         "operationId": "list_sources",
         "responses": {
           "200": {
@@ -2436,6 +2012,402 @@
                   "items": {
                     "$ref": "#/components/schemas/ReceiptSourceDto"
                   }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}": {
+      "get": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "One source: its state, when it last ran, how many receipts came from it, the last error.",
+        "operationId": "get_source",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`email`, `lidl_plus`, `kaufland_card`, `folder`, `rewe_app` or `orders_file`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptSourceDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}/connect": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "`sign_in` sources: start the sign-in. Returns the address of the shop's own sign-in page;\nnothing is sent to the shop by this call. Experimental and unofficial: see\ndocs/RECEIPT_SOURCES.md.",
+        "operationId": "connect_source",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`lidl_plus` or `kaufland_card`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceConnectDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a source you sign in to",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}/disconnect": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "Forget the connection: a stored token is deleted (`sign_in`), or the note of the last push\n(`rewe_app`). Receipts already stored stay.",
+        "operationId": "disconnect_source",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`lidl_plus`, `kaufland_card` or `rewe_app`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptSourceDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nothing to disconnect for this source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}/finish": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "`sign_in` sources: finish the sign-in with the address the shop's page ended on. Only the\nrefresh token is stored, encrypted. The first receipts are fetched right away.",
+        "operationId": "finish_source",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`lidl_plus` or `kaufland_card`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceFinishInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptSourceDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown or expired sign-in, or an address that is not the callback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The shop did not accept the code or could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}/import": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "`push` sources: store the receipts the app read (REWE's web shop in its own window, `rewe_app`)\nor the orders it read from a file the shop produced (`orders_file`: Amazon's data request, for\nexample), once each, and match them to bank payments. Nothing is fetched from the shop.\nExperimental: see docs/RECEIPT_SOURCES.md.",
+        "operationId": "import_receipts",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`rewe_app` or `orders_file`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptImportInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptImportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A receipt is malformed, there are too many, or the source takes no pushes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/receipts/sources/{kind}/known": {
+      "post": {
+        "tags": [
+          "receipt_sources"
+        ],
+        "summary": "`push` sources (`rewe_app`): which of the shop's receipt ids are not stored yet. The app calls\nit with the list it just read, so that it fetches the details of the new ones only.",
+        "operationId": "known_receipts",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`rewe_app`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptKnownInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptKnownDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Too many ids, an odd id, or a source without a list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -2459,17 +2431,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/ReceiptSyncRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "$ref": "#/components/schemas/ReceiptSyncInput"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -2628,7 +2594,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/IdeasRequest"
+                "$ref": "#/components/schemas/IdeasInput"
               }
             }
           },
@@ -2774,7 +2740,7 @@
         ]
       }
     },
-    "/v1/rules/apply": {
+    "/v1/rules/applications": {
       "post": {
         "tags": [
           "categorization"
@@ -2786,7 +2752,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApplyReport"
+                  "$ref": "#/components/schemas/RulesAppliedDto"
                 }
               }
             }
@@ -2799,8 +2765,8 @@
         ]
       }
     },
-    "/v1/rules/reorder": {
-      "post": {
+    "/v1/rules/order": {
+      "put": {
         "tags": [
           "categorization"
         ],
@@ -2810,7 +2776,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RuleOrder"
+                "$ref": "#/components/schemas/RuleOrderInput"
               }
             }
           },
@@ -2964,7 +2930,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigView"
+                  "$ref": "#/components/schemas/ConfigDto"
                 }
               }
             }
@@ -2996,7 +2962,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Change"
+                "$ref": "#/components/schemas/ConfigChangeInput"
               }
             }
           },
@@ -3007,7 +2973,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigSaved"
+                  "$ref": "#/components/schemas/ConfigSavedDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The change was refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigProblems"
                 }
               }
             }
@@ -3024,16 +3000,6 @@
           },
           "409": {
             "description": "A key is decided by an environment variable, or a restart is under way",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfigProblems"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The change was refused",
             "content": {
               "application/json": {
                 "schema": {
@@ -3092,7 +3058,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SettingsUpdate"
+                "$ref": "#/components/schemas/SettingsInput"
               }
             }
           },
@@ -3110,6 +3076,71 @@
           },
           "400": {
             "description": "Invalid value",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/shopping-list": {
+      "get": {
+        "tags": [
+          "mealplan"
+        ],
+        "summary": "The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the\nservings and converted to packs), pantry items left off, priced per chain with the best split\nand checked against what is left of the groceries budget.",
+        "operationId": "get_shopping_list",
+        "parameters": [
+          {
+            "name": "week",
+            "in": "path",
+            "description": "Any day of the week to shop for. Defaults to the current week.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "example": "2026-10-12"
+          },
+          {
+            "name": "date",
+            "in": "path",
+            "description": "The day to treat as today when looking up the groceries budget left. Defaults to today (UTC).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "example": "2026-10-12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShoppingListDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Week out of range",
             "content": {
               "application/json": {
                 "schema": {
@@ -3332,7 +3363,7 @@
             }
           },
           {
-            "name": "as_of",
+            "name": "date",
             "in": "path",
             "description": "Treat this date as today (`2026-03-02`). Default: today. Mainly for testing.",
             "required": true,
@@ -3391,53 +3422,8 @@
         ]
       }
     },
-    "/v1/transactions/categorize-unknown": {
-      "post": {
-        "tags": [
-          "categorization"
-        ],
-        "summary": "Ask your Claude or OpenAI model to suggest categories for merchants still left as\nuncategorized or other. Only distinct merchant names (letters only) and the allowed\ncategories are sent; never amounts, dates, IBANs or purposes. Nothing is changed until you\naccept suggestions.",
-        "operationId": "categorize_unknown",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuggestionsDto"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The provider failed or returned nothing usable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "No API key configured for the selected provider",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/transactions/categorize-unknown/accept": {
-      "post": {
+    "/v1/transactions/categories": {
+      "put": {
         "tags": [
           "categorization"
         ],
@@ -3447,7 +3433,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AcceptSuggestions"
+                "$ref": "#/components/schemas/CategoriesInput"
               }
             }
           },
@@ -3458,59 +3444,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AcceptReport"
+                  "$ref": "#/components/schemas/CategoriesChangedDto"
                 }
               }
             }
           },
           "400": {
             "description": "A merchant without letters or a category suggestions cannot use",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/transactions/import": {
-      "post": {
-        "tags": [
-          "routes"
-        ],
-        "summary": "Import a Sparkasse CSV-CAMT export. Transactions are categorized, and rows that were\nimported before are skipped, so re-uploading an overlapping period is safe.",
-        "operationId": "import_transactions",
-        "requestBody": {
-          "content": {
-            "text/csv": {
-              "schema": {
-                "type": "string"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Import finished",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportReport"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Not a Sparkasse CSV export",
             "content": {
               "application/json": {
                 "schema": {
@@ -3555,6 +3495,51 @@
         ]
       }
     },
+    "/v1/transactions/suggestions": {
+      "post": {
+        "tags": [
+          "categorization"
+        ],
+        "summary": "Ask your Claude or OpenAI model to suggest categories for merchants still left as\nuncategorized or other. Only distinct merchant names (letters only) and the allowed\ncategories are sent; never amounts, dates, IBANs or purposes. Nothing is changed until you\naccept suggestions.",
+        "operationId": "categorize_unknown",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestionsDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The provider failed or returned nothing usable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No API key configured for the selected provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/transactions/{id}/category": {
       "put": {
         "tags": [
@@ -3578,7 +3563,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CategoryChange"
+                "$ref": "#/components/schemas/CategoryInput"
               }
             }
           },
@@ -3589,7 +3574,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CategoryChanged"
+                  "$ref": "#/components/schemas/CategoryChangedDto"
                 }
               }
             }
@@ -3731,39 +3716,6 @@
   },
   "components": {
     "schemas": {
-      "AcceptReport": {
-        "type": "object",
-        "required": [
-          "rules_saved",
-          "transactions_changed"
-        ],
-        "properties": {
-          "rules_saved": {
-            "type": "integer",
-            "description": "Rules created or updated (one per accepted merchant).",
-            "minimum": 0
-          },
-          "transactions_changed": {
-            "type": "integer",
-            "description": "Transactions that changed category as a result.",
-            "minimum": 0
-          }
-        }
-      },
-      "AcceptSuggestions": {
-        "type": "object",
-        "required": [
-          "suggestions"
-        ],
-        "properties": {
-          "suggestions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AcceptedSuggestion"
-            }
-          }
-        }
-      },
       "AcceptedSuggestion": {
         "type": "object",
         "required": [
@@ -3930,31 +3882,6 @@
           }
         }
       },
-      "ApplyReport": {
-        "type": "object",
-        "required": [
-          "changed"
-        ],
-        "properties": {
-          "changed": {
-            "type": "integer",
-            "description": "Transactions whose category changed. Transactions you categorized by hand are skipped.",
-            "minimum": 0
-          }
-        }
-      },
-      "BackupCreateRequest": {
-        "type": "object",
-        "required": [
-          "passphrase"
-        ],
-        "properties": {
-          "passphrase": {
-            "type": "string",
-            "description": "At least 8 characters. Not stored anywhere: without it the backup cannot be opened."
-          }
-        }
-      },
       "BackupDto": {
         "type": "object",
         "required": [
@@ -3977,7 +3904,19 @@
           }
         }
       },
-      "BackupRestoreRequest": {
+      "BackupInput": {
+        "type": "object",
+        "required": [
+          "passphrase"
+        ],
+        "properties": {
+          "passphrase": {
+            "type": "string",
+            "description": "At least 8 characters. Not stored anywhere: without it the backup cannot be opened."
+          }
+        }
+      },
+      "BackupRestorationInput": {
         "type": "object",
         "required": [
           "passphrase",
@@ -3997,6 +3936,7 @@
         "type": "object",
         "description": "A configured connection. The login is masked; the PIN is never part of it.",
         "required": [
+          "id",
           "name",
           "kind",
           "bank_code",
@@ -4015,7 +3955,7 @@
             "items": {
               "$ref": "#/components/schemas/LinkedAccountDto"
             },
-            "description": "Plaid: the accounts that were linked (put their ids in `account_ids` to read only some)."
+            "description": "The accounts that were linked (put their ids in `account_ids` to read only some)."
           },
           "approval_expires_at": {
             "type": [
@@ -4023,7 +3963,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Unix seconds after which a sync waiting for approval, or Plaid's sign-in page, is given up."
+            "description": "Unix seconds after which a sync waiting for approval, or for a sign-in, is given up."
           },
           "balance_cents": {
             "type": [
@@ -4045,9 +3985,13 @@
           "iban_masked": {
             "type": "string"
           },
+          "id": {
+            "type": "string",
+            "description": "What to poll and cancel it by (`/v1/bank/sync/{id}`)."
+          },
           "kind": {
             "type": "string",
-            "description": "`fints` or `plaid`."
+            "description": "`fints`, `plaid`, `gocardless` or `finapi`."
           },
           "last_result": {
             "oneOf": [
@@ -4072,11 +4016,11 @@
               "string",
               "null"
             ],
-            "description": "Plaid, in `needs_link`: the page to open in the browser to sign in to your bank."
+            "description": "In `needs_link`: the page to open in the browser to sign in to your bank."
           },
           "linked": {
             "type": "boolean",
-            "description": "Plaid: false until you have signed in to your bank once (press Sync now to start that);\nalways true for FinTS."
+            "description": "False until you have signed in to your bank once (start a sync to do that); always true\nfor FinTS."
           },
           "login_masked": {
             "type": "string"
@@ -4108,7 +4052,7 @@
           },
           "sync_due": {
             "type": "boolean",
-            "description": "A scheduled sync is due but cannot start by itself because the server has no PIN: press\nSync now and type it."
+            "description": "A scheduled sync is due but cannot start by itself because the server has no PIN: start a\nsync and type it."
           },
           "sync_every_hours": {
             "type": "integer",
@@ -4118,7 +4062,7 @@
           }
         }
       },
-      "BankStatus": {
+      "BankStatusDto": {
         "type": "object",
         "required": [
           "configured"
@@ -4196,7 +4140,7 @@
           }
         }
       },
-      "BasketItemDto": {
+      "BasketItemInput": {
         "type": "object",
         "required": [
           "item",
@@ -4237,6 +4181,42 @@
           },
           "reference_pack": {
             "type": "string"
+          }
+        }
+      },
+      "BudgetDto": {
+        "type": "object",
+        "description": "The budget: the period you are in (or the one before), what was spent against each envelope in\nit, what is left to spend per day, and the monthly picture from your recurring payments.",
+        "required": [
+          "period",
+          "disposable",
+          "envelopes"
+        ],
+        "properties": {
+          "disposable": {
+            "$ref": "#/components/schemas/DisposableDto",
+            "description": "Monthly income minus fixed costs, from detected recurring payments."
+          },
+          "envelopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvelopeStatusDto"
+            },
+            "description": "Every envelope with its limit, what was spent in `period` and what is left. A calendar month\nunless a payday is set in the settings."
+          },
+          "period": {
+            "$ref": "#/components/schemas/PeriodDto"
+          },
+          "safe_to_spend": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SafeToSpendDto",
+                "description": "What you can spend per day for the rest of the period. Only for the period you are in:\nabsent when `period=previous`."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -4303,23 +4283,40 @@
           }
         }
       },
-      "CategoryChange": {
+      "CategoriesChangedDto": {
         "type": "object",
         "required": [
-          "category"
+          "rules_saved",
+          "transactions_changed"
         ],
         "properties": {
-          "category": {
-            "type": "string",
-            "example": "groceries"
+          "rules_saved": {
+            "type": "integer",
+            "description": "Rules created or updated (one per accepted merchant).",
+            "minimum": 0
           },
-          "remember": {
-            "type": "boolean",
-            "description": "Also create (or update) a rule for this merchant and apply it to its other\ntransactions."
+          "transactions_changed": {
+            "type": "integer",
+            "description": "Transactions that changed category as a result.",
+            "minimum": 0
           }
         }
       },
-      "CategoryChanged": {
+      "CategoriesInput": {
+        "type": "object",
+        "required": [
+          "suggestions"
+        ],
+        "properties": {
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AcceptedSuggestion"
+            }
+          }
+        }
+      },
+      "CategoryChangedDto": {
         "type": "object",
         "required": [
           "transaction",
@@ -4344,6 +4341,22 @@
           },
           "transaction": {
             "$ref": "#/components/schemas/TransactionDto"
+          }
+        }
+      },
+      "CategoryInput": {
+        "type": "object",
+        "required": [
+          "category"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "example": "groceries"
+          },
+          "remember": {
+            "type": "boolean",
+            "description": "Also create (or update) a rule for this merchant and apply it to its other\ntransactions."
           }
         }
       },
@@ -4490,7 +4503,7 @@
           }
         }
       },
-      "Change": {
+      "ConfigChangeInput": {
         "type": "object",
         "description": "What to change: `set` writes values (`null` clears one), `reset` removes the app's value so the\nfile's, or the default, applies again.",
         "properties": {
@@ -4509,57 +4522,7 @@
           }
         }
       },
-      "ConfigProblems": {
-        "type": "object",
-        "description": "A change was refused; nothing was saved.",
-        "required": [
-          "error",
-          "problems"
-        ],
-        "properties": {
-          "error": {
-            "type": "string",
-            "description": "The problems as one text."
-          },
-          "problems": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "One entry per problem, naming the key."
-          }
-        }
-      },
-      "ConfigSaved": {
-        "type": "object",
-        "description": "A change was saved.",
-        "required": [
-          "changed",
-          "warnings",
-          "restarting"
-        ],
-        "properties": {
-          "changed": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "The keys whose value is different now."
-          },
-          "restarting": {
-            "type": "boolean",
-            "description": "The server is restarting to apply the change (a few seconds). False when nothing changed."
-          },
-          "warnings": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Things that are legal but probably not what you want."
-          }
-        }
-      },
-      "ConfigView": {
+      "ConfigDto": {
         "type": "object",
         "description": "The whole settings screen.",
         "required": [
@@ -4615,6 +4578,56 @@
           }
         }
       },
+      "ConfigProblems": {
+        "type": "object",
+        "description": "A change was refused; nothing was saved.",
+        "required": [
+          "error",
+          "problems"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "The problems as one text."
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "One entry per problem, naming the key."
+          }
+        }
+      },
+      "ConfigSavedDto": {
+        "type": "object",
+        "description": "A change was saved.",
+        "required": [
+          "changed",
+          "warnings",
+          "restarting"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The keys whose value is different now."
+          },
+          "restarting": {
+            "type": "boolean",
+            "description": "The server is restarting to apply the change (a few seconds). False when nothing changed."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Things that are legal but probably not what you want."
+          }
+        }
+      },
       "ConnectionState": {
         "type": "string",
         "description": "Where a connection is in a sync.",
@@ -4625,6 +4638,66 @@
           "needs_link",
           "error"
         ]
+      },
+      "DataDto": {
+        "type": "object",
+        "description": "Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,\nwhich are fetched again.",
+        "required": [
+          "version",
+          "transactions",
+          "budget",
+          "basket",
+          "receipts",
+          "settings"
+        ],
+        "properties": {
+          "basket": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BasketItemInput"
+            }
+          },
+          "budget": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvelopeInput"
+            }
+          },
+          "calendars": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportCalendar"
+            },
+            "description": "Added in the calendar release; older exports have none."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportEvent"
+            }
+          },
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportReceipt"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ExportSettings"
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExportTransaction"
+            }
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Format version, currently 1.",
+            "minimum": 0
+          }
+        }
       },
       "DisposableDto": {
         "type": "object",
@@ -4770,7 +4843,7 @@
           }
         }
       },
-      "EnvelopeDto": {
+      "EnvelopeInput": {
         "type": "object",
         "required": [
           "category",
@@ -5095,66 +5168,6 @@
           }
         }
       },
-      "ExportDto": {
-        "type": "object",
-        "description": "Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,\nwhich are fetched again.",
-        "required": [
-          "version",
-          "transactions",
-          "budget",
-          "basket",
-          "receipts",
-          "settings"
-        ],
-        "properties": {
-          "basket": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/BasketItemDto"
-            }
-          },
-          "budget": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EnvelopeDto"
-            }
-          },
-          "calendars": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ExportCalendar"
-            },
-            "description": "Added in the calendar release; older exports have none."
-          },
-          "events": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ExportEvent"
-            }
-          },
-          "receipts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ExportReceipt"
-            }
-          },
-          "settings": {
-            "$ref": "#/components/schemas/ExportSettings"
-          },
-          "transactions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ExportTransaction"
-            }
-          },
-          "version": {
-            "type": "integer",
-            "format": "int32",
-            "description": "Format version, currently 1.",
-            "minimum": 0
-          }
-        }
-      },
       "ExportEvent": {
         "allOf": [
           {
@@ -5324,6 +5337,33 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "FileImportDto": {
+        "type": "object",
+        "required": [
+          "imported",
+          "duplicates",
+          "skipped"
+        ],
+        "properties": {
+          "duplicates": {
+            "type": "integer",
+            "description": "Rows already stored (same date, amount, counterparty and purpose).",
+            "minimum": 0
+          },
+          "imported": {
+            "type": "integer",
+            "description": "Rows stored for the first time.",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedRowDto"
+            },
+            "description": "Rows that could not be read, with the reason."
           }
         }
       },
@@ -5558,7 +5598,7 @@
           }
         }
       },
-      "IdeasRequest": {
+      "IdeasInput": {
         "type": "object",
         "properties": {
           "budget_cents": {
@@ -5580,33 +5620,6 @@
               "string",
               "null"
             ]
-          }
-        }
-      },
-      "ImportReport": {
-        "type": "object",
-        "required": [
-          "imported",
-          "duplicates",
-          "skipped"
-        ],
-        "properties": {
-          "duplicates": {
-            "type": "integer",
-            "description": "Rows already stored (same date, amount, counterparty and purpose).",
-            "minimum": 0
-          },
-          "imported": {
-            "type": "integer",
-            "description": "Rows stored for the first time.",
-            "minimum": 0
-          },
-          "skipped": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SkippedRowDto"
-            },
-            "description": "Rows that could not be read, with the reason."
           }
         }
       },
@@ -5757,103 +5770,9 @@
           }
         }
       },
-      "LidlFinishRequest": {
-        "type": "object",
-        "required": [
-          "state",
-          "callback_url"
-        ],
-        "properties": {
-          "callback_url": {
-            "type": "string",
-            "description": "The address the sign-in ended on, `com.lidlplus.app://callback?code=...`."
-          },
-          "state": {
-            "type": "string"
-          }
-        }
-      },
-      "LidlStartDto": {
-        "type": "object",
-        "required": [
-          "authorization_url",
-          "state",
-          "callback_scheme",
-          "redirect_uri",
-          "expires_in_seconds"
-        ],
-        "properties": {
-          "authorization_url": {
-            "type": "string",
-            "description": "Open this address in a browser: it is Lidl's own sign-in page."
-          },
-          "callback_scheme": {
-            "type": "string",
-            "description": "The address scheme Lidl's page redirects to after sign-in (`com.lidlplus.app`); an app can\nwatch for it, a person can copy the address from the browser."
-          },
-          "expires_in_seconds": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "redirect_uri": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string",
-            "description": "Send this back with the final address to `POST /v1/receipts/lidl/finish`."
-          }
-        }
-      },
-      "LidlStatusDto": {
-        "type": "object",
-        "required": [
-          "enabled",
-          "state",
-          "receipts"
-        ],
-        "properties": {
-          "connected_at": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "Unix seconds of the sign-in."
-          },
-          "enabled": {
-            "type": "boolean",
-            "description": "Lidl Plus is switched on in the server configuration."
-          },
-          "last_error": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "last_sync": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "Unix seconds of the last receipt sync."
-          },
-          "receipts": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Receipts imported from Lidl Plus.",
-            "minimum": 0
-          },
-          "state": {
-            "type": "string",
-            "description": "`disabled`, `never`, `connected` or `needs_signin`."
-          }
-        }
-      },
       "LinkedAccountDto": {
         "type": "object",
-        "description": "An account Plaid reported for a linked connection.",
+        "description": "An account the provider reported for a linked connection.",
         "required": [
           "id",
           "name",
@@ -5873,10 +5792,46 @@
               "string",
               "null"
             ],
-            "description": "The last digits of the account number, when Plaid has them."
+            "description": "The last digits of the account number, when the provider has them."
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "LoginInput": {
+        "type": "object",
+        "description": "The online banking login of a FinTS sync that is not set up in the configuration.",
+        "required": [
+          "blz",
+          "user_id",
+          "iban"
+        ],
+        "properties": {
+          "bic": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Leave empty to use the bank's own BIC."
+          },
+          "blz": {
+            "type": "string",
+            "description": "Bank code (BLZ)."
+          },
+          "fints_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only for a bank that is not in the built-in list (then the BIC is needed too)."
+          },
+          "iban": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Online banking login name."
           }
         }
       },
@@ -6165,6 +6120,21 @@
           }
         }
       },
+      "PantryInput": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Catalog keys (see `GET /v1/catalog`)."
+          }
+        }
+      },
       "PantryItemDto": {
         "type": "object",
         "required": [
@@ -6177,21 +6147,6 @@
           },
           "name": {
             "type": "string"
-          }
-        }
-      },
-      "PantryUpdate": {
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Catalog keys (see `GET /v1/catalog`)."
           }
         }
       },
@@ -6431,6 +6386,40 @@
           }
         }
       },
+      "ProviderDto": {
+        "type": "object",
+        "description": "A source of transactions and how to talk to it.",
+        "required": [
+          "kind",
+          "label",
+          "flow",
+          "available",
+          "connections"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "This server has it set up (its keys, or for FinTS the product id)."
+          },
+          "connections": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Connections of this kind in the server configuration.",
+            "minimum": 0
+          },
+          "flow": {
+            "type": "string",
+            "description": "`file` (send a file to `/v1/bank/import/{kind}`), `approval` (a PIN, then an approval in the\nbanking app, for every sync) or `link` (sign in once on the provider's page)."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`csv`, `fints`, `plaid`, `gocardless` or `finapi`."
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
       "ReceiptDto": {
         "type": "object",
         "required": [
@@ -6502,6 +6491,113 @@
           }
         }
       },
+      "ReceiptImportDto": {
+        "type": "object",
+        "required": [
+          "imported",
+          "duplicates",
+          "skipped",
+          "linked",
+          "notes"
+        ],
+        "properties": {
+          "duplicates": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "imported": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "linked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Receipts matched to a bank payment by this import.",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ReceiptImportInput": {
+        "type": "object",
+        "required": [
+          "receipts"
+        ],
+        "properties": {
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceiptInput"
+            },
+            "description": "At most 100 receipts for `rewe_app`, 200 orders for `orders_file` (whose `time` is not used)."
+          },
+          "shop": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`orders_file` only: the shop's name as it should show (\"Amazon\"); at most 40 characters."
+          }
+        }
+      },
+      "ReceiptInput": {
+        "type": "object",
+        "required": [
+          "id",
+          "date",
+          "lines"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Local day of the purchase, `YYYY-MM-DD`.",
+            "example": "2026-03-02"
+          },
+          "id": {
+            "type": "string",
+            "description": "The shop's id of the receipt (for an order, its order number)."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceiptLineInput"
+            }
+          },
+          "store": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "time": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Local time, `HH:MM`."
+          },
+          "total_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The printed total in cents; the sum of the lines when absent."
+          }
+        }
+      },
       "ReceiptItemDto": {
         "type": "object",
         "required": [
@@ -6531,7 +6627,61 @@
           }
         }
       },
-      "ReceiptScan": {
+      "ReceiptKnownDto": {
+        "type": "object",
+        "required": [
+          "unknown"
+        ],
+        "properties": {
+          "unknown": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The ids that are not stored yet: fetch and push only these."
+          }
+        }
+      },
+      "ReceiptKnownInput": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The shop's receipt ids the app has just listed."
+          }
+        }
+      },
+      "ReceiptLineInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "quantity",
+          "total_cents"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 to 99.",
+            "minimum": 0
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What the line cost in cents (negative for a refund)."
+          }
+        }
+      },
+      "ReceiptScanInput": {
         "type": "object",
         "required": [
           "image_base64",
@@ -6553,6 +6703,7 @@
         "description": "One receipt source and how it is doing. Contains no secrets.",
         "required": [
           "source",
+          "flow",
           "configured",
           "enabled",
           "state",
@@ -6565,6 +6716,14 @@
             "type": "boolean",
             "description": "Has a setting in the server configuration (Lidl Plus always counts)."
           },
+          "connected_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds of the sign-in (a `sign_in` source)."
+          },
           "detail": {
             "type": [
               "string",
@@ -6574,6 +6733,10 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "flow": {
+            "type": "string",
+            "description": "How its receipts get in: `server`, `sign_in` or `push`."
           },
           "imported_total": {
             "type": "integer",
@@ -6624,7 +6787,7 @@
           },
           "source": {
             "type": "string",
-            "description": "`email`, `lidl_plus` or `folder`."
+            "description": "`email`, `lidl_plus`, `kaufland_card`, `folder`, `rewe_app` or `orders_file`."
           },
           "state": {
             "type": "string",
@@ -6660,7 +6823,7 @@
           }
         }
       },
-      "ReceiptSyncRequest": {
+      "ReceiptSyncInput": {
         "type": "object",
         "properties": {
           "source": {
@@ -6668,11 +6831,11 @@
               "string",
               "null"
             ],
-            "description": "Only this source (`email`, `lidl_plus`, `folder`); all enabled ones when absent."
+            "description": "Only this source (`email`, `lidl_plus`, `kaufland_card`, `folder`); all enabled ones when absent."
           }
         }
       },
-      "ReceiptUpload": {
+      "ReceiptUploadInput": {
         "type": "object",
         "required": [
           "text"
@@ -7007,7 +7170,7 @@
           }
         }
       },
-      "RuleOrder": {
+      "RuleOrderInput": {
         "type": "object",
         "required": [
           "ids"
@@ -7020,6 +7183,19 @@
               "format": "int64"
             },
             "description": "Every rule id exactly once, highest priority first."
+          }
+        }
+      },
+      "RulesAppliedDto": {
+        "type": "object",
+        "required": [
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "integer",
+            "description": "Transactions whose category changed. Transactions you categorized by hand are skipped.",
+            "minimum": 0
           }
         }
       },
@@ -7192,7 +7368,7 @@
           }
         }
       },
-      "SettingsUpdate": {
+      "SettingsInput": {
         "type": "object",
         "properties": {
           "habit_mode": {
@@ -7435,6 +7611,55 @@
             "minimum": 0
           },
           "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "SourceConnectDto": {
+        "type": "object",
+        "description": "Starting a sign-in on a shop's own page.",
+        "required": [
+          "authorization_url",
+          "state",
+          "callback_scheme",
+          "redirect_uri",
+          "expires_in_seconds"
+        ],
+        "properties": {
+          "authorization_url": {
+            "type": "string",
+            "description": "Open this address in a browser: it is the shop's own sign-in page."
+          },
+          "callback_scheme": {
+            "type": "string",
+            "description": "The address scheme the shop's page redirects to after sign-in (`com.lidlplus.app`); an app\ncan watch for it, a person can copy the address from the browser."
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "redirect_uri": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "description": "Send this back with the final address to `POST /v1/receipts/sources/{kind}/finish`."
+          }
+        }
+      },
+      "SourceFinishInput": {
+        "type": "object",
+        "required": [
+          "state",
+          "callback_url"
+        ],
+        "properties": {
+          "callback_url": {
+            "type": "string",
+            "description": "The address the sign-in ended on, `com.lidlplus.app://callback?code=...`."
+          },
+          "state": {
             "type": "string"
           }
         }
@@ -7788,7 +8013,7 @@
       "SubscriptionsDto": {
         "type": "object",
         "required": [
-          "as_of",
+          "date",
           "days",
           "active",
           "monthly_total_cents",
@@ -7805,7 +8030,7 @@
             },
             "description": "Subscriptions that are still running."
           },
-          "as_of": {
+          "date": {
             "type": "string",
             "format": "date"
           },
@@ -7890,46 +8115,103 @@
           }
         }
       },
-      "SyncDone": {
+      "SyncDto": {
         "type": "object",
+        "description": "A sync, started or running or finished. Poll `GET /v1/bank/sync/{id}` while `state` is\n`syncing`, `needs_approval` or `needs_link`.",
         "required": [
-          "imported",
-          "duplicates",
-          "skipped"
+          "id",
+          "kind",
+          "state"
         ],
         "properties": {
-          "balance_cents": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
-          },
-          "balance_date": {
+          "connection": {
             "type": [
               "string",
               "null"
             ],
-            "format": "date"
+            "description": "The configured connection it belongs to; absent for a login sent with the request."
           },
-          "duplicates": {
-            "type": "integer",
-            "minimum": 0
+          "expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds after which the wait is given up."
           },
-          "imported": {
-            "type": "integer",
-            "minimum": 0
+          "id": {
+            "type": "string"
           },
-          "skipped": {
-            "type": "integer",
-            "description": "Transactions left out (pending, or not in EUR).",
-            "minimum": 0
+          "kind": {
+            "type": "string"
+          },
+          "link_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "In `needs_link`: the page to open in the browser."
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The bank's approval text in `needs_approval`, the reason in `error`."
+          },
+          "result": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SyncOutcomeDto",
+                "description": "How the last attempt ended, once it did."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConnectionState"
           }
         }
       },
-      "SyncNowRequest": {
+      "SyncInput": {
         "type": "object",
+        "description": "Start a sync: the same request for every provider.",
         "properties": {
+          "connection": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A connection of the server configuration, by name. Or leave it out and name the `kind` and\n(for FinTS) the `login`."
+          },
+          "days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Days of history for a login sent with the request (default 90, 1 to 365).",
+            "minimum": 0
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`fints` for a login sent with this request."
+          },
+          "login": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LoginInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "pin": {
             "type": [
               "string",
@@ -7951,6 +8233,20 @@
             "type": "integer",
             "format": "int64",
             "description": "Unix seconds."
+          },
+          "balance_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "balance_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
           },
           "duplicates": {
             "type": [
@@ -7985,69 +8281,6 @@
             ],
             "format": "int32",
             "minimum": 0
-          }
-        }
-      },
-      "SyncRequest": {
-        "type": "object",
-        "required": [
-          "blz",
-          "user_id",
-          "pin",
-          "iban"
-        ],
-        "properties": {
-          "bic": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Leave empty to use the bank's own BIC."
-          },
-          "blz": {
-            "type": "string",
-            "description": "Bank code (BLZ)."
-          },
-          "days": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32",
-            "description": "Days of history to fetch (default 90, 1 to 365).",
-            "minimum": 0
-          },
-          "iban": {
-            "type": "string"
-          },
-          "pin": {
-            "type": "string",
-            "description": "Online banking PIN. Held in memory until you approve, never stored or logged."
-          },
-          "user_id": {
-            "type": "string",
-            "description": "Online banking login name."
-          }
-        }
-      },
-      "SyncStarted": {
-        "type": "object",
-        "required": [
-          "sync_id",
-          "challenge",
-          "no_tan_required"
-        ],
-        "properties": {
-          "challenge": {
-            "type": "string",
-            "description": "Text from the bank, e.g. \"Bitte bestätigen Sie die Anfrage in Ihrer S-pushTAN-App\"."
-          },
-          "no_tan_required": {
-            "type": "boolean",
-            "description": "True if the bank needs no approval; confirm right away."
-          },
-          "sync_id": {
-            "type": "string"
           }
         }
       },

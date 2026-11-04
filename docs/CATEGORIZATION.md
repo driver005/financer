@@ -7,7 +7,7 @@
   order = priority) wins and beats the built-in rules in `crates/core/src/category.rs`. Names are
   compared after `NameNormalizer` (lowercase letters only), so `REWE Markt 1234` matches `rewe markt`.
   Amount limits compare the amount without its sign. Rules apply to every CSV import and bank sync;
-  `POST /v1/rules/apply` runs them again over stored transactions and returns how many changed.
+  `POST /v1/rules/applications` runs them again over stored transactions and returns how many changed.
 - **Learning from corrections** (`PUT /v1/transactions/{id}/category`): sets the category of one
   transaction. A hand-made category is recorded and never overwritten by a later rule run. With
   `remember: true` the merchant gets an "is exactly" rule (or the existing one is updated) at the top
@@ -17,12 +17,12 @@
   to the booked amount exactly. Budget status and the groceries "what can I buy" envelope count the
   parts instead of the whole (`Store::list_effective_transactions`). The bank record itself is not
   changed; recurring-payment detection still sees the whole booking.
-- **AI suggestions for unknown merchants** (`POST /v1/transactions/categorize-unknown`): for
+- **AI suggestions for unknown merchants** (`POST /v1/transactions/suggestions`): for
   expense merchants still `other`/uncategorized (no hand-made category, not split) the configured
   provider (Settings -> Claude/OpenAI) is asked for categories. **Only the distinct normalized merchant
   names (letters and spaces, at most 60 per request) and the list of allowed categories are sent**, never
   amounts, dates, IBANs or purposes. Answers are vetted: unknown merchants, `income`/`other` and repeats
-  are dropped. Nothing changes until you accept (`POST .../categorize-unknown/accept` creates one rule
+  are dropped. Nothing changes until you accept (`POST .../categories` creates one rule
   per merchant and applies the rules).
 
 ## Identity of transactions

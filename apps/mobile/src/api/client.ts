@@ -5,11 +5,13 @@ import { CallError, type Caller } from "../../../../packages/wire/src";
 export type ApiConfig = { baseUrl: string; token: string };
 
 export type Transaction = components["schemas"]["TransactionDto"];
-export type ImportReport = components["schemas"]["ImportReport"];
+export type ImportReport = components["schemas"]["FileImportDto"];
 export type Recurring = components["schemas"]["RecurringDto"];
-export type Envelope = components["schemas"]["EnvelopeDto"];
+export type Envelope = components["schemas"]["EnvelopeInput"];
 export type EnvelopeStatus = components["schemas"]["EnvelopeStatusDto"];
 export type Disposable = components["schemas"]["DisposableDto"];
+/** The budget in one answer: the period, its envelopes with what was spent, the daily number, the monthly picture. */
+export type Budget = components["schemas"]["BudgetDto"];
 export type BudgetPeriod = components["schemas"]["PeriodDto"];
 export type SafeToSpend = components["schemas"]["SafeToSpendDto"];
 export type Forecast = components["schemas"]["ForecastDto"];
@@ -21,12 +23,17 @@ export type RefreshReport = components["schemas"]["RefreshReportDto"];
 export type Pick = components["schemas"]["PickDto"];
 export type CatalogItem = components["schemas"]["CatalogItemDto"];
 export type Basket = components["schemas"]["BasketDto"];
-export type BasketItem = components["schemas"]["BasketItemDto"];
+export type BasketItem = components["schemas"]["BasketItemInput"];
 export type Receipt = components["schemas"]["ReceiptDto"];
 export type ReceiptSource = components["schemas"]["ReceiptSourceDto"];
 export type ReceiptSync = components["schemas"]["ReceiptSyncDto"];
-export type LidlStart = components["schemas"]["LidlStartDto"];
-export type LidlStatus = components["schemas"]["LidlStatusDto"];
+/** Starting a sign-in on a shop's own page (`sign_in` sources). */
+export type SourceConnect = components["schemas"]["SourceConnectDto"];
+/** A receipt (or an order) a `push` source hands over. */
+export type ReceiptInput = components["schemas"]["ReceiptInput"];
+export type ReceiptImport = components["schemas"]["ReceiptImportDto"];
+/** The sources a receipt can come from, and the key every call of one source is made with. */
+export type SourceKind = "email" | "lidl_plus" | "kaufland_card" | "folder" | "rewe_app" | "orders_file";
 export type Affordability = components["schemas"]["AffordabilityDto"];
 export type RecipeMatch = components["schemas"]["RecipeMatchDto"];
 export type Idea = components["schemas"]["IdeaDto"];
@@ -42,26 +49,28 @@ export type CalendarEvent = components["schemas"]["EventDto"];
 export type CalendarEventInput = components["schemas"]["EventInput"];
 export type Repeat = components["schemas"]["RepeatDto"];
 export type Settings = components["schemas"]["SettingsDto"];
-export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
-export type BankStatus = components["schemas"]["BankStatus"];
-export type SyncStarted = components["schemas"]["SyncStarted"];
-export type SyncDone = components["schemas"]["SyncDone"];
-export type SyncRequest = components["schemas"]["SyncRequest"];
+export type SettingsUpdate = components["schemas"]["SettingsInput"];
+export type BankStatus = components["schemas"]["BankStatusDto"];
+/** A sync, whichever provider: what the person has to do next, or how it ended. */
+export type Sync = components["schemas"]["SyncDto"];
+/** A way transactions come in (csv, fints, plaid, gocardless, finapi) and whether the server has it. */
+export type ProviderInfo = components["schemas"]["ProviderDto"];
+export type SyncRequest = components["schemas"]["SyncInput"];
 export type BankConnection = components["schemas"]["BankConnectionDto"];
 export type ConnectionState = components["schemas"]["ConnectionState"];
 export type StoreSpend = components["schemas"]["StoreSpendDto"];
 export type StoreSpending = components["schemas"]["StoresDto"];
 export type StoresPeriod = components["schemas"]["StoresPeriod"];
 export type ScanResult =components["schemas"]["ScanDto"];
-export type ExportData = components["schemas"]["ExportDto"];
+export type ExportData = components["schemas"]["DataDto"];
 export type ImportSummary = components["schemas"]["ImportReportDto"];
 export type Rule = components["schemas"]["RuleDto"];
 export type RuleInput = components["schemas"]["RuleInput"];
-export type CategoryChanged = components["schemas"]["CategoryChanged"];
+export type CategoryChanged = components["schemas"]["CategoryChangedDto"];
 export type Split = components["schemas"]["SplitDto"];
 export type SplitInput = components["schemas"]["SplitInput"];
 export type Suggestions = components["schemas"]["SuggestionsDto"];
-export type AcceptReport = components["schemas"]["AcceptReport"];
+export type AcceptReport = components["schemas"]["CategoriesChangedDto"];
 export type Subscriptions = components["schemas"]["SubscriptionsDto"];
 export type Subscription = components["schemas"]["SubscriptionDto"];
 export type UpcomingCharge = components["schemas"]["UpcomingChargeDto"];
@@ -104,43 +113,27 @@ export class Api {
     return this.op<Transaction[]>("list_transactions");
   }
 
-  /** The bank's CSV export, as the bytes it came in (it may not be UTF-8). */
-  importCsv(bytes: ArrayBuffer) {
-    return this.op<ImportReport>("import_transactions", { csv_base64: toBase64(bytes) });
+  /** Hand a file to a provider with the `file` flow (`csv`: the bank's export, as the bytes it came in; it may not be UTF-8). */
+  importFile(kind: "csv", bytes: ArrayBuffer) {
+    return this.op<ImportReport>("import_file", { kind, csv_base64: toBase64(bytes) });
   }
 
   recurring() {
     return this.op<Recurring[]>("recurring");
   }
 
-  disposable() {
-    return this.op<Disposable>("disposable");
+  /**
+   * The budget in one call: the period (payday to payday), every envelope with its limit and what was spent,
+   * the daily number (`safe_to_spend`, only for the current period) and the monthly picture (`disposable`).
+   * `date` is the local day, so a late evening is not tomorrow.
+   */
+  budget(period: "current" | "previous" = "current", date?: string) {
+    return this.op<Budget>("budget", { period, date });
   }
 
-  envelopes() {
-    return this.op<Envelope[]>("get_envelopes");
-  }
-
+  /** Replace all envelope limits; answers with the envelopes of the current period. */
   saveEnvelopes(envelopes: Envelope[]) {
-    return this.op<Envelope[]>("put_envelopes", { body: envelopes });
-  }
-
-  budgetStatus(year: number, month: number) {
-    return this.op<EnvelopeStatus[]>("budget_status", { year, month });
-  }
-
-  /** The budget status of the current or the previous budget period (see `budgetPeriod`). */
-  budgetStatusFor(period: "current" | "previous", date?: string) {
-    return this.op<EnvelopeStatus[]>("budget_status", { period, date });
-  }
-
-  /** The budget period (payday to payday). `date` is the local day, so a late evening is not tomorrow. */
-  budgetPeriod(period: "current" | "previous" = "current", date?: string) {
-    return this.op<BudgetPeriod>("budget_period", { period, date });
-  }
-
-  safeToSpend(date?: string) {
-    return this.op<SafeToSpend>("safe_to_spend", { date });
+    return this.op<EnvelopeStatus[]>("put_envelopes", { body: envelopes });
   }
 
   /** Where the current budget period is heading; `date` is the local day. */
@@ -190,9 +183,14 @@ export class Api {
     return this.op<void>("delete_receipt", { id });
   }
 
-  /** The automatic receipt sources (mailbox, Lidl Plus, watched folder) and how each is doing. */
+  /** Every receipt source (mailbox, folder, Lidl Plus, Kaufland Card, REWE, orders file), its `flow` and how it is doing. */
   receiptSources() {
     return this.op<ReceiptSource[]>("list_sources");
+  }
+
+  /** One source. */
+  receiptSource(kind: SourceKind) {
+    return this.op<ReceiptSource>("get_source", { kind });
   }
 
   /** Run the enabled sources now, or just one. */
@@ -200,22 +198,29 @@ export class Api {
     return this.op<ReceiptSync>("sync_now", source ? { body: { source } } : {});
   }
 
-  /** Begin the Lidl Plus sign-in; the returned address is Lidl's own page. */
-  lidlStart() {
-    return this.op<LidlStart>("lidl_start");
+  /** `sign_in` sources: begin the sign-in; the returned address is the shop's own page. */
+  connectSource(kind: SourceKind) {
+    return this.op<SourceConnect>("connect_source", { kind });
   }
 
-  /** Finish the sign-in with the address the page redirected to. */
-  lidlFinish(state: string, callbackUrl: string) {
-    return this.op<LidlStatus>("lidl_finish", { body: { state, callback_url: callbackUrl } });
+  /** `sign_in` sources: finish the sign-in with the address the page redirected to. */
+  finishSource(kind: SourceKind, state: string, callbackUrl: string) {
+    return this.op<ReceiptSource>("finish_source", { kind, body: { state, callback_url: callbackUrl } });
   }
 
-  lidlStatus() {
-    return this.op<LidlStatus>("lidl_status");
+  /** Forget the connection (a stored token, or the note of the last push). Receipts already stored stay. */
+  disconnectSource(kind: SourceKind) {
+    return this.op<ReceiptSource>("disconnect_source", { kind });
   }
 
-  lidlDisconnect() {
-    return this.op<void>("lidl_disconnect");
+  /** `push` sources: which of the shop's receipt ids (read in the app's browser window) are not stored yet. */
+  knownReceipts(kind: SourceKind, ids: string[]) {
+    return this.op<components["schemas"]["ReceiptKnownDto"]>("known_receipts", { kind, body: { ids } });
+  }
+
+  /** `push` sources: store the receipts the app read (REWE's web shop) or the orders it read from a file (`shop` names the web shop, for `orders_file`). */
+  importReceipts(kind: SourceKind, receipts: ReceiptInput[], shop?: string) {
+    return this.op<ReceiptImport>("import_receipts", { kind, body: shop === undefined ? { receipts } : { shop, receipts } });
   }
 
   affordability(budgetCents?: number, daysPerBasket?: number) {
@@ -263,7 +268,7 @@ export class Api {
    * the on-phone backend, which has no such file.
    */
   serverConfig() {
-    return this.op<components["schemas"]["ConfigView"]>("get_config");
+    return this.op<components["schemas"]["ConfigDto"]>("get_config");
   }
 
   /**
@@ -271,8 +276,8 @@ export class Api {
    * `problems` when it refuses; 409 when an environment variable decides a key), then restarts to
    * apply them.
    */
-  saveServerConfig(change: components["schemas"]["Change"]) {
-    return this.op<components["schemas"]["ConfigSaved"]>("put_config", { body: change });
+  saveServerConfig(change: components["schemas"]["ConfigChangeInput"]) {
+    return this.op<components["schemas"]["ConfigSavedDto"]>("put_config", { body: change });
   }
 
   saveSettings(update: SettingsUpdate) {
@@ -312,17 +317,14 @@ export class Api {
     return this.op<ImportSummary>("restore_backup", { body: { passphrase, data_base64: dataBase64 } });
   }
 
+  /** What the last login sent with a request looked like (non-secret), to prefill a form. */
   bankStatus() {
     return this.op<BankStatus>("bank_status");
   }
 
-  startSync(req: SyncRequest) {
-    return this.op<SyncStarted>("start_sync", { body: req });
-  }
-
-  /** Throws `ApiError` with status 409 while the approval in the banking app is still missing. */
-  confirmSync(id: string) {
-    return this.op<SyncDone>("confirm_sync", { id });
+  /** Every way transactions come in, how each works (`file`, `approval`, `link`) and whether this server has it. */
+  providers() {
+    return this.op<ProviderInfo[]>("list_providers");
   }
 
   /** The bank connections of the server's financer.toml, without secrets. Empty when none is configured. */
@@ -331,21 +333,28 @@ export class Api {
   }
 
   /**
-   * Log in for one connection; the server then waits for the approval in the banking app and imports by
-   * itself. Send `pin` only when the connection has no `pin_from_env`.
+   * Start a sync, whichever provider: name a `connection` of the server's configuration, or for FinTS a
+   * `kind` with a `login`. The server then waits for the approval in the banking app (`needs_approval`) or
+   * for the sign-in on the provider's page (`needs_link`, with `link_url`) and imports by itself. Send
+   * `pin` only when the connection has no `pin_from_env`.
    */
-  syncConnection(name: string, pin?: string) {
-    return this.op<BankConnection>("sync_connection", pin ? { name, body: { pin } } : { name });
+  startSync(req: SyncRequest) {
+    return this.op<Sync>("start_sync", { body: req });
   }
 
-  /** Plaid: forget the connection (the server tells Plaid and deletes its access). Imported transactions stay. */
+  /** Where a sync stands. Ask while its `state` is `syncing`, `needs_approval` or `needs_link`. */
+  syncStatus(id: string) {
+    return this.op<Sync>("get_sync", { id });
+  }
+
+  /** Stop waiting for an approval or a sign-in. */
+  cancelSync(id: string) {
+    return this.op<Sync>("cancel_sync", { id });
+  }
+
+  /** Plaid, GoCardless, finAPI: forget the connection (the server tells the provider and deletes its access). Imported transactions stay. */
   disconnectConnection(name: string) {
     return this.op<BankConnection>("disconnect_connection", { name });
-  }
-
-  /** Stop waiting for an approval, or for the sign-in on Plaid's page. */
-  cancelConnection(name: string) {
-    return this.op<BankConnection>("cancel_connection", { name });
   }
 
   /** Spending per supermarket chain for the current/previous budget period or the last `n` periods. `date` is the local day. */

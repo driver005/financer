@@ -14,9 +14,8 @@ path = "src/main.rs"
 financer-api = { path = "../api" }
 financer-config = { path = "../config" }
 financer-core = { path = "../core" }
-financer-fints = { path = "../fints" }
 financer-llm = { path = "../llm" }
-financer-plaid = { path = "../plaid" }
+financer-openbanking = { path = "../openbanking" }
 financer-prices = { path = "../prices" }
 financer-receipt-sources = { path = "../receipt-sources" }
 financer-mail-api = { path = "../mail-api", optional = true }

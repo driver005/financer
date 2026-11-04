@@ -27,11 +27,11 @@ clear message.
   dialogs, balance, and MT940 transaction parsing through to Financer's types; a wrong PIN is
   recognised; an unreachable bank is a connection error.
 - **Verified against a simulated pushTAN bank:** the stock mock stubs TANs, so
-  `crates/fints/tests/mock/decoupled-tan.patch` implements the decoupled flow it was meant to have
+  `crates/openbanking/tests/mock/decoupled-tan.patch` implements the decoupled flow it was meant to have
   (login answers 0030/3955 with a challenge, polls answer 3956 until the approval time, then
   0020). Against that, the real client code shows the bank's challenge text, keeps answering
   "pending" while you have not approved, and delivers the data once you have. Build it with
-  `crates/fints/tests/mock/build.sh <dir>`.
+  `crates/openbanking/tests/mock/build.sh <dir>`.
 - **Verified with mocks of my own trait:** the whole approval flow in the API (waiting, 409 until
   approved, expiry, import, no duplicates, the PIN never in a response).
 - **Still unverified:** how a *real* Sparkasse words and sequences its pushTAN messages. The
@@ -85,11 +85,16 @@ What this does and does not do:
   overlapping periods are harmless.
 - `GET /v1/bank/connections` lists the connections without secrets (login and IBAN masked) with
   `state` (`idle`, `syncing`, `needs_approval`, `error`), the bank's message, the last result and
-  the next scheduled time. `POST /v1/bank/connections/{name}/sync` (optional body `{"pin": "..."}`)
-  starts one and `POST .../cancel` stops waiting.
-- The older manual flow (`POST /v1/bank/sync`, **Spending > Sync with Sparkasse**) is unchanged. The
-  app offers it on the Bank connections card only when no connection is configured. The on-phone
-  backend has no config file, so it has no configured connections.
+  the next scheduled time. `POST /v1/bank/sync` with `{"connection": "name"}` (and `"pin"` when
+  the server has none) starts one, `GET /v1/bank/sync/{id}` says how it is going and
+  `POST /v1/bank/sync/{id}/cancel` stops waiting. It is the same call as for Plaid, GoCardless and
+  finAPI (see `docs/BANK_PROVIDERS.md`).
+- A login that is not set up in the configuration (**Spending > Sync with Sparkasse**) uses the
+  same call: `{"kind": "fints", "login": {"blz": "...", "user_id": "...", "iban": "..."}, "pin": "..."}`.
+  The server waits for the approval by itself, so the app only asks `GET /v1/bank/sync/{id}`; there
+  is no separate confirm call. The app offers it on the Bank connections card only when no
+  connection is configured. The on-phone backend has no config file, so it has no configured
+  connections.
 - `fints_url` (with `bic`) is for a bank that `fints-rs` does not know by bank code.
 
 **What was tested:** all of the above against a scripted bank in the API tests (approval wait,

@@ -11,9 +11,11 @@ use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode, Uri};
 use axum::Router;
 use financer_api::{Api, AppState, LlmKeys, PriceSourceConfig, TokenHash};
-use financer_fints::FintsBank;
+use financer_openbanking::fints::FintsBank;
 use financer_prices::{PoliteHttp, ReqwestHttp};
-use financer_receipt_sources::{LidlPlusConfig, ReceiptSourcesConfig, ReceiptSyncer};
+use financer_receipt_sources::{
+    KauflandCardConfig, LidlPlusConfig, ReceiptSourcesConfig, ReceiptSyncer,
+};
 use financer_store::Store;
 use http_body_util::BodyExt;
 use time::OffsetDateTime;
@@ -48,6 +50,9 @@ pub struct StartConfig {
     pub lidl_language: Option<String>,
     /// Hours between Lidl Plus syncs when the app asks (default 12).
     pub lidl_poll_hours: Option<u32>,
+    /// Switch on receipt import from the Kaufland Card (you sign in on Kaufland's own page from
+    /// the app). Needs `device_secret`; country, language and interval follow the Lidl Plus ones.
+    pub kaufland: bool,
     /// A secret the app keeps in the phone's secure storage and passes on every start (make one
     /// with `generate_device_secret`). It encrypts the Lidl Plus sign-in in the database, so the
     /// database alone, e.g. in a phone backup, does not give it away. It must not change.
@@ -215,6 +220,15 @@ impl Backend {
                     .unwrap_or_else(|| "de".into()),
                 poll_hours: config.lidl_poll_hours.map_or(12, u64::from),
                 ..LidlPlusConfig::default()
+            };
+        }
+        if config.kaufland {
+            cfg.kaufland = KauflandCardConfig {
+                enabled: true,
+                country: cfg.lidl_plus.country.clone(),
+                language: cfg.lidl_plus.language.clone(),
+                poll_hours: config.lidl_poll_hours.map_or(12, u64::from),
+                ..KauflandCardConfig::default()
             };
         }
         let receipts = match config.device_secret.as_deref().map(str::trim) {
@@ -417,7 +431,16 @@ mod tests {
                 lidl_country: None,
                 lidl_language: None,
                 lidl_poll_hours: None,
+                kaufland: false,
                 device_secret: None,
+            }
+        }
+
+        fn with_kaufland(name: &str) -> StartConfig {
+            StartConfig {
+                kaufland: true,
+                device_secret: Some(generate_device_secret()),
+                ..Self::config(name)
             }
         }
 
@@ -458,7 +481,7 @@ mod tests {
         let import = b
             .handle_request(HttpRequest {
                 method: "post".into(), // case-insensitive
-                path_and_query: "/v1/transactions/import".into(),
+                path_and_query: "/v1/bank/import/csv".into(),
                 content_type: Some("text/csv".into()),
                 body: CSV.as_bytes().to_vec(),
             })
@@ -494,9 +517,10 @@ mod tests {
         let b = Backend::start_with(Fixtures::config("typed"))
             .await
             .unwrap();
-        let csv = serde_json::json!({ "csv_base64": base64_of(CSV.as_bytes()) }).to_string();
+        let csv = serde_json::json!({ "kind": "csv", "csv_base64": base64_of(CSV.as_bytes()) })
+            .to_string();
         let report = b
-            .call("finance".into(), "import_transactions".into(), csv)
+            .call("finance".into(), "import_file".into(), csv)
             .await
             .unwrap();
         assert_eq!(
@@ -543,7 +567,7 @@ mod tests {
         first
             .handle_request(HttpRequest {
                 method: "POST".into(),
-                path_and_query: "/v1/transactions/import".into(),
+                path_and_query: "/v1/bank/import/csv".into(),
                 content_type: Some("text/csv".into()),
                 body: CSV.as_bytes().to_vec(),
             })
@@ -645,7 +669,7 @@ mod tests {
             .unwrap();
         assert_eq!(b.sync_receipts().await.unwrap(), "receipt import is off");
         let status = b
-            .handle_request(Fixtures::get("/v1/receipts/lidl/status"))
+            .handle_request(Fixtures::get("/v1/receipts/sources/lidl_plus"))
             .await;
         assert_eq!(status.status, 200);
         assert_eq!(Fixtures::json(&status)["state"], "disabled");
@@ -653,7 +677,7 @@ mod tests {
         let start = b
             .handle_request(HttpRequest {
                 method: "POST".into(),
-                path_and_query: "/v1/receipts/lidl/start".into(),
+                path_and_query: "/v1/receipts/sources/lidl_plus/connect".into(),
                 content_type: None,
                 body: vec![],
             })
@@ -672,17 +696,17 @@ mod tests {
             .await
             .unwrap();
         let status = b
-            .handle_request(Fixtures::get("/v1/receipts/lidl/status"))
+            .handle_request(Fixtures::get("/v1/receipts/sources/lidl_plus"))
             .await;
         let status = Fixtures::json(&status);
         assert_eq!(status["enabled"], true);
-        assert_eq!(status["state"], "never"); // on, but nobody has signed in yet
+        assert_eq!(status["state"], "not_connected"); // on, but nobody has signed in yet
 
         // the sign-in page address comes from the backend; nothing is contacted here
         let start = b
             .handle_request(HttpRequest {
                 method: "POST".into(),
-                path_and_query: "/v1/receipts/lidl/start".into(),
+                path_and_query: "/v1/receipts/sources/lidl_plus/connect".into(),
                 content_type: None,
                 body: vec![],
             })
@@ -697,6 +721,39 @@ mod tests {
 
         // nothing to sync until someone has signed in, and this must not reach the network
         assert_eq!(b.sync_receipts().await.unwrap(), "no receipts due");
+    }
+
+    #[tokio::test]
+    async fn kaufland_can_be_switched_on_on_the_phone() {
+        let b = Backend::start_with(Fixtures::with_kaufland("receipts-kaufland"))
+            .await
+            .unwrap();
+        let status = b
+            .handle_request(Fixtures::get("/v1/receipts/sources/kaufland_card"))
+            .await;
+        let status = Fixtures::json(&status);
+        assert_eq!(status["enabled"], true);
+        assert_eq!(status["state"], "not_connected");
+        let start = b
+            .handle_request(HttpRequest {
+                method: "POST".into(),
+                path_and_query: "/v1/receipts/sources/kaufland_card/connect".into(),
+                content_type: None,
+                body: vec![],
+            })
+            .await;
+        assert_eq!(start.status, 200);
+        let start = Fixtures::json(&start);
+        assert!(start["authorization_url"]
+            .as_str()
+            .unwrap()
+            .starts_with("https://account.kaufland.com/"));
+        assert_eq!(start["callback_scheme"], "com.kaufland.kaufland");
+        // Lidl Plus stays off
+        let lidl = b
+            .handle_request(Fixtures::get("/v1/receipts/sources/lidl_plus"))
+            .await;
+        assert_eq!(Fixtures::json(&lidl)["state"], "disabled");
     }
 
     #[tokio::test]
@@ -759,7 +816,7 @@ mod tests {
             "/v1/spending/stores",
             "/v1/bank/connections",
             "/v1/receipts/sources",
-            "/v1/meal-plan/pantry",
+            "/v1/pantry",
         ] {
             assert!(checked.iter().any(|p| p == must), "{must} was not checked");
         }

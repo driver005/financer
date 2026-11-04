@@ -14,20 +14,6 @@ use crate::json::JsonValue;
 use crate::transport::Transport;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct AcceptReport {
-    /// Rules created or updated (one per accepted merchant).
-    pub rules_saved: u32,
-    /// Transactions that changed category as a result.
-    pub transactions_changed: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct AcceptSuggestions {
-    #[serde(default)]
-    pub suggestions: Vec<AcceptedSuggestion>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct AcceptedSuggestion {
     pub category: String,
     pub merchant: String,
@@ -89,18 +75,6 @@ pub struct AlertsDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct ApplyReport {
-    /// Transactions whose category changed. Transactions you categorized by hand are skipped.
-    pub changed: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct BackupCreateRequest {
-    /// At least 8 characters. Not stored anywhere: without it the backup cannot be opened.
-    pub passphrase: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct BackupDto {
     /// The encrypted backup (an `age` file), base64-encoded.
     pub data_base64: String,
@@ -109,7 +83,13 @@ pub struct BackupDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct BackupRestoreRequest {
+pub struct BackupInput {
+    /// At least 8 characters. Not stored anywhere: without it the backup cannot be opened.
+    pub passphrase: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct BackupRestorationInput {
     /// The encrypted backup, base64-encoded, as returned by the create endpoint.
     pub data_base64: String,
     pub passphrase: String,
@@ -118,10 +98,10 @@ pub struct BackupRestoreRequest {
 /// A configured connection. The login is masked; the PIN is never part of it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct BankConnectionDto {
-    /// Plaid: the accounts that were linked (put their ids in `account_ids` to read only some).
+    /// The accounts that were linked (put their ids in `account_ids` to read only some).
     #[serde(default)]
     pub accounts: Vec<LinkedAccountDto>,
-    /// Unix seconds after which a sync waiting for approval, or Plaid's sign-in page, is given up.
+    /// Unix seconds after which a sync waiting for approval, or for a sign-in, is given up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_expires_at: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -130,18 +110,20 @@ pub struct BankConnectionDto {
     pub balance_date: Option<String>,
     pub bank_code: String,
     pub iban_masked: String,
-    /// `fints` or `plaid`.
+    /// What to poll and cancel it by (`/v1/bank/sync/{id}`).
+    pub id: String,
+    /// `fints`, `plaid`, `gocardless` or `finapi`.
     pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_result: Option<SyncOutcomeDto>,
     /// Unix seconds of the last successful sync.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_sync_at: Option<i64>,
-    /// Plaid, in `needs_link`: the page to open in the browser to sign in to your bank.
+    /// In `needs_link`: the page to open in the browser to sign in to your bank.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link_url: Option<String>,
-    /// Plaid: false until you have signed in to your bank once (press Sync now to start that);
-    /// always true for FinTS.
+    /// False until you have signed in to your bank once (start a sync to do that); always true
+    /// for FinTS.
     pub linked: bool,
     pub login_masked: String,
     /// The bank's approval text in `needs_approval`, the reason in `error`.
@@ -155,15 +137,15 @@ pub struct BankConnectionDto {
     /// the app does not need to ask for it.
     pub pin_from_env: bool,
     pub state: ConnectionState,
-    /// A scheduled sync is due but cannot start by itself because the server has no PIN: press
-    /// Sync now and type it.
+    /// A scheduled sync is due but cannot start by itself because the server has no PIN: start a
+    /// sync and type it.
     pub sync_due: bool,
     /// Hours between automatic syncs; 0 = only when you ask.
     pub sync_every_hours: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct BankStatus {
+pub struct BankStatusDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub balance_cents: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -193,7 +175,7 @@ pub struct BasketDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct BasketItemDto {
+pub struct BasketItemInput {
     /// Catalog key, e.g. `milch`.
     pub item: String,
     /// Packs of the reference size per shopping period (1 to 99).
@@ -206,6 +188,23 @@ pub struct BasketItemOutDto {
     pub name: String,
     pub quantity: i32,
     pub reference_pack: String,
+}
+
+/// The budget: the period you are in (or the one before), what was spent against each envelope in
+/// it, what is left to spend per day, and the monthly picture from your recurring payments.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct BudgetDto {
+    /// Monthly income minus fixed costs, from detected recurring payments.
+    pub disposable: DisposableDto,
+    /// Every envelope with its limit, what was spent in `period` and what is left. A calendar month
+    /// unless a payday is set in the settings.
+    #[serde(default)]
+    pub envelopes: Vec<EnvelopeStatusDto>,
+    pub period: PeriodDto,
+    /// What you can spend per day for the rest of the period. Only for the period you are in:
+    /// absent when `period=previous`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub safe_to_spend: Option<SafeToSpendDto>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
@@ -232,22 +231,36 @@ pub struct CatalogItemDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct CategoryChange {
-    pub category: String,
-    /// Also create (or update) a rule for this merchant and apply it to its other
-    /// transactions.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub remember: Option<bool>,
+pub struct CategoriesChangedDto {
+    /// Rules created or updated (one per accepted merchant).
+    pub rules_saved: u32,
+    /// Transactions that changed category as a result.
+    pub transactions_changed: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct CategoryChanged {
+pub struct CategoriesInput {
+    #[serde(default)]
+    pub suggestions: Vec<AcceptedSuggestion>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct CategoryChangedDto {
     /// Other transactions that changed category because of that rule.
     pub others_changed: u32,
     /// The rule that was created or updated when `remember` was set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rule: Option<RuleDto>,
     pub transaction: TransactionDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct CategoryInput {
+    pub category: String,
+    /// Also create (or update) a rule for this merchant and apply it to its other
+    /// transactions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remember: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
@@ -307,39 +320,16 @@ pub struct ChainTotalDto {
 /// What to change: `set` writes values (`null` clears one), `reset` removes the app's value so the
 /// file's, or the default, applies again.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct Change {
+pub struct ConfigChangeInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reset: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub set: Option<HashMap<String, JsonValue>>,
 }
 
-/// A change was refused; nothing was saved.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct ConfigProblems {
-    /// The problems as one text.
-    pub error: String,
-    /// One entry per problem, naming the key.
-    #[serde(default)]
-    pub problems: Vec<String>,
-}
-
-/// A change was saved.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct ConfigSaved {
-    /// The keys whose value is different now.
-    #[serde(default)]
-    pub changed: Vec<String>,
-    /// The server is restarting to apply the change (a few seconds). False when nothing changed.
-    pub restarting: bool,
-    /// Things that are legal but probably not what you want.
-    #[serde(default)]
-    pub warnings: Vec<String>,
-}
-
 /// The whole settings screen.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct ConfigView {
+pub struct ConfigDto {
     /// A change is saved but the server has not yet started with it. The app waits for this to
     /// turn false (or `state` to turn `rolled_back`) after it saved something.
     pub applying: bool,
@@ -360,6 +350,29 @@ pub struct ConfigView {
     pub writable: bool,
 }
 
+/// A change was refused; nothing was saved.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ConfigProblems {
+    /// The problems as one text.
+    pub error: String,
+    /// One entry per problem, naming the key.
+    #[serde(default)]
+    pub problems: Vec<String>,
+}
+
+/// A change was saved.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ConfigSavedDto {
+    /// The keys whose value is different now.
+    #[serde(default)]
+    pub changed: Vec<String>,
+    /// The server is restarting to apply the change (a few seconds). False when nothing changed.
+    pub restarting: bool,
+    /// Things that are legal but probably not what you want.
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
 /// Where a connection is in a sync.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
 pub enum ConnectionState {
@@ -373,6 +386,28 @@ pub enum ConnectionState {
     NeedsLink,
     #[serde(rename = "error")]
     Error,
+}
+
+/// Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
+/// which are fetched again.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct DataDto {
+    #[serde(default)]
+    pub basket: Vec<BasketItemInput>,
+    #[serde(default)]
+    pub budget: Vec<EnvelopeInput>,
+    /// Added in the calendar release; older exports have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calendars: Option<Vec<ExportCalendar>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub events: Option<Vec<ExportEvent>>,
+    #[serde(default)]
+    pub receipts: Vec<ExportReceipt>,
+    pub settings: ExportSettings,
+    #[serde(default)]
+    pub transactions: Vec<ExportTransaction>,
+    /// Format version, currently 1.
+    pub version: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
@@ -433,7 +468,7 @@ pub struct EanLookupDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct EnvelopeDto {
+pub struct EnvelopeInput {
     pub category: String,
     pub limit_cents: i64,
 }
@@ -537,28 +572,6 @@ pub struct ExportCalendar {
     pub visible: bool,
 }
 
-/// Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
-/// which are fetched again.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct ExportDto {
-    #[serde(default)]
-    pub basket: Vec<BasketItemDto>,
-    #[serde(default)]
-    pub budget: Vec<EnvelopeDto>,
-    /// Added in the calendar release; older exports have none.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub calendars: Option<Vec<ExportCalendar>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub events: Option<Vec<ExportEvent>>,
-    #[serde(default)]
-    pub receipts: Vec<ExportReceipt>,
-    pub settings: ExportSettings,
-    #[serde(default)]
-    pub transactions: Vec<ExportTransaction>,
-    /// Format version, currently 1.
-    pub version: i32,
-}
-
 /// An event in an export; its calendar is named, since ids differ between backends.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct ExportEvent {
@@ -638,6 +651,17 @@ pub struct FieldView {
     pub when_value: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct FileImportDto {
+    /// Rows already stored (same date, amount, counterparty and purpose).
+    pub duplicates: u32,
+    /// Rows stored for the first time.
+    pub imported: u32,
+    /// Rows that could not be read, with the reason.
+    #[serde(default)]
+    pub skipped: Vec<SkippedRowDto>,
+}
+
 /// The end-of-period projection. Amounts are integer cents.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct ForecastDto {
@@ -714,24 +738,13 @@ pub struct IdeaIngredientDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct IdeasRequest {
+pub struct IdeasInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget_cents: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub count: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diet: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct ImportReport {
-    /// Rows already stored (same date, amount, counterparty and purpose).
-    pub duplicates: u32,
-    /// Rows stored for the first time.
-    pub imported: u32,
-    /// Rows that could not be read, with the reason.
-    #[serde(default)]
-    pub skipped: Vec<SkippedRowDto>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
@@ -786,55 +799,33 @@ pub struct KeyView {
     pub warning: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct LidlFinishRequest {
-    /// The address the sign-in ended on, `com.lidlplus.app://callback?code=...`.
-    pub callback_url: String,
-    pub state: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct LidlStartDto {
-    /// Open this address in a browser: it is Lidl's own sign-in page.
-    pub authorization_url: String,
-    /// The address scheme Lidl's page redirects to after sign-in (`com.lidlplus.app`); an app can
-    /// watch for it, a person can copy the address from the browser.
-    pub callback_scheme: String,
-    pub expires_in_seconds: i64,
-    pub redirect_uri: String,
-    /// Send this back with the final address to `POST /v1/receipts/lidl/finish`.
-    pub state: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct LidlStatusDto {
-    /// Unix seconds of the sign-in.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub connected_at: Option<i64>,
-    /// Lidl Plus is switched on in the server configuration.
-    pub enabled: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_error: Option<String>,
-    /// Unix seconds of the last receipt sync.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_sync: Option<i64>,
-    /// Receipts imported from Lidl Plus.
-    pub receipts: i64,
-    /// `disabled`, `never`, `connected` or `needs_signin`.
-    pub state: String,
-}
-
-/// An account Plaid reported for a linked connection.
+/// An account the provider reported for a linked connection.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct LinkedAccountDto {
     /// Put this in `account_ids` of the connection to read only some accounts.
     pub id: String,
     /// For example `depository` or `credit`.
     pub kind: String,
-    /// The last digits of the account number, when Plaid has them.
+    /// The last digits of the account number, when the provider has them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mask: Option<String>,
     pub name: String,
+}
+
+/// The online banking login of a FinTS sync that is not set up in the configuration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct LoginInput {
+    /// Leave empty to use the bank's own BIC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bic: Option<String>,
+    /// Bank code (BLZ).
+    pub blz: String,
+    /// Only for a bank that is not in the built-in list (then the BIC is needed too).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fints_url: Option<String>,
+    pub iban: String,
+    /// Online banking login name.
+    pub user_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
@@ -947,16 +938,16 @@ pub struct PantryDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct PantryItemDto {
-    pub item: String,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct PantryUpdate {
+pub struct PantryInput {
     /// Catalog keys (see `GET /v1/catalog`).
     #[serde(default)]
     pub items: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct PantryItemDto {
+    pub item: String,
+    pub name: String,
 }
 
 /// Which period to look at when no year and month are given.
@@ -1044,6 +1035,21 @@ pub struct PriceHikeDto {
     pub since: String,
 }
 
+/// A source of transactions and how to talk to it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ProviderDto {
+    /// This server has it set up (its keys, or for FinTS the product id).
+    pub available: bool,
+    /// Connections of this kind in the server configuration.
+    pub connections: i32,
+    /// `file` (send a file to `/v1/bank/import/{kind}`), `approval` (a PIN, then an approval in the
+    /// banking app, for every sync) or `link` (sign in once on the provider's page).
+    pub flow: String,
+    /// `csv`, `fints`, `plaid`, `gocardless` or `finapi`.
+    pub kind: String,
+    pub label: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct ReceiptDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1071,6 +1077,45 @@ pub struct ReceiptDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ReceiptImportDto {
+    pub duplicates: i32,
+    pub imported: i32,
+    /// Receipts matched to a bank payment by this import.
+    pub linked: i64,
+    #[serde(default)]
+    pub notes: Vec<String>,
+    pub skipped: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ReceiptImportInput {
+    /// At most 100 receipts for `rewe_app`, 200 orders for `orders_file` (whose `time` is not used).
+    #[serde(default)]
+    pub receipts: Vec<ReceiptInput>,
+    /// `orders_file` only: the shop's name as it should show ("Amazon"); at most 40 characters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shop: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ReceiptInput {
+    /// Local day of the purchase, `YYYY-MM-DD`.
+    pub date: String,
+    /// The shop's id of the receipt (for an order, its order number).
+    pub id: String,
+    #[serde(default)]
+    pub lines: Vec<ReceiptLineInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub store: Option<String>,
+    /// Local time, `HH:MM`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+    /// The printed total in cents; the sum of the lines when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_cents: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct ReceiptItemDto {
     /// Catalog key when recognised.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1081,7 +1126,30 @@ pub struct ReceiptItemDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct ReceiptScan {
+pub struct ReceiptKnownDto {
+    /// The ids that are not stored yet: fetch and push only these.
+    #[serde(default)]
+    pub unknown: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ReceiptKnownInput {
+    /// The shop's receipt ids the app has just listed.
+    #[serde(default)]
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ReceiptLineInput {
+    pub name: String,
+    /// 1 to 99.
+    pub quantity: i32,
+    /// What the line cost in cents (negative for a refund).
+    pub total_cents: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct ReceiptScanInput {
     /// The photo's or PDF's bytes, base64-encoded (at most 8 MB decoded).
     pub image_base64: String,
     /// `image/jpeg`, `image/png`, `image/webp` or `application/pdf`.
@@ -1093,10 +1161,15 @@ pub struct ReceiptScan {
 pub struct ReceiptSourceDto {
     /// Has a setting in the server configuration (Lidl Plus always counts).
     pub configured: bool,
+    /// Unix seconds of the sign-in (a `sign_in` source).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connected_at: Option<i64>,
     /// Where it reads from (mail server and folder, folder path, account region); never a login.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     pub enabled: bool,
+    /// How its receipts get in: `server`, `sign_in` or `push`.
+    pub flow: String,
     /// Receipts from this source in the database.
     pub imported_total: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1113,7 +1186,7 @@ pub struct ReceiptSourceDto {
     /// Remarks from the last run, e.g. why a mail or file was skipped.
     #[serde(default)]
     pub notes: Vec<String>,
-    /// `email`, `lidl_plus` or `folder`.
+    /// `email`, `lidl_plus`, `kaufland_card`, `folder`, `rewe_app` or `orders_file`.
     pub source: String,
     /// `disabled`, `waiting`, `running`, `ok`, `error`, `not_connected` or `needs_signin`.
     pub state: String,
@@ -1130,14 +1203,14 @@ pub struct ReceiptSyncDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct ReceiptSyncRequest {
-    /// Only this source (`email`, `lidl_plus`, `folder`); all enabled ones when absent.
+pub struct ReceiptSyncInput {
+    /// Only this source (`email`, `lidl_plus`, `kaufland_card`, `folder`); all enabled ones when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct ReceiptUpload {
+pub struct ReceiptUploadInput {
     /// Text recognised from the receipt photo.
     pub text: String,
 }
@@ -1251,10 +1324,16 @@ pub struct RuleInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct RuleOrder {
+pub struct RuleOrderInput {
     /// Every rule id exactly once, highest priority first.
     #[serde(default)]
     pub ids: Vec<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct RulesAppliedDto {
+    /// Transactions whose category changed. Transactions you categorized by hand are skipped.
+    pub changed: u32,
 }
 
 /// The daily number and everything behind it. Amounts are integer cents.
@@ -1314,7 +1393,7 @@ pub struct SettingsDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct SettingsUpdate {
+pub struct SettingsInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub habit_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1400,6 +1479,27 @@ pub struct ShoppingStopDto {
 pub struct SkippedRowDto {
     pub line: i64,
     pub reason: String,
+}
+
+/// Starting a sign-in on a shop's own page.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct SourceConnectDto {
+    /// Open this address in a browser: it is the shop's own sign-in page.
+    pub authorization_url: String,
+    /// The address scheme the shop's page redirects to after sign-in (`com.lidlplus.app`); an app
+    /// can watch for it, a person can copy the address from the browser.
+    pub callback_scheme: String,
+    pub expires_in_seconds: i64,
+    pub redirect_uri: String,
+    /// Send this back with the final address to `POST /v1/receipts/sources/{kind}/finish`.
+    pub state: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct SourceFinishInput {
+    /// The address the sign-in ended on, `com.lidlplus.app://callback?code=...`.
+    pub callback_url: String,
+    pub state: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
@@ -1534,7 +1634,7 @@ pub struct SubscriptionsDto {
     /// Subscriptions that are still running.
     #[serde(default)]
     pub active: Vec<SubscriptionDto>,
-    pub as_of: String,
+    pub date: String,
     /// How many days ahead `upcoming` looks.
     pub days: i64,
     #[serde(default)]
@@ -1568,20 +1668,45 @@ pub struct SuggestionsDto {
     pub suggestions: Vec<SuggestionDto>,
 }
 
+/// A sync, started or running or finished. Poll `GET /v1/bank/sync/{id}` while `state` is
+/// `syncing`, `needs_approval` or `needs_link`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct SyncDone {
+pub struct SyncDto {
+    /// The configured connection it belongs to; absent for a login sent with the request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub balance_cents: Option<i64>,
+    pub connection: Option<String>,
+    /// Unix seconds after which the wait is given up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub balance_date: Option<String>,
-    pub duplicates: u32,
-    pub imported: u32,
-    /// Transactions left out (pending, or not in EUR).
-    pub skipped: u32,
+    pub expires_at: Option<i64>,
+    pub id: String,
+    pub kind: String,
+    /// In `needs_link`: the page to open in the browser.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_url: Option<String>,
+    /// The bank's approval text in `needs_approval`, the reason in `error`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    /// How the last attempt ended, once it did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<SyncOutcomeDto>,
+    pub state: ConnectionState,
 }
 
+/// Start a sync: the same request for every provider.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct SyncNowRequest {
+pub struct SyncInput {
+    /// A connection of the server configuration, by name. Or leave it out and name the `kind` and
+    /// (for FinTS) the `login`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection: Option<String>,
+    /// Days of history for a login sent with the request (default 90, 1 to 365).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub days: Option<i32>,
+    /// `fints` for a login sent with this request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login: Option<LoginInput>,
     /// The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync
     /// only and never stored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1594,6 +1719,10 @@ pub struct SyncOutcomeDto {
     /// Unix seconds.
     pub at: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub balance_cents: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub balance_date: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicates: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub imported: Option<i32>,
@@ -1603,32 +1732,6 @@ pub struct SyncOutcomeDto {
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skipped: Option<i32>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct SyncRequest {
-    /// Leave empty to use the bank's own BIC.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub bic: Option<String>,
-    /// Bank code (BLZ).
-    pub blz: String,
-    /// Days of history to fetch (default 90, 1 to 365).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub days: Option<i32>,
-    pub iban: String,
-    /// Online banking PIN. Held in memory until you approve, never stored or logged.
-    pub pin: String,
-    /// Online banking login name.
-    pub user_id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct SyncStarted {
-    /// Text from the bank, e.g. "Bitte bestätigen Sie die Anfrage in Ihrer S-pushTAN-App".
-    pub challenge: String,
-    /// True if the bank needs no approval; confirm right away.
-    pub no_tan_required: bool,
-    pub sync_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
@@ -1726,7 +1829,7 @@ impl FinanceSdk {
 
     /// Accept suggestions: one rule per merchant, then the rules are applied to existing
     /// transactions.
-    pub async fn accept_suggestions(&self, body: AcceptSuggestions) -> Result<AcceptReport, SdkError> {
+    pub async fn accept_suggestions(&self, body: CategoriesInput) -> Result<CategoriesChangedDto, SdkError> {
         self.caller.decode(self.accept_suggestions_raw(body).await?)
     }
 
@@ -1744,18 +1847,18 @@ impl FinanceSdk {
     /// Possible problems in recent payments: duplicate charges, amounts far above the usual, big
     /// first-time merchants and charges that are large for their category. Dismissed alerts are left
     /// out unless `include_dismissed=true`.
-    pub async fn alerts(&self, include_dismissed: Option<bool>, lookback_days: Option<i64>, as_of: Option<String>) -> Result<AlertsDto, SdkError> {
-        self.caller.decode(self.alerts_raw(include_dismissed, lookback_days, as_of).await?)
+    pub async fn alerts(&self, include_dismissed: Option<bool>, lookback_days: Option<i64>, date: Option<String>) -> Result<AlertsDto, SdkError> {
+        self.caller.decode(self.alerts_raw(include_dismissed, lookback_days, date).await?)
     }
 
     /// Run the rules again over existing transactions. Transactions you categorized by hand keep
     /// their category. Returns how many changed.
-    pub async fn apply_rules(&self) -> Result<ApplyReport, SdkError> {
+    pub async fn apply_rules(&self) -> Result<RulesAppliedDto, SdkError> {
         self.caller.decode(self.apply_rules_raw().await?)
     }
 
-    /// GET /v1/bank/status
-    pub async fn bank_status(&self) -> Result<BankStatus, SdkError> {
+    /// What the last login sent with a request looked like (its non-secret details), to prefill the form.
+    pub async fn bank_status(&self) -> Result<BankStatusDto, SdkError> {
         self.caller.decode(self.bank_status_raw().await?)
     }
 
@@ -1764,20 +1867,17 @@ impl FinanceSdk {
         self.caller.decode(self.best_prices_raw().await?)
     }
 
-    /// The budget period you are in (or the previous one), from your payday setting.
-    pub async fn budget_period(&self, period: Option<PeriodChoice>, date: Option<String>) -> Result<PeriodDto, SdkError> {
-        self.caller.decode(self.budget_period_raw(period, date).await?)
+    /// The budget in one answer: the period you are in (or the previous one, `period=previous`), what
+    /// was spent against each envelope in it, what you can spend per day for the rest of it, and
+    /// monthly income minus fixed costs from your recurring payments. `date` is the day to treat as
+    /// today (the app sends its local date so that a late evening is not already "tomorrow").
+    pub async fn budget(&self, period: Option<PeriodChoice>, date: Option<String>) -> Result<BudgetDto, SdkError> {
+        self.caller.decode(self.budget_raw(period, date).await?)
     }
 
-    /// Spent and remaining per envelope for one budget period (a calendar month unless a payday is
-    /// set in the settings).
-    pub async fn budget_status(&self, year: Option<i32>, month: Option<i32>, period: Option<PeriodChoice>, date: Option<String>) -> Result<Vec<EnvelopeStatusDto>, SdkError> {
-        self.caller.decode(self.budget_status_raw(year, month, period, date).await?)
-    }
-
-    /// Stop waiting for an approval.
-    pub async fn cancel_connection(&self, name: String) -> Result<BankConnectionDto, SdkError> {
-        self.caller.decode(self.cancel_connection_raw(name).await?)
+    /// Stop waiting for an approval or a sign-in.
+    pub async fn cancel_sync(&self, id: String) -> Result<SyncDto, SdkError> {
+        self.caller.decode(self.cancel_sync_raw(id).await?)
     }
 
     /// All items prices and recipes can refer to.
@@ -1793,14 +1893,15 @@ impl FinanceSdk {
         self.caller.decode(self.categorize_unknown_raw().await?)
     }
 
-    /// Check whether you approved in the banking app; if so, import. Answers 409 while still
-    /// waiting: keep calling every few seconds.
-    pub async fn confirm_sync(&self, id: String) -> Result<SyncDone, SdkError> {
-        self.caller.decode(self.confirm_sync_raw(id).await?)
+    /// `sign_in` sources: start the sign-in. Returns the address of the shop's own sign-in page;
+    /// nothing is sent to the shop by this call. Experimental and unofficial: see
+    /// docs/RECEIPT_SOURCES.md.
+    pub async fn connect_source(&self, kind: String) -> Result<SourceConnectDto, SdkError> {
+        self.caller.decode(self.connect_source_raw(kind).await?)
     }
 
-    /// Create a passphrase-encrypted backup of everything that is yours (see `/v1/export`).
-    pub async fn create_backup(&self, body: BackupCreateRequest) -> Result<BackupDto, SdkError> {
+    /// Create a passphrase-encrypted backup of everything that is yours (see `/v1/data`).
+    pub async fn create_backup(&self, body: BackupInput) -> Result<BackupDto, SdkError> {
         self.caller.decode(self.create_backup_raw(body).await?)
     }
 
@@ -1844,20 +1945,21 @@ impl FinanceSdk {
         self.delete_split_raw(id).await.map(|_| ())
     }
 
-    /// Plaid: forget the connection. Tells Plaid to drop it and deletes the stored access token, so
-    /// the next sync starts with signing in again. The imported transactions stay.
+    /// Plaid, GoCardless, finAPI: forget the connection. Tells the provider to drop it and deletes the
+    /// stored access, so the next sync starts with signing in again. The imported transactions stay.
     pub async fn disconnect_connection(&self, name: String) -> Result<BankConnectionDto, SdkError> {
         self.caller.decode(self.disconnect_connection_raw(name).await?)
+    }
+
+    /// Forget the connection: a stored token is deleted (`sign_in`), or the note of the last push
+    /// (`rewe_app`). Receipts already stored stay.
+    pub async fn disconnect_source(&self, kind: String) -> Result<ReceiptSourceDto, SdkError> {
+        self.caller.decode(self.disconnect_source_raw(kind).await?)
     }
 
     /// Dismiss an alert so it no longer counts as unread. Dismissing twice is fine.
     pub async fn dismiss_alert(&self, id: String) -> Result<AlertDismissedDto, SdkError> {
         self.caller.decode(self.dismiss_alert_raw(id).await?)
-    }
-
-    /// Monthly income minus fixed costs, from detected recurring payments.
-    pub async fn disposable(&self) -> Result<DisposableDto, SdkError> {
-        self.caller.decode(self.disposable_raw().await?)
     }
 
     /// What a scanned barcode costs at Lidl, Aldi, Kaufland and Rewe: the best stored price per
@@ -1868,8 +1970,14 @@ impl FinanceSdk {
     }
 
     /// Download everything that is yours as one JSON document (no secrets, no prices).
-    pub async fn export_data(&self) -> Result<ExportDto, SdkError> {
+    pub async fn export_data(&self) -> Result<DataDto, SdkError> {
         self.caller.decode(self.export_data_raw().await?)
+    }
+
+    /// `sign_in` sources: finish the sign-in with the address the shop's page ended on. Only the
+    /// refresh token is stored, encrypted. The first receipts are fetched right away.
+    pub async fn finish_source(&self, kind: String, body: SourceFinishInput) -> Result<ReceiptSourceDto, SdkError> {
+        self.caller.decode(self.finish_source_raw(kind, body).await?)
     }
 
     /// Project the current budget period to its end from the recurring payments still due, the
@@ -1885,13 +1993,8 @@ impl FinanceSdk {
 
     /// Every setting of the server with its value (secrets only as "set"), the place it comes from
     /// and what the app may change.
-    pub async fn get_config(&self) -> Result<ConfigView, SdkError> {
+    pub async fn get_config(&self) -> Result<ConfigDto, SdkError> {
         self.caller.decode(self.get_config_raw().await?)
-    }
-
-    /// GET /v1/budget/envelopes
-    pub async fn get_envelopes(&self) -> Result<Vec<EnvelopeDto>, SdkError> {
-        self.caller.decode(self.get_envelopes_raw().await?)
     }
 
     /// One event.
@@ -1921,39 +2024,43 @@ impl FinanceSdk {
         self.caller.decode(self.get_shopping_list_raw(week, date).await?)
     }
 
+    /// One source: its state, when it last ran, how many receipts came from it, the last error.
+    pub async fn get_source(&self, kind: String) -> Result<ReceiptSourceDto, SdkError> {
+        self.caller.decode(self.get_source_raw(kind).await?)
+    }
+
+    /// Where a sync stands: waiting for an approval or a sign-in, running, or how it ended (`result`).
+    /// A connection can be asked by its name; an unknown or expired login answers 404.
+    pub async fn get_sync(&self, id: String) -> Result<SyncDto, SdkError> {
+        self.caller.decode(self.get_sync_raw(id).await?)
+    }
+
     /// Merge an export into this backend. Transactions and receipts already present (same
     /// fingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items
     /// list replace the current ones when the export has any; settings are applied if present.
-    pub async fn import_data(&self, body: ExportDto) -> Result<ImportReportDto, SdkError> {
+    pub async fn import_data(&self, body: DataDto) -> Result<ImportReportDto, SdkError> {
         self.caller.decode(self.import_data_raw(body).await?)
     }
 
-    /// Import a Sparkasse CSV-CAMT export. Transactions are categorized, and rows that were
-    /// imported before are skipped, so re-uploading an overlapping period is safe.
-    pub async fn import_transactions(&self, csv: Vec<u8>) -> Result<ImportReport, SdkError> {
-        self.caller.decode(self.import_transactions_raw(csv).await?)
+    /// Import a file of a provider with the `file` flow (`csv`: the Sparkasse CSV-CAMT export).
+    /// Transactions are categorized, and rows that were imported before are skipped, so uploading an
+    /// overlapping period is safe.
+    pub async fn import_file(&self, kind: String, csv: Vec<u8>) -> Result<FileImportDto, SdkError> {
+        self.caller.decode(self.import_file_raw(kind, csv).await?)
     }
 
-    /// Disconnect Lidl Plus: the stored token is deleted. Receipts already imported stay.
-    pub async fn lidl_disconnect(&self) -> Result<(), SdkError> {
-        self.lidl_disconnect_raw().await.map(|_| ())
+    /// `push` sources: store the receipts the app read (REWE's web shop in its own window, `rewe_app`)
+    /// or the orders it read from a file the shop produced (`orders_file`: Amazon's data request, for
+    /// example), once each, and match them to bank payments. Nothing is fetched from the shop.
+    /// Experimental: see docs/RECEIPT_SOURCES.md.
+    pub async fn import_receipts(&self, kind: String, body: ReceiptImportInput) -> Result<ReceiptImportDto, SdkError> {
+        self.caller.decode(self.import_receipts_raw(kind, body).await?)
     }
 
-    /// Finish the sign-in with the address Lidl's page ended on. Only the refresh token is stored,
-    /// encrypted. The first receipts are fetched right away.
-    pub async fn lidl_finish(&self, body: LidlFinishRequest) -> Result<LidlStatusDto, SdkError> {
-        self.caller.decode(self.lidl_finish_raw(body).await?)
-    }
-
-    /// Start a Lidl Plus sign-in. Returns the address of Lidl's own sign-in page; nothing is sent to
-    /// Lidl by this call. Experimental and unofficial: see docs/RECEIPT_SOURCES.md.
-    pub async fn lidl_start(&self) -> Result<LidlStartDto, SdkError> {
-        self.caller.decode(self.lidl_start_raw().await?)
-    }
-
-    /// Whether Lidl Plus is connected, when it last synced and how many receipts came from it.
-    pub async fn lidl_status(&self) -> Result<LidlStatusDto, SdkError> {
-        self.caller.decode(self.lidl_status_raw().await?)
+    /// `push` sources (`rewe_app`): which of the shop's receipt ids are not stored yet. The app calls
+    /// it with the list it just read, so that it fetches the details of the new ones only.
+    pub async fn known_receipts(&self, kind: String, body: ReceiptKnownInput) -> Result<ReceiptKnownDto, SdkError> {
+        self.caller.decode(self.known_receipts_raw(kind, body).await?)
     }
 
     /// Your calendars in display order. A new database has one, "Personal".
@@ -1978,6 +2085,12 @@ impl FinanceSdk {
         self.caller.decode(self.list_prices_raw(item).await?)
     }
 
+    /// The ways transactions come in (a CSV file, FinTS, Plaid, GoCardless, finAPI), how each works, and
+    /// whether this server has it set up.
+    pub async fn list_providers(&self) -> Result<Vec<ProviderDto>, SdkError> {
+        self.caller.decode(self.list_providers_raw().await?)
+    }
+
     /// GET /v1/receipts
     pub async fn list_receipts(&self) -> Result<Vec<ReceiptDto>, SdkError> {
         self.caller.decode(self.list_receipts_raw().await?)
@@ -1988,8 +2101,9 @@ impl FinanceSdk {
         self.caller.decode(self.list_rules_raw().await?)
     }
 
-    /// The receipt sources: the mailbox, the Lidl Plus account and the watched folder, with state,
-    /// last run, receipts imported and the last error. Never contains a password or token.
+    /// Every receipt source and how it is doing: the mailbox and the watched folder (`server`), Lidl
+    /// Plus and the Kaufland Card (`sign_in`), REWE in the app and an orders file (`push`). Never
+    /// contains a password or token.
     pub async fn list_sources(&self) -> Result<Vec<ReceiptSourceDto>, SdkError> {
         self.caller.decode(self.list_sources_raw().await?)
     }
@@ -2005,7 +2119,7 @@ impl FinanceSdk {
     }
 
     /// Replace your hand-maintained list of usual items (used in `manual` habit mode).
-    pub async fn put_basket(&self, body: Vec<BasketItemDto>) -> Result<BasketDto, SdkError> {
+    pub async fn put_basket(&self, body: Vec<BasketItemInput>) -> Result<BasketDto, SdkError> {
         self.caller.decode(self.put_basket_raw(body).await?)
     }
 
@@ -2013,12 +2127,12 @@ impl FinanceSdk {
     /// Everything is checked the way the server checks its configuration at start; one mistake and
     /// nothing is saved. The server restarts to apply the change; if the changed settings do not
     /// start, the previous ones come back by themselves.
-    pub async fn put_config(&self, body: Change) -> Result<ConfigSaved, SdkError> {
+    pub async fn put_config(&self, body: ConfigChangeInput) -> Result<ConfigSavedDto, SdkError> {
         self.caller.decode(self.put_config_raw(body).await?)
     }
 
     /// Replace all monthly envelopes. A category may appear once; limits must not be negative.
-    pub async fn put_envelopes(&self, body: Vec<EnvelopeDto>) -> Result<Vec<EnvelopeDto>, SdkError> {
+    pub async fn put_envelopes(&self, body: Vec<EnvelopeInput>) -> Result<Vec<EnvelopeStatusDto>, SdkError> {
         self.caller.decode(self.put_envelopes_raw(body).await?)
     }
 
@@ -2029,12 +2143,12 @@ impl FinanceSdk {
     }
 
     /// Replace the pantry list.
-    pub async fn put_pantry(&self, body: PantryUpdate) -> Result<PantryDto, SdkError> {
+    pub async fn put_pantry(&self, body: PantryInput) -> Result<PantryDto, SdkError> {
         self.caller.decode(self.put_pantry_raw(body).await?)
     }
 
     /// PUT /v1/settings
-    pub async fn put_settings(&self, body: SettingsUpdate) -> Result<SettingsDto, SdkError> {
+    pub async fn put_settings(&self, body: SettingsInput) -> Result<SettingsDto, SdkError> {
         self.caller.decode(self.put_settings_raw(body).await?)
     }
 
@@ -2046,7 +2160,7 @@ impl FinanceSdk {
 
     /// New recipe ideas from Claude or OpenAI, based on your usual items and current offers. Only
     /// item names, the budget and your diet note are sent, never bank data.
-    pub async fn recipe_ideas(&self, body: IdeasRequest) -> Result<Vec<IdeaDto>, SdkError> {
+    pub async fn recipe_ideas(&self, body: IdeasInput) -> Result<Vec<IdeaDto>, SdkError> {
         self.caller.decode(self.recipe_ideas_raw(body).await?)
     }
 
@@ -2068,37 +2182,35 @@ impl FinanceSdk {
     }
 
     /// Set the priority order of all rules.
-    pub async fn reorder_rules(&self, body: RuleOrder) -> Result<Vec<RuleDto>, SdkError> {
+    pub async fn reorder_rules(&self, body: RuleOrderInput) -> Result<Vec<RuleDto>, SdkError> {
         self.caller.decode(self.reorder_rules_raw(body).await?)
     }
 
-    /// Decrypt a backup and merge it like `/v1/import`. A wrong passphrase or damaged file is a
+    /// Decrypt a backup and merge it like `/v1/data`. A wrong passphrase or damaged file is a
     /// 400 and changes nothing.
-    pub async fn restore_backup(&self, body: BackupRestoreRequest) -> Result<ImportReportDto, SdkError> {
+    pub async fn restore_backup(&self, body: BackupRestorationInput) -> Result<ImportReportDto, SdkError> {
         self.caller.decode(self.restore_backup_raw(body).await?)
-    }
-
-    /// What you can spend per day for the rest of the period, with the breakdown: expected income,
-    /// recurring costs still to come, planned envelope money not yet spent, and spending so far.
-    pub async fn safe_to_spend(&self, date: Option<String>) -> Result<SafeToSpendDto, SdkError> {
-        self.caller.decode(self.safe_to_spend_raw(date).await?)
     }
 
     /// Scan a receipt photo or a digital receipt PDF (a Rewe eBon or Lidl Plus receipt exported from
     /// their app or email): a model that can read documents (Claude or OpenAI, as configured) transcribes it
     /// and the transcript is parsed like pasted text. The photo is sent to that provider.
-    pub async fn scan_receipt(&self, body: ReceiptScan) -> Result<ScanDto, SdkError> {
+    pub async fn scan_receipt(&self, body: ReceiptScanInput) -> Result<ScanDto, SdkError> {
         self.caller.decode(self.scan_receipt_raw(body).await?)
     }
 
     /// Recategorize one transaction. With `remember`, the merchant gets a rule so its other and
     /// future transactions follow.
-    pub async fn set_category(&self, id: i64, body: CategoryChange) -> Result<CategoryChanged, SdkError> {
+    pub async fn set_category(&self, id: i64, body: CategoryInput) -> Result<CategoryChangedDto, SdkError> {
         self.caller.decode(self.set_category_raw(id, body).await?)
     }
 
-    /// Log in to the bank and ask for approval. Approve in your Sparkasse app, then call confirm.
-    pub async fn start_sync(&self, body: SyncRequest) -> Result<SyncStarted, SdkError> {
+    /// Start a sync, whichever provider: name a `connection` of the server configuration, or for FinTS
+    /// a `kind` with a `login`. The server logs in or asks the provider for a sign-in page, then waits
+    /// in the background for what the person has to do (`state` is `needs_approval` or `needs_link`)
+    /// and imports as soon as it is done. Poll `GET /v1/bank/sync/{id}`. Send the PIN only when the
+    /// connection has no `pin_from_env`.
+    pub async fn start_sync(&self, body: SyncInput) -> Result<SyncDto, SdkError> {
         self.caller.decode(self.start_sync_raw(body).await?)
     }
 
@@ -2116,19 +2228,13 @@ impl FinanceSdk {
 
     /// Recurring payments seen as a watchdog: what is due in the next days, price hikes, possible
     /// duplicates, and subscriptions that seem to have stopped.
-    pub async fn subscriptions(&self, days: Option<i64>, as_of: Option<String>) -> Result<SubscriptionsDto, SdkError> {
-        self.caller.decode(self.subscriptions_raw(days, as_of).await?)
-    }
-
-    /// Start a sync for one connection: logs in, then waits (in the background) for your approval in
-    /// the banking app and imports. Send the PIN only when `pin_from_env` is false.
-    pub async fn sync_connection(&self, name: String, body: Option<SyncNowRequest>) -> Result<BankConnectionDto, SdkError> {
-        self.caller.decode(self.sync_connection_raw(name, body).await?)
+    pub async fn subscriptions(&self, days: Option<i64>, date: Option<String>) -> Result<SubscriptionsDto, SdkError> {
+        self.caller.decode(self.subscriptions_raw(days, date).await?)
     }
 
     /// Run the enabled receipt sources now (or just one). New receipts are linked to bank
     /// transactions where that is unambiguous. `409` while another sync is running.
-    pub async fn sync_now(&self, body: Option<ReceiptSyncRequest>) -> Result<ReceiptSyncDto, SdkError> {
+    pub async fn sync_now(&self, body: ReceiptSyncInput) -> Result<ReceiptSyncDto, SdkError> {
         self.caller.decode(self.sync_now_raw(body).await?)
     }
 
@@ -2149,15 +2255,15 @@ impl FinanceSdk {
 
     /// Upload text recognised from a receipt photo. Your usual items are learned from receipts
     /// when the habit mode is `receipts`.
-    pub async fn upload_receipt(&self, body: ReceiptUpload) -> Result<ReceiptDto, SdkError> {
+    pub async fn upload_receipt(&self, body: ReceiptUploadInput) -> Result<ReceiptDto, SdkError> {
         self.caller.decode(self.upload_receipt_raw(body).await?)
     }
 }
 
 // The same calls, answering the server's own text: what `dispatch` hands the apps.
 impl FinanceSdk {
-    async fn accept_suggestions_raw(&self, body: AcceptSuggestions) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/transactions/categorize-unknown/accept".to_string(), Some(&body)).await
+    async fn accept_suggestions_raw(&self, body: CategoriesInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", "/v1/transactions/categories".to_string(), Some(&body)).await
     }
 
     async fn add_exception_raw(&self, id: i64, body: ExceptionInput) -> Result<Vec<u8>, SdkError> {
@@ -2168,12 +2274,12 @@ impl FinanceSdk {
         self.caller.json("GET", format!("/v1/affordability{}", query(&[("budget_cents", qv(&budget_cents)), ("days_per_basket", qv(&days_per_basket))])), None::<&()>).await
     }
 
-    async fn alerts_raw(&self, include_dismissed: Option<bool>, lookback_days: Option<i64>, as_of: Option<String>) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", format!("/v1/alerts{}", query(&[("include_dismissed", qv(&include_dismissed)), ("lookback_days", qv(&lookback_days)), ("as_of", qv(&as_of))])), None::<&()>).await
+    async fn alerts_raw(&self, include_dismissed: Option<bool>, lookback_days: Option<i64>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/alerts{}", query(&[("include_dismissed", qv(&include_dismissed)), ("lookback_days", qv(&lookback_days)), ("date", qv(&date))])), None::<&()>).await
     }
 
     async fn apply_rules_raw(&self) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/rules/apply".to_string(), None::<&()>).await
+        self.caller.json("POST", "/v1/rules/applications".to_string(), None::<&()>).await
     }
 
     async fn bank_status_raw(&self) -> Result<Vec<u8>, SdkError> {
@@ -2184,16 +2290,12 @@ impl FinanceSdk {
         self.caller.json("GET", "/v1/prices/best".to_string(), None::<&()>).await
     }
 
-    async fn budget_period_raw(&self, period: Option<PeriodChoice>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", format!("/v1/budget/period{}", query(&[("period", qv(&period)), ("date", qv(&date))])), None::<&()>).await
+    async fn budget_raw(&self, period: Option<PeriodChoice>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/budget{}", query(&[("period", qv(&period)), ("date", qv(&date))])), None::<&()>).await
     }
 
-    async fn budget_status_raw(&self, year: Option<i32>, month: Option<i32>, period: Option<PeriodChoice>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", format!("/v1/budget/status{}", query(&[("year", qv(&year)), ("month", qv(&month)), ("period", qv(&period)), ("date", qv(&date))])), None::<&()>).await
-    }
-
-    async fn cancel_connection_raw(&self, name: String) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", format!("/v1/bank/connections/{}/cancel", encode(&name.to_string())), None::<&()>).await
+    async fn cancel_sync_raw(&self, id: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/bank/sync/{}/cancel", encode(&id.to_string())), None::<&()>).await
     }
 
     async fn catalog_raw(&self) -> Result<Vec<u8>, SdkError> {
@@ -2201,15 +2303,15 @@ impl FinanceSdk {
     }
 
     async fn categorize_unknown_raw(&self) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/transactions/categorize-unknown".to_string(), None::<&()>).await
+        self.caller.json("POST", "/v1/transactions/suggestions".to_string(), None::<&()>).await
     }
 
-    async fn confirm_sync_raw(&self, id: String) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", format!("/v1/bank/sync/{}/confirm", encode(&id.to_string())), None::<&()>).await
+    async fn connect_source_raw(&self, kind: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/receipts/sources/{}/connect", encode(&kind.to_string())), None::<&()>).await
     }
 
-    async fn create_backup_raw(&self, body: BackupCreateRequest) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/backup/create".to_string(), Some(&body)).await
+    async fn create_backup_raw(&self, body: BackupInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/backups".to_string(), Some(&body)).await
     }
 
     async fn create_calendar_raw(&self, body: CalendarInput) -> Result<Vec<u8>, SdkError> {
@@ -2248,12 +2350,12 @@ impl FinanceSdk {
         self.caller.json("POST", format!("/v1/bank/connections/{}/disconnect", encode(&name.to_string())), None::<&()>).await
     }
 
-    async fn dismiss_alert_raw(&self, id: String) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", format!("/v1/alerts/{}/dismiss", encode(&id.to_string())), None::<&()>).await
+    async fn disconnect_source_raw(&self, kind: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/receipts/sources/{}/disconnect", encode(&kind.to_string())), None::<&()>).await
     }
 
-    async fn disposable_raw(&self) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", "/v1/budget/disposable".to_string(), None::<&()>).await
+    async fn dismiss_alert_raw(&self, id: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/alerts/{}/dismiss", encode(&id.to_string())), None::<&()>).await
     }
 
     async fn ean_lookup_raw(&self, ean: String) -> Result<Vec<u8>, SdkError> {
@@ -2261,7 +2363,11 @@ impl FinanceSdk {
     }
 
     async fn export_data_raw(&self) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", "/v1/export".to_string(), None::<&()>).await
+        self.caller.json("GET", "/v1/data".to_string(), None::<&()>).await
+    }
+
+    async fn finish_source_raw(&self, kind: String, body: SourceFinishInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/receipts/sources/{}/finish", encode(&kind.to_string())), Some(&body)).await
     }
 
     async fn forecast_raw(&self, date: Option<String>) -> Result<Vec<u8>, SdkError> {
@@ -2276,10 +2382,6 @@ impl FinanceSdk {
         self.caller.json("GET", "/v1/server-config".to_string(), None::<&()>).await
     }
 
-    async fn get_envelopes_raw(&self) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", "/v1/budget/envelopes".to_string(), None::<&()>).await
-    }
-
     async fn get_event_raw(&self, id: i64) -> Result<Vec<u8>, SdkError> {
         self.caller.json("GET", format!("/v1/calendar/events/{}", encode(&id.to_string())), None::<&()>).await
     }
@@ -2289,7 +2391,7 @@ impl FinanceSdk {
     }
 
     async fn get_pantry_raw(&self) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", "/v1/meal-plan/pantry".to_string(), None::<&()>).await
+        self.caller.json("GET", "/v1/pantry".to_string(), None::<&()>).await
     }
 
     async fn get_settings_raw(&self) -> Result<Vec<u8>, SdkError> {
@@ -2297,31 +2399,31 @@ impl FinanceSdk {
     }
 
     async fn get_shopping_list_raw(&self, week: Option<String>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", format!("/v1/meal-plan/shopping-list{}", query(&[("week", qv(&week)), ("date", qv(&date))])), None::<&()>).await
+        self.caller.json("GET", format!("/v1/shopping-list{}", query(&[("week", qv(&week)), ("date", qv(&date))])), None::<&()>).await
     }
 
-    async fn import_data_raw(&self, body: ExportDto) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/import".to_string(), Some(&body)).await
+    async fn get_source_raw(&self, kind: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/receipts/sources/{}", encode(&kind.to_string())), None::<&()>).await
     }
 
-    async fn import_transactions_raw(&self, csv: Vec<u8>) -> Result<Vec<u8>, SdkError> {
-        self.caller.raw("POST", "/v1/transactions/import".to_string(), "text/csv", csv).await
+    async fn get_sync_raw(&self, id: String) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/bank/sync/{}", encode(&id.to_string())), None::<&()>).await
     }
 
-    async fn lidl_disconnect_raw(&self) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("DELETE", "/v1/receipts/lidl".to_string(), None::<&()>).await
+    async fn import_data_raw(&self, body: DataDto) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/data".to_string(), Some(&body)).await
     }
 
-    async fn lidl_finish_raw(&self, body: LidlFinishRequest) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/receipts/lidl/finish".to_string(), Some(&body)).await
+    async fn import_file_raw(&self, kind: String, csv: Vec<u8>) -> Result<Vec<u8>, SdkError> {
+        self.caller.raw("POST", format!("/v1/bank/import/{}", encode(&kind.to_string())), "text/csv", csv).await
     }
 
-    async fn lidl_start_raw(&self) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/receipts/lidl/start".to_string(), None::<&()>).await
+    async fn import_receipts_raw(&self, kind: String, body: ReceiptImportInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/receipts/sources/{}/import", encode(&kind.to_string())), Some(&body)).await
     }
 
-    async fn lidl_status_raw(&self) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", "/v1/receipts/lidl/status".to_string(), None::<&()>).await
+    async fn known_receipts_raw(&self, kind: String, body: ReceiptKnownInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", format!("/v1/receipts/sources/{}/known", encode(&kind.to_string())), Some(&body)).await
     }
 
     async fn list_calendars_raw(&self) -> Result<Vec<u8>, SdkError> {
@@ -2338,6 +2440,10 @@ impl FinanceSdk {
 
     async fn list_prices_raw(&self, item: Option<String>) -> Result<Vec<u8>, SdkError> {
         self.caller.json("GET", format!("/v1/prices{}", query(&[("item", qv(&item))])), None::<&()>).await
+    }
+
+    async fn list_providers_raw(&self) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", "/v1/bank/providers".to_string(), None::<&()>).await
     }
 
     async fn list_receipts_raw(&self) -> Result<Vec<u8>, SdkError> {
@@ -2360,15 +2466,15 @@ impl FinanceSdk {
         self.caller.json("GET", "/v1/transactions".to_string(), None::<&()>).await
     }
 
-    async fn put_basket_raw(&self, body: Vec<BasketItemDto>) -> Result<Vec<u8>, SdkError> {
+    async fn put_basket_raw(&self, body: Vec<BasketItemInput>) -> Result<Vec<u8>, SdkError> {
         self.caller.json("PUT", "/v1/basket".to_string(), Some(&body)).await
     }
 
-    async fn put_config_raw(&self, body: Change) -> Result<Vec<u8>, SdkError> {
+    async fn put_config_raw(&self, body: ConfigChangeInput) -> Result<Vec<u8>, SdkError> {
         self.caller.json("PUT", "/v1/server-config".to_string(), Some(&body)).await
     }
 
-    async fn put_envelopes_raw(&self, body: Vec<EnvelopeDto>) -> Result<Vec<u8>, SdkError> {
+    async fn put_envelopes_raw(&self, body: Vec<EnvelopeInput>) -> Result<Vec<u8>, SdkError> {
         self.caller.json("PUT", "/v1/budget/envelopes".to_string(), Some(&body)).await
     }
 
@@ -2376,11 +2482,11 @@ impl FinanceSdk {
         self.caller.json("PUT", format!("/v1/meal-plan{}", query(&[("week", qv(&week))])), Some(&body)).await
     }
 
-    async fn put_pantry_raw(&self, body: PantryUpdate) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("PUT", "/v1/meal-plan/pantry".to_string(), Some(&body)).await
+    async fn put_pantry_raw(&self, body: PantryInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", "/v1/pantry".to_string(), Some(&body)).await
     }
 
-    async fn put_settings_raw(&self, body: SettingsUpdate) -> Result<Vec<u8>, SdkError> {
+    async fn put_settings_raw(&self, body: SettingsInput) -> Result<Vec<u8>, SdkError> {
         self.caller.json("PUT", "/v1/settings".to_string(), Some(&body)).await
     }
 
@@ -2388,7 +2494,7 @@ impl FinanceSdk {
         self.caller.json("PUT", format!("/v1/transactions/{}/split", encode(&id.to_string())), Some(&body)).await
     }
 
-    async fn recipe_ideas_raw(&self, body: IdeasRequest) -> Result<Vec<u8>, SdkError> {
+    async fn recipe_ideas_raw(&self, body: IdeasInput) -> Result<Vec<u8>, SdkError> {
         self.caller.json("POST", "/v1/recipes/ideas".to_string(), Some(&body)).await
     }
 
@@ -2401,30 +2507,26 @@ impl FinanceSdk {
     }
 
     async fn refresh_prices_raw(&self) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/prices/refresh".to_string(), None::<&()>).await
+        self.caller.json("POST", "/v1/prices/refreshes".to_string(), None::<&()>).await
     }
 
-    async fn reorder_rules_raw(&self, body: RuleOrder) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/rules/reorder".to_string(), Some(&body)).await
+    async fn reorder_rules_raw(&self, body: RuleOrderInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("PUT", "/v1/rules/order".to_string(), Some(&body)).await
     }
 
-    async fn restore_backup_raw(&self, body: BackupRestoreRequest) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/backup/restore".to_string(), Some(&body)).await
+    async fn restore_backup_raw(&self, body: BackupRestorationInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/backups/restorations".to_string(), Some(&body)).await
     }
 
-    async fn safe_to_spend_raw(&self, date: Option<String>) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", format!("/v1/budget/safe-to-spend{}", query(&[("date", qv(&date))])), None::<&()>).await
+    async fn scan_receipt_raw(&self, body: ReceiptScanInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/receipts/scans".to_string(), Some(&body)).await
     }
 
-    async fn scan_receipt_raw(&self, body: ReceiptScan) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/receipts/scan".to_string(), Some(&body)).await
-    }
-
-    async fn set_category_raw(&self, id: i64, body: CategoryChange) -> Result<Vec<u8>, SdkError> {
+    async fn set_category_raw(&self, id: i64, body: CategoryInput) -> Result<Vec<u8>, SdkError> {
         self.caller.json("PUT", format!("/v1/transactions/{}/category", encode(&id.to_string())), Some(&body)).await
     }
 
-    async fn start_sync_raw(&self, body: SyncRequest) -> Result<Vec<u8>, SdkError> {
+    async fn start_sync_raw(&self, body: SyncInput) -> Result<Vec<u8>, SdkError> {
         self.caller.json("POST", "/v1/bank/sync".to_string(), Some(&body)).await
     }
 
@@ -2436,16 +2538,12 @@ impl FinanceSdk {
         self.caller.json("GET", format!("/v1/spending/stores/{}/transactions{}", encode(&chain.to_string()), query(&[("period", qv(&period)), ("n", qv(&n)), ("date", qv(&date))])), None::<&()>).await
     }
 
-    async fn subscriptions_raw(&self, days: Option<i64>, as_of: Option<String>) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("GET", format!("/v1/subscriptions{}", query(&[("days", qv(&days)), ("as_of", qv(&as_of))])), None::<&()>).await
+    async fn subscriptions_raw(&self, days: Option<i64>, date: Option<String>) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("GET", format!("/v1/subscriptions{}", query(&[("days", qv(&days)), ("date", qv(&date))])), None::<&()>).await
     }
 
-    async fn sync_connection_raw(&self, name: String, body: Option<SyncNowRequest>) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", format!("/v1/bank/connections/{}/sync", encode(&name.to_string())), body.as_ref()).await
-    }
-
-    async fn sync_now_raw(&self, body: Option<ReceiptSyncRequest>) -> Result<Vec<u8>, SdkError> {
-        self.caller.json("POST", "/v1/receipts/sync".to_string(), body.as_ref()).await
+    async fn sync_now_raw(&self, body: ReceiptSyncInput) -> Result<Vec<u8>, SdkError> {
+        self.caller.json("POST", "/v1/receipts/sync".to_string(), Some(&body)).await
     }
 
     async fn update_calendar_raw(&self, id: i64, body: CalendarInput) -> Result<Vec<u8>, SdkError> {
@@ -2460,7 +2558,7 @@ impl FinanceSdk {
         self.caller.json("PUT", format!("/v1/rules/{}", encode(&id.to_string())), Some(&body)).await
     }
 
-    async fn upload_receipt_raw(&self, body: ReceiptUpload) -> Result<Vec<u8>, SdkError> {
+    async fn upload_receipt_raw(&self, body: ReceiptUploadInput) -> Result<Vec<u8>, SdkError> {
         self.caller.json("POST", "/v1/receipts".to_string(), Some(&body)).await
     }
 
@@ -2475,10 +2573,10 @@ impl FinanceSdk {
             "accept_suggestions" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: AcceptSuggestions,
+                    body: CategoriesInput,
                 }
                 let a: A = parse_args(args)?;
-                answer::<AcceptReport>(self.accept_suggestions_raw(a.body).await?)
+                answer::<CategoriesChangedDto>(self.accept_suggestions_raw(a.body).await?)
             }
             "add_exception" => {
                 #[derive(Deserialize)]
@@ -2508,21 +2606,21 @@ impl FinanceSdk {
                     #[serde(default)]
                     lookback_days: Option<i64>,
                     #[serde(default)]
-                    as_of: Option<String>,
+                    date: Option<String>,
                 }
                 let a: A = parse_args(args)?;
-                answer::<AlertsDto>(self.alerts_raw(a.include_dismissed, a.lookback_days, a.as_of).await?)
+                answer::<AlertsDto>(self.alerts_raw(a.include_dismissed, a.lookback_days, a.date).await?)
             }
             "apply_rules" => {
-                answer::<ApplyReport>(self.apply_rules_raw().await?)
+                answer::<RulesAppliedDto>(self.apply_rules_raw().await?)
             }
             "bank_status" => {
-                answer::<BankStatus>(self.bank_status_raw().await?)
+                answer::<BankStatusDto>(self.bank_status_raw().await?)
             }
             "best_prices" => {
                 answer::<Vec<PickDto>>(self.best_prices_raw().await?)
             }
-            "budget_period" => {
+            "budget" => {
                 #[derive(Deserialize)]
                 struct A {
                     #[serde(default)]
@@ -2531,30 +2629,15 @@ impl FinanceSdk {
                     date: Option<String>,
                 }
                 let a: A = parse_args(args)?;
-                answer::<PeriodDto>(self.budget_period_raw(a.period, a.date).await?)
+                answer::<BudgetDto>(self.budget_raw(a.period, a.date).await?)
             }
-            "budget_status" => {
+            "cancel_sync" => {
                 #[derive(Deserialize)]
                 struct A {
-                    #[serde(default)]
-                    year: Option<i32>,
-                    #[serde(default)]
-                    month: Option<i32>,
-                    #[serde(default)]
-                    period: Option<PeriodChoice>,
-                    #[serde(default)]
-                    date: Option<String>,
+                    id: String,
                 }
                 let a: A = parse_args(args)?;
-                answer::<Vec<EnvelopeStatusDto>>(self.budget_status_raw(a.year, a.month, a.period, a.date).await?)
-            }
-            "cancel_connection" => {
-                #[derive(Deserialize)]
-                struct A {
-                    name: String,
-                }
-                let a: A = parse_args(args)?;
-                answer::<BankConnectionDto>(self.cancel_connection_raw(a.name).await?)
+                answer::<SyncDto>(self.cancel_sync_raw(a.id).await?)
             }
             "catalog" => {
                 answer::<Vec<CatalogItemDto>>(self.catalog_raw().await?)
@@ -2562,18 +2645,18 @@ impl FinanceSdk {
             "categorize_unknown" => {
                 answer::<SuggestionsDto>(self.categorize_unknown_raw().await?)
             }
-            "confirm_sync" => {
+            "connect_source" => {
                 #[derive(Deserialize)]
                 struct A {
-                    id: String,
+                    kind: String,
                 }
                 let a: A = parse_args(args)?;
-                answer::<SyncDone>(self.confirm_sync_raw(a.id).await?)
+                answer::<SourceConnectDto>(self.connect_source_raw(a.kind).await?)
             }
             "create_backup" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: BackupCreateRequest,
+                    body: BackupInput,
                 }
                 let a: A = parse_args(args)?;
                 answer::<BackupDto>(self.create_backup_raw(a.body).await?)
@@ -2650,6 +2733,14 @@ impl FinanceSdk {
                 let a: A = parse_args(args)?;
                 answer::<BankConnectionDto>(self.disconnect_connection_raw(a.name).await?)
             }
+            "disconnect_source" => {
+                #[derive(Deserialize)]
+                struct A {
+                    kind: String,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ReceiptSourceDto>(self.disconnect_source_raw(a.kind).await?)
+            }
             "dismiss_alert" => {
                 #[derive(Deserialize)]
                 struct A {
@@ -2657,9 +2748,6 @@ impl FinanceSdk {
                 }
                 let a: A = parse_args(args)?;
                 answer::<AlertDismissedDto>(self.dismiss_alert_raw(a.id).await?)
-            }
-            "disposable" => {
-                answer::<DisposableDto>(self.disposable_raw().await?)
             }
             "ean_lookup" => {
                 #[derive(Deserialize)]
@@ -2670,7 +2758,16 @@ impl FinanceSdk {
                 answer::<EanLookupDto>(self.ean_lookup_raw(a.ean).await?)
             }
             "export_data" => {
-                answer::<ExportDto>(self.export_data_raw().await?)
+                answer::<DataDto>(self.export_data_raw().await?)
+            }
+            "finish_source" => {
+                #[derive(Deserialize)]
+                struct A {
+                    kind: String,
+                    body: SourceFinishInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ReceiptSourceDto>(self.finish_source_raw(a.kind, a.body).await?)
             }
             "forecast" => {
                 #[derive(Deserialize)]
@@ -2685,10 +2782,7 @@ impl FinanceSdk {
                 answer::<BasketDto>(self.get_basket_raw().await?)
             }
             "get_config" => {
-                answer::<ConfigView>(self.get_config_raw().await?)
-            }
-            "get_envelopes" => {
-                answer::<Vec<EnvelopeDto>>(self.get_envelopes_raw().await?)
+                answer::<ConfigDto>(self.get_config_raw().await?)
             }
             "get_event" => {
                 #[derive(Deserialize)]
@@ -2724,38 +2818,56 @@ impl FinanceSdk {
                 let a: A = parse_args(args)?;
                 answer::<ShoppingListDto>(self.get_shopping_list_raw(a.week, a.date).await?)
             }
+            "get_source" => {
+                #[derive(Deserialize)]
+                struct A {
+                    kind: String,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ReceiptSourceDto>(self.get_source_raw(a.kind).await?)
+            }
+            "get_sync" => {
+                #[derive(Deserialize)]
+                struct A {
+                    id: String,
+                }
+                let a: A = parse_args(args)?;
+                answer::<SyncDto>(self.get_sync_raw(a.id).await?)
+            }
             "import_data" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: ExportDto,
+                    body: DataDto,
                 }
                 let a: A = parse_args(args)?;
                 answer::<ImportReportDto>(self.import_data_raw(a.body).await?)
             }
-            "import_transactions" => {
+            "import_file" => {
                 #[derive(Deserialize)]
                 struct A {
+                    kind: String,
                     csv_base64: String,
                 }
                 let a: A = parse_args(args)?;
-                answer::<ImportReport>(self.import_transactions_raw(decode_base64(&a.csv_base64)?).await?)
+                answer::<FileImportDto>(self.import_file_raw(a.kind, decode_base64(&a.csv_base64)?).await?)
             }
-            "lidl_disconnect" => {
-                self.lidl_disconnect_raw().await.map(|_| "null".to_string())
-            }
-            "lidl_finish" => {
+            "import_receipts" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: LidlFinishRequest,
+                    kind: String,
+                    body: ReceiptImportInput,
                 }
                 let a: A = parse_args(args)?;
-                answer::<LidlStatusDto>(self.lidl_finish_raw(a.body).await?)
+                answer::<ReceiptImportDto>(self.import_receipts_raw(a.kind, a.body).await?)
             }
-            "lidl_start" => {
-                answer::<LidlStartDto>(self.lidl_start_raw().await?)
-            }
-            "lidl_status" => {
-                answer::<LidlStatusDto>(self.lidl_status_raw().await?)
+            "known_receipts" => {
+                #[derive(Deserialize)]
+                struct A {
+                    kind: String,
+                    body: ReceiptKnownInput,
+                }
+                let a: A = parse_args(args)?;
+                answer::<ReceiptKnownDto>(self.known_receipts_raw(a.kind, a.body).await?)
             }
             "list_calendars" => {
                 answer::<Vec<CalendarDto>>(self.list_calendars_raw().await?)
@@ -2783,6 +2895,9 @@ impl FinanceSdk {
                 let a: A = parse_args(args)?;
                 answer::<Vec<PriceDto>>(self.list_prices_raw(a.item).await?)
             }
+            "list_providers" => {
+                answer::<Vec<ProviderDto>>(self.list_providers_raw().await?)
+            }
             "list_receipts" => {
                 answer::<Vec<ReceiptDto>>(self.list_receipts_raw().await?)
             }
@@ -2801,7 +2916,7 @@ impl FinanceSdk {
             "put_basket" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: Vec<BasketItemDto>,
+                    body: Vec<BasketItemInput>,
                 }
                 let a: A = parse_args(args)?;
                 answer::<BasketDto>(self.put_basket_raw(a.body).await?)
@@ -2809,18 +2924,18 @@ impl FinanceSdk {
             "put_config" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: Change,
+                    body: ConfigChangeInput,
                 }
                 let a: A = parse_args(args)?;
-                answer::<ConfigSaved>(self.put_config_raw(a.body).await?)
+                answer::<ConfigSavedDto>(self.put_config_raw(a.body).await?)
             }
             "put_envelopes" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: Vec<EnvelopeDto>,
+                    body: Vec<EnvelopeInput>,
                 }
                 let a: A = parse_args(args)?;
-                answer::<Vec<EnvelopeDto>>(self.put_envelopes_raw(a.body).await?)
+                answer::<Vec<EnvelopeStatusDto>>(self.put_envelopes_raw(a.body).await?)
             }
             "put_meal_plan" => {
                 #[derive(Deserialize)]
@@ -2835,7 +2950,7 @@ impl FinanceSdk {
             "put_pantry" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: PantryUpdate,
+                    body: PantryInput,
                 }
                 let a: A = parse_args(args)?;
                 answer::<PantryDto>(self.put_pantry_raw(a.body).await?)
@@ -2843,7 +2958,7 @@ impl FinanceSdk {
             "put_settings" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: SettingsUpdate,
+                    body: SettingsInput,
                 }
                 let a: A = parse_args(args)?;
                 answer::<SettingsDto>(self.put_settings_raw(a.body).await?)
@@ -2860,7 +2975,7 @@ impl FinanceSdk {
             "recipe_ideas" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: IdeasRequest,
+                    body: IdeasInput,
                 }
                 let a: A = parse_args(args)?;
                 answer::<Vec<IdeaDto>>(self.recipe_ideas_raw(a.body).await?)
@@ -2887,7 +3002,7 @@ impl FinanceSdk {
             "reorder_rules" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: RuleOrder,
+                    body: RuleOrderInput,
                 }
                 let a: A = parse_args(args)?;
                 answer::<Vec<RuleDto>>(self.reorder_rules_raw(a.body).await?)
@@ -2895,24 +3010,15 @@ impl FinanceSdk {
             "restore_backup" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: BackupRestoreRequest,
+                    body: BackupRestorationInput,
                 }
                 let a: A = parse_args(args)?;
                 answer::<ImportReportDto>(self.restore_backup_raw(a.body).await?)
             }
-            "safe_to_spend" => {
-                #[derive(Deserialize)]
-                struct A {
-                    #[serde(default)]
-                    date: Option<String>,
-                }
-                let a: A = parse_args(args)?;
-                answer::<SafeToSpendDto>(self.safe_to_spend_raw(a.date).await?)
-            }
             "scan_receipt" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: ReceiptScan,
+                    body: ReceiptScanInput,
                 }
                 let a: A = parse_args(args)?;
                 answer::<ScanDto>(self.scan_receipt_raw(a.body).await?)
@@ -2921,18 +3027,18 @@ impl FinanceSdk {
                 #[derive(Deserialize)]
                 struct A {
                     id: i64,
-                    body: CategoryChange,
+                    body: CategoryInput,
                 }
                 let a: A = parse_args(args)?;
-                answer::<CategoryChanged>(self.set_category_raw(a.id, a.body).await?)
+                answer::<CategoryChangedDto>(self.set_category_raw(a.id, a.body).await?)
             }
             "start_sync" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: SyncRequest,
+                    body: SyncInput,
                 }
                 let a: A = parse_args(args)?;
-                answer::<SyncStarted>(self.start_sync_raw(a.body).await?)
+                answer::<SyncDto>(self.start_sync_raw(a.body).await?)
             }
             "store_spending" => {
                 #[derive(Deserialize)]
@@ -2967,26 +3073,15 @@ impl FinanceSdk {
                     #[serde(default)]
                     days: Option<i64>,
                     #[serde(default)]
-                    as_of: Option<String>,
+                    date: Option<String>,
                 }
                 let a: A = parse_args(args)?;
-                answer::<SubscriptionsDto>(self.subscriptions_raw(a.days, a.as_of).await?)
-            }
-            "sync_connection" => {
-                #[derive(Deserialize)]
-                struct A {
-                    name: String,
-                    #[serde(default)]
-                    body: Option<SyncNowRequest>,
-                }
-                let a: A = parse_args(args)?;
-                answer::<BankConnectionDto>(self.sync_connection_raw(a.name, a.body).await?)
+                answer::<SubscriptionsDto>(self.subscriptions_raw(a.days, a.date).await?)
             }
             "sync_now" => {
                 #[derive(Deserialize)]
                 struct A {
-                    #[serde(default)]
-                    body: Option<ReceiptSyncRequest>,
+                    body: ReceiptSyncInput,
                 }
                 let a: A = parse_args(args)?;
                 answer::<ReceiptSyncDto>(self.sync_now_raw(a.body).await?)
@@ -3021,7 +3116,7 @@ impl FinanceSdk {
             "upload_receipt" => {
                 #[derive(Deserialize)]
                 struct A {
-                    body: ReceiptUpload,
+                    body: ReceiptUploadInput,
                 }
                 let a: A = parse_args(args)?;
                 answer::<ReceiptDto>(self.upload_receipt_raw(a.body).await?)

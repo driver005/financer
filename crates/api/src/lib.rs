@@ -2,9 +2,7 @@
 
 mod auth;
 mod backup;
-mod bank;
 mod bank_connections;
-mod bank_plaid;
 mod budget_period;
 mod calendar;
 mod categorization;
@@ -28,8 +26,9 @@ use axum::middleware;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
 use financer_core::{StoreAlias, StoreMatcher};
-use financer_fints::{BankClient, UnconfiguredBank};
 use financer_llm::{LlmError, LlmProvider, LlmSettings, ProviderFactory};
+use financer_openbanking::fints::BankClient;
+use financer_openbanking::{FintsProvider, Provider, Providers};
 use financer_prices::{Http, HttpResponse, PriceError, SourceConfig};
 use financer_store::Store;
 use tower_http::trace::TraceLayer;
@@ -37,9 +36,11 @@ use utoipa::OpenApi;
 
 pub use auth::TokenHash;
 pub use bank_connections::{BankConnection, BankProvider, ConnectionState};
-pub use bank_plaid::PlaidSetup;
-pub use financer_fints::{BankClient as BankClientTrait, BankData, BankError, MockBank};
 pub use financer_llm::MockProvider;
+pub use financer_openbanking::fints::{
+    BankClient as BankClientTrait, BankData, BankError, MockBank,
+};
+pub use financer_openbanking::{ProviderKind, Providers as BankProviders};
 pub use financer_prices::{FakeHttp, SourceConfig as PriceSourceConfig};
 
 /// Largest request body accepted (CSV exports of many years stay well below this).
@@ -73,15 +74,14 @@ impl Http for NoNetwork {
 #[derive(Clone)]
 pub struct AppState {
     pub store: Store,
-    pub(crate) bank: Arc<dyn BankClient>,
-    pub(crate) bank_configured: bool,
-    pub(crate) pending_sync: Arc<tokio::sync::Mutex<Option<bank::PendingEntry>>>,
+    /// Every way transactions come in that this server has set up (CSV import always).
+    pub(crate) providers: Providers,
+    /// The FinTS provider, kept to set how long a wrong PIN pauses syncing.
+    pub(crate) fints: Option<Arc<FintsProvider>>,
+    pub(crate) pin_pause: Option<std::time::Duration>,
     pub(crate) sync_ttl: std::time::Duration,
-    pub(crate) pin_guard: Arc<tokio::sync::Mutex<bank::PinGuard>>,
-    pub(crate) pin_pause: std::time::Duration,
     pub(crate) bank_connections: Arc<bank_connections::Connections>,
     pub(crate) pin_lookup: PinLookup,
-    pub(crate) plaid: Option<Arc<PlaidSetup>>,
     pub(crate) secret_box: Option<Arc<financer_receipt_sources::SecretBox>>,
     pub(crate) connection_poll: std::time::Duration,
     pub(crate) http: Arc<dyn Http>,
@@ -98,15 +98,12 @@ impl AppState {
     pub fn new(store: Store) -> Self {
         Self {
             store,
-            bank: Arc::new(UnconfiguredBank),
-            bank_configured: false,
-            pending_sync: Arc::new(tokio::sync::Mutex::new(None)),
-            sync_ttl: bank::DEFAULT_SYNC_TTL,
-            pin_guard: Arc::new(tokio::sync::Mutex::new(bank::PinGuard::default())),
-            pin_pause: bank::DEFAULT_PIN_PAUSE,
+            providers: Providers::new(),
+            fints: None,
+            pin_pause: None,
+            sync_ttl: bank_connections::DEFAULT_SYNC_TTL,
             bank_connections: Arc::new(bank_connections::Connections::new(Vec::new())),
             pin_lookup: Arc::new(|var| std::env::var(var).ok().filter(|v| !v.is_empty())),
-            plaid: None,
             secret_box: None,
             connection_poll: bank_connections::DEFAULT_POLL,
             http: Arc::new(NoNetwork),
@@ -150,34 +147,42 @@ impl AppState {
         self
     }
 
-    /// The bank client used for live sync (the server passes the real FinTS client).
+    /// The bank client used for FinTS (the server passes the real one).
     pub fn with_bank(mut self, bank: Arc<dyn BankClient>) -> Self {
-        self.bank = bank;
-        self.bank_configured = true;
+        let fints = Arc::new(FintsProvider::new(bank));
+        if let Some(pause) = self.pin_pause {
+            fints.set_pin_pause(pause);
+        }
+        self.providers = self.providers.with(fints.clone());
+        self.fints = Some(fints);
         self
     }
 
     /// How long syncing pauses after repeated wrong PINs (tests shorten it).
     pub fn with_pin_pause(mut self, pause: std::time::Duration) -> Self {
-        self.pin_pause = pause;
+        self.pin_pause = Some(pause);
+        if let Some(fints) = &self.fints {
+            fints.set_pin_pause(pause);
+        }
+        self
+    }
+
+    /// A provider of transactions (Plaid, GoCardless, finAPI, or another FinTS client), set up by
+    /// the server from its configuration. Plaid, GoCardless and finAPI need
+    /// [`AppState::with_secret_box`] as well, because their access is kept sealed.
+    pub fn with_provider(mut self, provider: Arc<dyn Provider>) -> Self {
+        self.providers = self.providers.with(provider);
         self
     }
 
     /// The bank connections of the server configuration (`[[bank.accounts]]`). They sync with the
-    /// client set by [`AppState::with_bank`].
+    /// providers set up here.
     pub fn with_bank_connections(mut self, connections: Vec<BankConnection>) -> Self {
         self.bank_connections = Arc::new(bank_connections::Connections::new(connections));
         self
     }
 
-    /// Plaid, for the connections with `kind = "plaid"`. Needs [`AppState::with_secret_box`] as
-    /// well, because the access token is kept sealed.
-    pub fn with_plaid(mut self, plaid: PlaidSetup) -> Self {
-        self.plaid = Some(Arc::new(plaid));
-        self
-    }
-
-    /// Seals the secrets the server keeps (the Plaid access token) with a key derived from a
+    /// Seals the secrets the server keeps (the Plaid, GoCardless and finAPI access) with a key derived from a
     /// server secret that is not in the database.
     pub fn with_secret_box(mut self, secrets: financer_receipt_sources::SecretBox) -> Self {
         self.secret_box = Some(Arc::new(secrets));
@@ -235,7 +240,7 @@ impl AppState {
         self
     }
 
-    /// The automatic receipt sources (mailbox, Lidl Plus, watched folder). Without it the receipt
+    /// The automatic receipt sources (mailbox, Lidl Plus, Kaufland Card, watched folder). Without it the receipt
     /// source endpoints report every source as disabled.
     pub fn with_receipt_syncer(
         mut self,
@@ -257,27 +262,23 @@ impl AppState {
     info(title = "Financer API", version = "0.1.0"),
     paths(
         routes::health,
-        routes::import_transactions,
         routes::list_transactions,
         routes::recurring,
-        routes::disposable,
-        routes::get_envelopes,
         routes::put_envelopes,
-        routes::budget_status,
-        budget_period::budget_period,
-        budget_period::safe_to_spend,
+        budget_period::budget,
         forecast::forecast,
         export::export_data,
         export::import_data,
         backup::create_backup,
         backup::restore_backup,
-        bank::start_sync,
-        bank::confirm_sync,
-        bank::bank_status,
+        bank_connections::list_providers,
         bank_connections::list_connections,
-        bank_connections::sync_connection,
-        bank_connections::cancel_connection,
+        bank_connections::start_sync,
+        bank_connections::get_sync,
+        bank_connections::cancel_sync,
         bank_connections::disconnect_connection,
+        bank_connections::import_file,
+        bank_connections::bank_status,
         stores::store_spending,
         stores::store_transactions,
         grocery::refresh_prices,
@@ -292,11 +293,13 @@ impl AppState {
         grocery::list_receipts,
         grocery::delete_receipt,
         receipt_sources::list_sources,
+        receipt_sources::get_source,
         receipt_sources::sync_now,
-        receipt_sources::lidl_start,
-        receipt_sources::lidl_finish,
-        receipt_sources::lidl_status,
-        receipt_sources::lidl_disconnect,
+        receipt_sources::connect_source,
+        receipt_sources::finish_source,
+        receipt_sources::disconnect_source,
+        receipt_sources::known_receipts,
+        receipt_sources::import_receipts,
         grocery::affordability,
         grocery::recipes,
         grocery::recipe_ideas,
@@ -337,13 +340,14 @@ impl AppState {
     ),
     components(schemas(
         dto::TransactionDto,
-        dto::ImportReport,
+        dto::FileImportDto,
         dto::SkippedRowDto,
         dto::RecurringDto,
-        dto::EnvelopeDto,
+        dto::EnvelopeInput,
         dto::EnvelopeStatusDto,
         dto::DisposableDto,
         budget_period::PeriodChoice,
+        budget_period::BudgetDto,
         budget_period::PeriodDto,
         budget_period::SafeToSpendDto,
         forecast::ForecastDto,
@@ -356,20 +360,20 @@ impl AppState {
         dto::ExportEvent,
         calendar::EventBody,
         dto::ExportSettings,
-        dto::ExportDto,
+        dto::DataDto,
         dto::ImportReportDto,
-        backup::BackupCreateRequest,
+        backup::BackupInput,
         backup::BackupDto,
-        backup::BackupRestoreRequest,
-        dto::SyncRequest,
-        dto::SyncStarted,
-        dto::SyncDone,
-        dto::BankStatus,
+        backup::BackupRestorationInput,
+        dto::BankStatusDto,
+        bank_connections::ProviderDto,
         bank_connections::BankConnectionDto,
         bank_connections::SyncOutcomeDto,
-        bank_connections::SyncNowRequest,
+        bank_connections::SyncInput,
+        bank_connections::LoginInput,
+        bank_connections::SyncDto,
         bank_connections::ConnectionState,
-        bank_plaid::LinkedAccountDto,
+        bank_connections::LinkedAccountDto,
         stores::StoresPeriod,
         stores::StoreSpendDto,
         stores::StoresDto,
@@ -379,20 +383,25 @@ impl AppState {
         scan::ObservationDto,
         dto::SourceStatusDto,
         dto::RefreshReportDto,
-        dto::BasketItemDto,
+        dto::BasketItemInput,
         dto::BasketDto,
         dto::BasketItemOutDto,
         dto::CatalogItemDto,
-        dto::ReceiptUpload,
+        dto::ReceiptUploadInput,
         dto::ReceiptItemDto,
         dto::ReceiptDto,
-        dto::ReceiptScan,
+        dto::ReceiptScanInput,
         receipt_sources::ReceiptSourceDto,
         receipt_sources::ReceiptSyncDto,
-        receipt_sources::ReceiptSyncRequest,
-        receipt_sources::LidlStartDto,
-        receipt_sources::LidlFinishRequest,
-        receipt_sources::LidlStatusDto,
+        receipt_sources::ReceiptSyncInput,
+        receipt_sources::SourceConnectDto,
+        receipt_sources::SourceFinishInput,
+        receipt_sources::ReceiptKnownInput,
+        receipt_sources::ReceiptKnownDto,
+        receipt_sources::ReceiptLineInput,
+        receipt_sources::ReceiptInput,
+        receipt_sources::ReceiptImportInput,
+        receipt_sources::ReceiptImportDto,
         dto::ScanDto,
         dto::ChainAffordabilityDto,
         dto::StapleDto,
@@ -402,32 +411,32 @@ impl AppState {
         dto::AffordabilityDto,
         dto::RecipeMatchDto,
         dto::RecipeIngredientDto,
-        dto::IdeasRequest,
+        dto::IdeasInput,
         dto::IdeaDto,
         dto::IdeaIngredientDto,
         dto::SettingsDto,
-        dto::SettingsUpdate,
+        dto::SettingsInput,
         financer_config::ConfigView,
         financer_config::GroupView,
         financer_config::KeyView,
         financer_config::FieldView,
         financer_config::Change,
-        server_config::ConfigSaved,
+        server_config::ConfigSavedDto,
         server_config::ConfigProblems,
         categorization::RuleDto,
         categorization::RuleInput,
-        categorization::RuleOrder,
-        categorization::ApplyReport,
-        categorization::CategoryChange,
-        categorization::CategoryChanged,
+        categorization::RuleOrderInput,
+        categorization::RulesAppliedDto,
+        categorization::CategoryInput,
+        categorization::CategoryChangedDto,
         categorization::SplitPartDto,
         categorization::SplitInput,
         categorization::SplitDto,
         categorization::SuggestionDto,
         categorization::SuggestionsDto,
         categorization::AcceptedSuggestion,
-        categorization::AcceptSuggestions,
-        categorization::AcceptReport,
+        categorization::CategoriesInput,
+        categorization::CategoriesChangedDto,
         watchdog::SubscriptionDto,
         watchdog::UpcomingChargeDto,
         watchdog::PriceHikeDto,
@@ -445,7 +454,7 @@ impl AppState {
         mealplan::MealPlanDto,
         mealplan::PantryItemDto,
         mealplan::PantryDto,
-        mealplan::PantryUpdate,
+        mealplan::PantryInput,
         mealplan::ShoppingItemDto,
         mealplan::ShoppingStopDto,
         mealplan::ShoppingPlanDto,
@@ -491,37 +500,27 @@ impl Api {
     pub fn router_with(state: AppState, token: TokenHash, apps: Vec<(&str, Router)>) -> Router {
         let mut v1 = Router::new()
             .route("/transactions", get(routes::list_transactions))
-            .route("/transactions/import", post(routes::import_transactions))
             .route("/recurring", get(routes::recurring))
-            .route("/budget/disposable", get(routes::disposable))
-            .route(
-                "/budget/envelopes",
-                get(routes::get_envelopes).put(routes::put_envelopes),
-            )
-            .route("/budget/status", get(routes::budget_status))
-            .route("/budget/period", get(budget_period::budget_period))
-            .route("/budget/safe-to-spend", get(budget_period::safe_to_spend))
+            .route("/budget", get(budget_period::budget))
+            .route("/budget/envelopes", put(routes::put_envelopes))
             .route("/forecast", get(forecast::forecast))
-            .route("/export", get(export::export_data))
-            .route("/import", post(export::import_data))
-            .route("/backup/create", post(backup::create_backup))
-            .route("/backup/restore", post(backup::restore_backup))
-            .route("/bank/sync", post(bank::start_sync))
-            .route("/bank/sync/{id}/confirm", post(bank::confirm_sync))
-            .route("/bank/status", get(bank::bank_status))
+            .route("/data", get(export::export_data).post(export::import_data))
+            .route("/backups", post(backup::create_backup))
+            .route("/backups/restorations", post(backup::restore_backup))
+            .route("/bank/providers", get(bank_connections::list_providers))
             .route("/bank/connections", get(bank_connections::list_connections))
-            .route(
-                "/bank/connections/{name}/sync",
-                post(bank_connections::sync_connection),
-            )
-            .route(
-                "/bank/connections/{name}/cancel",
-                post(bank_connections::cancel_connection),
-            )
             .route(
                 "/bank/connections/{name}/disconnect",
                 post(bank_connections::disconnect_connection),
             )
+            .route("/bank/sync", post(bank_connections::start_sync))
+            .route("/bank/sync/{id}", get(bank_connections::get_sync))
+            .route(
+                "/bank/sync/{id}/cancel",
+                post(bank_connections::cancel_sync),
+            )
+            .route("/bank/import/{kind}", post(bank_connections::import_file))
+            .route("/bank/status", get(bank_connections::bank_status))
             .route("/spending/stores", get(stores::store_spending))
             .route(
                 "/spending/stores/{chain}/transactions",
@@ -530,7 +529,7 @@ impl Api {
             .route("/prices", get(grocery::list_prices))
             .route("/prices/best", get(grocery::best_prices))
             .route("/prices/ean/{ean}", get(scan::ean_lookup))
-            .route("/prices/refresh", post(grocery::refresh_prices))
+            .route("/prices/refreshes", post(grocery::refresh_prices))
             .route("/catalog", get(grocery::catalog))
             .route("/basket", get(grocery::get_basket).put(grocery::put_basket))
             .route(
@@ -538,16 +537,33 @@ impl Api {
                 get(grocery::list_receipts).post(grocery::upload_receipt),
             )
             .route(
-                "/receipts/scan",
+                "/receipts/scans",
                 post(grocery::scan_receipt).layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
             )
             .route("/receipts/{id}", delete(grocery::delete_receipt))
             .route("/receipts/sources", get(receipt_sources::list_sources))
+            .route("/receipts/sources/{kind}", get(receipt_sources::get_source))
+            .route(
+                "/receipts/sources/{kind}/connect",
+                post(receipt_sources::connect_source),
+            )
+            .route(
+                "/receipts/sources/{kind}/finish",
+                post(receipt_sources::finish_source),
+            )
+            .route(
+                "/receipts/sources/{kind}/disconnect",
+                post(receipt_sources::disconnect_source),
+            )
+            .route(
+                "/receipts/sources/{kind}/known",
+                post(receipt_sources::known_receipts),
+            )
+            .route(
+                "/receipts/sources/{kind}/import",
+                post(receipt_sources::import_receipts),
+            )
             .route("/receipts/sync", post(receipt_sources::sync_now))
-            .route("/receipts/lidl/start", post(receipt_sources::lidl_start))
-            .route("/receipts/lidl/finish", post(receipt_sources::lidl_finish))
-            .route("/receipts/lidl/status", get(receipt_sources::lidl_status))
-            .route("/receipts/lidl", delete(receipt_sources::lidl_disconnect))
             .route("/affordability", get(grocery::affordability))
             .route("/recipes", get(grocery::recipes))
             .route("/recipes/ideas", post(grocery::recipe_ideas))
@@ -563,20 +579,20 @@ impl Api {
                 "/rules",
                 get(categorization::list_rules).post(categorization::create_rule),
             )
-            .route("/rules/reorder", post(categorization::reorder_rules))
-            .route("/rules/apply", post(categorization::apply_rules))
+            .route("/rules/order", put(categorization::reorder_rules))
+            .route("/rules/applications", post(categorization::apply_rules))
             .route(
                 "/rules/{id}",
                 put(categorization::update_rule).delete(categorization::delete_rule),
             )
             .route("/transactions/splits", get(categorization::list_splits))
             .route(
-                "/transactions/categorize-unknown",
+                "/transactions/suggestions",
                 post(categorization::categorize_unknown),
             )
             .route(
-                "/transactions/categorize-unknown/accept",
-                post(categorization::accept_suggestions),
+                "/transactions/categories",
+                put(categorization::accept_suggestions),
             )
             .route(
                 "/transactions/{id}/category",
@@ -615,9 +631,9 @@ impl Api {
                 "/meal-plan",
                 get(mealplan::get_meal_plan).put(mealplan::put_meal_plan),
             )
-            .route("/meal-plan/shopping-list", get(mealplan::get_shopping_list))
+            .route("/shopping-list", get(mealplan::get_shopping_list))
             .route(
-                "/meal-plan/pantry",
+                "/pantry",
                 get(mealplan::get_pantry).put(mealplan::put_pantry),
             );
         for (name, app) in apps {

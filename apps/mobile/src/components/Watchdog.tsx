@@ -25,7 +25,7 @@ export function WatchdogCard() {
   });
   if (!api || !data) return null;
 
-  const next = nextChargeText(data.subs.upcoming, data.subs.as_of, 14);
+  const next = nextChargeText(data.subs.upcoming, data.subs.date, 14);
   const hikes = data.subs.price_hikes.length;
   const title = data.unread > 0 ? `${data.unread} unread alert${data.unread === 1 ? "" : "s"}` : "No alerts";
   return (

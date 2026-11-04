@@ -61,7 +61,7 @@ const LIDL_RECEIPT = ["LIDL", "Bananen  1,29 B", "Milch 1,5%  1,09 B", "Brot  2,
 /** Imports the demo data through `call(op, args)`, a function that makes one finance call of the backend and gives the answer. */
 async function seedDemo(call) {
   const { toBase64 } = require("../src/native/base64");
-  const csv = await call("import_transactions", { csv_base64: toBase64(new TextEncoder().encode(demoCsv()).buffer) });
+  const csv = await call("import_file", { kind: "csv", csv_base64: toBase64(new TextEncoder().encode(demoCsv()).buffer) });
   let receipts = 0;
   for (const text of [REWE_RECEIPT, LIDL_RECEIPT]) {
     await call("upload_receipt", { body: { text } });

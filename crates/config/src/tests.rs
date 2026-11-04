@@ -932,3 +932,84 @@ fn the_rendered_configuration_never_shows_the_plaid_secret() {
         "{shown}"
     );
 }
+
+const GOCARDLESS_SECTION: &str =
+    "[bank.gocardless]\nsecret_id = \"${GC_ID}\"\nsecret_key = \"${GC_KEY}\"\nlanguage = \"EN\"\n";
+const GOCARDLESS_ACCOUNT: &str = "[[bank.accounts]]\nname = \"GC Giro\"\nkind = \"gocardless\"\ninstitution = \"SPARKASSE_X\"\nsync_every_hours = 12\n";
+const FINAPI_ACCOUNT: &str = "[[bank.accounts]]\nname = \"Fin Giro\"\nkind = \"finapi\"\n";
+
+#[test]
+fn a_gocardless_account_names_its_bank_and_needs_no_fints_fields() {
+    let text = format!("{GOCARDLESS_SECTION}\n{GOCARDLESS_ACCOUNT}");
+    let l = Fixture::ok(&text, &[("GC_ID", "id"), ("GC_KEY", "key")]);
+    let a = &l.config.bank.accounts[0];
+    assert_eq!(a.kind, "gocardless");
+    assert_eq!(a.institution.as_deref(), Some("SPARKASSE_X"));
+    let g = &l.config.bank.gocardless;
+    assert!(g.configured());
+    assert_eq!(g.secret_key.value.as_ref().unwrap().expose(), "key");
+    assert_eq!(g.language, "en");
+    assert!(l.warnings.is_empty(), "{:?}", l.warnings);
+}
+
+#[test]
+fn a_gocardless_account_without_keys_or_bank_is_called_out() {
+    let l = Fixture::ok(
+        "[[bank.accounts]]\nname = \"GC\"\nkind = \"gocardless\"\n",
+        &[],
+    );
+    assert!(l
+        .warnings
+        .iter()
+        .any(|w| w.contains("bank.gocardless.secret_id")));
+    assert!(l.warnings.iter().any(|w| w.contains("institution id")));
+}
+
+#[test]
+fn the_gocardless_and_finapi_keys_can_come_from_the_environment() {
+    let l = Fixture::ok(
+        &format!("{GOCARDLESS_ACCOUNT}\n{FINAPI_ACCOUNT}"),
+        &[
+            ("FINANCER_GOCARDLESS_SECRET_ID", "id"),
+            ("FINANCER_GOCARDLESS_SECRET_KEY", "key"),
+            ("FINANCER_FINAPI_CLIENT_ID", "cid"),
+            ("FINANCER_FINAPI_CLIENT_SECRET", "csec"),
+            ("FINANCER_FINAPI_ENV", "Live"),
+        ],
+    );
+    assert!(l.config.bank.gocardless.configured());
+    assert!(l.config.bank.finapi.configured());
+    assert_eq!(l.config.bank.finapi.environment.value, "live");
+    assert!(l.warnings.is_empty(), "{:?}", l.warnings);
+}
+
+#[test]
+fn finapi_defaults_to_the_sandbox_and_says_so() {
+    let l = Fixture::ok(
+        FINAPI_ACCOUNT,
+        &[
+            ("FINANCER_FINAPI_CLIENT_ID", "cid"),
+            ("FINANCER_FINAPI_CLIENT_SECRET", "csec"),
+        ],
+    );
+    assert_eq!(l.config.bank.finapi.environment.value, "sandbox");
+    assert!(l
+        .warnings
+        .iter()
+        .any(|w| w.contains("finapi") && w.contains("sandbox")));
+}
+
+#[test]
+fn literal_gocardless_and_finapi_secrets_get_a_warning() {
+    for section in [
+        "[bank.gocardless]\nsecret_key = \"literal123\"\n",
+        "[bank.finapi]\nclient_secret = \"literal123\"\n",
+    ] {
+        let l = Fixture::ok(section, &[]);
+        assert!(
+            l.warnings.iter().any(|w| w.contains("plain text")),
+            "{section}: {:?}",
+            l.warnings
+        );
+    }
+}

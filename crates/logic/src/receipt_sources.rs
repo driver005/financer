@@ -1,5 +1,5 @@
-//! The Receipt sources screen: names and texts for the three sources, the status pill, "last synced"
-//! wording, setup help, and reading the Lidl callback address.
+//! The Receipt sources screen: names and texts for the sources, the status pill, "last synced"
+//! wording, setup help, and reading the callback address of a shop's sign-in.
 
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +25,8 @@ pub fn source_title(s: &str) -> String {
     match s {
         "email" => "Email",
         "lidl_plus" => "Lidl Plus",
+        "kaufland_card" => "Kaufland Card",
+        "rewe_app" => "REWE eBon (app)",
         "folder" => "Watched folder",
         other => other,
     }
@@ -35,6 +37,7 @@ pub fn source_icon(s: &str) -> &'static str {
     match s {
         "email" => "email-fast-outline",
         "lidl_plus" => "cart-heart",
+        "kaufland_card" => "card-account-details-outline",
         "folder" => "folder-download-outline",
         _ => "receipt-text-outline",
     }
@@ -48,6 +51,9 @@ pub fn source_blurb(s: &str) -> &'static str {
         }
         "lidl_plus" => {
             "Reads your Lidl Plus receipts after you sign in on Lidl's own page. Experimental."
+        }
+        "kaufland_card" => {
+            "Reads the digital receipts of your Kaufland Card after you sign in on Kaufland's own page. Experimental."
         }
         "folder" => {
             "Imports any receipt PDF, text or web page you drop into a folder on your server."
@@ -185,6 +191,10 @@ pub fn setup_steps(s: &str, on_phone: bool) -> Vec<&'static str> {
                 "Switch it on below. The setting stays on this phone.",
                 "Then tap Connect. You sign in on Lidl's own page; Financer never sees your password.",
             ],
+            "kaufland_card" => vec![
+                "Switch it on below. The setting stays on this phone.",
+                "Then tap Connect. You sign in on Kaufland's own page; Financer never sees your password.",
+            ],
             "email" => vec![
                 "Not available on this phone: reading a mailbox needs a server that can stay connected. Connect your own server (Settings > Backend) to use it, or forward receipts to the Receipts screen by hand.",
             ],
@@ -204,6 +214,10 @@ pub fn setup_steps(s: &str, on_phone: bool) -> Vec<&'static str> {
             "Switch it on with enabled = true under [receipts.lidl_plus] in financer.toml and restart the server.",
             "Come back here and tap Connect. You sign in on Lidl's own page; Financer never sees your password.",
         ],
+        "kaufland_card" => vec![
+            "Switch it on with enabled = true under [receipts.kaufland] in financer.toml and restart the server.",
+            "Come back here and tap Connect. You sign in on Kaufland's own page; Financer never sees your password.",
+        ],
         "folder" => vec![
             "Add a [receipts.folder] section to financer.toml with the path of a folder on the server.",
             "Restart the server, then drop receipt PDFs, text or web pages into that folder (a synced cloud folder works well).",
@@ -212,14 +226,26 @@ pub fn setup_steps(s: &str, on_phone: bool) -> Vec<&'static str> {
     }
 }
 
-/// The short, plain statements shown on the Lidl Plus card.
-pub fn lidl_promises(on_phone: bool) -> Vec<String> {
+/// The short, plain statements shown on the sign-in card of a shop (`Lidl`, `Kaufland`).
+pub fn sign_in_promises(shop: &str, on_phone: bool) -> Vec<String> {
     vec![
-        "You sign in on Lidl's own page. Financer never sees your password.".into(),
-        format!("Only a refresh token is stored, {}, encrypted.", if on_phone { "on this phone" } else { "on your server" }),
-        "This is unofficial. Lidl has no public interface for this, so it can stop working at any time.".into(),
+        format!("You sign in on {shop}'s own page. Financer never sees your password."),
+        format!(
+            "Only a refresh token is stored, {}, encrypted.",
+            if on_phone {
+                "on this phone"
+            } else {
+                "on your server"
+            }
+        ),
+        format!("This is unofficial. {shop} has no public interface for this, so it can stop working at any time."),
         "You can disconnect whenever you like. That deletes the token; receipts already imported stay.".into(),
     ]
+}
+
+/// The statements of the Lidl Plus card.
+pub fn lidl_promises(on_phone: bool) -> Vec<String> {
+    sign_in_promises("Lidl", on_phone)
 }
 
 /// Where "Disconnect" says the saved sign-in is deleted from.
@@ -237,9 +263,9 @@ pub fn disconnected_text(on_phone: bool) -> String {
 /// The empty state when no receipt source is on.
 pub fn no_source_text(on_phone: bool) -> &'static str {
     if on_phone {
-        "On this phone the receipts can come from Lidl Plus. Switch it on in the Lidl Plus card below. Mailbox and folder import need your own server."
+        "On this phone the receipts can come from Lidl Plus or the Kaufland Card. Switch one on in its card below. Mailbox and folder import need your own server."
     } else {
-        "Receipts can arrive from your mailbox, from Lidl Plus or from a folder. Sources are switched on in the server's financer.toml; the cards below say how."
+        "Receipts can arrive from your mailbox, from Lidl Plus, from the Kaufland Card or from a folder. Sources are switched on in the server's financer.toml; the cards below say how."
     }
 }
 
@@ -273,6 +299,37 @@ pub fn callback_has_result(url: &str) -> bool {
     })
 }
 
+/// A source you sign in to is connected once it has a token: any state but "not connected",
+/// "switched off" and "sign in again".
+pub fn is_signed_in(state: &str) -> bool {
+    ["connected", "ok", "waiting", "running", "error"].contains(&state)
+}
+
+/// The one-line state of the sign-in card of a shop (`Lidl`, `Kaufland`).
+pub fn sign_in_state_text(
+    shop: &str,
+    state: &str,
+    connected_at: Option<f64>,
+    now_sec: f64,
+    on_phone: bool,
+) -> String {
+    match state {
+        s if is_signed_in(s) => match connected_at.filter(|t| *t != 0.0) {
+            Some(t) => format!(
+                "Connected {}",
+                last_sync_text(Some(t), now_sec).to_lowercase()
+            ),
+            None => "Connected".into(),
+        },
+        "needs_signin" => format!("{shop} no longer accepts the saved sign-in"),
+        "never" | "not_connected" => "Not connected".into(),
+        _ => format!(
+            "Switched off on this {}",
+            if on_phone { "phone" } else { "server" }
+        ),
+    }
+}
+
 /// The one-line state of the Lidl card.
 pub fn lidl_state_text(
     state: &str,
@@ -280,21 +337,16 @@ pub fn lidl_state_text(
     now_sec: f64,
     on_phone: bool,
 ) -> String {
-    match state {
-        "connected" => match connected_at.filter(|t| *t != 0.0) {
-            Some(t) => format!(
-                "Connected {}",
-                last_sync_text(Some(t), now_sec).to_lowercase()
-            ),
-            None => "Connected".into(),
-        },
-        "needs_signin" => "Lidl no longer accepts the saved sign-in".into(),
-        "never" => "Not connected".into(),
-        _ => format!(
-            "Switched off on this {}",
-            if on_phone { "phone" } else { "server" }
-        ),
-    }
+    sign_in_state_text("Lidl", state, connected_at, now_sec, on_phone)
+}
+
+/// The sources that run on a schedule or that you sign in to: the ones with a card of their own in
+/// the list. A source the app pushes (`flow` `push`) has its own screen.
+pub fn listed_sources(list: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    list.iter()
+        .filter(|s| s.get("flow").and_then(serde_json::Value::as_str) != Some("push"))
+        .cloned()
+        .collect()
 }
 
 #[cfg(test)]
@@ -349,5 +401,53 @@ mod tests {
             "2 new receipts; 1 matched to a bank payment."
         );
         assert!(!can_sync_now(true, "running"));
+    }
+
+    #[test]
+    fn every_sign_in_shop_is_named_in_its_own_sentences() {
+        assert_eq!(source_title("kaufland_card"), "Kaufland Card");
+        assert_eq!(source_title("rewe_app"), "REWE eBon (app)");
+        assert_eq!(source_icon("kaufland_card"), "card-account-details-outline");
+        assert!(
+            sign_in_promises("Kaufland", true)[0].starts_with("You sign in on Kaufland's own page")
+        );
+        assert!(sign_in_promises("Kaufland", true)[1].contains("on this phone"));
+        assert!(sign_in_promises("Lidl", false)[2].contains("Lidl has no public interface"));
+        assert_eq!(
+            sign_in_state_text("Kaufland", "needs_signin", None, 0.0, false),
+            "Kaufland no longer accepts the saved sign-in"
+        );
+        assert_eq!(
+            sign_in_state_text("Kaufland", "ok", Some(990.0), 1000.0, false),
+            "Connected just now"
+        );
+        assert_eq!(
+            sign_in_state_text("Lidl", "not_connected", None, 0.0, false),
+            "Not connected"
+        );
+        assert_eq!(
+            sign_in_state_text("Lidl", "disabled", None, 0.0, true),
+            "Switched off on this phone"
+        );
+        assert!(
+            is_signed_in("running") && !is_signed_in("needs_signin") && !is_signed_in("disabled")
+        );
+        assert!(
+            !setup_steps("kaufland_card", false).is_empty()
+                && !setup_steps("kaufland_card", true).is_empty()
+        );
+    }
+
+    #[test]
+    fn pushed_sources_have_no_card_in_the_list() {
+        let list: Vec<serde_json::Value> = serde_json::from_str(
+            r#"[{"source":"email","flow":"server"},{"source":"lidl_plus","flow":"sign_in"},{"source":"rewe_app","flow":"push"}]"#,
+        )
+        .unwrap();
+        let shown: Vec<_> = listed_sources(&list)
+            .iter()
+            .map(|s| s["source"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(shown, ["email", "lidl_plus"]);
     }
 }

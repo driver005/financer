@@ -133,9 +133,11 @@ Unknown keys are an error that names the key (to catch typos), everywhere, `[rec
 | `[llm] provider` | `FINANCER_LLM_PROVIDER` | `claude` | `claude` or `openai`; used until the app stores its own choice (Settings) |
 | `[bank] fints_product_id` | `FINANCER_FINTS_PRODUCT_ID` | none | enables live bank sync, see `docs/FINTS.md` |
 | `[bank.plaid] client_id`, `secret`, `environment`, `country_codes`, `language`, `redirect_uri` | `FINANCER_PLAID_CLIENT_ID`, `FINANCER_PLAID_SECRET`, `FINANCER_PLAID_ENV` | sandbox, DE, de | Plaid keys for `kind = "plaid"` connections, see `docs/BANK_PROVIDERS.md` |
+| `[bank.gocardless] secret_id`, `secret_key`, `language`, `redirect_uri` | `FINANCER_GOCARDLESS_SECRET_ID`, `FINANCER_GOCARDLESS_SECRET_KEY` | de | GoCardless Bank Account Data keys for `kind = "gocardless"` connections, see `docs/BANK_PROVIDERS.md` |
+| `[bank.finapi] client_id`, `client_secret`, `environment`, `redirect_uri` | `FINANCER_FINAPI_CLIENT_ID`, `FINANCER_FINAPI_CLIENT_SECRET`, `FINANCER_FINAPI_ENV` | sandbox | finAPI keys for `kind = "finapi"` connections, see `docs/BANK_PROVIDERS.md` |
 | `[[bank.accounts]]` | | none | connections to sync, below |
 | `[[stores]]` | | none | your own supermarket spellings, below |
-| `[receipts.email]`, `[receipts.lidl_plus]`, `[receipts.folder]` | `FINANCER_RECEIPTS_*` | all off | automatic receipt import, below |
+| `[receipts.email]`, `[receipts.lidl_plus]`, `[receipts.kaufland]`, `[receipts.folder]` | `FINANCER_RECEIPTS_*` | all off | automatic receipt import, below |
 
 `FINANCER_CONFIG` (path of the file) is the only variable without a key. `RUST_LOG` is unchanged.
 
@@ -144,7 +146,7 @@ Unknown keys are an error that names the key (to catch typos), everywhere, `[rec
 ```toml
 [[bank.accounts]]
 name = "Girokonto"                 # shown in the app; unique
-kind = "fints"                     # "fints" (default) or "plaid", see below
+kind = "fints"                     # "fints" (default), "plaid", "gocardless" or "finapi", see below
 bank_code = "37050198"             # 8 digits
 login = "your-login-name"          # online banking login
 iban = "DE89 3704 0044 0532 0130 00"   # FinTS needs the account; checked with the IBAN checksum
@@ -178,8 +180,35 @@ sync_every_hours = 12
 # account_ids = ["..."]            # optional: read only some linked accounts
 ```
 
-Both kinds can be configured side by side. See `docs/BANK_PROVIDERS.md` for the sign-in, what is
-stored, and what was and was not tested.
+**GoCardless** (Bank Account Data) and **finAPI** work the same way for you: sign in once on the
+provider's page, then no PIN and no approval. GoCardless needs the bank's institution id in the
+account entry; finAPI lets you pick the bank on its page:
+
+```toml
+[bank.gocardless]
+secret_id = "${GOCARDLESS_SECRET_ID}"
+secret_key = "${GOCARDLESS_SECRET_KEY}"
+
+[bank.finapi]
+client_id = "${FINAPI_CLIENT_ID}"
+client_secret = "${FINAPI_CLIENT_SECRET}"
+environment = "live"               # "sandbox" (default) is finAPI's test banks
+
+[[bank.accounts]]
+name = "GoCardless Giro"
+kind = "gocardless"
+institution = "SPARKASSE_..."      # from GoCardless's institutions list
+sync_every_hours = 12
+
+[[bank.accounts]]
+name = "finAPI Giro"
+kind = "finapi"
+```
+
+All kinds can be configured side by side. The app can write the keys and the account for you: on
+the Spending screen, **Set up** (or the bank icon) opens a menu of everything that can be
+connected. See `docs/BANK_PROVIDERS.md` for the sign-in, what is stored, and what was and was not
+tested.
 
 ### `[[stores]]`
 
@@ -213,6 +242,9 @@ password_env = "FINANCER_IMAP_PASSWORD"   # the NAME of the variable that holds 
 [receipts.lidl_plus]              # experimental, unofficial
 enabled = true                    # default false; country = "DE", language = "de", poll_hours = 12
 
+[receipts.kaufland]               # experimental, unofficial; same keys as lidl_plus
+enabled = true
+
 [receipts.folder]
 path = "/data/receipts"           # relative paths are relative to the file; poll_seconds = 60
 # on_done = "keep"                # or "move" (to done/)
@@ -223,12 +255,13 @@ Environment variables (they win over the file, value by value; a blank one count
 `_POLL_MINUTES`, `_MARK_SEEN`, `_MAX_AGE_DAYS`, `_ENABLED`, `_PASSWORD_ENV`, `_SENDERS`
 (`rewe=rewe.de,rewe-group.com;lidl=lidl.de`); `FINANCER_RECEIPTS_LIDL_PLUS` (`1` or `0`),
 `FINANCER_RECEIPTS_LIDL_COUNTRY`, `_LIDL_LANGUAGE`, `_LIDL_POLL_HOURS`;
+`FINANCER_RECEIPTS_KAUFLAND` (`1` or `0`), `_KAUFLAND_COUNTRY`, `_KAUFLAND_LANGUAGE`, `_KAUFLAND_POLL_HOURS`;
 `FINANCER_RECEIPTS_FOLDER` (also creates the section), `_FOLDER_POLL_SECONDS`, `_FOLDER_ON_DONE`.
 The mailbox password is read from the variable named by `password_env` (default
 `FINANCER_IMAP_PASSWORD`), unless a password was typed into the app (Settings > Server settings,
 Receipts: mailbox), which keeps it in the server's settings file and uses it first. It is not a key
 to write in `financer.toml`. `FINANCER_SECRET_KEY` (16+ characters) encrypts the stored
-Lidl Plus token; without it the API token is used.
+Lidl Plus and Kaufland Card tokens; without it the API token is used.
 
 `--print-config` shows the section with the mail login masked (`j***@example.org`) and only the
 *name* of the password variable. `--check-config` fails on an empty host, username or folder path and

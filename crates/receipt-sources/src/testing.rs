@@ -386,7 +386,19 @@ pub mod lidl_fixtures {
     pub const TICKET_3: &str = include_str!("../fixtures/lidl/ticket_0003.json");
 }
 
-/// A stand-in for Lidl's servers: answers from a list of canned responses and records every
+pub mod kaufland_fixtures {
+    pub const TOKEN: &str = include_str!("../fixtures/kaufland/token.json");
+    pub const TOKEN_REFRESHED: &str = include_str!("../fixtures/kaufland/token_refreshed.json");
+    pub const TOKEN_INVALID_GRANT: &str =
+        include_str!("../fixtures/kaufland/token_invalid_grant.json");
+    pub const USERINFO: &str = include_str!("../fixtures/kaufland/userinfo.json");
+    pub const TRANSACTIONS_PAGE_1: &str =
+        include_str!("../fixtures/kaufland/transactions_page1.json");
+    pub const TRANSACTIONS_PAGE_2: &str =
+        include_str!("../fixtures/kaufland/transactions_page2.json");
+}
+
+/// A stand-in for Lidl's servers (and, as the same seam, Kaufland's): answers from a list of canned responses and records every
 /// request. A route matches when the method is equal and the URL contains the given text. Several
 /// responses for one route are served in the order they were added; the last one then repeats.
 #[derive(Default)]

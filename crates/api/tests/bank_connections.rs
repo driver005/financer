@@ -12,7 +12,7 @@ use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
 use financer_api::{Api, AppState, BankConnection, BankData, BankError, BankProvider, TokenHash};
 use financer_core::{Money, Transaction};
-use financer_fints::{BankClient, PendingSync, SyncParams, TanChallenge};
+use financer_openbanking::fints::{BankClient, PendingSync, SyncParams, TanChallenge};
 use financer_store::Store;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
@@ -127,6 +127,7 @@ impl Fixture {
             name: name.into(),
             kind: BankProvider::Fints,
             account_ids: vec![],
+            institution: None,
             bank_code: "37050198".into(),
             login: "login-name-123".into(),
             iban: "DE89 3704 0044 0532 0130 00".into(),
@@ -217,12 +218,11 @@ impl Fixture {
     }
 
     async fn sync(&self, name: &str, pin: Option<&str>) -> (StatusCode, Value) {
-        self.json(
-            Method::POST,
-            &format!("/v1/bank/connections/{name}/sync"),
-            pin.map(|p| json!({ "pin": p })),
-        )
-        .await
+        let mut body = json!({ "connection": name });
+        if let Some(p) = pin {
+            body["pin"] = json!(p);
+        }
+        self.json(Method::POST, "/v1/bank/sync", Some(body)).await
     }
 }
 
@@ -291,8 +291,11 @@ async fn needs_the_token() {
     let f = Fixture::new(vec![], vec![Fixture::connection("Giro", 0, None)], |s| s).await;
     for (method, uri) in [
         (Method::GET, "/v1/bank/connections"),
-        (Method::POST, "/v1/bank/connections/Giro/sync"),
-        (Method::POST, "/v1/bank/connections/Giro/cancel"),
+        (Method::GET, "/v1/bank/providers"),
+        (Method::POST, "/v1/bank/sync"),
+        (Method::GET, "/v1/bank/sync/giro"),
+        (Method::POST, "/v1/bank/sync/giro/cancel"),
+        (Method::POST, "/v1/bank/import/csv"),
     ] {
         let res = f
             .app
@@ -323,8 +326,8 @@ async fn a_synced_connection_waits_for_approval_then_imports_without_leaking_the
     let (status, text) = f
         .send(
             Method::POST,
-            "/v1/bank/connections/Giro/sync",
-            Some(json!({ "pin": PIN })),
+            "/v1/bank/sync",
+            Some(json!({ "connection": "Giro", "pin": PIN })),
         )
         .await;
     assert_eq!(status, StatusCode::OK);
@@ -332,7 +335,7 @@ async fn a_synced_connection_waits_for_approval_then_imports_without_leaking_the
     let started: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(started["state"], "needs_approval");
     assert_eq!(started["message"], "Bitte in der S-pushTAN-App bestätigen");
-    assert!(started["approval_expires_at"].as_i64().unwrap() > 1_700_000_000);
+    assert!(started["expires_at"].as_i64().unwrap() > 1_700_000_000);
 
     // the server polls the bank itself; no further call from the app is needed
     let done = f.wait_for_state("Giro", "idle").await;
@@ -452,7 +455,7 @@ async fn unknown_connections_and_a_missing_product_id() {
     let f = Fixture::new(vec![], vec![Fixture::connection("Giro", 0, None)], |s| s).await;
     assert_eq!(f.sync("Nope", Some(PIN)).await.0, StatusCode::NOT_FOUND);
     let (status, _) = f
-        .json(Method::POST, "/v1/bank/connections/Nope/cancel", None)
+        .json(Method::POST, "/v1/bank/sync/nope/cancel", None)
         .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
@@ -465,10 +468,12 @@ async fn unknown_connections_and_a_missing_product_id() {
         .oneshot(
             Request::builder()
                 .method(Method::POST)
-                .uri("/v1/bank/connections/Giro/sync")
+                .uri("/v1/bank/sync")
                 .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(json!({"pin": PIN}).to_string()))
+                .body(Body::from(
+                    json!({"connection": "Giro", "pin": PIN}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -485,9 +490,9 @@ async fn names_are_matched_without_regard_to_case_and_a_second_start_conflicts()
         |s| s,
     )
     .await;
-    let (status, _) = f.sync("giro%20konto", Some(PIN)).await;
+    let (status, _) = f.sync("giro konto", Some(PIN)).await;
     assert_eq!(status, StatusCode::OK);
-    let (status, body) = f.sync("Giro%20Konto", Some(PIN)).await;
+    let (status, body) = f.sync("Giro Konto", Some(PIN)).await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert!(body["error"].as_str().unwrap().contains("already running"));
     assert_eq!(f.bank.logins_seen(), 1);
@@ -504,7 +509,7 @@ async fn cancelling_stops_the_wait() {
     f.sync("Giro", Some(PIN)).await;
     assert_eq!(f.connection_json("Giro").await["state"], "needs_approval");
     let (status, c) = f
-        .json(Method::POST, "/v1/bank/connections/Giro/cancel", None)
+        .json(Method::POST, "/v1/bank/sync/giro/cancel", None)
         .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(c["state"], "idle");
