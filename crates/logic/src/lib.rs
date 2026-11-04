@@ -19,6 +19,7 @@ pub mod period;
 pub mod rules;
 pub mod safe_to_spend;
 pub mod scan;
+pub mod server_config;
 pub mod settings_plan;
 pub mod stores;
 pub mod watchdog;
@@ -570,6 +571,91 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
         )),
         "onboarding.first_quest" => json(onboarding::first_quest(&arg(&args, "draft")?)),
         "onboarding.entry_action" => json(onboarding::entry_action(&arg(&args, "i")?)),
+        "server_config.entry_noun" => {
+            json(server_config::entry_noun(&arg::<String>(&args, "path")?))
+        }
+        "server_config.entry_title" => json(server_config::entry_title(
+            &arg::<String>(&args, "path")?,
+            &arg::<Vec<Value>>(&args, "fields")?,
+            &arg::<Value>(&args, "row")?,
+            arg(&args, "index")?,
+        )),
+        "server_config.row_from_server" => json(server_config::row_from_server(
+            &arg(&args, "key")?,
+            &opt::<Value>(&args, "raw")?.unwrap_or(Value::Null),
+        )),
+        "server_config.empty_row" => json(server_config::empty_row(&arg(&args, "key")?)),
+        "server_config.server_value" => json(server_config::server_value(&arg(&args, "key")?)),
+        "server_config.editor_value" => json(server_config::editor_value(
+            &arg(&args, "key")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.set_value" => json(server_config::set_value(
+            &arg(&args, "draft")?,
+            &arg(&args, "key")?,
+            &arg(&args, "value")?,
+        )),
+        "server_config.clear_secret" => json(server_config::clear_secret(
+            &arg(&args, "draft")?,
+            &arg(&args, "key")?,
+        )),
+        "server_config.reset_key" => json(server_config::reset_key(
+            &arg(&args, "draft")?,
+            &arg(&args, "key")?,
+        )),
+        "server_config.discard_key" => json(server_config::discard_key(
+            &arg(&args, "draft")?,
+            &arg(&args, "key")?,
+        )),
+        "server_config.is_dirty" => json(server_config::is_dirty(
+            &arg::<String>(&args, "path")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.change_count" => json(server_config::change_count(&arg(&args, "draft")?)),
+        "server_config.editable" => json(server_config::editable(&arg(&args, "key")?)),
+        "server_config.field_visible" => json(server_config::field_visible(
+            &arg(&args, "key")?,
+            &arg(&args, "field")?,
+            &arg(&args, "row")?,
+        )),
+        "server_config.row_to_wire" => json(server_config::row_to_wire(
+            &arg(&args, "key")?,
+            &arg(&args, "row")?,
+        )),
+        "server_config.wire_value" => json(server_config::wire_value(
+            &arg(&args, "key")?,
+            &opt::<Value>(&args, "value")?.unwrap_or(Value::Null),
+        )),
+        "server_config.to_change" => json(server_config::to_change(
+            &arg(&args, "view")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.problem_for" => json(server_config::problem_for(
+            &arg(&args, "key")?,
+            &opt::<Value>(&args, "value")?.unwrap_or(Value::Null),
+        )),
+        "server_config.draft_problems" => json(server_config::draft_problems(
+            &arg(&args, "view")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.warnings_for" => json(server_config::warnings_for(
+            &arg(&args, "view")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.new_token" => json(server_config::new_token(&arg(&args, "draft")?)),
+        "server_config.source_label" => json(server_config::source_label(&arg(&args, "key")?)),
+        "server_config.source_tone" => json(server_config::source_tone(&arg(&args, "key")?)),
+        "server_config.value_summary" => json(server_config::value_summary(&arg(&args, "key")?)),
+        "server_config.group_summary" => json(server_config::group_summary(
+            &arg(&args, "group")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.save_summary" => json(server_config::save_summary(&arg(&args, "draft")?)),
+        "server_config.saved_text" => json(server_config::saved_text(&arg(&args, "saved")?)),
+        "server_config.timeout_text" => json(server_config::timeout_text(arg(
+            &args,
+            "changed_listen_address",
+        )?)),
         other => return Err(format!("unknown function {other}")),
     };
     out
