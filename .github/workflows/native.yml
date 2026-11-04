@@ -103,11 +103,12 @@ jobs:
       - run: npm ci
       - name: Build the Rust library and generate the bindings
         run: scripts/enable-embedded.sh android
+        env:
+          # CI-only entry that starts the backend at app launch (read by the android-emulator job);
+          # enable-embedded.sh installs it, so the variable belongs on this step
+          FINANCER_SMOKE: "1"
       - name: Build the Rust SDK and generate its bindings (every request of the app goes through it)
         run: scripts/enable-sdk.sh android .
-        env:
-          # CI-only entry that starts the backend at app launch (read by the android-emulator job)
-          FINANCER_SMOKE: "1"
       - name: Typecheck against the generated bindings
         run: npm run typecheck
       - name: Generate the native Android project
