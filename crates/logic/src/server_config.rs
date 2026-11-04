@@ -233,9 +233,8 @@ pub fn set_value(draft: &Value, key: &Value, value: &Value) -> Value {
     let path = str_of(key, "path").unwrap_or("").to_string();
     let secret = str_of(key, "kind") == Some("secret");
     let mut set = draft_set(draft);
-    if !secret && *value == server_value(key) {
-        set.remove(&path);
-    } else if secret && value == &json!("") {
+    // an edit that equals what the server has (or an empty secret) is no edit
+    if (!secret && *value == server_value(key)) || (secret && value == &json!("")) {
         set.remove(&path);
     } else {
         set.insert(path.clone(), value.clone());

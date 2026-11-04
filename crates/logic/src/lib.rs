@@ -16,6 +16,7 @@ pub mod mealplan;
 pub mod notify_plan;
 pub mod onboarding;
 pub mod period;
+pub mod receipt_sources;
 pub mod rules;
 pub mod safe_to_spend;
 pub mod scan;
@@ -656,6 +657,75 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &args,
             "changed_listen_address",
         )?)),
+        "receipt_sources.source_title" => {
+            json(receipt_sources::source_title(&arg::<String>(&args, "s")?))
+        }
+        "receipt_sources.source_icon" => {
+            json(receipt_sources::source_icon(&arg::<String>(&args, "s")?))
+        }
+        "receipt_sources.source_blurb" => {
+            json(receipt_sources::source_blurb(&arg::<String>(&args, "s")?))
+        }
+        "receipt_sources.health_pill" => json(receipt_sources::health_pill(&arg::<String>(
+            &args, "state",
+        )?)),
+        "receipt_sources.last_sync_text" => json(receipt_sources::last_sync_text(
+            opt(&args, "ts")?,
+            arg(&args, "now_sec")?,
+        )),
+        "receipt_sources.next_run_text" => json(receipt_sources::next_run_text(
+            opt(&args, "ts")?,
+            arg(&args, "now_sec")?,
+        )),
+        "receipt_sources.imported_text" => json(receipt_sources::imported_text(arg(&args, "n")?)),
+        "receipt_sources.can_sync_now" => json(receipt_sources::can_sync_now(
+            arg(&args, "enabled")?,
+            &arg::<String>(&args, "state")?,
+        )),
+        "receipt_sources.attention_count" => json(receipt_sources::attention_count(&arg::<
+            Vec<receipt_sources::SourceLike>,
+        >(
+            &args, "list",
+        )?)),
+        "receipt_sources.summary_text" => {
+            json(receipt_sources::summary_text(&arg::<
+                Vec<receipt_sources::SourceLike>,
+            >(&args, "list")?))
+        }
+        "receipt_sources.sync_result_text" => json(receipt_sources::sync_result_text(
+            arg(&args, "imported")?,
+            arg(&args, "linked")?,
+        )),
+        "receipt_sources.setup_steps" => json(receipt_sources::setup_steps(
+            &arg::<String>(&args, "s")?,
+            opt(&args, "on_phone")?.unwrap_or(false),
+        )),
+        "receipt_sources.lidl_promises" => json(receipt_sources::lidl_promises(
+            opt(&args, "on_phone")?.unwrap_or(false),
+        )),
+        "receipt_sources.disconnected_text" => {
+            json(receipt_sources::disconnected_text(arg(&args, "on_phone")?))
+        }
+        "receipt_sources.no_source_text" => {
+            json(receipt_sources::no_source_text(arg(&args, "on_phone")?))
+        }
+        "receipt_sources.sign_in_mode" => json(receipt_sources::sign_in_mode(&arg::<String>(
+            &args,
+            "platform_os",
+        )?)),
+        "receipt_sources.extract_callback_url" => json(receipt_sources::extract_callback_url(
+            &arg::<String>(&args, "input")?,
+            &arg::<String>(&args, "scheme")?,
+        )),
+        "receipt_sources.callback_has_result" => json(receipt_sources::callback_has_result(
+            &arg::<String>(&args, "url")?,
+        )),
+        "receipt_sources.lidl_state_text" => json(receipt_sources::lidl_state_text(
+            &arg::<String>(&args, "state")?,
+            opt(&args, "connected_at")?,
+            arg(&args, "now_sec")?,
+            opt(&args, "on_phone")?.unwrap_or(false),
+        )),
         other => return Err(format!("unknown function {other}")),
     };
     out
