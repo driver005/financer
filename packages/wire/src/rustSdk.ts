@@ -8,6 +8,8 @@ export type RustSdk = {
   Wire: new (baseUrl: string, token: string) => WireHandle;
   /** The browser loads the WebAssembly module first; a phone needs nothing. */
   uniffiInitAsync?: () => Promise<void>;
+  /** The app's own logic, called by name (crates/logic). */
+  logic: (name: string, args: string) => string;
 };
 
 // Every request of the app goes through the Rust SDK (crates/sdk, docs/SDK.md). This file is what a

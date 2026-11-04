@@ -119,15 +119,17 @@ crates/config     financer.toml and environment configuration of the server
 crates/server     hosted binary
 crates/embedded   the same backend as a library for the phone (UniFFI), including the shopping backend
 crates/shop-*     the shopping assistant: core (ranking, schemas), sources (crawler), store, api, server
-crates/sdk        a typed Rust client of the server's APIs (mail so far), for Rust and, through UniFFI, for the app natively and in the browser as WebAssembly
+crates/sdk        the Rust client of the server's APIs (finance, shop, mail) and the entry to the app logic; the apps reach every server through it (UniFFI: natively and as WebAssembly)
+crates/logic      the app's own logic in Rust (formatting, budget periods, card wording, streaks and badges; docs/LOGIC.md)
 crates/mail-*     the mail client: core (chats, topics, templates, events), store, api (IMAP sync, SMTP, routes)
 apps/mobile       Expo app (routes in src/app); carries the shopping assistant when built with EXPO_PUBLIC_SHOPPING=1
 apps/shopping     the shopping assistant as an app of its own
 packages/shopping the shopping assistant as a module (client, logic, screens), used by both apps
 apps/sdk-bindings the generated TypeScript of the SDK (docs/SDK.md)
+packages/wire     the TypeScript side of the SDK: calls by name, the platform loaders (no logic)
 packages/mail     the mail client as a module (client, logic, screens), opened from the finance app's Settings
 deploy/           Dockerfile, compose, Caddyfile
-docs/             SHOP.md, CONFIG.md, RECEIPT_SOURCES.md, STORES.md, CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
+docs/             SDK.md, LOGIC.md, MAIL.md, SHOP.md, CONFIG.md, RECEIPT_SOURCES.md, STORES.md, CATEGORIZATION.md, FINTS.md, PRICES.md, EMBEDDED.md, RELEASE.md, MASCOT.md
 ```
 
 ## Security notes

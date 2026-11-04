@@ -15,6 +15,7 @@ pub mod error;
 #[rustfmt::skip]
 pub mod finance;
 pub mod json;
+pub mod logic;
 pub mod mail;
 pub mod raw;
 pub mod shop;

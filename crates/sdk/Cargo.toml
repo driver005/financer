@@ -24,6 +24,7 @@ required-features = ["bindgen-cli"]
 
 [dependencies]
 financer-mail-core = { path = "../mail-core" }
+financer-logic = { path = "../logic" }
 async-trait = "0.1"
 base64 = "0.23"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"], optional = true }

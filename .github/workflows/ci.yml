@@ -102,7 +102,6 @@ jobs:
           cache-dependency-path: apps/mobile/package-lock.json
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
       - name: The wire to the SDK
         working-directory: packages/wire
         run: |
@@ -164,7 +163,10 @@ jobs:
       - run: npm ci --prefix apps/mobile
       - run: npm ci --prefix apps/shopping
       - run: apps/mobile/scripts/enable-sdk.sh web
-      - run: apps/mobile/scripts/enable-sdk.sh web ../shopping
+      - run: apps/mobile/scripts/enable-sdk.sh web apps/shopping
+      - name: Finance app tests (the app logic that moved to Rust runs in them, through the SDK)
+        working-directory: apps/mobile
+        run: npm test
       - name: Finance app bundles with the SDK, with the shop inside and without it
         working-directory: apps/mobile
         run: |

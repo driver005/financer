@@ -6,6 +6,7 @@ import { ThemeProvider, fill } from "@financer/ui";
 import { ApiProvider } from "@/api/config";
 import { AppLockOverlay } from "@/components/AppLockOverlay";
 import { AppFrame } from "@/components/AppFrame";
+import { SdkGate } from "@/components/SdkGate";
 import { BackupOnOpen } from "@/components/BackupOnOpen";
 import "@/native/background"; // defines the background task at startup
 import { NotificationSync } from "@/components/NotificationSync";
@@ -15,6 +16,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView {...fill}>
       <ThemeProvider>
+      <SdkGate>
       <ApiProvider>
         {/* dark icons on the light theme, light icons on the dark one (the default left white ones on white) */}
         <StatusBar style="auto" />
@@ -53,6 +55,7 @@ export default function RootLayout() {
         <BackupOnOpen />
         <AppLockOverlay />
       </ApiProvider>
+      </SdkGate>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

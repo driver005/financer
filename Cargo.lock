@@ -1751,6 +1751,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "financer-logic"
+version = "0.1.0"
+dependencies = [
+ "financer-core",
+ "serde",
+ "serde_json",
+ "time",
+]
+
+[[package]]
 name = "financer-mail-api"
 version = "0.1.0"
 dependencies = [
@@ -1898,6 +1908,7 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "financer-api",
+ "financer-logic",
  "financer-mail-api",
  "financer-mail-core",
  "financer-prices",

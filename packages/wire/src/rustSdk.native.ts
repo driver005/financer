@@ -6,4 +6,5 @@ const bindings = require("financer-sdk-bindings");
 
 export const rustSdk: RustSdk | null = {
   Wire: bindings.Wire,
+  logic: (name, args) => bindings.logic(name, args),
 };

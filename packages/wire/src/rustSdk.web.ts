@@ -9,6 +9,7 @@ const wasm = require("../../../apps/sdk-bindings/src/generated-web/financer_sdk.
 
 export const rustSdk: RustSdk | null = {
   Wire: bindings.Wire,
+  logic: (name, args) => bindings.logic(name, args),
   uniffiInitAsync: () => (ready ??= load()),
 };
 
