@@ -43,9 +43,6 @@ export function anyEnabled(prefs: NotifyPrefs): boolean {
 }
 
 export type ClockTime = { hour: number; minute: number };
-export const EVENING_TIME: ClockTime = { hour: 18, minute: 0 };
-export const PAYDAY_TIME: ClockTime = { hour: 8, minute: 0 };
-
 /** A notification to be delivered at `date` + `hour:minute` local time. */
 export type Planned = { id: string; date: string; hour: number; minute: number; title: string; body: string };
 
@@ -74,11 +71,6 @@ export type PriceMemory = {
 };
 
 export const EMPTY_MEMORY: PriceMemory = { refs: {}, announced: [] };
-
-/** A drop needs to be at least this many percent AND this many cents, so noise stays quiet. */
-export const MIN_DROP_PERCENT = 5;
-export const MIN_DROP_CENTS = 10;
-export const MAX_TRACKED_ITEMS = 40;
 export const MAX_ANNOUNCED = 30;
 
 export function parsePriceMemory(raw: string | null | undefined): PriceMemory {

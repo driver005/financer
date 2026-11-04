@@ -5,7 +5,7 @@
  */
 import type { CalendarEvent, CalendarEventInput } from "./api/client";
 import { logic } from "../../../packages/wire/src/logic";
-import { timeOf, type EventRule, type Occurrence, type Repeat, type RepeatKind } from "./calendar";
+import { timeOf, type EventRule, type Repeat, type RepeatKind } from "./calendar";
 
 export type Draft = {
   /** Set when editing an existing event. */
@@ -57,8 +57,3 @@ export const problem = (d: Draft): string | null => logic("calendar_form.problem
 
 /** The request body for saving the draft. Call only when `problem` is null. */
 export const toInput = (d: Draft): CalendarEventInput => logic("calendar_form.to_input", { d });
-
-/** The occurrence the editor opened from, for the "this event" wording. */
-export function isSeries(o: Pick<Occurrence, "repeats">): boolean {
-  return o.repeats;
-}

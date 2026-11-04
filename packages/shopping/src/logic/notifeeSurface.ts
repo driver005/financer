@@ -59,11 +59,6 @@ export function registerIndexService(n: NotifeeLike): void {
     if (isStopPress(e)) activeStop?.();
   });
 }
-
-export function isServiceRegistered(): boolean {
-  return registered;
-}
-
 export class NotifeeSurface implements ProgressSurface {
   private channel: Promise<string> | null = null;
   constructor(

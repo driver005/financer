@@ -160,6 +160,7 @@ jobs:
             apps/mobile/package-lock.json
             apps/shopping/package-lock.json
             apps/sdk-bindings/package-lock.json
+            packages/shopping/package-lock.json
       - run: npm ci --prefix apps/mobile
       - run: npm ci --prefix apps/shopping
       - run: apps/mobile/scripts/enable-sdk.sh web
@@ -167,6 +168,10 @@ jobs:
       - name: Finance app tests (the app logic that moved to Rust runs in them, through the SDK)
         working-directory: apps/mobile
         run: npm test
+      - name: Shopping module tests (its logic moved to Rust and runs in them, through the SDK)
+        run: |
+          npm ci --prefix packages/shopping
+          npm test --prefix packages/shopping
       - name: Finance app bundles with the SDK, with the shop inside and without it
         working-directory: apps/mobile
         run: |
@@ -196,11 +201,7 @@ jobs:
             packages/shopping/package-lock.json
             apps/shopping/package-lock.json
             apps/mobile/package-lock.json
-      - name: Module tests
-        run: |
-          npm ci --prefix packages/shopping
-          npm test --prefix packages/shopping
-      - name: Standalone app type check (its web bundle is in sdk-web, which has the Rust SDK)
+      - name: Standalone app type check (its module tests and web bundle are in sdk-web, which has the Rust SDK)
         working-directory: apps/shopping
         run: |
           npm ci

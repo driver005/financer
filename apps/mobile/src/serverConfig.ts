@@ -33,10 +33,6 @@ export const entryNoun = (key: Pick<ConfigKey, "path">): string => logic("server
 /** "Account 2: Giro" for the heading of a table entry (the first column names it when it has a value). */
 export const entryTitle = (key: Pick<ConfigKey, "path" | "fields">, row: Row, index: number): string =>
   logic("server_config.entry_title", { path: key.path, fields: key.fields, row, index });
-
-/** One table entry from the server, as text fields and lists. */
-export const rowFromServer = (key: ConfigKey, raw: unknown): Row => logic("server_config.row_from_server", { key, raw: raw ?? null });
-
 /** A new, empty entry; a choice starts on its default (an account on FinTS). */
 export const emptyRow = (key: ConfigKey): Row => logic("server_config.empty_row", { key });
 

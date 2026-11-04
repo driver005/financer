@@ -59,15 +59,20 @@ CI runs them in the `sdk-web` job, which has the bindings.
 | `calendarView` (ranges, steps, month cells, day columns, schedule days) | 186 | Rust, 3 tests; the tap handlers are attached in TypeScript |
 | `calendarForm` (event draft, moves, repeat, problems, request) | 173 | Rust, 5 tests; the clock-reading `nextHour` stays |
 | `charts`, `todayCharts` (trend, curve, week, shares and their sentences) | 311 | Rust, 5 tests |
+| shopping `logic/`: `format`, `weights`, `schemaEdit`, `view`, `progress` (model and throttle), `library`, `profiles`, `runs`, `searchPlan`, `sources`, `dealNotifications` | about 1,000 | Rust (`shop_*.rs`), 17 + 8 tests; the package's own 71 tests run against it in the `sdk-web` job |
 
-## What is not moved yet
+## What is not moved
 
-The shopping module's `logic/` (`weights`, `schemaEdit`, `view`, `progress`, `library`, `profiles`, `runs`,
-`searchPlan`, `sources`, `format`) and the mail module's `logic/` (`agenda`, `chat`, `compose`, `format`,
-`templates`), and the small leftovers in `apps/mobile/src` (`calendarTones`, `onboardingDemo`, the event reminders in
-`notifyPlan`). They follow the same recipe: write the function in `crates/logic`, add its name to
-`financer_logic::call`, replace the body in TypeScript by a `logic(...)` entry, keep the TypeScript test (it then tests
-Rust) or move it to Rust.
+Everything below stays TypeScript on purpose, or because the rule is the device's, not the app's:
+
+- the mail module's `logic/` (`agenda`, `chat`, `compose`, `format`, `templates`): its days, clocks and chat rows are
+  written by the device's `Intl` in the device's language and time zone, which Rust does not have; the few rules that
+  do not depend on it (`compose`, `templates`) are too small to carry a second test setup;
+- the polling loop `followJob`, the waits (`waitForRestart`), the fetching of feeds (`loadFeeds`), the apply step of the
+  setup (`applyDraft`): they hold the network, a clock or a callback, not a rule;
+- `formatStamp` and `nextHour` (the device's time zone and clock), `safeUrl` (the platform's URL parser) and
+  `orderProfiles` (sorts the way the device's language does);
+- the shopping `notifeeSurface` and `offlineCache`, and `calendarTones`, `onboardingDemo` (device glue and plain data).
 
 Judged to stay TypeScript: per-frame animation maths (`ring`: a WebAssembly call per frame costs more than it saves), a plain array filter (`spendingView`) and device storage (`savingsGoal`).
 

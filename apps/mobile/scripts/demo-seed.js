@@ -58,14 +58,16 @@ const REWE_RECEIPT = [
 
 const LIDL_RECEIPT = ["LIDL", "Bananen  1,29 B", "Milch 1,5%  1,09 B", "Brot  2,49 B", "Butter  2,19 B", "SUMME EUR  7,06", ""].join("\n");
 
-/** Imports the demo data through an `EmbeddedTransport`-like object (`send({method, path, ...})`). */
-async function seedDemo(t) {
-  const csv = await t.send({ method: "POST", path: "/v1/transactions/import", headers: { "Content-Type": "text/csv" }, body: demoCsv() });
-  const receipts = [];
+/** Imports the demo data through `call(op, args)`, a function that makes one finance call of the backend and gives the answer. */
+async function seedDemo(call) {
+  const { toBase64 } = require("../src/native/base64");
+  const csv = await call("import_transactions", { csv_base64: toBase64(new TextEncoder().encode(demoCsv()).buffer) });
+  let receipts = 0;
   for (const text of [REWE_RECEIPT, LIDL_RECEIPT]) {
-    receipts.push((await t.send({ method: "POST", path: "/v1/receipts", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) })).status);
+    await call("upload_receipt", { body: { text } });
+    receipts += 1;
   }
-  return `csv=${csv.status} receipts=${receipts.join(",")}`;
+  return `imported=${csv?.imported} receipts=${receipts}`;
 }
 
 module.exports = { demoCsv, seedDemo };
