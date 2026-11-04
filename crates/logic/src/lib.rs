@@ -9,6 +9,7 @@
 pub mod backup_plan;
 pub mod bank_connections;
 pub mod calendar;
+pub mod calendar_feeds;
 pub mod forecast;
 pub mod format;
 pub mod game;
@@ -775,6 +776,30 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             let (title, body) = bank_connections::live_sync_missing(arg(&args, "on_phone")?);
             json(serde_json::json!({ "title": title, "body": body }))
         }
+        "calendar_feeds.payday_occurrences" => json(calendar_feeds::payday_occurrences(
+            arg(&args, "payday")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )?),
+        "calendar_feeds.charge_occurrences" => json(calendar_feeds::charge_occurrences(
+            &arg::<Vec<calendar_feeds::Charge>>(&args, "charges")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )),
+        "calendar_feeds.meal_occurrences" => json(calendar_feeds::meal_occurrences(
+            &arg::<Vec<calendar_feeds::PlannedMeal>>(&args, "meals")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )),
+        "calendar_feeds.contract_occurrences" => json(calendar_feeds::contract_occurrences(
+            &arg::<Vec<calendar_feeds::Contract>>(&args, "contracts")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )?),
+        "calendar_feeds.week_starts" => json(calendar_feeds::week_starts(
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )?),
         other => return Err(format!("unknown function {other}")),
     };
     out

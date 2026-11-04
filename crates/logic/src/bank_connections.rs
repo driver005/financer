@@ -210,10 +210,7 @@ pub fn is_safe_link_url(url: Option<&str>) -> bool {
     let Some(rest) = url.strip_prefix("https://") else {
         return false;
     };
-    let authority = rest
-        .split(['/', '?', '#', '\\'])
-        .next()
-        .unwrap_or("");
+    let authority = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
     let host_port = authority.rsplit('@').next().unwrap_or("");
     let host = match host_port.rsplit_once(':') {
         Some((h, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => h,
