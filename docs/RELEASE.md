@@ -67,6 +67,12 @@ compact leg first builds the Rust library and bindings with `apps/mobile/scripts
 (see `EMBEDDED.md`), which is the same chain the `android-app` / `ios-app` jobs in `native.yml`
 check on every push.
 
+Every app build, both variants and the web builds too, also builds the Rust SDK with
+`apps/mobile/scripts/enable-sdk.sh` (`web`, `android` or `ios`; see `SDK.md`), because every request
+of the app goes through it and the bundler cannot find the generated bindings without it. A new job
+that bundles an app needs that step as well, and the Rust toolchain for the platform (`wasm32` for the
+browser, the Android or iOS targets for a phone), for the client variant too.
+
 - **Required for a release:** the desktop bundles, the web zip and **both** Android APKs. If the
   compact build breaks, the release is not created (rather than silently shipping one variant).
 - **Best effort:** the iOS Simulator zips are added when they build; a failure there does not
