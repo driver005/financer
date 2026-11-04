@@ -249,8 +249,6 @@ fn openapi_document_lists_every_route() {
         "/health",
         "/v1/export",
         "/v1/import",
-        "/v1/bank/sync",
-        "/v1/bank/sync/{id}/confirm",
         "/v1/bank/status",
         "/v1/prices",
         "/v1/prices/best",
