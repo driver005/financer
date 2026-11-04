@@ -517,9 +517,10 @@ mod tests {
         let b = Backend::start_with(Fixtures::config("typed"))
             .await
             .unwrap();
-        let csv = serde_json::json!({ "csv_base64": base64_of(CSV.as_bytes()) }).to_string();
+        let csv = serde_json::json!({ "kind": "csv", "csv_base64": base64_of(CSV.as_bytes()) })
+            .to_string();
         let report = b
-            .call("finance".into(), "import_transactions".into(), csv)
+            .call("finance".into(), "import_file".into(), csv)
             .await
             .unwrap();
         assert_eq!(

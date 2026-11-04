@@ -222,7 +222,7 @@ describe("profile", () => {
 
 describe("applying the answers", () => {
   it("writes nothing for unanswered questions", () => {
-    assert.deepEqual(planApply({}, "2026-10-12", [{ category: "dining", limit_cents: 5000 }]), { payday: undefined, habitMode: undefined, envelopes: null });
+    assert.deepEqual(planApply({}, "2026-10-12", [{ category: "dining", limit_cents: 5000 }]), { envelopes: null });
   });
 
   it("replaces only the groceries envelope", () => {

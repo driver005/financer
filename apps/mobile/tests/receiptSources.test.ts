@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 
 import { apiWith } from "./fakeWire";
 import {
-  LIDL_PROMISES,
   SOURCE_ORDER,
   attentionCount,
   callbackHasResult,
@@ -152,7 +151,7 @@ describe("Lidl sign-in", () => {
   });
 
   it("the card says the promises plainly", () => {
-    const text = LIDL_PROMISES.join(" ");
+    const text = lidlPromises(false).join(" ");
     for (const must of ["Lidl's own page", "never sees your password", "refresh token", "unofficial", "disconnect"]) {
       assert.ok(text.includes(must) || text.toLowerCase().includes(must.toLowerCase()), must);
     }
@@ -237,7 +236,6 @@ describe("on the phone's own backend", () => {
     assert.match(lidlPromises(false)[1], /on your server/);
     assert.match(disconnectedText(false), /your server/);
     assert.match(noSourceText(false), /financer\.toml/);
-    assert.deepEqual(lidlPromises(false), [...LIDL_PROMISES]);
   });
 
   it("keeps the same four statements, the unofficial warning included", () => {

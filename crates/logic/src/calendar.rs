@@ -38,7 +38,7 @@ pub const MIN_BLOCK_MINUTES: i64 = 30;
 
 // ---- dates ----
 
-fn ymd(iso_date: &str) -> Result<(i32, u8, u8), String> {
+pub(crate) fn ymd(iso_date: &str) -> Result<(i32, u8, u8), String> {
     let d = date_of(iso_date)?;
     Ok((d.year(), d.month() as u8, d.day()))
 }
@@ -489,7 +489,7 @@ pub fn expand(
 }
 
 impl Occurrence {
-    fn when(&self) -> When {
+    pub(crate) fn when(&self) -> When {
         When {
             all_day: self.all_day,
             start_date: self.start_date.clone(),

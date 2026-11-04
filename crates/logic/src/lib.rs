@@ -7,17 +7,25 @@
 //! TypeScript tests, moved with the code.
 
 pub mod backup_plan;
+pub mod bank_connections;
 pub mod calendar;
+pub mod calendar_feeds;
+pub mod calendar_form;
+pub mod calendar_view;
+pub mod charts;
 pub mod forecast;
 pub mod format;
 pub mod game;
 pub mod grocery_view;
 pub mod mealplan;
 pub mod notify_plan;
+pub mod onboarding;
 pub mod period;
+pub mod receipt_sources;
 pub mod rules;
 pub mod safe_to_spend;
 pub mod scan;
+pub mod server_config;
 pub mod settings_plan;
 pub mod stores;
 pub mod watchdog;
@@ -496,6 +504,450 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
         "scan.plan_add_to_usual" => json(scan::plan_add_to_usual(
             &arg(&args, "basket")?,
             &arg::<String>(&args, "item")?,
+        )),
+        "onboarding.steps_for" => json(onboarding::steps_for(&arg::<String>(&args, "platform")?)),
+        "onboarding.is_step_id" => json(onboarding::is_step_id(&arg::<String>(&args, "value")?)),
+        "onboarding.next_step" => json(onboarding::next_step(
+            &arg::<Vec<String>>(&args, "steps")?,
+            &arg::<String>(&args, "current")?,
+        )),
+        "onboarding.previous_step" => json(onboarding::previous_step(
+            &arg::<Vec<String>>(&args, "steps")?,
+            &arg::<String>(&args, "current")?,
+        )),
+        "onboarding.progress_of" => json(onboarding::progress_of(
+            &arg::<Vec<String>>(&args, "steps")?,
+            &arg::<String>(&args, "current")?,
+        )),
+        "onboarding.resolve_step" => json(onboarding::resolve_step(
+            &arg::<Vec<String>>(&args, "steps")?,
+            &arg::<String>(&args, "stored")?,
+        )),
+        "onboarding.sanitize_draft" => {
+            json(onboarding::sanitize_draft(&arg::<Value>(&args, "raw")?))
+        }
+        "onboarding.parse_state" => json(onboarding::parse_state(
+            opt::<String>(&args, "raw")?.as_deref(),
+        )),
+        "onboarding.clamp_household" => json(onboarding::clamp_household(
+            opt(&args, "n")?.unwrap_or(f64::NAN),
+        )),
+        "onboarding.parse_postal_code" => json(onboarding::parse_postal_code(&arg::<String>(
+            &args, "input",
+        )?)),
+        "onboarding.parse_budget" => {
+            json(onboarding::parse_budget(&arg::<String>(&args, "input")?))
+        }
+        "onboarding.monthly_grocery_cents" => json(onboarding::monthly_grocery_cents(
+            arg(&args, "cents")?,
+            &arg::<String>(&args, "cadence")?,
+        )),
+        "onboarding.validate_server" => json(onboarding::validate_server(
+            &arg::<String>(&args, "url")?,
+            &arg::<String>(&args, "token")?,
+        )),
+        "onboarding.household_factor" => json(onboarding::household_factor(
+            opt(&args, "size")?.unwrap_or(f64::NAN),
+        )),
+        "onboarding.suggest_allowance" => json(onboarding::suggest_allowance(&arg(&args, "args")?)),
+        "onboarding.grocery_limit_for" => json(onboarding::grocery_limit_for(
+            &arg(&args, "draft")?,
+            &arg::<String>(&args, "today")?,
+        )?),
+        "onboarding.parse_profile" => json(onboarding::parse_profile(
+            opt::<String>(&args, "raw")?.as_deref(),
+        )),
+        "onboarding.merge_profile" => json(onboarding::merge_profile(
+            &arg(&args, "existing")?,
+            &arg(&args, "draft")?,
+        )),
+        "onboarding.plan_apply" => json(onboarding::plan_apply(
+            &arg(&args, "draft")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<Vec<onboarding::Envelope>>(&args, "existing")?,
+        )?),
+        "onboarding.mascot_for" => json(onboarding::mascot_for(
+            &arg::<String>(&args, "step")?,
+            &arg(&args, "draft")?,
+            arg(&args, "embedded_available")?,
+        )),
+        "onboarding.recap_rows" => json(onboarding::recap_rows(
+            &arg(&args, "draft")?,
+            &arg::<String>(&args, "platform")?,
+        )),
+        "onboarding.first_quest" => json(onboarding::first_quest(&arg(&args, "draft")?)),
+        "onboarding.entry_action" => json(onboarding::entry_action(&arg(&args, "i")?)),
+        "server_config.entry_noun" => {
+            json(server_config::entry_noun(&arg::<String>(&args, "path")?))
+        }
+        "server_config.entry_title" => json(server_config::entry_title(
+            &arg::<String>(&args, "path")?,
+            &arg::<Vec<Value>>(&args, "fields")?,
+            &arg::<Value>(&args, "row")?,
+            arg(&args, "index")?,
+        )),
+        "server_config.row_from_server" => json(server_config::row_from_server(
+            &arg(&args, "key")?,
+            &opt::<Value>(&args, "raw")?.unwrap_or(Value::Null),
+        )),
+        "server_config.empty_row" => json(server_config::empty_row(&arg(&args, "key")?)),
+        "server_config.server_value" => json(server_config::server_value(&arg(&args, "key")?)),
+        "server_config.editor_value" => json(server_config::editor_value(
+            &arg(&args, "key")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.set_value" => json(server_config::set_value(
+            &arg(&args, "draft")?,
+            &arg(&args, "key")?,
+            &arg(&args, "value")?,
+        )),
+        "server_config.clear_secret" => json(server_config::clear_secret(
+            &arg(&args, "draft")?,
+            &arg(&args, "key")?,
+        )),
+        "server_config.reset_key" => json(server_config::reset_key(
+            &arg(&args, "draft")?,
+            &arg(&args, "key")?,
+        )),
+        "server_config.discard_key" => json(server_config::discard_key(
+            &arg(&args, "draft")?,
+            &arg(&args, "key")?,
+        )),
+        "server_config.is_dirty" => json(server_config::is_dirty(
+            &arg::<String>(&args, "path")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.change_count" => json(server_config::change_count(&arg(&args, "draft")?)),
+        "server_config.editable" => json(server_config::editable(&arg(&args, "key")?)),
+        "server_config.field_visible" => json(server_config::field_visible(
+            &arg(&args, "key")?,
+            &arg(&args, "field")?,
+            &arg(&args, "row")?,
+        )),
+        "server_config.row_to_wire" => json(server_config::row_to_wire(
+            &arg(&args, "key")?,
+            &arg(&args, "row")?,
+        )),
+        "server_config.wire_value" => json(server_config::wire_value(
+            &arg(&args, "key")?,
+            &opt::<Value>(&args, "value")?.unwrap_or(Value::Null),
+        )),
+        "server_config.to_change" => json(server_config::to_change(
+            &arg(&args, "view")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.problem_for" => json(server_config::problem_for(
+            &arg(&args, "key")?,
+            &opt::<Value>(&args, "value")?.unwrap_or(Value::Null),
+        )),
+        "server_config.draft_problems" => json(server_config::draft_problems(
+            &arg(&args, "view")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.warnings_for" => json(server_config::warnings_for(
+            &arg(&args, "view")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.new_token" => json(server_config::new_token(&arg(&args, "draft")?)),
+        "server_config.source_label" => json(server_config::source_label(&arg(&args, "key")?)),
+        "server_config.source_tone" => json(server_config::source_tone(&arg(&args, "key")?)),
+        "server_config.value_summary" => json(server_config::value_summary(&arg(&args, "key")?)),
+        "server_config.group_summary" => json(server_config::group_summary(
+            &arg(&args, "group")?,
+            &arg(&args, "draft")?,
+        )),
+        "server_config.save_summary" => json(server_config::save_summary(&arg(&args, "draft")?)),
+        "server_config.saved_text" => json(server_config::saved_text(&arg(&args, "saved")?)),
+        "server_config.timeout_text" => json(server_config::timeout_text(arg(
+            &args,
+            "changed_listen_address",
+        )?)),
+        "receipt_sources.source_title" => {
+            json(receipt_sources::source_title(&arg::<String>(&args, "s")?))
+        }
+        "receipt_sources.source_icon" => {
+            json(receipt_sources::source_icon(&arg::<String>(&args, "s")?))
+        }
+        "receipt_sources.source_blurb" => {
+            json(receipt_sources::source_blurb(&arg::<String>(&args, "s")?))
+        }
+        "receipt_sources.health_pill" => json(receipt_sources::health_pill(&arg::<String>(
+            &args, "state",
+        )?)),
+        "receipt_sources.last_sync_text" => json(receipt_sources::last_sync_text(
+            opt(&args, "ts")?,
+            arg(&args, "now_sec")?,
+        )),
+        "receipt_sources.next_run_text" => json(receipt_sources::next_run_text(
+            opt(&args, "ts")?,
+            arg(&args, "now_sec")?,
+        )),
+        "receipt_sources.imported_text" => json(receipt_sources::imported_text(arg(&args, "n")?)),
+        "receipt_sources.can_sync_now" => json(receipt_sources::can_sync_now(
+            arg(&args, "enabled")?,
+            &arg::<String>(&args, "state")?,
+        )),
+        "receipt_sources.attention_count" => json(receipt_sources::attention_count(&arg::<
+            Vec<receipt_sources::SourceLike>,
+        >(
+            &args, "list",
+        )?)),
+        "receipt_sources.summary_text" => {
+            json(receipt_sources::summary_text(&arg::<
+                Vec<receipt_sources::SourceLike>,
+            >(&args, "list")?))
+        }
+        "receipt_sources.sync_result_text" => json(receipt_sources::sync_result_text(
+            arg(&args, "imported")?,
+            arg(&args, "linked")?,
+        )),
+        "receipt_sources.setup_steps" => json(receipt_sources::setup_steps(
+            &arg::<String>(&args, "s")?,
+            opt(&args, "on_phone")?.unwrap_or(false),
+        )),
+        "receipt_sources.sign_in_promises" => json(receipt_sources::sign_in_promises(
+            &arg::<String>(&args, "shop")?,
+            opt(&args, "on_phone")?.unwrap_or(false),
+        )),
+        "receipt_sources.is_signed_in" => json(receipt_sources::is_signed_in(&arg::<String>(
+            &args, "state",
+        )?)),
+        "receipt_sources.sign_in_state_text" => json(receipt_sources::sign_in_state_text(
+            &arg::<String>(&args, "shop")?,
+            &arg::<String>(&args, "state")?,
+            opt(&args, "connected_at")?,
+            arg(&args, "now_sec")?,
+            opt(&args, "on_phone")?.unwrap_or(false),
+        )),
+        "receipt_sources.listed_sources" => {
+            json(receipt_sources::listed_sources(&arg::<Vec<Value>>(
+                &args, "list",
+            )?))
+        }
+        "receipt_sources.lidl_promises" => json(receipt_sources::lidl_promises(
+            opt(&args, "on_phone")?.unwrap_or(false),
+        )),
+        "receipt_sources.disconnected_text" => {
+            json(receipt_sources::disconnected_text(arg(&args, "on_phone")?))
+        }
+        "receipt_sources.no_source_text" => {
+            json(receipt_sources::no_source_text(arg(&args, "on_phone")?))
+        }
+        "receipt_sources.sign_in_mode" => json(receipt_sources::sign_in_mode(&arg::<String>(
+            &args,
+            "platform_os",
+        )?)),
+        "receipt_sources.extract_callback_url" => json(receipt_sources::extract_callback_url(
+            &arg::<String>(&args, "input")?,
+            &arg::<String>(&args, "scheme")?,
+        )),
+        "receipt_sources.callback_has_result" => json(receipt_sources::callback_has_result(
+            &arg::<String>(&args, "url")?,
+        )),
+        "receipt_sources.lidl_state_text" => json(receipt_sources::lidl_state_text(
+            &arg::<String>(&args, "state")?,
+            opt(&args, "connected_at")?,
+            arg(&args, "now_sec")?,
+            opt(&args, "on_phone")?.unwrap_or(false),
+        )),
+        "bank_connections.is_busy" => json(bank_connections::is_busy(&arg(&args, "c")?)),
+        "bank_connections.links_once" => json(bank_connections::links_once(&arg(&args, "c")?)),
+        "bank_connections.is_running" => json(bank_connections::is_running(&arg(&args, "s")?)),
+        "bank_connections.apply_sync" => json(bank_connections::apply_sync(
+            &arg(&args, "c")?,
+            &arg(&args, "s")?,
+        )),
+        "bank_connections.sync_result_text" => {
+            json(bank_connections::sync_result_text(&arg(&args, "s")?))
+        }
+        "bank_connections.is_plaid" => json(bank_connections::is_plaid(&arg(&args, "c")?)),
+        "bank_connections.needs_linking" => {
+            json(bank_connections::needs_linking(&arg(&args, "c")?))
+        }
+        "bank_connections.provider_label" => {
+            json(bank_connections::provider_label(&arg(&args, "c")?))
+        }
+        "bank_connections.connection_subtitle" => {
+            json(bank_connections::connection_subtitle(&arg(&args, "c")?))
+        }
+        "bank_connections.linked_accounts_text" => {
+            json(bank_connections::linked_accounts_text(&arg(&args, "c")?))
+        }
+        "bank_connections.sync_button_label" => json(bank_connections::sync_button_label(
+            &arg(&args, "c")?,
+            arg(&args, "starting")?,
+        )),
+        "bank_connections.any_busy" => json(bank_connections::any_busy(&arg::<Vec<Value>>(
+            &args, "list",
+        )?)),
+        "bank_connections.state_label" => json(bank_connections::state_label(&arg(&args, "c")?)),
+        "bank_connections.state_tone" => json(bank_connections::state_tone(&arg(&args, "c")?)),
+        "bank_connections.needs_typed_pin" => {
+            json(bank_connections::needs_typed_pin(&arg(&args, "c")?))
+        }
+        "bank_connections.can_sync" => json(bank_connections::can_sync(
+            &arg(&args, "c")?,
+            &arg::<String>(&args, "typed_pin")?,
+        )),
+        "bank_connections.next_sync_text" => json(bank_connections::next_sync_text(
+            &arg(&args, "c")?,
+            arg(&args, "now_seconds")?,
+        )),
+        "bank_connections.approval_left_text" => json(bank_connections::approval_left_text(
+            &arg(&args, "c")?,
+            arg(&args, "now_seconds")?,
+        )),
+        "bank_connections.is_safe_link_url" => json(bank_connections::is_safe_link_url(
+            opt::<String>(&args, "url")?.as_deref(),
+        )),
+        "bank_connections.connection_key" => {
+            json(bank_connections::connection_key(&arg(&args, "c")?))
+        }
+        "bank_connections.live_sync_missing" => {
+            let (title, body) = bank_connections::live_sync_missing(arg(&args, "on_phone")?);
+            json(serde_json::json!({ "title": title, "body": body }))
+        }
+        "calendar_feeds.payday_occurrences" => json(calendar_feeds::payday_occurrences(
+            arg(&args, "payday")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )?),
+        "calendar_feeds.charge_occurrences" => json(calendar_feeds::charge_occurrences(
+            &arg::<Vec<calendar_feeds::Charge>>(&args, "charges")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )),
+        "calendar_feeds.meal_occurrences" => json(calendar_feeds::meal_occurrences(
+            &arg::<Vec<calendar_feeds::PlannedMeal>>(&args, "meals")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )),
+        "calendar_feeds.contract_occurrences" => json(calendar_feeds::contract_occurrences(
+            &arg::<Vec<calendar_feeds::Contract>>(&args, "contracts")?,
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )?),
+        "calendar_feeds.week_starts" => json(calendar_feeds::week_starts(
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+        )?),
+        "calendar_view.range_for" => json(calendar_view::range_for(
+            &arg::<String>(&args, "view")?,
+            &arg::<String>(&args, "anchor")?,
+            opt(&args, "schedule_days")?.unwrap_or(calendar_view::SCHEDULE_DAYS),
+        )?),
+        "calendar_view.step" => json(calendar_view::step(
+            &arg::<String>(&args, "view")?,
+            &arg::<String>(&args, "anchor")?,
+            arg(&args, "direction")?,
+        )?),
+        "calendar_view.title_for" => json(calendar_view::title_for(
+            &arg::<String>(&args, "view")?,
+            &arg::<String>(&args, "anchor")?,
+        )?),
+        "calendar_view.month_cells" => json(calendar_view::month_cells(
+            &arg::<String>(&args, "anchor")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<String>(&args, "selected")?,
+            &arg::<Vec<calendar::Occurrence>>(&args, "occurrences")?,
+        )?),
+        "calendar_view.mini_cells" => json(calendar_view::mini_cells(
+            &arg::<String>(&args, "anchor")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<String>(&args, "selected")?,
+            &arg::<Vec<calendar::Occurrence>>(&args, "occurrences")?,
+        )?),
+        "calendar_view.day_columns" => json(calendar_view::day_columns(
+            &arg::<Vec<String>>(&args, "dates")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<String>(&args, "selected")?,
+            &arg::<Vec<calendar::Occurrence>>(&args, "occurrences")?,
+        )?),
+        "calendar_view.agenda_days" => json(calendar_view::agenda_days(
+            &arg::<String>(&args, "from")?,
+            &arg::<String>(&args, "to")?,
+            &arg::<String>(&args, "today")?,
+            &arg::<Vec<calendar::Occurrence>>(&args, "occurrences")?,
+        )?),
+        "calendar_form.new_draft" => json(calendar_form::new_draft(
+            &arg::<String>(&args, "date")?,
+            opt(&args, "calendar_id")?,
+            opt::<String>(&args, "time")?.as_deref(),
+        )),
+        "calendar_form.rule_from_dto" => json(calendar_form::rule_from_dto(&arg(&args, "e")?)),
+        "calendar_form.draft_from_rule" => {
+            json(calendar_form::draft_from_rule(&arg(&args, "rule")?))
+        }
+        "calendar_form.move_start" => json(calendar_form::move_start(
+            &arg(&args, "d")?,
+            &arg::<String>(&args, "date")?,
+            opt::<String>(&args, "time")?.as_deref(),
+        )?),
+        "calendar_form.set_repeat_kind" => json(calendar_form::set_repeat_kind(
+            &arg(&args, "d")?,
+            &arg::<String>(&args, "kind")?,
+        )?),
+        "calendar_form.toggle_weekday" => json(calendar_form::toggle_weekday(
+            &arg(&args, "d")?,
+            &arg::<String>(&args, "code")?,
+        )),
+        "calendar_form.toggle_reminder" => json(calendar_form::toggle_reminder(
+            &arg(&args, "d")?,
+            arg(&args, "minutes")?,
+        )),
+        "calendar_form.problem" => json(calendar_form::problem(&arg(&args, "d")?)),
+        "calendar_form.to_input" => json(calendar_form::to_input(&arg(&args, "d")?)),
+        "charts.spending_trend" => json(charts::spending_trend(
+            &arg::<Vec<charts::Tx>>(&args, "txs")?,
+            &arg::<String>(&args, "today")?,
+            arg(&args, "days")?,
+        )?),
+        "charts.trend_summary" => json(charts::trend_summary(
+            &arg(&args, "t")?,
+            arg(&args, "days")?,
+        )),
+        "charts.peak_text" => json(charts::peak_text(&arg(&args, "t")?)?),
+        "charts.top_categories" => json(charts::top_categories(
+            &arg::<Vec<charts::Spent>>(&args, "current")?,
+            &arg::<Vec<charts::Spent>>(&args, "previous")?,
+            opt(&args, "limit")?.unwrap_or(5),
+        )),
+        "charts.compare_summary" => json(charts::compare_summary(&arg::<
+            Vec<charts::CategoryCompare>,
+        >(&args, "rows")?)),
+        "charts.is_spend" => json(charts::is_spend(&arg(&args, "t")?)),
+        "charts.period_curve" => json(charts::period_curve(
+            &arg::<Vec<charts::Tx>>(&args, "txs")?,
+            &arg(&args, "period")?,
+            &arg::<String>(&args, "today")?,
+            opt(&args, "still_to_come")?,
+        )?),
+        "charts.curve_geometry" => json(charts::curve_geometry(
+            &arg(&args, "curve")?,
+            arg(&args, "width")?,
+            arg(&args, "height")?,
+            opt(&args, "pad")?.unwrap_or(4.0),
+        )),
+        "charts.curve_summary" => json(charts::curve_summary(&arg(&args, "curve")?)),
+        "charts.spend_comparison" => json(charts::spend_comparison(
+            &arg::<Vec<charts::Tx>>(&args, "txs")?,
+            &arg(&args, "period")?,
+            &arg(&args, "previous")?,
+            &arg::<String>(&args, "today")?,
+        )?),
+        "charts.last_week" => json(charts::last_week(
+            &arg::<Vec<charts::Tx>>(&args, "txs")?,
+            &arg::<String>(&args, "today")?,
+        )?),
+        "charts.week_summary" => json(charts::week_summary(&arg(&args, "w")?)),
+        "charts.category_shares" => json(charts::category_shares(
+            &arg::<Vec<charts::Tx>>(&args, "txs")?,
+            &arg(&args, "period")?,
+            opt(&args, "limit")?.unwrap_or(5),
+        )),
+        "charts.shares_summary" => json(charts::shares_summary(
+            arg(&args, "total")?,
+            &arg::<Vec<charts::Share>>(&args, "shares")?,
         )),
         other => return Err(format!("unknown function {other}")),
     };
