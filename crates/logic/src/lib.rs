@@ -12,6 +12,7 @@ pub mod calendar;
 pub mod calendar_feeds;
 pub mod calendar_form;
 pub mod calendar_view;
+pub mod charts;
 pub mod forecast;
 pub mod format;
 pub mod game;
@@ -868,6 +869,58 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
         )),
         "calendar_form.problem" => json(calendar_form::problem(&arg(&args, "d")?)),
         "calendar_form.to_input" => json(calendar_form::to_input(&arg(&args, "d")?)),
+        "charts.spending_trend" => json(charts::spending_trend(
+            &arg::<Vec<charts::Tx>>(&args, "txs")?,
+            &arg::<String>(&args, "today")?,
+            arg(&args, "days")?,
+        )?),
+        "charts.trend_summary" => json(charts::trend_summary(
+            &arg(&args, "t")?,
+            arg(&args, "days")?,
+        )),
+        "charts.peak_text" => json(charts::peak_text(&arg(&args, "t")?)?),
+        "charts.top_categories" => json(charts::top_categories(
+            &arg::<Vec<charts::Spent>>(&args, "current")?,
+            &arg::<Vec<charts::Spent>>(&args, "previous")?,
+            opt(&args, "limit")?.unwrap_or(5),
+        )),
+        "charts.compare_summary" => json(charts::compare_summary(&arg::<
+            Vec<charts::CategoryCompare>,
+        >(&args, "rows")?)),
+        "charts.is_spend" => json(charts::is_spend(&arg(&args, "t")?)),
+        "charts.period_curve" => json(charts::period_curve(
+            &arg::<Vec<charts::Tx>>(&args, "txs")?,
+            &arg(&args, "period")?,
+            &arg::<String>(&args, "today")?,
+            opt(&args, "still_to_come")?,
+        )?),
+        "charts.curve_geometry" => json(charts::curve_geometry(
+            &arg(&args, "curve")?,
+            arg(&args, "width")?,
+            arg(&args, "height")?,
+            opt(&args, "pad")?.unwrap_or(4.0),
+        )),
+        "charts.curve_summary" => json(charts::curve_summary(&arg(&args, "curve")?)),
+        "charts.spend_comparison" => json(charts::spend_comparison(
+            &arg::<Vec<charts::Tx>>(&args, "txs")?,
+            &arg(&args, "period")?,
+            &arg(&args, "previous")?,
+            &arg::<String>(&args, "today")?,
+        )?),
+        "charts.last_week" => json(charts::last_week(
+            &arg::<Vec<charts::Tx>>(&args, "txs")?,
+            &arg::<String>(&args, "today")?,
+        )?),
+        "charts.week_summary" => json(charts::week_summary(&arg(&args, "w")?)),
+        "charts.category_shares" => json(charts::category_shares(
+            &arg::<Vec<charts::Tx>>(&args, "txs")?,
+            &arg(&args, "period")?,
+            opt(&args, "limit")?.unwrap_or(5),
+        )),
+        "charts.shares_summary" => json(charts::shares_summary(
+            arg(&args, "total")?,
+            &arg::<Vec<charts::Share>>(&args, "shares")?,
+        )),
         other => return Err(format!("unknown function {other}")),
     };
     out
