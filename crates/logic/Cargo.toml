@@ -1,0 +1,17 @@
+[package]
+name = "financer-logic"
+description = "The app's own logic (wording, formatting, periods), moved out of TypeScript: pure functions over plain data, called by name through the SDK. Builds for native and WebAssembly."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+financer-core = { path = "../core" }
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
+url = { version = "2", default-features = false, features = ["std"] }
+unicode-normalization = { version = "0.1", default-features = false }
+regex = { version = "1", default-features = false, features = ["std", "unicode-case", "unicode-perl"] }

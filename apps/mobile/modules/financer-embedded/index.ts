@@ -1,7 +1,7 @@
 // Placeholder for the generated bindings of crates/embedded (see docs/EMBEDDED.md).
 //
 // `uniffi-bindgen-react-native` generates the real module here: a `Backend` class with
-// `Backend.start(config)`, `backend.handle(request)`, `backend.refreshPrices()` and `backend.syncReceiptsNow()`. Until that
+// `Backend.start(config)`, `backend.call(app, op, args)`, `backend.refreshPrices()` and `backend.syncReceiptsNow()`. Until that
 // is built, `Backend` is `null`, which the app reports as "not available in this build".
 
 export type StartConfig = {
@@ -18,12 +18,8 @@ export type StartConfig = {
 };
 
 export type BackendHandle = {
-  handle(request: {
-    method: string;
-    pathAndQuery: string;
-    contentType?: string;
-    body: ArrayBuffer;
-  }): Promise<{ status: number; contentType?: string; body: ArrayBuffer }>;
+  /** One call of the finance, shopping or mail API by name; the SDK's `Wire.call` over the in-process router. */
+  call(app: "finance" | "shop" | "mail", op: string, args: string): Promise<string>;
   refreshPrices(): Promise<string>;
   syncReceiptsNow(): Promise<string>;
 };
@@ -44,4 +40,4 @@ export type ShopStartConfig = {
   openaiApiKey: string | undefined;
 };
 
-export const ShopBackend: { start(config: ShopStartConfig): Promise<Pick<BackendHandle, "handle">> } | null = null;
+export const ShopBackend: { start(config: ShopStartConfig): Promise<Pick<BackendHandle, "call">> } | null = null;

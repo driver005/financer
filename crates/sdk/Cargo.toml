@@ -1,0 +1,60 @@
+[package]
+name = "financer-sdk"
+description = "Typed Rust client for the Financer server's APIs (mail first), with a transport you can swap: HTTP over the network, or in-process. Builds for native and for WebAssembly, and exposes its calls to JavaScript through UniFFI."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[features]
+default = ["http"]
+# The network transport. Off for a build that brings its own transport (the app that runs the backend
+# inside the phone passes the in-process one).
+http = ["dep:reqwest"]
+# Builds the `uniffi-bindgen` helper binary used to generate the JavaScript bindings.
+bindgen-cli = ["uniffi/cli"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen-cli"]
+
+[dependencies]
+financer-mail-core = { path = "../mail-core" }
+financer-logic = { path = "../logic" }
+async-trait = "0.1"
+base64 = "0.23"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"], optional = true }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+# JavaScript gets async calls through UniFFI. Natively they run on tokio (the HTTP client needs it);
+# in the browser there is no tokio and the browser drives the futures.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+uniffi = { version = "=0.31", features = ["tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# The browser runs the futures on one thread, so they need not be Send.
+uniffi = { version = "=0.31", features = ["wasm-unstable-single-threaded"] }
+# The player that runs this crate as WebAssembly in the browser (uniffi-bindgen-react-native, wasm2).
+uniffi-runtime-wasm = "0.31.0-6"
+
+[dev-dependencies]
+financer-mail-api = { path = "../mail-api" }
+financer-api = { path = "../api" }
+financer-store = { path = "../store" }
+financer-shop-api = { path = "../shop-api" }
+financer-shop-core = { path = "../shop-core" }
+financer-shop-sources = { path = "../shop-sources" }
+financer-shop-store = { path = "../shop-store" }
+financer-prices = { path = "../prices" }
+axum = { version = "0.8", default-features = false, features = ["json", "tokio", "http1"] }
+serde_json.workspace = true
+http-body-util = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tower = { version = "0.5", features = ["util"] }

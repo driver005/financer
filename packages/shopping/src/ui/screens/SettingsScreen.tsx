@@ -36,6 +36,15 @@ export function SettingsScreen() {
       return;
     }
     await shop.save({ dealAlerts: on });
+    if (!on && shop.where === "server" && shop.client && shop.host.notices.pushToken) {
+      // stop the server pushing to this phone
+      try {
+        const t = await shop.host.notices.pushToken();
+        if (t) await shop.client.removePushToken(t);
+      } catch {
+        // the server keeps the token until it is told otherwise; alerts here are off already
+      }
+    }
     if (on && shop.where === "server" && shop.client && shop.host.notices.pushToken) {
       try {
         const t = await shop.host.notices.pushToken();
@@ -99,6 +108,12 @@ export function SettingsScreen() {
         <Section title="More">
           <Card padded={false}>
             <Box px="lg">
+              <ListItem title="My products" subtitle="Everything found or added, and add your own" icon="package-variant-closed" onPress={() => nav.push({ name: "library" })} />
+              <Divider />
+              <ListItem title="Saved priorities" subtitle="What matters to you, by name" icon="tune-variant" onPress={() => nav.push({ name: "profiles" })} />
+              <Divider />
+              <ListItem title="Reading history" subtitle="What each search read, and what went wrong" icon="history" onPress={() => nav.push({ name: "runs" })} />
+              <Divider />
               <ListItem title="Shops to read" subtitle="Where prices and specs come from" icon="storefront-outline" onPress={() => nav.push({ name: "sources" })} />
               <Divider />
               <ListItem title="Categories and criteria" subtitle="Change what is measured" icon="shape-outline" onPress={() => nav.push({ name: "categories" })} />

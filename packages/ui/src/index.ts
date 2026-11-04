@@ -11,19 +11,22 @@ export { contrast } from "./responsive/contrast";
 export { formatCents, formatPercent } from "./format";
 
 export { Box, Row, Spacer, Stack, type BoxProps } from "./primitives/Box";
-export type { BgToken, Dim, MaxWidth } from "./primitives/boxStyle";
+export type { BgToken, Dim, MaxWidth, Share } from "./primitives/boxStyle";
 export { Text, type TextProps, type TextTone } from "./primitives/Text";
 export { Icon, type IconName } from "./primitives/Icon";
 export { Dot } from "./primitives/Dot";
 export { Touchable } from "./primitives/Touchable";
 
+export { Avatar, AVATAR_TONES, initialsOf, toneForSeed, type AvatarProps } from "./components/Avatar";
 export { Badge } from "./components/Badge";
 export { Banner } from "./components/Banner";
 export { Button, IconButton, type ButtonProps, type ButtonSize, type ButtonVariant } from "./components/Button";
 export { Card, type CardProps } from "./components/Card";
+export { ChatBubble, type ChatBubbleProps } from "./components/ChatBubble";
+export { DateBadge, type DateBadgeProps } from "./components/DateBadge";
 export { Checkbox } from "./components/Checkbox";
 export { Chip, ChipRow, type ChipProps } from "./components/Chip";
-export { Divider } from "./components/Divider";
+export { Divider, DividerLabel } from "./components/Divider";
 export { Hint } from "./components/Hint";
 export { MatchBadge } from "./components/MatchBadge";
 export { EmptyState } from "./components/EmptyState";

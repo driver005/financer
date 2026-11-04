@@ -1,0 +1,15 @@
+{
+  "name": "@financer/wire",
+  "version": "0.1.0",
+  "private": true,
+  "description": "How the apps call the Rust SDK: one object, calls by name, JSON in and out. No logic: the contract, the paths and the encoding are in crates/sdk.",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "tsc -p tests/tsconfig.json && node --test \".test-build/tests/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "~7.0.2"
+  },
+  "types": "src/index.ts"
+}

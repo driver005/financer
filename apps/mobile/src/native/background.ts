@@ -2,10 +2,10 @@ import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 
-import { Api, type ApiConfig } from "@/api/client";
+import type { Api, ApiConfig } from "@/api/client";
+import { connectApi, embeddedApi } from "@/api/connect";
 import { CONFIG_KEY, MODE_KEY } from "@/api/keys";
 import { getSecret } from "@/api/storage";
-import { EmbeddedTransport } from "@/api/transport";
 import { anyEnabled } from "@/notifyPlan";
 import { EMBEDDED_KEY, EMPTY_EMBEDDED_SETTINGS, embeddedAvailable, startEmbedded, type EmbeddedSettings } from "./embedded";
 import { getPrefs, runNotificationChecks } from "./notifications";
@@ -24,13 +24,13 @@ async function headlessApi(): Promise<{ api: Api; refreshPrices?: () => Promise<
     const settings: EmbeddedSettings = { ...EMPTY_EMBEDDED_SETTINGS, ...(raw ? (JSON.parse(raw) as Partial<EmbeddedSettings>) : {}) };
     const backend = await startEmbedded(settings);
     return {
-      api: new Api(new EmbeddedTransport(backend)),
+      api: embeddedApi(backend),
       refreshPrices: () => backend.refreshPrices(),
       syncReceipts: () => backend.syncReceiptsNow(),
     };
   }
   const raw = await getSecret(CONFIG_KEY);
-  return raw ? { api: new Api(JSON.parse(raw) as ApiConfig) } : null;
+  return raw ? { api: await connectApi(JSON.parse(raw) as ApiConfig) } : null;
 }
 
 // Defined at import time (the root layout imports this file), because the OS can wake the app

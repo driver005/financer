@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Api, type BankConnection } from "../src/api/client";
-import { RemoteTransport } from "../src/api/transport";
+import { apiWith } from "./fakeWire";
 import {
   anyBusy,
   approvalLeftText,
@@ -131,25 +131,22 @@ describe("texts", () => {
 
 describe("API calls", () => {
   it("lists, starts (with or without a PIN) and cancels", async () => {
-    const calls: { url: string; method?: string; body?: unknown; headers?: unknown }[] = [];
-    const impl = (async (url: string, init: RequestInit = {}) => {
-      calls.push({ url, method: init.method, body: init.body, headers: init.headers });
-      return { status: 200, ok: true, text: async () => JSON.stringify(conn()) } as Response;
-    }) as unknown as typeof fetch;
-    const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
+    const { api, calls } = apiWith((op) => (op === "list_connections" ? [conn()] : conn()));
     await api.bankConnections();
     await api.syncConnection("Giro Konto", "1234");
     await api.syncConnection("Giro Konto");
     await api.cancelConnection("Giro Konto");
     await api.disconnectConnection("Plaid Giro");
-    assert.equal(calls[0].url, "https://x.test/v1/bank/connections");
-    assert.equal(calls[1].url, "https://x.test/v1/bank/connections/Giro%20Konto/sync");
-    assert.equal(calls[1].method, "POST");
-    assert.equal(calls[1].body, '{"pin":"1234"}');
-    assert.equal(calls[2].body, undefined); // the server has the PIN: nothing is sent
-    assert.equal(calls[3].url, "https://x.test/v1/bank/connections/Giro%20Konto/cancel");
-    assert.equal(calls[4].url, "https://x.test/v1/bank/connections/Plaid%20Giro/disconnect");
-    assert.equal(calls[4].method, "POST");
+    assert.deepEqual(
+      calls.map((c) => [c.op, c.args]),
+      [
+        ["list_connections", {}],
+        ["sync_connection", { name: "Giro Konto", body: { pin: "1234" } }],
+        ["sync_connection", { name: "Giro Konto" }], // the server has the PIN: nothing is sent
+        ["cancel_connection", { name: "Giro Konto" }],
+        ["disconnect_connection", { name: "Plaid Giro" }],
+      ],
+    );
   });
 });
 

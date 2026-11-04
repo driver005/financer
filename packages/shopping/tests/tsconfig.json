@@ -7,18 +7,24 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "outDir": "../.test-build",
-    "rootDir": "..",
+    "rootDir": "../../..",
     "types": [
       "node"
     ],
     "lib": [
       "es2022",
       "dom"
-    ]
+    ],
+    "allowJs": true,
+    "checkJs": false
   },
   "include": [
     "../src/api/*.ts",
     "../src/logic/*.ts",
-    "./*.test.ts"
+    "./*.test.ts",
+    "../../wire/src/index.ts",
+    "../../wire/src/logic.ts",
+    "../../../apps/sdk-bindings/src/generated-web/index.ts",
+    "../../../apps/sdk-bindings/src/generated-web/financer_sdk_bg.js"
   ]
 }

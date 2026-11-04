@@ -23,12 +23,16 @@
     "**/*.tsx",
     "../../packages/ui/src/**/*.ts",
     "../../packages/ui/src/**/*.tsx",
+    "../../packages/mail/src/**/*.ts",
+    "../../packages/mail/src/**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ],
   "exclude": [
     "node_modules",
     "../../packages/ui/node_modules",
-    "../../packages/ui/.test-build"
+    "../../packages/ui/.test-build",
+    "../../packages/mail/node_modules",
+    "../../packages/mail/.test-build"
   ]
 }

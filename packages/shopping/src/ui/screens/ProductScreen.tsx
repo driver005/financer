@@ -28,6 +28,7 @@ export function ProductScreen({ id }: { id: string }) {
   const [key, setKey] = useState("");
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const now = Math.floor(Date.now() / 1000);
 
   const load = useCallback(async () => {
@@ -64,6 +65,18 @@ export function ProductScreen({ id }: { id: string }) {
       setError(e instanceof ShopApiError ? e.message : "Could not save.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!client) return;
+    try {
+      await client.deleteProduct(id);
+      void host.storage.remove(cacheKey(id)).catch(() => {});
+      nav.pop();
+    } catch (e) {
+      setConfirmRemove(false);
+      setError(e instanceof ShopApiError ? e.message : "Could not remove the product.");
     }
   };
 
@@ -173,6 +186,19 @@ export function ProductScreen({ id }: { id: string }) {
           <TextField label="Value" value={value} onChangeText={setValue} placeholder="92 or 5000 mAh or yes" />
           <Row><Button label="Save spec" onPress={() => void addSpec()} loading={saving} disabled={!key.trim() || !value.trim()} /></Row>
         </Stack>
+      </Section>
+
+      <Section title="Remove" description="Takes it out of your products, with its prices and history. A later search may find it again.">
+        <Row gap="sm" wrap>
+          {confirmRemove ? (
+            <>
+              <Button label="Yes, remove it" tone="danger" onPress={() => void remove()} testID="confirm-remove" />
+              <Button label="Keep it" variant="ghost" tone="neutral" onPress={() => setConfirmRemove(false)} />
+            </>
+          ) : (
+            <Button label="Remove this product" variant="soft" tone="danger" icon="delete-outline" onPress={() => setConfirmRemove(true)} />
+          )}
+        </Row>
       </Section>
     </Screen>
   );

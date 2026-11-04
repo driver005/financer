@@ -21,6 +21,7 @@
     "../src/responsive/resolve.ts",
     "../src/responsive/contrast.ts",
     "../src/finance/geometry.ts",
+    "../src/components/avatarModel.ts",
     "./*.test.ts"
   ]
 }

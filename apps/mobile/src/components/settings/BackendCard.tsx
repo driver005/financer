@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { Box, Button, ConfirmAction, Divider, Expandable, Note, Segmented, Text, TextField } from "@financer/ui";
 
-import { Api } from "@/api/client";
+import { connectApi } from "@/api/connect";
 import { useApi } from "@/api/config";
 import { validateServer } from "@/onboarding";
 import { connectionState, type ConnectionState } from "@/settingsPlan";
@@ -60,7 +60,7 @@ export function BackendCard({ settingsLoaded, settingsError }: { settingsLoaded:
     setStatus(null);
     try {
       const next = { baseUrl: baseUrl.trim(), token: token.trim() };
-      const probe = new Api(next);
+      const probe = await connectApi(next);
       if (!(await probe.health())) throw new Error("Server answered, but not as a Financer server");
       await probe.transactions(); // needs the token
       await save(next);

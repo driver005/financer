@@ -3,7 +3,16 @@
 
 import type { ProgressSurface } from "./logic/progress";
 import type { LocalNotice } from "./logic/dealNotifications";
-import type { ShopBackendHandle, ShopServerConfig } from "./api/transport";
+import type { Caller } from "../../wire/src";
+
+/** Where a server is and the token it accepts. */
+export type ShopServerConfig = { baseUrl: string; token: string };
+
+/** The shopping backend that runs inside the app: the SDK's calls, in process. */
+export interface ShopBackendHandle {
+  call(app: "shop", op: string, args: string): Promise<string>;
+  checkDeals?(): Promise<number>;
+}
 
 export type KeyValue = {
   get(key: string): Promise<string | null>;
@@ -29,6 +38,11 @@ export type ModuleHost = {
    * token, so one setup serves both apps; the standalone app has none.
    */
   sharedServer?: () => Promise<ShopServerConfig | null>;
+  /**
+   * The shopping API of a server, called through the Rust SDK (docs/SDK.md). The host makes it: the
+   * module has no way to reach a server of its own.
+   */
+  makeCaller?: (config: ShopServerConfig) => Promise<Caller>;
   /** Start the Rust shopping backend of this build; absent or null when the build has none. */
   startEmbedded?: ((config: EmbeddedStart) => Promise<ShopBackendHandle>) | null;
   /** Where the index run's progress is shown (a notification). */

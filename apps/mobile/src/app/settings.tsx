@@ -72,6 +72,7 @@ export default function SettingsScreen() {
           <ListItem icon="receipt-text-outline" tile title="Receipts" subtitle="Add and read receipts" onPress={() => router.push("/receipts")} />
           <ListItem icon="email-sync-outline" tile title="Receipt sources" subtitle="Mailbox, Lidl Plus and a watched folder" onPress={() => router.push("/receipt-sources")} />
           <ListItem icon="silverware-fork-knife" tile title="Meal plan" subtitle="Plan the week and shop for it" onPress={() => router.push("/mealplan")} />
+          <ListItem icon="email-outline" tile title="Mail" subtitle="Chats by person and topic, calendar, greetings" onPress={() => router.push("/mail")} />
           {SHOPPING_ENABLED ? <ListItem icon="shopping-search-outline" tile title="Shopping assistant" subtitle="Compare phones, plans and prices" onPress={() => router.push("/shop")} /> : null}
           {settings ? <AiCard settings={settings} onSave={save} /> : null}
           {settings ? (

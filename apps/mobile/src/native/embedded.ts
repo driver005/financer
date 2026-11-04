@@ -1,7 +1,6 @@
 import { Paths } from "expo-file-system";
 
 import { getSecret, setSecret } from "@/api/storage";
-import type { EmbeddedBackend } from "@/api/transport";
 import { Backend, generateDeviceSecret, type BackendHandle } from "../../modules/financer-embedded";
 
 export type EmbeddedSettings = {
@@ -30,7 +29,7 @@ export const EMBEDDED_KEY = "financer.embedded-settings";
 /** Where the secret that encrypts the Lidl Plus sign-in is kept (secure storage, never in the database). */
 export const DEVICE_SECRET_KEY = "financer.device-secret";
 
-export type StartedEmbedded = EmbeddedBackend & Pick<BackendHandle, "refreshPrices" | "syncReceiptsNow">;
+export type StartedEmbedded = BackendHandle;
 
 /** The stable secret for this phone, made on first use. It must never change: a stored sign-in cannot be opened with another. */
 async function deviceSecret(): Promise<string | undefined> {

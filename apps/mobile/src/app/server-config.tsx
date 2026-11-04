@@ -2,7 +2,8 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Banner, Box, Button, Expandable, Group, Note, Text } from "@financer/ui";
 
-import { Api, ApiError } from "@/api/client";
+import { ApiError } from "@/api/client";
+import { connectApi } from "@/api/connect";
 import { useApi } from "@/api/config";
 import { Page } from "@/components/Page";
 import { KeyField } from "@/components/serverConfig/KeyField";
@@ -94,7 +95,7 @@ export default function ServerConfigScreen() {
         let last: unknown = new Error("no answer");
         for (const t of tokens) {
           try {
-            return { view: await new Api({ baseUrl: config.baseUrl, token: t }).serverConfig(), token: t };
+            return { view: await (await connectApi({ baseUrl: config.baseUrl, token: t })).serverConfig(), token: t };
           } catch (e) {
             last = e;
           }

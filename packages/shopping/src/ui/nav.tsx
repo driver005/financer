@@ -11,7 +11,13 @@ export type Route =
   | { name: "category"; id: string }
   | { name: "watch"; query?: string; category?: string | null }
   | { name: "settings" }
-  | { name: "sources" };
+  | { name: "sources" }
+  /** The products you have saved or added, by category. */
+  | { name: "library"; category?: string }
+  | { name: "addProduct"; category?: string }
+  | { name: "profiles" }
+  /** The history of reading runs. */
+  | { name: "runs" };
 
 type Nav = {
   tab: Tab;

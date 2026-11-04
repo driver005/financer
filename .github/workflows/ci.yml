@@ -25,7 +25,12 @@ jobs:
           --health-retries 10
     env:
       FINANCER_TEST_POSTGRES_URL: postgres://financer:financer@127.0.0.1:5432/financer_test
+      # The workspace (with the SDK, mail and the shop) fills the runner's disk with debug info that no
+      # test reads: "No space left on device" while linking the server.
+      CARGO_PROFILE_DEV_DEBUG: "0"
     steps:
+      - name: Free disk space (toolchains this job does not use)
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - uses: actions/checkout@v7
       # The release version rules (.github/scripts/next-version.sh); no build needed, runs in seconds.
       - name: Version script tests
@@ -35,6 +40,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
       # Dependencies and workspace libs are compiled once and restored on later runs (also when a
       # run fails, so the next push does not start from zero).
       - uses: Swatinem/rust-cache@v2
@@ -42,11 +48,17 @@ jobs:
           shared-key: workspace
           cache-on-failure: true
       - run: cargo fmt --all --check
+      # The SDK's finance calls are generated from the API's OpenAPI file (docs/SDK.md): the generated
+      # file must be what the file produces, and the file must be what the server says (below).
+      - run: node crates/sdk/gen/finance.mjs --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
-      # The bundled build: the shopping assistant inside the finance server (feature "shop")
-      - run: cargo clippy -p financer-server --features shop --all-targets -- -D warnings
-      - run: cargo test -p financer-server --features shop
+      # The Rust SDK (docs/SDK.md) also runs in the browser, as WebAssembly: it must keep building there.
+      - run: cargo clippy -p financer-sdk --target wasm32-unknown-unknown -- -D warnings
+      # The bundled build: the shopping assistant and the mail client inside the finance server
+      # (features "shop" and "mail")
+      - run: cargo clippy -p financer-server --features shop,mail --all-targets -- -D warnings
+      - run: cargo test -p financer-server --features shop,mail
       # The two mock bank servers are built from source (several minutes); keep the binaries.
       - name: Cache the FinTS mock banks
         id: fints-mock
@@ -90,7 +102,11 @@ jobs:
           cache-dependency-path: apps/mobile/package-lock.json
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
+      - name: The wire to the SDK
+        working-directory: packages/wire
+        run: |
+          npm ci
+          npm test
 
   # The UI package: token and contrast tests, and the guard that keeps raw spacing, sizes and
   # colours out of the screens (CLAUDE.md); the catalog must type check and bundle (docs/UI.md).
@@ -105,11 +121,14 @@ jobs:
           cache-dependency-path: |
             packages/ui/package-lock.json
             packages/shopping/package-lock.json
+            packages/mail/package-lock.json
             apps/catalog/package-lock.json
       - name: Tokens, contrast and the no-raw-values guard
         run: |
           npm ci --prefix packages/ui
           npm test --prefix packages/ui
+      - name: Mail module dependencies (its screens are type checked with the catalog; its tests run in sdk-web, which has the Rust SDK)
+        run: npm ci --prefix packages/mail
       - name: Catalog type check and web bundle
         working-directory: apps/catalog
         run: |
@@ -117,8 +136,62 @@ jobs:
           npm run typecheck
           CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/catalog-web"
 
-  # The shopping assistant: its module (logic tests), the standalone app (type check, web bundle)
-  # and the finance app bundled with it (docs/SHOP.md).
+  # The Rust SDK in the app (docs/SDK.md): the apps reach every server through it, so every bundle needs
+  # it. Builds the WebAssembly module, generates its TypeScript and bundles the web apps with it. It does
+  # not run them; the native (JSI) build is in native.yml.
+  sdk-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: sdk-web
+          cache-on-failure: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/mobile/package-lock.json
+            apps/shopping/package-lock.json
+            apps/sdk-bindings/package-lock.json
+            packages/shopping/package-lock.json
+            packages/mail/package-lock.json
+      - run: npm ci --prefix apps/mobile
+      - run: npm ci --prefix apps/shopping
+      - run: apps/mobile/scripts/enable-sdk.sh web
+      - run: apps/mobile/scripts/enable-sdk.sh web apps/shopping
+      - name: Finance app tests (the app logic that moved to Rust runs in them, through the SDK)
+        working-directory: apps/mobile
+        run: npm test
+      - name: Shopping module tests (its logic moved to Rust and runs in them, through the SDK)
+        run: |
+          npm ci --prefix packages/shopping
+          npm test --prefix packages/shopping
+      - name: Mail module tests (its logic moved to Rust and runs in them, through the SDK; its screens are type checked with the catalog in the ui job)
+        run: |
+          npm ci --prefix packages/mail
+          npm test --prefix packages/mail
+      - name: Finance app bundles with the SDK, with the shop inside and without it
+        working-directory: apps/mobile
+        run: |
+          EXPO_PUBLIC_SHOPPING=1 CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/mobile-with-shop"
+          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/mobile-without-shop"
+          find "$RUNNER_TEMP/mobile-with-shop" -name 'financer_sdk*.wasm' | grep .
+          # without the flag the shop's code must not be in the bundle at all
+          ! grep -rl "Nothing is read from the web" "$RUNNER_TEMP/mobile-without-shop/_expo"
+          grep -rl "Nothing is read from the web" "$RUNNER_TEMP/mobile-with-shop/_expo"
+      - name: Standalone shopping app bundles with the SDK
+        working-directory: apps/shopping
+        run: |
+          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/shop-web"
+          find "$RUNNER_TEMP/shop-web" -name 'financer_sdk*.wasm' | grep .
+
+  # The shopping assistant: its module (logic tests) and the standalone app (type check). The bundles
+  # with the finance app are in sdk-web (docs/SHOP.md).
   shopping:
     runs-on: ubuntu-latest
     steps:
@@ -131,22 +204,8 @@ jobs:
             packages/shopping/package-lock.json
             apps/shopping/package-lock.json
             apps/mobile/package-lock.json
-      - name: Module tests
-        run: |
-          npm ci --prefix packages/shopping
-          npm test --prefix packages/shopping
-      - name: Standalone app type check and web bundle
+      - name: Standalone app type check (its module tests and web bundle are in sdk-web, which has the Rust SDK)
         working-directory: apps/shopping
         run: |
           npm ci
           npm run typecheck
-          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/shop-web"
-      - name: Finance app bundles with the shop inside, and without it
-        working-directory: apps/mobile
-        run: |
-          npm ci
-          EXPO_PUBLIC_SHOPPING=1 CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/mobile-with-shop"
-          CI=1 npx expo export --platform web --output-dir "$RUNNER_TEMP/mobile-without-shop"
-          # without the flag the shop's code must not be in the bundle at all
-          ! grep -rl "Nothing is read from the web" "$RUNNER_TEMP/mobile-without-shop/_expo"
-          grep -rl "Nothing is read from the web" "$RUNNER_TEMP/mobile-with-shop/_expo"

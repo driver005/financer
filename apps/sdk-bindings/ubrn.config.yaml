@@ -1,0 +1,12 @@
+# Generates the bindings of crates/sdk. Native (phone): `ubrn build jsi2 android|ios`; browser:
+# `ubrn build wasm2`. Run through apps/sdk-bindings/build.sh; see docs/SDK.md.
+rust:
+  directory: ../..
+  manifestPath: crates/sdk/Cargo.toml
+jsi2:
+  ts: src/generated
+  androidTargets: [arm64-v8a, x86_64]
+  minIosVersion: "15.1"
+  bundleIdPrefix: app.financer.sdk
+wasm2:
+  ts: src/generated-web

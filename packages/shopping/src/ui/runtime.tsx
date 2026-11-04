@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { ShopClient } from "../api/client";
-import { EmbeddedShopTransport, RemoteShopTransport, type ShopTransport } from "../api/transport";
+import { ShopClient, shopCaller } from "../api/client";
 import type { IndexReport, IndexRequest, JobView, ShopInfo } from "../api/types";
+import type { Caller } from "../../../wire/src";
 import type { ModuleHost } from "../host";
 import { followJob, progressModel, type ProgressModel, type ProgressSurface } from "../logic/progress";
 
@@ -99,7 +99,7 @@ export function ShopRuntime({ host, children }: { host: ModuleHost; children: Re
         const canPhone = Boolean(host.startEmbedded);
         const wantServer = s.mode === "server" || (s.mode === "auto" && (Boolean(shared) || (!canPhone && s.serverUrl !== "")));
         const wantPhone = s.mode === "phone" || (s.mode === "auto" && !wantServer && canPhone);
-        let transport: ShopTransport;
+        let caller: Caller;
         if (wantServer) {
           const baseUrl = s.serverUrl.trim() || shared?.baseUrl || "";
           const token = k.token.trim() || shared?.token || "";
@@ -108,7 +108,8 @@ export function ShopRuntime({ host, children }: { host: ModuleHost; children: Re
             setClient(null);
             return;
           }
-          transport = new RemoteShopTransport({ baseUrl, token });
+          if (!host.makeCaller) throw new Error("This host cannot reach a server (it has no Rust SDK).");
+          caller = await host.makeCaller({ baseUrl, token });
           setWhere("server");
         } else if (wantPhone && host.startEmbedded) {
           const backend = await host.startEmbedded({
@@ -117,14 +118,14 @@ export function ShopRuntime({ host, children }: { host: ModuleHost; children: Re
             claudeApiKey: k.claude.trim() || undefined,
             openaiApiKey: k.openai.trim() || undefined,
           });
-          transport = new EmbeddedShopTransport(backend);
+          caller = shopCaller(backend);
           setWhere("phone");
         } else {
           setStatus("unconfigured");
           setClient(null);
           return;
         }
-        const c = new ShopClient(transport);
+        const c = new ShopClient(caller);
         const i = await c.info();
         setClient(c);
         setInfo(i);
