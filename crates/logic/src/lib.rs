@@ -7,6 +7,7 @@
 //! TypeScript tests, moved with the code.
 
 pub mod backup_plan;
+pub mod bank_connections;
 pub mod calendar;
 pub mod forecast;
 pub mod format;
@@ -726,6 +727,54 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             arg(&args, "now_sec")?,
             opt(&args, "on_phone")?.unwrap_or(false),
         )),
+        "bank_connections.is_busy" => json(bank_connections::is_busy(&arg(&args, "c")?)),
+        "bank_connections.is_plaid" => json(bank_connections::is_plaid(&arg(&args, "c")?)),
+        "bank_connections.needs_linking" => {
+            json(bank_connections::needs_linking(&arg(&args, "c")?))
+        }
+        "bank_connections.provider_label" => {
+            json(bank_connections::provider_label(&arg(&args, "c")?))
+        }
+        "bank_connections.connection_subtitle" => {
+            json(bank_connections::connection_subtitle(&arg(&args, "c")?))
+        }
+        "bank_connections.linked_accounts_text" => {
+            json(bank_connections::linked_accounts_text(&arg(&args, "c")?))
+        }
+        "bank_connections.sync_button_label" => json(bank_connections::sync_button_label(
+            &arg(&args, "c")?,
+            arg(&args, "starting")?,
+        )),
+        "bank_connections.any_busy" => json(bank_connections::any_busy(&arg::<Vec<Value>>(
+            &args, "list",
+        )?)),
+        "bank_connections.state_label" => json(bank_connections::state_label(&arg(&args, "c")?)),
+        "bank_connections.state_tone" => json(bank_connections::state_tone(&arg(&args, "c")?)),
+        "bank_connections.needs_typed_pin" => {
+            json(bank_connections::needs_typed_pin(&arg(&args, "c")?))
+        }
+        "bank_connections.can_sync" => json(bank_connections::can_sync(
+            &arg(&args, "c")?,
+            &arg::<String>(&args, "typed_pin")?,
+        )),
+        "bank_connections.next_sync_text" => json(bank_connections::next_sync_text(
+            &arg(&args, "c")?,
+            arg(&args, "now_seconds")?,
+        )),
+        "bank_connections.approval_left_text" => json(bank_connections::approval_left_text(
+            &arg(&args, "c")?,
+            arg(&args, "now_seconds")?,
+        )),
+        "bank_connections.is_safe_link_url" => json(bank_connections::is_safe_link_url(
+            opt::<String>(&args, "url")?.as_deref(),
+        )),
+        "bank_connections.connection_key" => {
+            json(bank_connections::connection_key(&arg(&args, "c")?))
+        }
+        "bank_connections.live_sync_missing" => {
+            let (title, body) = bank_connections::live_sync_missing(arg(&args, "on_phone")?);
+            json(serde_json::json!({ "title": title, "body": body }))
+        }
         other => return Err(format!("unknown function {other}")),
     };
     out
