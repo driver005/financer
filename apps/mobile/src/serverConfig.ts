@@ -7,12 +7,12 @@
 
 import type { components } from "./api/schema";
 
-export type ConfigView = components["schemas"]["ConfigView"];
+export type ConfigView = components["schemas"]["ConfigDto"];
 export type ConfigGroup = components["schemas"]["GroupView"];
 export type ConfigKey = components["schemas"]["KeyView"];
 export type ConfigField = components["schemas"]["FieldView"];
-export type ConfigChange = components["schemas"]["Change"];
-export type ConfigSaved = components["schemas"]["ConfigSaved"];
+export type ConfigChange = components["schemas"]["ConfigChangeInput"];
+export type ConfigSaved = components["schemas"]["ConfigSavedDto"];
 
 /** One entry of a table key (an account, a store name, a sender) as the form edits it. */
 export type Row = Record<string, string | boolean | string[]>;

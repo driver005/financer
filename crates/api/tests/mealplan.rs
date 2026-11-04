@@ -91,11 +91,8 @@ impl Fixture {
     }
 
     async fn list(app: &Router) -> Value {
-        let (status, list) = Fixture::get(
-            app,
-            &format!("/v1/shopping-list?week={WEEK}&date={WEEK}"),
-        )
-        .await;
+        let (status, list) =
+            Fixture::get(app, &format!("/v1/shopping-list?week={WEEK}&date={WEEK}")).await;
         assert_eq!(status, StatusCode::OK, "{list}");
         list
     }
@@ -541,13 +538,8 @@ async fn pantry_defaults_can_be_edited_and_drive_the_list() {
     assert_eq!(skipped, vec!["oel"]);
 
     // an empty list is allowed and is not the default
-    let (_, empty) = Fixture::send(
-        &app,
-        Method::PUT,
-        "/v1/pantry",
-        Some(json!({"items": []})),
-    )
-    .await;
+    let (_, empty) =
+        Fixture::send(&app, Method::PUT, "/v1/pantry", Some(json!({"items": []}))).await;
     assert_eq!(empty["items"].as_array().unwrap().len(), 0);
     assert_eq!(empty["is_default"], false);
 }
@@ -639,11 +631,7 @@ async fn the_total_is_checked_against_what_is_left_of_the_groceries_limit() {
 fn openapi_document_lists_the_meal_plan_routes() {
     let doc: Value = serde_json::from_str(&Api::openapi_json()).unwrap();
     let paths = doc["paths"].as_object().unwrap();
-    for p in [
-        "/v1/meal-plan",
-        "/v1/shopping-list",
-        "/v1/pantry",
-    ] {
+    for p in ["/v1/meal-plan", "/v1/shopping-list", "/v1/pantry"] {
         assert!(paths.contains_key(p), "missing {p}");
     }
     assert!(paths["/v1/meal-plan"]["put"].is_object());

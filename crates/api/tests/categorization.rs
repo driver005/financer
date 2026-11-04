@@ -474,13 +474,7 @@ async fn llm_fallback_sends_only_merchant_names_and_returns_vetted_suggestions()
     let (app, mock) = Fixture::app_with_llm(vec![Ok(SUGGESTIONS.into())]).await;
     Fixture::import_sample(&app).await;
 
-    let (s, body) = Fixture::call(
-        &app,
-        Method::POST,
-        "/v1/transactions/suggestions",
-        None,
-    )
-    .await;
+    let (s, body) = Fixture::call(&app, Method::POST, "/v1/transactions/suggestions", None).await;
     assert_eq!(s, StatusCode::OK, "{body}");
     // Rewe is already groceries, so only the kiosk and the zebra shop are unknown
     assert_eq!(body["merchants_sent"], 2);
@@ -552,13 +546,7 @@ async fn llm_fallback_sends_only_merchant_names_and_returns_vetted_suggestions()
     );
 
     // all merchants are placed now: asking again calls no model
-    let (s, again) = Fixture::call(
-        &app,
-        Method::POST,
-        "/v1/transactions/suggestions",
-        None,
-    )
-    .await;
+    let (s, again) = Fixture::call(&app, Method::POST, "/v1/transactions/suggestions", None).await;
     assert_eq!(
         (s, again["merchants_sent"].clone()),
         (StatusCode::OK, json!(0))
@@ -594,13 +582,7 @@ async fn accepting_rejects_categories_suggestions_cannot_use() {
 async fn llm_fallback_failures_are_reported_not_hidden() {
     // no key configured
     let app = Fixture::bank().await;
-    let (s, _) = Fixture::call(
-        &app,
-        Method::POST,
-        "/v1/transactions/suggestions",
-        None,
-    )
-    .await;
+    let (s, _) = Fixture::call(&app, Method::POST, "/v1/transactions/suggestions", None).await;
     assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE);
 
     // provider failure and nonsense answers
@@ -610,13 +592,7 @@ async fn llm_fallback_failures_are_reported_not_hidden() {
     ] {
         let (app, _) = Fixture::app_with_llm(vec![answer]).await;
         Fixture::import_sample(&app).await;
-        let (s, _) = Fixture::call(
-            &app,
-            Method::POST,
-            "/v1/transactions/suggestions",
-            None,
-        )
-        .await;
+        let (s, _) = Fixture::call(&app, Method::POST, "/v1/transactions/suggestions", None).await;
         assert_eq!(s, StatusCode::BAD_GATEWAY);
     }
 }

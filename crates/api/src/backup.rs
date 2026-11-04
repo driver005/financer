@@ -16,7 +16,7 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::dto::{ErrorBody, DataDto, ImportReportDto};
+use crate::dto::{DataDto, ErrorBody, ImportReportDto};
 use crate::export::ExportRoutes;
 use crate::routes::ApiError;
 use crate::AppState;
@@ -141,10 +141,7 @@ pub async fn restore_backup(
 }
 
 impl BackupRoutes {
-    pub async fn create(
-        state: AppState,
-        req: BackupInput,
-    ) -> Result<Json<BackupDto>, ApiError> {
+    pub async fn create(state: AppState, req: BackupInput) -> Result<Json<BackupDto>, ApiError> {
         Self::check_passphrase(&req.passphrase)?;
         let export = ExportRoutes::export_data(state).await?.0;
         let (transactions, receipts) = (export.transactions.len(), export.receipts.len());

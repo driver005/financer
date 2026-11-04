@@ -135,6 +135,21 @@ describe("Api", () => {
     assert.equal(calls[2].url, "https://x.test/v1/bank/sync/a%2Fb%20c");
   });
 
+  it("asks the budget in one call and saves the limits with another", async () => {
+    const { impl, calls } = fakeFetch([
+      { status: 200, body: "{}" },
+      { status: 200, body: "{}" },
+      { status: 200, body: "[]" },
+    ]);
+    const api = new Api(new RemoteTransport({ baseUrl: "https://x.test", token: "t" }, impl));
+    await api.budget();
+    await api.budget("previous", "2026-10-11");
+    await api.saveEnvelopes([{ category: "groceries", limit_cents: 40000 }]);
+    assert.equal(calls[0].url, "https://x.test/v1/budget?period=current");
+    assert.equal(calls[1].url, "https://x.test/v1/budget?period=previous&date=2026-10-11");
+    assert.equal(calls[2].url, "https://x.test/v1/budget/envelopes");
+  });
+
   it("embedded health is always true; remote health asks the server", async () => {
     assert.equal(await new Api(new EmbeddedTransport(fakeBackend(200, "").backend)).health(), true);
     const { impl, calls } = fakeFetch([{ status: 200, body: "ok" }]);

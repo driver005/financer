@@ -122,7 +122,7 @@ export async function setKindEnabled(kind: NotifyKind, enabled: boolean): Promis
   return { prefs, permission };
 }
 
-export type NotifyApi = Pick<Api, "safeToSpend" | "basket" | "prices" | "calendars" | "calendarEvents">;
+export type NotifyApi = Pick<Api, "budget" | "basket" | "prices" | "calendars" | "calendarEvents">;
 
 let running: Promise<void> | null = null;
 

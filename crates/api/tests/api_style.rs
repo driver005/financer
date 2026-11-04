@@ -165,10 +165,16 @@ fn what_goes_in_is_an_input_and_what_comes_out_is_a_dto() {
             ["schema"]
             .clone();
         let symmetric = schema_name(&gets);
-        for c in op["requestBody"]["content"].as_object().into_iter().flatten() {
+        for c in op["requestBody"]["content"]
+            .as_object()
+            .into_iter()
+            .flatten()
+        {
             if let Some(name) = schema_name(&c.1["schema"]) {
                 if !name.ends_with("Input") && symmetric.as_deref() != Some(name.as_str()) {
-                    bad.push(format!("{method} {path}: the body {name} should end in `Input`"));
+                    bad.push(format!(
+                        "{method} {path}: the body {name} should end in `Input`"
+                    ));
                 }
             }
         }
@@ -179,7 +185,9 @@ fn what_goes_in_is_an_input_and_what_comes_out_is_a_dto() {
             if let Some(c) = r["content"]["application/json"].as_object() {
                 if let Some(name) = schema_name(&c["schema"]) {
                     if !name.ends_with("Dto") {
-                        bad.push(format!("{method} {path}: the answer {name} should end in `Dto`"));
+                        bad.push(format!(
+                            "{method} {path}: the answer {name} should end in `Dto`"
+                        ));
                     }
                 }
             }
@@ -194,11 +202,28 @@ fn what_goes_in_is_an_input_and_what_comes_out_is_a_dto() {
 fn paths_are_nouns_and_only_actions_on_one_thing_are_verbs() {
     let doc = doc();
     // verbs that may close a path under one thing (`/{id}/dismiss`, `/sources/{kind}/connect`)
-    let actions = ["dismiss", "cancel", "connect", "finish", "disconnect", "import"];
+    let actions = [
+        "dismiss",
+        "cancel",
+        "connect",
+        "finish",
+        "disconnect",
+        "import",
+    ];
     // verbs that used to be paths of their own: make the result a resource instead
     let banned = [
-        "apply", "reorder", "refresh", "create", "restore", "accept", "categorize-unknown", "scan",
-        "export", "recalculate", "run", "do",
+        "apply",
+        "reorder",
+        "refresh",
+        "create",
+        "restore",
+        "accept",
+        "categorize-unknown",
+        "scan",
+        "export",
+        "recalculate",
+        "run",
+        "do",
     ];
     let mut bad = Vec::new();
     for (method, path, _) in operations(&doc) {
@@ -211,10 +236,14 @@ fn paths_are_nouns_and_only_actions_on_one_thing_are_verbs() {
             let after_param = i > 0 && segs[i - 1].starts_with('{');
             let before_param = segs.get(i + 1).is_some_and(|n| n.starts_with('{'));
             if banned.contains(seg) {
-                bad.push(format!("{method} {path}: {seg:?} is a verb; make the result a resource"));
+                bad.push(format!(
+                    "{method} {path}: {seg:?} is a verb; make the result a resource"
+                ));
             }
             if actions.contains(seg) && !(after_param && i == segs.len() - 1) && !before_param {
-                bad.push(format!("{method} {path}: the action {seg:?} belongs under one thing"));
+                bad.push(format!(
+                    "{method} {path}: the action {seg:?} belongs under one thing"
+                ));
             }
         }
     }
@@ -228,7 +257,9 @@ fn a_resource_is_not_nested_under_one_it_is_not_part_of() {
     let mut bad = Vec::new();
     for (method, path, _) in operations(&doc) {
         if path.starts_with("/v1/meal-plan/") {
-            bad.push(format!("{method} {path}: {path} is not part of the meal plan"));
+            bad.push(format!(
+                "{method} {path}: {path} is not part of the meal plan"
+            ));
         }
     }
     report(bad);

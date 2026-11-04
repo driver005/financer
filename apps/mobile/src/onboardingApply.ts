@@ -7,7 +7,7 @@
 import type { Api } from "./api/client";
 import { planApply, type Draft } from "./onboarding";
 
-export type ApplyApi = Pick<Api, "envelopes" | "saveEnvelopes" | "saveSettings">;
+export type ApplyApi = Pick<Api, "budget" | "saveEnvelopes" | "saveSettings">;
 
 export type ApplyResult = { ok: true; wrote: string[] } | { ok: false; error: string };
 

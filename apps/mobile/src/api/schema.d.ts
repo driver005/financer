@@ -78,7 +78,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/backup/create": {
+    "/v1/backups": {
         parameters: {
             query?: never;
             header?: never;
@@ -87,7 +87,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create a passphrase-encrypted backup of everything that is yours (see `/v1/export`). */
+        /** Create a passphrase-encrypted backup of everything that is yours (see `/v1/data`). */
         post: operations["create_backup"];
         delete?: never;
         options?: never;
@@ -95,7 +95,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/backup/restore": {
+    "/v1/backups/restorations": {
         parameters: {
             query?: never;
             header?: never;
@@ -105,7 +105,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Decrypt a backup and merge it like `/v1/import`. A wrong passphrase or damaged file is a
+         * Decrypt a backup and merge it like `/v1/data`. A wrong passphrase or damaged file is a
          *     400 and changes nothing.
          */
         post: operations["restore_backup"];
@@ -290,15 +290,20 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/budget/disposable": {
+    "/v1/budget": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Monthly income minus fixed costs, from detected recurring payments. */
-        get: operations["disposable"];
+        /**
+         * The budget in one answer: the period you are in (or the previous one, `period=previous`), what
+         *     was spent against each envelope in it, what you can spend per day for the rest of it, and
+         *     monthly income minus fixed costs from your recurring payments. `date` is the day to treat as
+         *     today (the app sends its local date so that a late evening is not already "tomorrow").
+         */
+        get: operations["budget"];
         put?: never;
         post?: never;
         delete?: never;
@@ -314,66 +319,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_envelopes"];
+        get?: never;
         /** Replace all monthly envelopes. A category may appear once; limits must not be negative. */
         put: operations["put_envelopes"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/budget/period": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The budget period you are in (or the previous one), from your payday setting. */
-        get: operations["budget_period"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/budget/safe-to-spend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * What you can spend per day for the rest of the period, with the breakdown: expected income,
-         *     recurring costs still to come, planned envelope money not yet spent, and spending so far.
-         */
-        get: operations["safe_to_spend"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/budget/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Spent and remaining per envelope for one budget period (a calendar month unless a payday is
-         *     set in the settings).
-         */
-        get: operations["budget_status"];
-        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -491,7 +439,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/export": {
+    "/v1/data": {
         parameters: {
             query?: never;
             header?: never;
@@ -501,7 +449,12 @@ export interface paths {
         /** Download everything that is yours as one JSON document (no secrets, no prices). */
         get: operations["export_data"];
         put?: never;
-        post?: never;
+        /**
+         * Merge an export into this backend. Transactions and receipts already present (same
+         *     fingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items
+         *     list replace the current ones when the export has any; settings are applied if present.
+         */
+        post: operations["import_data"];
         delete?: never;
         options?: never;
         head?: never;
@@ -522,27 +475,6 @@ export interface paths {
         get: operations["forecast"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/import": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Merge an export into this backend. Transactions and receipts already present (same
-         *     fingerprint) are skipped, so importing twice changes nothing. The budget and your usual-items
-         *     list replace the current ones when the export has any; settings are applied if present.
-         */
-        post: operations["import_data"];
         delete?: never;
         options?: never;
         head?: never;
@@ -570,7 +502,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/meal-plan/pantry": {
+    "/v1/pantry": {
         parameters: {
             query?: never;
             header?: never;
@@ -581,27 +513,6 @@ export interface paths {
         get: operations["get_pantry"];
         /** Replace the pantry list. */
         put: operations["put_pantry"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/meal-plan/shopping-list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the
-         *     servings and converted to packs), pantry items left off, priced per chain with the best split
-         *     and checked against what is left of the groceries budget.
-         */
-        get: operations["get_shopping_list"];
-        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -664,7 +575,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/prices/refresh": {
+    "/v1/prices/refreshes": {
         parameters: {
             query?: never;
             header?: never;
@@ -704,7 +615,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/receipts/scan": {
+    "/v1/receipts/scans": {
         parameters: {
             query?: never;
             header?: never;
@@ -977,7 +888,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/rules/apply": {
+    "/v1/rules/applications": {
         parameters: {
             query?: never;
             header?: never;
@@ -997,7 +908,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/rules/reorder": {
+    "/v1/rules/order": {
         parameters: {
             query?: never;
             header?: never;
@@ -1005,9 +916,9 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
         /** Set the priority order of all rules. */
-        post: operations["reorder_rules"];
+        put: operations["reorder_rules"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1066,6 +977,27 @@ export interface paths {
         };
         get: operations["get_settings"];
         put: operations["put_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/shopping-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The shopping list for a week: ingredients of all planned meals added up (amounts scaled to the
+         *     servings and converted to packs), pantry items left off, priced per chain with the best split
+         *     and checked against what is left of the groceries budget.
+         */
+        get: operations["get_shopping_list"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1148,7 +1080,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/transactions/categorize-unknown": {
+    "/v1/transactions/categories": {
         parameters: {
             query?: never;
             header?: never;
@@ -1156,34 +1088,12 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
-        /**
-         * Ask your Claude or OpenAI model to suggest categories for merchants still left as
-         *     uncategorized or other. Only distinct merchant names (letters only) and the allowed
-         *     categories are sent; never amounts, dates, IBANs or purposes. Nothing is changed until you
-         *     accept suggestions.
-         */
-        post: operations["categorize_unknown"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/transactions/categorize-unknown/accept": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         /**
          * Accept suggestions: one rule per merchant, then the rules are applied to existing
          *     transactions.
          */
-        post: operations["accept_suggestions"];
+        put: operations["accept_suggestions"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1201,6 +1111,28 @@ export interface paths {
         get: operations["list_splits"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask your Claude or OpenAI model to suggest categories for merchants still left as
+         *     uncategorized or other. Only distinct merchant names (letters only) and the allowed
+         *     categories are sent; never amounts, dates, IBANs or purposes. Nothing is changed until you
+         *     accept suggestions.
+         */
+        post: operations["categorize_unknown"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1252,15 +1184,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        AcceptReport: {
-            /** @description Rules created or updated (one per accepted merchant). */
-            rules_saved: number;
-            /** @description Transactions that changed category as a result. */
-            transactions_changed: number;
-        };
-        AcceptSuggestions: {
-            suggestions: components["schemas"]["AcceptedSuggestion"][];
-        };
         AcceptedSuggestion: {
             /** @example dining */
             category: string;
@@ -1324,21 +1247,17 @@ export interface components {
             /** @description Alerts that are not dismissed (also when `include_dismissed` is set). */
             unread_count: number;
         };
-        ApplyReport: {
-            /** @description Transactions whose category changed. Transactions you categorized by hand are skipped. */
-            changed: number;
-        };
-        BackupCreateRequest: {
-            /** @description At least 8 characters. Not stored anywhere: without it the backup cannot be opened. */
-            passphrase: string;
-        };
         BackupDto: {
             /** @description The encrypted backup (an `age` file), base64-encoded. */
             data_base64: string;
             receipts: number;
             transactions: number;
         };
-        BackupRestoreRequest: {
+        BackupInput: {
+            /** @description At least 8 characters. Not stored anywhere: without it the backup cannot be opened. */
+            passphrase: string;
+        };
+        BackupRestorationInput: {
             /** @description The encrypted backup, base64-encoded, as returned by the create endpoint. */
             data_base64: string;
             passphrase: string;
@@ -1401,7 +1320,7 @@ export interface components {
              */
             sync_every_hours: number;
         };
-        BankStatus: {
+        BankStatusDto: {
             /** Format: int64 */
             balance_cents?: number | null;
             /** Format: date */
@@ -1424,7 +1343,7 @@ export interface components {
             /** @description `manual`, `receipts` or `starter` (a generic basket used until habits are known). */
             source: string;
         };
-        BasketItemDto: {
+        BasketItemInput: {
             /** @description Catalog key, e.g. `milch`. */
             item: string;
             /**
@@ -1439,6 +1358,21 @@ export interface components {
             /** Format: int32 */
             quantity: number;
             reference_pack: string;
+        };
+        /**
+         * @description The budget: the period you are in (or the one before), what was spent against each envelope in
+         *     it, what is left to spend per day, and the monthly picture from your recurring payments.
+         */
+        BudgetDto: {
+            /** @description Monthly income minus fixed costs, from detected recurring payments. */
+            disposable: components["schemas"]["DisposableDto"];
+            /**
+             * @description Every envelope with its limit, what was spent in `period` and what is left. A calendar month
+             *     unless a payday is set in the settings.
+             */
+            envelopes: components["schemas"]["EnvelopeStatusDto"][];
+            period: components["schemas"]["PeriodDto"];
+            safe_to_spend?: components["schemas"]["SafeToSpendDto"] | null;
         };
         CalendarDto: {
             /** Format: int64 */
@@ -1458,7 +1392,22 @@ export interface components {
             name: string;
             reference_pack: string;
         };
-        CategoryChange: {
+        CategoriesChangedDto: {
+            /** @description Rules created or updated (one per accepted merchant). */
+            rules_saved: number;
+            /** @description Transactions that changed category as a result. */
+            transactions_changed: number;
+        };
+        CategoriesInput: {
+            suggestions: components["schemas"]["AcceptedSuggestion"][];
+        };
+        CategoryChangedDto: {
+            /** @description Other transactions that changed category because of that rule. */
+            others_changed: number;
+            rule?: components["schemas"]["RuleDto"] | null;
+            transaction: components["schemas"]["TransactionDto"];
+        };
+        CategoryInput: {
             /** @example groceries */
             category: string;
             /**
@@ -1466,12 +1415,6 @@ export interface components {
              *     transactions.
              */
             remember?: boolean;
-        };
-        CategoryChanged: {
-            /** @description Other transactions that changed category because of that rule. */
-            others_changed: number;
-            rule?: components["schemas"]["RuleDto"] | null;
-            transaction: components["schemas"]["TransactionDto"];
         };
         ChainAffordabilityDto: {
             /** Format: int64 */
@@ -1539,30 +1482,14 @@ export interface components {
          * @description What to change: `set` writes values (`null` clears one), `reset` removes the app's value so the
          *     file's, or the default, applies again.
          */
-        Change: {
+        ConfigChangeInput: {
             reset?: string[];
             set?: {
                 [key: string]: unknown;
             };
         };
-        /** @description A change was refused; nothing was saved. */
-        ConfigProblems: {
-            /** @description The problems as one text. */
-            error: string;
-            /** @description One entry per problem, naming the key. */
-            problems: string[];
-        };
-        /** @description A change was saved. */
-        ConfigSaved: {
-            /** @description The keys whose value is different now. */
-            changed: string[];
-            /** @description The server is restarting to apply the change (a few seconds). False when nothing changed. */
-            restarting: boolean;
-            /** @description Things that are legal but probably not what you want. */
-            warnings: string[];
-        };
         /** @description The whole settings screen. */
-        ConfigView: {
+        ConfigDto: {
             /**
              * @description A change is saved but the server has not yet started with it. The app waits for this to
              *     turn false (or `state` to turn `rolled_back`) after it saved something.
@@ -1580,11 +1507,46 @@ export interface components {
             /** @description The server may write that file; without it nothing can be saved. */
             writable: boolean;
         };
+        /** @description A change was refused; nothing was saved. */
+        ConfigProblems: {
+            /** @description The problems as one text. */
+            error: string;
+            /** @description One entry per problem, naming the key. */
+            problems: string[];
+        };
+        /** @description A change was saved. */
+        ConfigSavedDto: {
+            /** @description The keys whose value is different now. */
+            changed: string[];
+            /** @description The server is restarting to apply the change (a few seconds). False when nothing changed. */
+            restarting: boolean;
+            /** @description Things that are legal but probably not what you want. */
+            warnings: string[];
+        };
         /**
          * @description Where a connection is in a sync.
          * @enum {string}
          */
         ConnectionState: "idle" | "syncing" | "needs_approval" | "needs_link" | "error";
+        /**
+         * @description Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
+         *     which are fetched again.
+         */
+        DataDto: {
+            basket: components["schemas"]["BasketItemInput"][];
+            budget: components["schemas"]["EnvelopeInput"][];
+            /** @description Added in the calendar release; older exports have none. */
+            calendars?: components["schemas"]["ExportCalendar"][];
+            events?: components["schemas"]["ExportEvent"][];
+            receipts: components["schemas"]["ExportReceipt"][];
+            settings: components["schemas"]["ExportSettings"];
+            transactions: components["schemas"]["ExportTransaction"][];
+            /**
+             * Format: int32
+             * @description Format version, currently 1.
+             */
+            version: number;
+        };
         DisposableDto: {
             /** Format: int64 */
             disposable_cents: number;
@@ -1638,7 +1600,7 @@ export interface components {
             /** @description Chains sharing the lowest price when there is a tie. */
             tied_cheapest: string[];
         };
-        EnvelopeDto: {
+        EnvelopeInput: {
             /** @example groceries */
             category: string;
             /**
@@ -1751,25 +1713,6 @@ export interface components {
             tone: string;
             visible: boolean;
         };
-        /**
-         * @description Everything that is yours, without secrets (no PIN, tokens or API keys) and without prices,
-         *     which are fetched again.
-         */
-        ExportDto: {
-            basket: components["schemas"]["BasketItemDto"][];
-            budget: components["schemas"]["EnvelopeDto"][];
-            /** @description Added in the calendar release; older exports have none. */
-            calendars?: components["schemas"]["ExportCalendar"][];
-            events?: components["schemas"]["ExportEvent"][];
-            receipts: components["schemas"]["ExportReceipt"][];
-            settings: components["schemas"]["ExportSettings"];
-            transactions: components["schemas"]["ExportTransaction"][];
-            /**
-             * Format: int32
-             * @description Format version, currently 1.
-             */
-            version: number;
-        };
         /** @description An event in an export; its calendar is named, since ids differ between backends. */
         ExportEvent: components["schemas"]["EventBody"] & {
             calendar: string;
@@ -1819,6 +1762,14 @@ export interface components {
              */
             when_field?: string | null;
             when_value?: string | null;
+        };
+        FileImportDto: {
+            /** @description Rows already stored (same date, amount, counterparty and purpose). */
+            duplicates: number;
+            /** @description Rows stored for the first time. */
+            imported: number;
+            /** @description Rows that could not be read, with the reason. */
+            skipped: components["schemas"]["SkippedRowDto"][];
         };
         /** @description The end-of-period projection. Amounts are integer cents. */
         ForecastDto: {
@@ -1924,19 +1875,11 @@ export interface components {
             amount: string;
             name: string;
         };
-        IdeasRequest: {
+        IdeasInput: {
             /** Format: int64 */
             budget_cents?: number | null;
             count?: number | null;
             diet?: string | null;
-        };
-        ImportReport: {
-            /** @description Rows already stored (same date, amount, counterparty and purpose). */
-            duplicates: number;
-            /** @description Rows stored for the first time. */
-            imported: number;
-            /** @description Rows that could not be read, with the reason. */
-            skipped: components["schemas"]["SkippedRowDto"][];
         };
         ImportReportDto: {
             basket_items: number;
@@ -1989,7 +1932,7 @@ export interface components {
             name: string;
         };
         /** @description The online banking login of a FinTS sync that is not set up in the configuration. */
-        LoginDto: {
+        LoginInput: {
             /** @description Leave empty to use the bank's own BIC. */
             bic?: string | null;
             /** @description Bank code (BLZ). */
@@ -2112,13 +2055,13 @@ export interface components {
             /** @description Items assumed to be at home; they are left off the shopping list. */
             items: components["schemas"]["PantryItemDto"][];
         };
+        PantryInput: {
+            /** @description Catalog keys (see `GET /v1/catalog`). */
+            items: string[];
+        };
         PantryItemDto: {
             item: string;
             name: string;
-        };
-        PantryUpdate: {
-            /** @description Catalog keys (see `GET /v1/catalog`). */
-            items: string[];
         };
         /**
          * @description Which period to look at when no year and month are given.
@@ -2282,7 +2225,7 @@ export interface components {
             /** Format: int32 */
             skipped: number;
         };
-        ReceiptImportRequest: {
+        ReceiptImportInput: {
             /** @description At most 100 receipts for `rewe_app`, 200 orders for `orders_file` (whose `time` is not used). */
             receipts: components["schemas"]["ReceiptInput"][];
             /** @description `orders_file` only: the shop's name as it should show ("Amazon"); at most 40 characters. */
@@ -2319,7 +2262,7 @@ export interface components {
             /** @description The ids that are not stored yet: fetch and push only these. */
             unknown: string[];
         };
-        ReceiptKnownRequest: {
+        ReceiptKnownInput: {
             /** @description The shop's receipt ids the app has just listed. */
             ids: string[];
         };
@@ -2336,7 +2279,7 @@ export interface components {
              */
             total_cents: number;
         };
-        ReceiptScan: {
+        ReceiptScanInput: {
             /** @description The photo's or PDF's bytes, base64-encoded (at most 8 MB decoded). */
             image_base64: string;
             /** @description `image/jpeg`, `image/png`, `image/webp` or `application/pdf`. */
@@ -2396,11 +2339,11 @@ export interface components {
             linked: number;
             sources: components["schemas"]["ReceiptSourceDto"][];
         };
-        ReceiptSyncRequest: {
+        ReceiptSyncInput: {
             /** @description Only this source (`email`, `lidl_plus`, `kaufland_card`, `folder`); all enabled ones when absent. */
             source?: string | null;
         };
-        ReceiptUpload: {
+        ReceiptUploadInput: {
             /** @description Text recognised from the receipt photo. */
             text: string;
         };
@@ -2528,9 +2471,13 @@ export interface components {
             /** @example expense */
             sign?: string | null;
         };
-        RuleOrder: {
+        RuleOrderInput: {
             /** @description Every rule id exactly once, highest priority first. */
             ids: number[];
+        };
+        RulesAppliedDto: {
+            /** @description Transactions whose category changed. Transactions you categorized by hand are skipped. */
+            changed: number;
         };
         /** @description The daily number and everything behind it. Amounts are integer cents. */
         SafeToSpendDto: {
@@ -2620,7 +2567,7 @@ export interface components {
             /** @description Number of configured price sources. */
             price_sources: number;
         };
-        SettingsUpdate: {
+        SettingsInput: {
             habit_mode?: string | null;
             llm_model?: string | null;
             llm_provider?: string | null;
@@ -2719,7 +2666,7 @@ export interface components {
             /** @description Send this back with the final address to `POST /v1/receipts/sources/{kind}/finish`. */
             state: string;
         };
-        SourceFinishRequest: {
+        SourceFinishInput: {
             /** @description The address the sign-in ended on, `com.lidlplus.app://callback?code=...`. */
             callback_url: string;
             state: string;
@@ -2943,6 +2890,27 @@ export interface components {
             result?: components["schemas"]["SyncOutcomeDto"] | null;
             state: components["schemas"]["ConnectionState"];
         };
+        /** @description Start a sync: the same request for every provider. */
+        SyncInput: {
+            /**
+             * @description A connection of the server configuration, by name. Or leave it out and name the `kind` and
+             *     (for FinTS) the `login`.
+             */
+            connection?: string | null;
+            /**
+             * Format: int32
+             * @description Days of history for a login sent with the request (default 90, 1 to 365).
+             */
+            days?: number | null;
+            /** @description `fints` for a login sent with this request. */
+            kind?: string | null;
+            login?: components["schemas"]["LoginInput"] | null;
+            /**
+             * @description The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync
+             *     only and never stored.
+             */
+            pin?: string | null;
+        };
         /** @description What a sync should do, to be reported in the connection list. */
         SyncOutcomeDto: {
             /**
@@ -2963,27 +2931,6 @@ export interface components {
             ok: boolean;
             /** Format: int32 */
             skipped?: number | null;
-        };
-        /** @description Start a sync: the same request for every provider. */
-        SyncRequest: {
-            /**
-             * @description A connection of the server configuration, by name. Or leave it out and name the `kind` and
-             *     (for FinTS) the `login`.
-             */
-            connection?: string | null;
-            /**
-             * Format: int32
-             * @description Days of history for a login sent with the request (default 90, 1 to 365).
-             */
-            days?: number | null;
-            /** @description `fints` for a login sent with this request. */
-            kind?: string | null;
-            login?: components["schemas"]["LoginDto"] | null;
-            /**
-             * @description The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync
-             *     only and never stored.
-             */
-            pin?: string | null;
         };
         TransactionDto: {
             /**
@@ -3167,7 +3114,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BackupCreateRequest"];
+                "application/json": components["schemas"]["BackupInput"];
             };
         };
         responses: {
@@ -3199,7 +3146,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BackupRestoreRequest"];
+                "application/json": components["schemas"]["BackupRestorationInput"];
             };
         };
         responses: {
@@ -3303,7 +3250,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportReport"];
+                    "application/json": components["schemas"]["FileImportDto"];
                 };
             };
             /** @description Not a file this provider reads */
@@ -3359,7 +3306,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BankStatus"];
+                    "application/json": components["schemas"]["BankStatusDto"];
                 };
             };
         };
@@ -3373,7 +3320,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SyncRequest"];
+                "application/json": components["schemas"]["SyncInput"];
             };
         };
         responses: {
@@ -3540,7 +3487,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BasketItemDto"][];
+                "application/json": components["schemas"]["BasketItemInput"][];
             };
         };
         responses: {
@@ -3563,77 +3510,7 @@ export interface operations {
             };
         };
     };
-    disposable: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DisposableDto"];
-                };
-            };
-        };
-    };
-    get_envelopes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EnvelopeDto"][];
-                };
-            };
-        };
-    };
-    put_envelopes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EnvelopeDto"][];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EnvelopeDto"][];
-                };
-            };
-            /** @description Duplicate category or negative limit */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    budget_period: {
+    budget: {
         parameters: {
             query?: never;
             header?: never;
@@ -3656,32 +3533,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PeriodDto"];
-                };
-            };
-        };
-    };
-    safe_to_spend: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /**
-                 * @description The day to treat as today, ISO format. Defaults to today (UTC).
-                 * @example 2026-10-11
-                 */
-                date: string | null;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SafeToSpendDto"];
+                    "application/json": components["schemas"]["BudgetDto"];
                 };
             };
             /** @description Invalid date */
@@ -3695,26 +3547,18 @@ export interface operations {
             };
         };
     };
-    budget_status: {
+    put_envelopes: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                /**
-                 * @description With `month`: the budget period that starts in this month (the calendar month when the
-                 *     payday is 1).
-                 */
-                year: number | null;
-                /** @description 1 to 12; only together with `year`. */
-                month: number | null;
-                /** @description Instead of `year` and `month`: `current` (default) or `previous` budget period. */
-                period: components["schemas"]["PeriodChoice"] | null;
-                /** @description The day to treat as today for `period` (ISO format); defaults to today (UTC). */
-                date: string | null;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvelopeInput"][];
+            };
+        };
         responses: {
             200: {
                 headers: {
@@ -3724,7 +3568,7 @@ export interface operations {
                     "application/json": components["schemas"]["EnvelopeStatusDto"][];
                 };
             };
-            /** @description Invalid month */
+            /** @description Duplicate category or negative limit */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4116,7 +3960,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExportDto"];
+                    "application/json": components["schemas"]["DataDto"];
+                };
+            };
+        };
+    };
+    import_data: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReportDto"];
+                };
+            };
+            /** @description Not a valid export */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -4145,38 +4021,6 @@ export interface operations {
                 };
             };
             /** @description Invalid date */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    import_data: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ExportDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportReportDto"];
-                };
-            };
-            /** @description Not a valid export */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4287,7 +4131,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PantryUpdate"];
+                "application/json": components["schemas"]["PantryInput"];
             };
         };
         responses: {
@@ -4300,45 +4144,6 @@ export interface operations {
                 };
             };
             /** @description Unknown item or too many items */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    get_shopping_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /**
-                 * @description Any day of the week to shop for. Defaults to the current week.
-                 * @example 2026-10-12
-                 */
-                week: string | null;
-                /**
-                 * @description The day to treat as today when looking up the groceries budget left. Defaults to today (UTC).
-                 * @example 2026-10-12
-                 */
-                date: string | null;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShoppingListDto"];
-                };
-            };
-            /** @description Week out of range */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4477,7 +4282,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReceiptUpload"];
+                "application/json": components["schemas"]["ReceiptUploadInput"];
             };
         };
         responses: {
@@ -4509,7 +4314,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReceiptScan"];
+                "application/json": components["schemas"]["ReceiptScanInput"];
             };
         };
         responses: {
@@ -4710,7 +4515,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SourceFinishRequest"];
+                "application/json": components["schemas"]["SourceFinishInput"];
             };
         };
         responses: {
@@ -4772,7 +4577,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReceiptImportRequest"];
+                "application/json": components["schemas"]["ReceiptImportInput"];
             };
         };
         responses: {
@@ -4816,7 +4621,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReceiptKnownRequest"];
+                "application/json": components["schemas"]["ReceiptKnownInput"];
             };
         };
         responses: {
@@ -4857,7 +4662,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReceiptSyncRequest"];
+                "application/json": components["schemas"]["ReceiptSyncInput"];
             };
         };
         responses: {
@@ -4954,7 +4759,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IdeasRequest"];
+                "application/json": components["schemas"]["IdeasInput"];
             };
         };
         responses: {
@@ -5070,7 +4875,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApplyReport"];
+                    "application/json": components["schemas"]["RulesAppliedDto"];
                 };
             };
         };
@@ -5084,7 +4889,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RuleOrder"];
+                "application/json": components["schemas"]["RuleOrderInput"];
             };
         };
         responses: {
@@ -5195,7 +5000,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigView"];
+                    "application/json": components["schemas"]["ConfigDto"];
                 };
             };
             /** @description This backend has no server configuration (the on-phone one) */
@@ -5218,7 +5023,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Change"];
+                "application/json": components["schemas"]["ConfigChangeInput"];
             };
         };
         responses: {
@@ -5227,7 +5032,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigSaved"];
+                    "application/json": components["schemas"]["ConfigSavedDto"];
                 };
             };
             /** @description The change was refused */
@@ -5296,7 +5101,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SettingsUpdate"];
+                "application/json": components["schemas"]["SettingsInput"];
             };
         };
         responses: {
@@ -5309,6 +5114,45 @@ export interface operations {
                 };
             };
             /** @description Invalid value */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_shopping_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Any day of the week to shop for. Defaults to the current week.
+                 * @example 2026-10-12
+                 */
+                week: string | null;
+                /**
+                 * @description The day to treat as today when looking up the groceries budget left. Defaults to today (UTC).
+                 * @example 2026-10-12
+                 */
+                date: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShoppingListDto"];
+                };
+            };
+            /** @description Week out of range */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5452,6 +5296,57 @@ export interface operations {
             };
         };
     };
+    accept_suggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoriesInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoriesChangedDto"];
+                };
+            };
+            /** @description A merchant without letters or a category suggestions cannot use */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_splits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SplitDto"][];
+                };
+            };
+        };
+    };
     categorize_unknown: {
         parameters: {
             query?: never;
@@ -5489,57 +5384,6 @@ export interface operations {
             };
         };
     };
-    accept_suggestions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AcceptSuggestions"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AcceptReport"];
-                };
-            };
-            /** @description A merchant without letters or a category suggestions cannot use */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    list_splits: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SplitDto"][];
-                };
-            };
-        };
-    };
     set_category: {
         parameters: {
             query?: never;
@@ -5552,7 +5396,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CategoryChange"];
+                "application/json": components["schemas"]["CategoryInput"];
             };
         };
         responses: {
@@ -5561,7 +5405,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CategoryChanged"];
+                    "application/json": components["schemas"]["CategoryChangedDto"];
                 };
             };
             /** @description Nothing to remember: the transaction has no merchant name */

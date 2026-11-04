@@ -155,8 +155,7 @@ async fn the_period_follows_the_payday() {
     assert_eq!(p["days_left"], 14);
     assert_eq!(p["payday"], 25);
 
-    let (_, prev) =
-        PeriodFixture::part(&app, "period", "period=previous&date=2026-10-11").await;
+    let (_, prev) = PeriodFixture::part(&app, "period", "period=previous&date=2026-10-11").await;
     assert_eq!(prev["start"], "2026-08-25");
     assert_eq!(prev["end"], "2026-09-24");
     assert_eq!(prev["days_left"], 0);
@@ -197,11 +196,9 @@ async fn envelope_status_follows_the_period_and_shifts_with_a_payday() {
     assert_eq!(PeriodFixture::groceries_spent(&st), Some(0));
     let (_, st) = PeriodFixture::part(&app, "envelopes", "date=2026-02-20").await;
     assert_eq!(PeriodFixture::groceries_spent(&st), Some(5450));
-    let (_, st) =
-        PeriodFixture::part(&app, "envelopes", "period=previous&date=2026-03-20").await;
+    let (_, st) = PeriodFixture::part(&app, "envelopes", "period=previous&date=2026-03-20").await;
     assert_eq!(PeriodFixture::groceries_spent(&st), Some(5450));
-    let (_, st) =
-        PeriodFixture::part(&app, "envelopes", "period=current&date=2026-03-20").await;
+    let (_, st) = PeriodFixture::part(&app, "envelopes", "period=current&date=2026-03-20").await;
     assert_eq!(PeriodFixture::groceries_spent(&st), Some(0));
 
     // bad input stays 400
