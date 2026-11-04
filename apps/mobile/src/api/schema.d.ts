@@ -135,23 +135,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/bank/connections/{name}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Stop waiting for an approval. */
-        post: operations["cancel_connection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/bank/connections/{name}/disconnect": {
         parameters: {
             query?: never;
@@ -162,8 +145,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Plaid, GoCardless, finAPI: forget the connection. Tells the provider to drop it and deletes
-         *     the stored access, so the next sync starts with signing in again. The imported transactions stay.
+         * Plaid, GoCardless, finAPI: forget the connection. Tells the provider to drop it and deletes the
+         *     stored access, so the next sync starts with signing in again. The imported transactions stay.
          */
         post: operations["disconnect_connection"];
         delete?: never;
@@ -172,7 +155,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/bank/connections/{name}/sync": {
+    "/v1/bank/import/{kind}": {
         parameters: {
             query?: never;
             header?: never;
@@ -182,10 +165,31 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Start a sync for one connection: logs in, then waits (in the background) for your approval in
-         *     the banking app and imports. Send the PIN only when `pin_from_env` is false.
+         * Import a file of a provider with the `file` flow (`csv`: the Sparkasse CSV-CAMT export).
+         *     Transactions are categorized, and rows that were imported before are skipped, so uploading an
+         *     overlapping period is safe.
          */
-        post: operations["sync_connection"];
+        post: operations["import_file"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/bank/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The ways transactions come in (a CSV file, FinTS, Plaid, GoCardless, finAPI), how each works, and
+         *     whether this server has it set up.
+         */
+        get: operations["list_providers"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -199,6 +203,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** What the last login sent with a request looked like (its non-secret details), to prefill the form. */
         get: operations["bank_status"];
         put?: never;
         post?: never;
@@ -217,7 +222,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Log in to the bank and ask for approval. Approve in your Sparkasse app, then call confirm. */
+        /**
+         * Start a sync, whichever provider: name a `connection` of the server configuration, or for FinTS
+         *     a `kind` with a `login`. The server logs in or asks the provider for a sign-in page, then waits
+         *     in the background for what the person has to do (`state` is `needs_approval` or `needs_link`)
+         *     and imports as soon as it is done. Poll `GET /v1/bank/sync/{id}`. Send the PIN only when the
+         *     connection has no `pin_from_env`.
+         */
         post: operations["start_sync"];
         delete?: never;
         options?: never;
@@ -225,7 +236,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/bank/sync/{id}/confirm": {
+    "/v1/bank/sync/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where a sync stands: waiting for an approval or a sign-in, running, or how it ended (`result`).
+         *     A connection can be asked by its name; an unknown or expired login answers 404.
+         */
+        get: operations["get_sync"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/bank/sync/{id}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -234,11 +265,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Check whether you approved in the banking app; if so, import. Answers 409 while still
-         *     waiting: keep calling every few seconds.
-         */
-        post: operations["confirm_sync"];
+        /** Stop waiting for an approval or a sign-in. */
+        post: operations["cancel_sync"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1284,26 +1312,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/transactions/import": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Import a Sparkasse CSV-CAMT export. Transactions are categorized, and rows that were
-         *     imported before are skipped, so re-uploading an overlapping period is safe.
-         */
-        post: operations["import_transactions"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/transactions/splits": {
         parameters: {
             query?: never;
@@ -1459,11 +1467,11 @@ export interface components {
         };
         /** @description A configured connection. The login is masked; the PIN is never part of it. */
         BankConnectionDto: {
-            /** @description Plaid: the accounts that were linked (put their ids in `account_ids` to read only some). */
+            /** @description The accounts that were linked (put their ids in `account_ids` to read only some). */
             accounts: components["schemas"]["LinkedAccountDto"][];
             /**
              * Format: int64
-             * @description Unix seconds after which a sync waiting for approval, or Plaid's sign-in page, is given up.
+             * @description Unix seconds after which a sync waiting for approval, or for a sign-in, is given up.
              */
             approval_expires_at?: number | null;
             /** Format: int64 */
@@ -1472,6 +1480,8 @@ export interface components {
             balance_date?: string | null;
             bank_code: string;
             iban_masked: string;
+            /** @description What to poll and cancel it by (`/v1/bank/sync/{id}`). */
+            id: string;
             /** @description `fints`, `plaid`, `gocardless` or `finapi`. */
             kind: string;
             last_result?: components["schemas"]["SyncOutcomeDto"] | null;
@@ -1480,11 +1490,11 @@ export interface components {
              * @description Unix seconds of the last successful sync.
              */
             last_sync_at?: number | null;
-            /** @description Plaid, in `needs_link`: the page to open in the browser to sign in to your bank. */
+            /** @description In `needs_link`: the page to open in the browser to sign in to your bank. */
             link_url?: string | null;
             /**
-             * @description Plaid: false until you have signed in to your bank once (press Sync now to start that);
-             *     always true for FinTS.
+             * @description False until you have signed in to your bank once (start a sync to do that); always true
+             *     for FinTS.
              */
             linked: boolean;
             login_masked: string;
@@ -1503,8 +1513,8 @@ export interface components {
             pin_from_env: boolean;
             state: components["schemas"]["ConnectionState"];
             /**
-             * @description A scheduled sync is due but cannot start by itself because the server has no PIN: press
-             *     Sync now and type it.
+             * @description A scheduled sync is due but cannot start by itself because the server has no PIN: start a
+             *     sync and type it.
              */
             sync_due: boolean;
             /**
@@ -2131,15 +2141,27 @@ export interface components {
             /** @description `disabled`, `never`, `connected` or `needs_signin`. */
             state: string;
         };
-        /** @description An account Plaid reported for a linked connection. */
+        /** @description An account the provider reported for a linked connection. */
         LinkedAccountDto: {
             /** @description Put this in `account_ids` of the connection to read only some accounts. */
             id: string;
             /** @description For example `depository` or `credit`. */
             kind: string;
-            /** @description The last digits of the account number, when Plaid has them. */
+            /** @description The last digits of the account number, when the provider has them. */
             mask?: string | null;
             name: string;
+        };
+        /** @description The online banking login of a FinTS sync that is not set up in the configuration. */
+        LoginDto: {
+            /** @description Leave empty to use the bank's own BIC. */
+            bic?: string | null;
+            /** @description Bank code (BLZ). */
+            blz: string;
+            /** @description Only for a bank that is not in the built-in list (then the BIC is needed too). */
+            fints_url?: string | null;
+            iban: string;
+            /** @description Online banking login name. */
+            user_id: string;
         };
         MealBudgetDto: {
             /**
@@ -2375,6 +2397,24 @@ export interface components {
              * @description First booking at the new price.
              */
             since: string;
+        };
+        /** @description A source of transactions and how to talk to it. */
+        ProviderDto: {
+            /** @description This server has it set up (its keys, or for FinTS the product id). */
+            available: boolean;
+            /**
+             * Format: int32
+             * @description Connections of this kind in the server configuration.
+             */
+            connections: number;
+            /**
+             * @description `file` (send a file to `/v1/bank/import/{kind}`), `approval` (a PIN, then an approval in the
+             *     banking app, for every sync) or `link` (sign in once on the provider's page).
+             */
+            flow: string;
+            /** @description `csv`, `fints`, `plaid`, `gocardless` or `finapi`. */
+            kind: string;
+            label: string;
         };
         ReceiptDto: {
             /** @example rewe */
@@ -3037,22 +3077,26 @@ export interface components {
             merchants_sent: number;
             suggestions: components["schemas"]["SuggestionDto"][];
         };
-        SyncDone: {
-            /** Format: int64 */
-            balance_cents?: number | null;
-            /** Format: date */
-            balance_date?: string | null;
-            duplicates: number;
-            imported: number;
-            /** @description Transactions left out (pending, or not in EUR). */
-            skipped: number;
-        };
-        SyncNowRequest: {
+        /**
+         * @description A sync, started or running or finished. Poll `GET /v1/bank/sync/{id}` while `state` is
+         *     `syncing`, `needs_approval` or `needs_link`.
+         */
+        SyncDto: {
+            /** @description The configured connection it belongs to; absent for a login sent with the request. */
+            connection?: string | null;
             /**
-             * @description The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync
-             *     only and never stored.
+             * Format: int64
+             * @description Unix seconds after which the wait is given up.
              */
-            pin?: string | null;
+            expires_at?: number | null;
+            id: string;
+            kind: string;
+            /** @description In `needs_link`: the page to open in the browser. */
+            link_url?: string | null;
+            /** @description The bank's approval text in `needs_approval`, the reason in `error`. */
+            message?: string | null;
+            result?: components["schemas"]["SyncOutcomeDto"] | null;
+            state: components["schemas"]["ConnectionState"];
         };
         /** @description What a sync should do, to be reported in the connection list. */
         SyncOutcomeDto: {
@@ -3061,6 +3105,10 @@ export interface components {
              * @description Unix seconds.
              */
             at: number;
+            /** Format: int64 */
+            balance_cents?: number | null;
+            /** Format: date */
+            balance_date?: string | null;
             /** Format: int32 */
             duplicates?: number | null;
             /** Format: int32 */
@@ -3071,28 +3119,26 @@ export interface components {
             /** Format: int32 */
             skipped?: number | null;
         };
+        /** @description Start a sync: the same request for every provider. */
         SyncRequest: {
-            /** @description Leave empty to use the bank's own BIC. */
-            bic?: string | null;
-            /** @description Bank code (BLZ). */
-            blz: string;
+            /**
+             * @description A connection of the server configuration, by name. Or leave it out and name the `kind` and
+             *     (for FinTS) the `login`.
+             */
+            connection?: string | null;
             /**
              * Format: int32
-             * @description Days of history to fetch (default 90, 1 to 365).
+             * @description Days of history for a login sent with the request (default 90, 1 to 365).
              */
             days?: number | null;
-            iban: string;
-            /** @description Online banking PIN. Held in memory until you approve, never stored or logged. */
-            pin: string;
-            /** @description Online banking login name. */
-            user_id: string;
-        };
-        SyncStarted: {
-            /** @description Text from the bank, e.g. "Bitte bestätigen Sie die Anfrage in Ihrer S-pushTAN-App". */
-            challenge: string;
-            /** @description True if the bank needs no approval; confirm right away. */
-            no_tan_required: boolean;
-            sync_id: string;
+            /** @description `fints` for a login sent with this request. */
+            kind?: string | null;
+            login?: components["schemas"]["LoginDto"] | null;
+            /**
+             * @description The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync
+             *     only and never stored.
+             */
+            pin?: string | null;
         };
         TransactionDto: {
             /**
@@ -3350,46 +3396,6 @@ export interface operations {
             };
         };
     };
-    cancel_connection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description connection name */
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BankConnectionDto"];
-                };
-            };
-            /** @description No such connection */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Logging in right now */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
     disconnect_connection: {
         parameters: {
             query?: never;
@@ -3430,31 +3436,32 @@ export interface operations {
             };
         };
     };
-    sync_connection: {
+    import_file: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description connection name */
-                name: string;
+                /** @description `csv` */
+                kind: string;
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": components["schemas"]["SyncNowRequest"] | null;
+                "text/csv": string;
             };
         };
         responses: {
+            /** @description Import finished */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BankConnectionDto"];
+                    "application/json": components["schemas"]["ImportReport"];
                 };
             };
-            /** @description PIN missing, or rejected by the bank */
+            /** @description Not a file this provider reads */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3463,7 +3470,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description No such connection */
+            /** @description Unknown provider */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3472,40 +3479,23 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Already running */
-            409: {
+        };
+    };
+    list_providers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Paused after wrong PINs */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Could not reach the bank */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description No FinTS product id configured */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["ProviderDto"][];
                 };
             };
         };
@@ -3547,10 +3537,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SyncStarted"];
+                    "application/json": components["schemas"]["SyncDto"];
                 };
             };
-            /** @description Rejected by the bank, or a TAN method that is not supported */
+            /** @description PIN or login missing or refused by the bank, a kind that needs a connection */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3559,7 +3549,34 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Could not reach the bank */
+            /** @description No such connection */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Already running */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Paused after wrong PINs */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Could not reach the bank or the provider */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -3568,7 +3585,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description No FinTS product id configured */
+            /** @description The provider is not set up on the server */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3579,12 +3596,12 @@ export interface operations {
             };
         };
     };
-    confirm_sync: {
+    get_sync: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description sync_id */
+                /** @description `id` of a connection or of a started sync */
                 id: string;
             };
             cookie?: never;
@@ -3596,16 +3613,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SyncDone"];
-                };
-            };
-            /** @description Rejected by the bank */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["SyncDto"];
                 };
             };
             /** @description Unknown or expired sync */
@@ -3617,8 +3625,30 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Not approved yet */
-            409: {
+        };
+    };
+    cancel_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `id` of a connection or of a started sync */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncDto"];
+                };
+            };
+            /** @description Unknown or expired sync */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3626,8 +3656,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Could not reach the bank */
-            502: {
+            /** @description Logging in or fetching right now */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5738,39 +5768,6 @@ export interface operations {
                 };
             };
             /** @description A merchant without letters or a category suggestions cannot use */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    import_transactions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "text/csv": string;
-            };
-        };
-        responses: {
-            /** @description Import finished */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportReport"];
-                };
-            };
-            /** @description Not a Sparkasse CSV export */
             400: {
                 headers: {
                     [name: string]: unknown;

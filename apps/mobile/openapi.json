@@ -323,68 +323,12 @@
         ]
       }
     },
-    "/v1/bank/connections/{name}/cancel": {
-      "post": {
-        "tags": [
-          "bank_connections"
-        ],
-        "summary": "Stop waiting for an approval.",
-        "operationId": "cancel_connection",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "description": "connection name",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BankConnectionDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such connection",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Logging in right now",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/v1/bank/connections/{name}/disconnect": {
       "post": {
         "tags": [
           "bank_connections"
         ],
-        "summary": "Plaid, GoCardless, finAPI: forget the connection. Tells the provider to drop it and deletes\nthe stored access, so the next sync starts with signing in again. The imported transactions stay.",
+        "summary": "Plaid, GoCardless, finAPI: forget the connection. Tells the provider to drop it and deletes the\nstored access, so the next sync starts with signing in again. The imported transactions stay.",
         "operationId": "disconnect_connection",
         "parameters": [
           {
@@ -435,18 +379,18 @@
         ]
       }
     },
-    "/v1/bank/connections/{name}/sync": {
+    "/v1/bank/import/{kind}": {
       "post": {
         "tags": [
           "bank_connections"
         ],
-        "summary": "Start a sync for one connection: logs in, then waits (in the background) for your approval in\nthe banking app and imports. Send the PIN only when `pin_from_env` is false.",
-        "operationId": "sync_connection",
+        "summary": "Import a file of a provider with the `file` flow (`csv`: the Sparkasse CSV-CAMT export).\nTransactions are categorized, and rows that were imported before are skipped, so uploading an\noverlapping period is safe.",
+        "operationId": "import_file",
         "parameters": [
           {
-            "name": "name",
+            "name": "kind",
             "in": "path",
-            "description": "connection name",
+            "description": "`csv`",
             "required": true,
             "schema": {
               "type": "string"
@@ -455,32 +399,135 @@
         ],
         "requestBody": {
           "content": {
-            "application/json": {
+            "text/csv": {
               "schema": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/SyncNowRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Import finished",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a file this provider reads",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
               }
             }
           }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/providers": {
+      "get": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "The ways transactions come in (a CSV file, FinTS, Plaid, GoCardless, finAPI), how each works, and\nwhether this server has it set up.",
+        "operationId": "list_providers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/status": {
+      "get": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "What the last login sent with a request looked like (its non-secret details), to prefill the form.",
+        "operationId": "bank_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/sync": {
+      "post": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "Start a sync, whichever provider: name a `connection` of the server configuration, or for FinTS\na `kind` with a `login`. The server logs in or asks the provider for a sign-in page, then waits\nin the background for what the person has to do (`state` is `needs_approval` or `needs_link`)\nand imports as soon as it is done. Poll `GET /v1/bank/sync/{id}`. Send the PIN only when the\nconnection has no `pin_from_env`.",
+        "operationId": "start_sync",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncRequest"
+              }
+            }
+          },
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BankConnectionDto"
+                  "$ref": "#/components/schemas/SyncDto"
                 }
               }
             }
           },
           "400": {
-            "description": "PIN missing, or rejected by the bank",
+            "description": "PIN or login missing or refused by the bank, a kind that needs a connection",
             "content": {
               "application/json": {
                 "schema": {
@@ -520,7 +567,7 @@
             }
           },
           "502": {
-            "description": "Could not reach the bank",
+            "description": "Could not reach the bank or the provider",
             "content": {
               "application/json": {
                 "schema": {
@@ -530,7 +577,7 @@
             }
           },
           "503": {
-            "description": "No FinTS product id configured",
+            "description": "The provider is not set up on the server",
             "content": {
               "application/json": {
                 "schema": {
@@ -547,107 +594,18 @@
         ]
       }
     },
-    "/v1/bank/status": {
+    "/v1/bank/sync/{id}": {
       "get": {
         "tags": [
-          "bank"
+          "bank_connections"
         ],
-        "operationId": "bank_status",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BankStatus"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/bank/sync": {
-      "post": {
-        "tags": [
-          "bank"
-        ],
-        "summary": "Log in to the bank and ask for approval. Approve in your Sparkasse app, then call confirm.",
-        "operationId": "start_sync",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SyncRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SyncStarted"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Rejected by the bank, or a TAN method that is not supported",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Could not reach the bank",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "No FinTS product id configured",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/bank/sync/{id}/confirm": {
-      "post": {
-        "tags": [
-          "bank"
-        ],
-        "summary": "Check whether you approved in the banking app; if so, import. Answers 409 while still\nwaiting: keep calling every few seconds.",
-        "operationId": "confirm_sync",
+        "summary": "Where a sync stands: waiting for an approval or a sign-in, running, or how it ended (`result`).\nA connection can be asked by its name; an unknown or expired login answers 404.",
+        "operationId": "get_sync",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "sync_id",
+            "description": "`id` of a connection or of a started sync",
             "required": true,
             "schema": {
               "type": "string"
@@ -659,17 +617,53 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SyncDone"
+                  "$ref": "#/components/schemas/SyncDto"
                 }
               }
             }
           },
-          "400": {
-            "description": "Rejected by the bank",
+          "404": {
+            "description": "Unknown or expired sync",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/bank/sync/{id}/cancel": {
+      "post": {
+        "tags": [
+          "bank_connections"
+        ],
+        "summary": "Stop waiting for an approval or a sign-in.",
+        "operationId": "cancel_sync",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "`id` of a connection or of a started sync",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncDto"
                 }
               }
             }
@@ -685,17 +679,7 @@
             }
           },
           "409": {
-            "description": "Not approved yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Could not reach the bank",
+            "description": "Logging in or fetching right now",
             "content": {
               "application/json": {
                 "schema": {
@@ -3814,52 +3798,6 @@
         ]
       }
     },
-    "/v1/transactions/import": {
-      "post": {
-        "tags": [
-          "routes"
-        ],
-        "summary": "Import a Sparkasse CSV-CAMT export. Transactions are categorized, and rows that were\nimported before are skipped, so re-uploading an overlapping period is safe.",
-        "operationId": "import_transactions",
-        "requestBody": {
-          "content": {
-            "text/csv": {
-              "schema": {
-                "type": "string"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Import finished",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportReport"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Not a Sparkasse CSV export",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/v1/transactions/splits": {
       "get": {
         "tags": [
@@ -4330,6 +4268,7 @@
         "type": "object",
         "description": "A configured connection. The login is masked; the PIN is never part of it.",
         "required": [
+          "id",
           "name",
           "kind",
           "bank_code",
@@ -4348,7 +4287,7 @@
             "items": {
               "$ref": "#/components/schemas/LinkedAccountDto"
             },
-            "description": "Plaid: the accounts that were linked (put their ids in `account_ids` to read only some)."
+            "description": "The accounts that were linked (put their ids in `account_ids` to read only some)."
           },
           "approval_expires_at": {
             "type": [
@@ -4356,7 +4295,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Unix seconds after which a sync waiting for approval, or Plaid's sign-in page, is given up."
+            "description": "Unix seconds after which a sync waiting for approval, or for a sign-in, is given up."
           },
           "balance_cents": {
             "type": [
@@ -4377,6 +4316,10 @@
           },
           "iban_masked": {
             "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "description": "What to poll and cancel it by (`/v1/bank/sync/{id}`)."
           },
           "kind": {
             "type": "string",
@@ -4405,11 +4348,11 @@
               "string",
               "null"
             ],
-            "description": "Plaid, in `needs_link`: the page to open in the browser to sign in to your bank."
+            "description": "In `needs_link`: the page to open in the browser to sign in to your bank."
           },
           "linked": {
             "type": "boolean",
-            "description": "Plaid: false until you have signed in to your bank once (press Sync now to start that);\nalways true for FinTS."
+            "description": "False until you have signed in to your bank once (start a sync to do that); always true\nfor FinTS."
           },
           "login_masked": {
             "type": "string"
@@ -4441,7 +4384,7 @@
           },
           "sync_due": {
             "type": "boolean",
-            "description": "A scheduled sync is due but cannot start by itself because the server has no PIN: press\nSync now and type it."
+            "description": "A scheduled sync is due but cannot start by itself because the server has no PIN: start a\nsync and type it."
           },
           "sync_every_hours": {
             "type": "integer",
@@ -6186,7 +6129,7 @@
       },
       "LinkedAccountDto": {
         "type": "object",
-        "description": "An account Plaid reported for a linked connection.",
+        "description": "An account the provider reported for a linked connection.",
         "required": [
           "id",
           "name",
@@ -6206,10 +6149,46 @@
               "string",
               "null"
             ],
-            "description": "The last digits of the account number, when Plaid has them."
+            "description": "The last digits of the account number, when the provider has them."
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "LoginDto": {
+        "type": "object",
+        "description": "The online banking login of a FinTS sync that is not set up in the configuration.",
+        "required": [
+          "blz",
+          "user_id",
+          "iban"
+        ],
+        "properties": {
+          "bic": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Leave empty to use the bank's own BIC."
+          },
+          "blz": {
+            "type": "string",
+            "description": "Bank code (BLZ)."
+          },
+          "fints_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only for a bank that is not in the built-in list (then the BIC is needed too)."
+          },
+          "iban": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Online banking login name."
           }
         }
       },
@@ -6781,6 +6760,40 @@
             "type": "string",
             "format": "date",
             "description": "First booking at the new price."
+          }
+        }
+      },
+      "ProviderDto": {
+        "type": "object",
+        "description": "A source of transactions and how to talk to it.",
+        "required": [
+          "kind",
+          "label",
+          "flow",
+          "available",
+          "connections"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "This server has it set up (its keys, or for FinTS the product id)."
+          },
+          "connections": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Connections of this kind in the server configuration.",
+            "minimum": 0
+          },
+          "flow": {
+            "type": "string",
+            "description": "`file` (send a file to `/v1/bank/import/{kind}`), `approval` (a PIN, then an approval in the\nbanking app, for every sync) or `link` (sign in once on the provider's page)."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`csv`, `fints`, `plaid`, `gocardless` or `finapi`."
+          },
+          "label": {
+            "type": "string"
           }
         }
       },
@@ -8419,52 +8432,63 @@
           }
         }
       },
-      "SyncDone": {
+      "SyncDto": {
         "type": "object",
+        "description": "A sync, started or running or finished. Poll `GET /v1/bank/sync/{id}` while `state` is\n`syncing`, `needs_approval` or `needs_link`.",
         "required": [
-          "imported",
-          "duplicates",
-          "skipped"
+          "id",
+          "kind",
+          "state"
         ],
         "properties": {
-          "balance_cents": {
+          "connection": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The configured connection it belongs to; absent for a login sent with the request."
+          },
+          "expires_at": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int64"
+            "format": "int64",
+            "description": "Unix seconds after which the wait is given up."
           },
-          "balance_date": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "link_url": {
             "type": [
               "string",
               "null"
             ],
-            "format": "date"
+            "description": "In `needs_link`: the page to open in the browser."
           },
-          "duplicates": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "imported": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "skipped": {
-            "type": "integer",
-            "description": "Transactions left out (pending, or not in EUR).",
-            "minimum": 0
-          }
-        }
-      },
-      "SyncNowRequest": {
-        "type": "object",
-        "properties": {
-          "pin": {
+          "message": {
             "type": [
               "string",
               "null"
             ],
-            "description": "The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync\nonly and never stored."
+            "description": "The bank's approval text in `needs_approval`, the reason in `error`."
+          },
+          "result": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SyncOutcomeDto",
+                "description": "How the last attempt ended, once it did."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConnectionState"
           }
         }
       },
@@ -8480,6 +8504,20 @@
             "type": "integer",
             "format": "int64",
             "description": "Unix seconds."
+          },
+          "balance_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "balance_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
           },
           "duplicates": {
             "type": [
@@ -8519,23 +8557,14 @@
       },
       "SyncRequest": {
         "type": "object",
-        "required": [
-          "blz",
-          "user_id",
-          "pin",
-          "iban"
-        ],
+        "description": "Start a sync: the same request for every provider.",
         "properties": {
-          "bic": {
+          "connection": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Leave empty to use the bank's own BIC."
-          },
-          "blz": {
-            "type": "string",
-            "description": "Bank code (BLZ)."
+            "description": "A connection of the server configuration, by name. Or leave it out and name the `kind` and\n(for FinTS) the `login`."
           },
           "days": {
             "type": [
@@ -8543,40 +8572,32 @@
               "null"
             ],
             "format": "int32",
-            "description": "Days of history to fetch (default 90, 1 to 365).",
+            "description": "Days of history for a login sent with the request (default 90, 1 to 365).",
             "minimum": 0
           },
-          "iban": {
-            "type": "string"
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`fints` for a login sent with this request."
+          },
+          "login": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LoginDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "pin": {
-            "type": "string",
-            "description": "Online banking PIN. Held in memory until you approve, never stored or logged."
-          },
-          "user_id": {
-            "type": "string",
-            "description": "Online banking login name."
-          }
-        }
-      },
-      "SyncStarted": {
-        "type": "object",
-        "required": [
-          "sync_id",
-          "challenge",
-          "no_tan_required"
-        ],
-        "properties": {
-          "challenge": {
-            "type": "string",
-            "description": "Text from the bank, e.g. \"Bitte bestätigen Sie die Anfrage in Ihrer S-pushTAN-App\"."
-          },
-          "no_tan_required": {
-            "type": "boolean",
-            "description": "True if the bank needs no approval; confirm right away."
-          },
-          "sync_id": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The PIN, when the server does not have it (`pin_from_env` is false). Used for this sync\nonly and never stored."
           }
         }
       },
