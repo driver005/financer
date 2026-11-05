@@ -1,9 +1,9 @@
 import { useState } from "react";
 
 import {
-  BarChart, Box, Button, Card, ChoiceCard, ColumnChart, CompareBars, ConfirmAction, CurveChart, DonutChart, Dot, Expandable, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, HeroNumber,
+  Badge, BarChart, Box, Button, Card, ChoiceCard, ColumnChart, CompareBars, ConfirmAction, CurveChart, DonutChart, Dot, Expandable, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, HeroNumber,
   HeroProgress, HeroStats, IconBadge, ListItem, Mascot, MascotFace, Money, Note, ProgressRing, Row, ScanFrame, Snackbar, Stack, Stepper, Text, TileButton, ToggleRow, useSeriesColor,
-  BubbleCloud, Icon,
+  Balance, BubbleCloud, Icon, QuickActions,
 } from "@financer/ui";
 
 import type { StoryDef } from "../Story";
@@ -147,6 +147,22 @@ function Friends() {
   );
 }
 
+function BalanceAndActions() {
+  return (
+    <Stack gap="lg">
+      <Balance label="Spent, last 14 days" cents={99359} chip={<Badge tone="warning" icon="trending-up" label="731 % more than before" />} caption="Most on 02.11.2026: 870,00 €." />
+      <QuickActions
+        actions={[
+          { icon: "file-delimited-outline", label: "Import", onPress: () => undefined },
+          { icon: "bank-transfer", label: "Sync", onPress: () => undefined },
+          { icon: "bank-plus", label: "Banks", onPress: () => undefined },
+          { icon: "storefront-outline", label: "Stores", onPress: () => undefined, disabled: true },
+        ]}
+      />
+    </Stack>
+  );
+}
+
 function Bubbles() {
   return (
     <BubbleCloud
@@ -168,6 +184,7 @@ export const financeStories: StoryDef[] = [
   { id: "charts", title: "Charts", note: "Every chart has a sentence that says the same in words.", render: () => <Charts /> },
   { id: "rows", title: "Rows, switches, steppers, tiles", note: "The settings and list vocabulary of the finance app.", render: () => <Rows /> },
   { id: "choices", title: "Choices, notes, confirm", note: "Setup answers and the confirm-first danger action.", render: () => <Choices /> },
+  { id: "balance", title: "Balance and quick actions", note: "A money screen opens with its one figure, big and centred on the page, then the few things you do from it as round buttons with their names under them.", render: () => <BalanceAndActions /> },
   { id: "bubbles", title: "Bubble cloud", note: "Where the money went: the bigger the share, the bigger the bubble. Each is named with its amount, so sizes and colours are never the only signal.", render: () => <Bubbles /> },
   { id: "friends", title: "Mascot, scan frame, snackbar", render: () => <Friends /> },
 ];

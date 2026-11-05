@@ -68,6 +68,8 @@ export { Stepper } from "./components/Stepper";
 export { formatMoney, spokenMoney, splitMoney } from "./format";
 export { Money, type MoneyTone } from "./finance/Money";
 export { HeroCaption, HeroCard, HeroChip, HeroFigure, HeroNumber, HeroProgress, HeroStats } from "./finance/Hero";
+export { Balance } from "./finance/Balance";
+export { QuickActions, type QuickAction } from "./components/QuickActions";
 export { BubbleCloud, type Bubble } from "./finance/BubbleCloud";
 export { BarChart, ColumnChart, CompareBars, CurveChart, DonutChart, ProgressRing, useSeriesColor, type Column, type CompareBarRow, type CurveGeometry } from "./finance/charts";
 export { ConfirmAction } from "./components/ConfirmAction";

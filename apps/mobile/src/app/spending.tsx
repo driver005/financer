@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { BarChart, Box, Card, Chip, ChipRow, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, IconButton, Note, Row, SearchBar, Section, Text, VirtualList } from "@financer/ui";
+import { Badge, Balance, BarChart, Box, Card, Chip, ChipRow, Group, Note, QuickActions, Row, SearchBar, Section, Text, VirtualList } from "@financer/ui";
 
 import type { Split, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -118,13 +118,6 @@ export default function Spending() {
       title="Spending"
       subtitle={items.length > 0 ? `${items.length} bookings` : undefined}
       fixed
-      actions={
-        <>
-          <IconButton icon="bank-plus" label="Connect a bank" onPress={() => setSetup({ open: true })} />
-          <IconButton icon="storefront-outline" label="Spending by store" onPress={() => router.push("/stores")} />
-          <IconButton icon="file-delimited-outline" label="Import a CSV file" onPress={() => void importCsv()} disabled={busy} />
-        </>
-      }
     >
       <BankSetupSheet
         visible={setup.open}
@@ -158,28 +151,28 @@ export default function Spending() {
         header={
           <Box gap="md">
             <SectionSwitch />
-            {banks.list !== null ? (
-              <SourceSwitcher
-                list={connections}
-                active={activeSource}
-                onChange={setSource}
-                onSetup={(id) => setSetup({ open: true, start: id })}
-                onImportCsv={() => void importCsv()}
-                importing={busy}
-                starting={banks.starting}
-                errors={banks.errors}
-                onStart={(c) => void banks.start(c)}
-                onCancel={(c) => void banks.cancel(c)}
-                onOpenLink={(c) => void banks.openLink(c)}
-              />
-            ) : null}
             {items.length > 0 ? (
               <>
-                <HeroCard label={`Spent, last ${TREND_DAYS} days`} chip={delta !== null && delta !== 0 ? <HeroChip icon={delta > 0 ? "trending-up" : "trending-down"} text={`${Math.abs(delta)} % ${delta > 0 ? "more" : "less"}`} /> : null}>
-                  <HeroFigure cents={trend.total} label={`Spent ${spokenMoney(trend.total)} in the last ${TREND_DAYS} days`} />
-                  <BarChart values={trend.series} highlight={trend.peak} summary={sentence} onCard />
-                  <HeroCaption>{sentence}</HeroCaption>
-                </HeroCard>
+                <Balance
+                  label={`Spent, last ${TREND_DAYS} days`}
+                  cents={trend.total}
+                  spoken={`Spent ${spokenMoney(trend.total)} in the last ${TREND_DAYS} days`}
+                  chip={delta !== null && delta !== 0 ? <Badge tone={delta > 0 ? "warning" : "success"} icon={delta > 0 ? "trending-up" : "trending-down"} label={`${Math.abs(delta)} % ${delta > 0 ? "more" : "less"} than before`} /> : undefined}
+                  caption={peak ? `${peak}.` : undefined}
+                />
+                <BarChart values={trend.series} highlight={trend.peak} summary={sentence} />
+              </>
+            ) : null}
+            <QuickActions
+              actions={[
+                { icon: "file-delimited-outline", label: "Import", onPress: () => void importCsv(), disabled: busy },
+                { icon: "bank-transfer", label: "Sync", onPress: () => router.push("/sync") },
+                { icon: "bank-plus", label: "Banks", onPress: () => setSetup({ open: true }) },
+                { icon: "storefront-outline", label: "Stores", onPress: () => router.push("/stores") },
+              ]}
+            />
+            {items.length > 0 ? (
+              <>
                 {shown.length > 0 ? (
                   <Row gap="md" align="stretch">
                     <Card tone="success" gap="2xs" fill>
@@ -193,6 +186,27 @@ export default function Spending() {
                   </Row>
                 ) : null}
                 {filter !== "income" && span ? <CategoryCard txs={shown} period={span} link={false} bubbles /> : null}
+              </>
+            ) : null}
+            {banks.list !== null ? (
+              <Section title="Sources" quiet>
+                <SourceSwitcher
+                  list={connections}
+                  active={activeSource}
+                  onChange={setSource}
+                  onSetup={(id) => setSetup({ open: true, start: id })}
+                  onImportCsv={() => void importCsv()}
+                  importing={busy}
+                  starting={banks.starting}
+                  errors={banks.errors}
+                  onStart={(c) => void banks.start(c)}
+                  onCancel={(c) => void banks.cancel(c)}
+                  onOpenLink={(c) => void banks.openLink(c)}
+                />
+              </Section>
+            ) : null}
+            {items.length > 0 ? (
+              <>
                 <SearchBar value={query} onChangeText={setQuery} placeholder="Search shops, words and categories" />
                 <ChipRow>
                   {TX_FILTERS.map((f) => (
