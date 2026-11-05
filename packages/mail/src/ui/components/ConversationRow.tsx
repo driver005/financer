@@ -21,10 +21,10 @@ export function ConversationRow({ c, now, fmt, onPress }: { c: Conversation; now
           </Box>
           <Text variant="caption" tone={unread ? "accent" : "muted"}>{listTime(c.last_at, now, fmt)}</Text>
         </Row>
-        {sub ? <Text variant="caption" tone="muted" numberOfLines={1}>{sub}</Text> : null}
+        {sub ? <Text variant={unread ? "bodyStrong" : "label"} tone={unread ? "default" : "muted"} numberOfLines={1}>{sub}</Text> : null}
         <Row justify="between" gap="sm">
           <Box grow>
-            <Text variant="label" tone={unread ? "default" : "muted"} numberOfLines={2}>{`${c.last_from_me ? "You: " : ""}${c.preview}`}</Text>
+            <Text variant="caption" tone="muted" numberOfLines={2}>{`${c.last_from_me ? "You: " : ""}${c.preview}`}</Text>
           </Box>
           {unread ? <Badge label={String(c.unread)} tone="accent" solid /> : null}
         </Row>

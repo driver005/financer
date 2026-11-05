@@ -30,12 +30,14 @@ export function useNav(): Nav {
   return v;
 }
 
-export function NavProvider({ children, exit }: { children: ReactNode; exit?: () => void }) {
+export function NavProvider({ children, exit: hostExit, embedded }: { children: ReactNode; exit?: () => void; embedded?: boolean }) {
   const [tab, setTab] = useState<Tab>("chats");
   const [stack, setStack] = useState<Route[]>([]);
   const push = useCallback((r: Route) => setStack((s) => [...s, r]), []);
   const pop = useCallback(() => setStack((s) => s.slice(0, -1)), []);
   const reset = useCallback(() => setStack([]), []);
+  // in a host's tab the module has no way out of its own; the other tabs go back to the chats
+  const exit = embedded ? (tab !== "chats" ? () => setTab("chats") : undefined) : hostExit;
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {

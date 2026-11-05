@@ -44,6 +44,10 @@ export FINANCER_MAIL_NAME='Paul Meier'               # shown to the people you w
 Without `FINANCER_MAIL_IMAP_HOST` the templates and the calendar still work; reading and sending do not.
 Mail is **not** part of the finance export or backup: it is bulky and private, and lives in its own database.
 
+## Where it lives, and how it looks
+
+Mail is a tab of the app (Spending, Mail, Calendar, Groceries): the app's tab bar is around it, so the module has none of its own (`MailHost.embedded`; on its own it still has a bar, a rail or a sidebar). The chat list is laid out like Gmail: a search pill ("Search in mail") with the sync and menu buttons, the tabs People, Topics and Updates with a "3 new" under the ones that have something (`TabStrip`), an "Unread" chip, chats under Today, Yesterday, This week and Earlier, and an extended **Compose** button. Calendar (the events found in mail), Templates and Mailbox are in the menu (the three dots) and have a back button to the chats.
+
 ## What it does
 
 **Chats.** Mail is grouped by person: everything exchanged with Max, in both directions and across subjects,

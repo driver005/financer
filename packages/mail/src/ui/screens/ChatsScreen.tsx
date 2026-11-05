@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Banner, Button, Chip, Divider, EmptyState, HeroCaption, HeroCard, HeroChip, HeroNumber, IconButton, Row, Screen, SearchBar, Segmented, Skeleton, Spinner, Stack, Text, TopBar } from "@financer/ui";
+import { Banner, Box, Button, Chip, Divider, EmptyState, FloatingButton, IconButton, ListItem, Row, Screen, SearchBar, Sheet, Skeleton, Spinner, Stack, TabStrip, Text, TopBar, type TabStripItem } from "@financer/ui";
 
 import { MailApiError } from "../../api/client";
 import type { Conversation } from "../../api/types";
@@ -21,6 +21,7 @@ export function ChatsScreen() {
   const [list, setList] = useState<Conversation[] | null>(null);
   const [unread, setUnread] = useState({ people: 0, updates: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [menu, setMenu] = useState(false);
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -47,26 +48,28 @@ export function ChatsScreen() {
     return n > 0 ? `${n} unread` : "";
   };
 
-  const options = [
-    { value: "people" as const, label: unread.people ? `People (${unread.people})` : "People" },
-    { value: "topics" as const, label: "Topics" },
-    { value: "updates" as const, label: unread.updates ? `Updates (${unread.updates})` : "Updates" },
+  const embedded = nav.exit === undefined;
+  const tabs: TabStripItem<View>[] = [
+    { key: "people", label: "People", icon: "account-outline", badge: unread.people ? `${unread.people} new` : undefined },
+    { key: "topics", label: "Topics", icon: "tag-outline" },
+    { key: "updates", label: "Updates", icon: "bell-outline", badge: unread.updates ? `${unread.updates} new` : undefined },
   ];
+  const tools = (
+    <>
+      {syncing ? <Spinner /> : <IconButton icon="sync" label="Check for new mail" onPress={() => void syncNow()} disabled={!info?.configured} />}
+      <IconButton icon="dots-vertical" label="More: calendar, templates and mailbox" onPress={() => setMenu(true)} />
+    </>
+  );
 
   return (
     <Screen
-      header={
-        <TopBar
-          title="Mail"
-          subtitle={info?.address ? info.address.email : undefined}
-          onBack={nav.exit}
-          actions={
-            <>
-              {syncing ? <Spinner /> : <IconButton icon="sync" label="Check for new mail" onPress={() => void syncNow()} disabled={!info?.configured} />}
-              <IconButton icon="pencil-plus-outline" label="New message" variant="soft" tone="accent" onPress={() => nav.push({ name: "compose" })} />
-            </>
-          }
-        />
+      // like Gmail: no title bar, the search is the first thing on the page; a host that gives the module a way out
+      // gets its back button in a bar of its own
+      header={embedded ? undefined : <TopBar title="Mail" subtitle={info?.address ? info.address.email : undefined} onBack={nav.exit} actions={tools} />}
+      footer={
+        <Box>
+          <FloatingButton icon="pencil-outline" label="Compose" extended onPress={() => nav.push({ name: "compose" })} />
+        </Box>
       }
       maxW="normal"
     >
@@ -77,17 +80,17 @@ export function ChatsScreen() {
         </Banner>
       ) : null}
       {info?.last_sync?.error ? <Banner tone="warning" title="The last check failed">{info.last_sync.error}</Banner> : null}
-      {!search && unread.people + unread.updates > 0 ? (
-        <HeroCard label="Needs your attention" chip={unread.updates > 0 ? <HeroChip icon="bell-outline" text={`${unread.updates} in updates`} /> : null}>
-          <HeroNumber value={String(unread.people)} suffix={unread.people === 1 ? "unread chat" : "unread chats"} />
-          <HeroCaption>New mail from your people, newest first below.</HeroCaption>
-        </HeroCard>
-      ) : null}
-      <Stack gap="md">
-        <SearchBar value={search} onChangeText={setSearch} placeholder="Search people, topics and words" />
-        <Segmented value={view} onChange={setView} options={options} testID="chat-view" />
+      <Stack gap="sm">
+        <Row gap="xs">
+          <Box grow>
+            <SearchBar value={search} onChangeText={setSearch} placeholder="Search in mail" />
+          </Box>
+          {embedded ? tools : null}
+        </Row>
+        <TabStrip items={tabs} value={view} onChange={setView} />
+        <Divider />
         <Row gap="sm">
-          <Chip label="Unread only" icon="email-outline" selected={unreadOnly} onPress={() => setUnreadOnly(!unreadOnly)} testID="chat-unread-only" />
+          <Chip label="Unread" icon="email-outline" selected={unreadOnly} onPress={() => setUnreadOnly(!unreadOnly)} testID="chat-unread-only" />
         </Row>
       </Stack>
       {list === null ? (
@@ -120,6 +123,13 @@ export function ChatsScreen() {
           })}
         </Stack>
       )}
+      <Sheet visible={menu} onClose={() => setMenu(false)} title="Mail">
+        <Stack gap="none" px="xl" pb="xl">
+          <ListItem icon="calendar-month-outline" tile title="Calendar" subtitle="Events found in your mail" onPress={() => { setMenu(false); nav.reset(); nav.setTab("calendar"); }} />
+          <ListItem icon="text-box-outline" tile title="Templates" subtitle="Greeting and closing" onPress={() => { setMenu(false); nav.reset(); nav.setTab("templates"); }} />
+          <ListItem icon="email-outline" tile title="Mailbox" subtitle="The account the mail comes from" onPress={() => { setMenu(false); nav.reset(); nav.setTab("mailbox"); }} />
+        </Stack>
+      </Sheet>
     </Screen>
   );
 }

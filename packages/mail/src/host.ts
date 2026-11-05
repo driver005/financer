@@ -12,4 +12,10 @@ export type MailHost = {
   makeCaller: (config: MailServerConfig) => Promise<Caller>;
   /** Shown as a back button on the first screen. */
   onExit?: () => void;
+  /**
+   * The host puts the module in one of its own tabs: no bottom bar or rail of its own (the host's
+   * stands in for it) and the theme of the host. Calendar, Templates and Mailbox are then reached
+   * from the menu of the chat list, each with a back button to the chats.
+   */
+  embedded?: boolean;
 };

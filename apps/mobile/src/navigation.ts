@@ -1,19 +1,19 @@
 // Which bottom tab a screen belongs to, and the switcher shown at the top of related screens.
 // Plain data and functions (no React Native), so a test can check that every screen has a home.
 //
-// Four tabs: Today, Calendar, Money (Spending and Budget) and Groceries (Prices, Recipes, Meal plan,
-// Usual items); Settings is a button at the top right. Every other screen is still its own route (links and
+// Four tabs: Spending (Today, Spending and Budget), Mail, Calendar and Groceries (Prices, Recipes, Meal
+// plan, Usual items); Settings is a button at the top right. Every other screen is still its own route (links and
 // notifications keep working) and counts as part of the tab it is reached from.
 
-export type TabId = "today" | "calendar" | "money" | "groceries";
+export type TabId = "money" | "mail" | "calendar" | "groceries";
 
 export type TabDef = { id: TabId; title: string; icon: string; href: string; screens: readonly string[] };
 
 /** The bottom bar: the four things you use every day. Settings is a button at the top right. */
 export const TABS: readonly TabDef[] = [
-  { id: "today", title: "Today", icon: "home-variant", href: "/", screens: ["/", "/trophies"] },
+  { id: "money", title: "Spending", icon: "swap-vertical", href: "/spending", screens: ["/", "/trophies", "/spending", "/budget", "/stores"] },
+  { id: "mail", title: "Mail", icon: "email-outline", href: "/mail", screens: ["/mail"] },
   { id: "calendar", title: "Calendar", icon: "calendar-month-outline", href: "/calendar", screens: ["/calendar"] },
-  { id: "money", title: "Money", icon: "swap-vertical", href: "/spending", screens: ["/spending", "/budget", "/stores"] },
   { id: "groceries", title: "Groceries", icon: "cart-outline", href: "/prices", screens: ["/prices", "/recipes", "/mealplan", "/basket"] },
 ];
 
@@ -23,14 +23,15 @@ export const TABS: readonly TabDef[] = [
  */
 export const SETTINGS_SCREENS: readonly string[] = ["/settings", "/sync", "/rules", "/subscriptions", "/alerts", "/receipts", "/receipt-sources", "/rewe-sync", "/orders-import", "/share", "/scan", "/server-config"];
 
-/** Routes with no chrome at all (first-run setup, and the shopping assistant, which brings its own). */
-export const BARE_SCREENS: readonly string[] = ["/onboarding", "/shop", "/mail"];
+/** Routes with no chrome at all (first-run setup, and the shopping assistant, which brings its own). The mail client is a tab. */
+export const BARE_SCREENS: readonly string[] = ["/onboarding", "/shop"];
 
 export type SwitchItem = { label: string; href: string };
 
 /** The switcher at the top of the screens that share a tab. */
 export const SWITCHES: Partial<Record<TabId, readonly SwitchItem[]>> = {
   money: [
+    { label: "Today", href: "/" },
     { label: "Spending", href: "/spending" },
     { label: "Budget", href: "/budget" },
   ],
@@ -56,11 +57,11 @@ export function areaFor(pathname: string): Area {
   return "tab";
 }
 
-/** The tab a path belongs to, or null in the settings area and on bare screens. Unknown paths count as Today. */
+/** The tab a path belongs to, or null in the settings area and on bare screens. Unknown paths count as Spending. */
 export function tabFor(pathname: string): TabId | null {
   if (areaFor(pathname) !== "tab") return null;
   const path = clean(pathname);
-  return TABS.find((t) => t.screens.includes(path))?.id ?? "today";
+  return TABS.find((t) => t.screens.includes(path))?.id ?? "money";
 }
 
 /** The switcher items and the active one for a path, or null on screens without a switcher. */
