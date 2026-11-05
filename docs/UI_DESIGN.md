@@ -135,7 +135,7 @@ spending trend and the sentences for it), `format.ts` (`formatMoney`, `spokenMon
 - **Pictures never carry the information alone.** Donut slices differ by hue only to tell them
   apart; every legend row names its category. Savings transfers and income are not spending and are
   left out of all three pictures.
-- **Spending shows where the money went.** Under the hero card two tiles say what came in and what was spent (`app_misc.income_spent`), then a donut with a legend (the same card as on Today) covers what is listed, and a search box finds bookings by shop, purpose or category (`app_misc.search_tx` in `crates/logic`); the donut follows the search and the filter chips.
+- **Spending shows where the money went.** Under the hero card two tiles say what came in and what was spent (`app_misc.income_spent`), then a "Where it went" card covers what is listed: on Spending as bubbles (`BubbleCloud`: the bigger the share, the bigger the bubble, each named with its amount; on Today the same card is a donut), and a search box finds bookings by shop, purpose or category (`app_misc.search_tx` in `crates/logic`); the donut follows the search and the filter chips.
 - **Lists are grouped.** A `ListGroup` per block (and per day in Spending), `ListRow` for each row.
   Amounts in the trailing slot with `Money`; they keep their width and the title shrinks.
 - **Money.** Always through `Money` or `formatMoney` in new code. Sign and colour follow the amount.

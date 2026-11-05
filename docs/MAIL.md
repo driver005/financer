@@ -52,7 +52,8 @@ shows what was said: the quoted reply chain (English, German, Outlook), the sign
 closing are left out (tap a bubble marked "quoted text hidden" to read the original). When the subject
 changes inside a chat, a topic marker shows it. The list of chats is grouped under Today, Yesterday, This
 week and Earlier (the rule is `mail_format.list_group` in `crates/logic`). An "Unread only" chip under the tabs
-shows just the chats with something new.
+shows just the chats with something new. A card at the top says how many chats need your attention, and each
+day's heading says how many of its chats are unread.
 
 **Topics.** The same mail grouped by subject instead: one thread per subject, whoever takes part. Threads
 follow `In-Reply-To` and `References`; when a client dropped them, the same subject with a person in

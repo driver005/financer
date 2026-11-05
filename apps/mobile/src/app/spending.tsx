@@ -192,7 +192,7 @@ export default function Spending() {
                     </Card>
                   </Row>
                 ) : null}
-                {filter !== "income" && span ? <CategoryCard txs={shown} period={span} link={false} /> : null}
+                {filter !== "income" && span ? <CategoryCard txs={shown} period={span} link={false} bubbles /> : null}
                 <SearchBar value={query} onChangeText={setQuery} placeholder="Search shops, words and categories" />
                 <ChipRow>
                   {TX_FILTERS.map((f) => (

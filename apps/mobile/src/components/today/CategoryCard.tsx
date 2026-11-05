@@ -1,8 +1,10 @@
 import { useRouter } from "expo-router";
-import { Box, Button, Card, Dot, DonutChart, Row, Text, useSeriesColor } from "@financer/ui";
+import { Box, BubbleCloud, Button, Card, Dot, DonutChart, Row, Text, useSeriesColor } from "@financer/ui";
 
+import { categoryIcon } from "@/categoryIcons";
 import { formatMoney, spokenMoney } from "@/format";
 import { periodLabel } from "@/period";
+import { asIcon, toTone } from "@/uiTone";
 import { categoryShares, sharesSummary } from "@/todayCharts";
 
 /**
@@ -10,7 +12,7 @@ import { categoryShares, sharesSummary } from "@/todayCharts";
  * row per category with its amount and share. The colours only tell the slices apart; every row
  * names its category, so nothing depends on telling hues apart.
  */
-export function CategoryCard({ txs, period, link = true }: { txs: { booking_date: string; amount_cents: number; category?: string | null }[]; period: { start: string; end: string }; /** Offer the button to the full list (not on the list itself). */ link?: boolean }) {
+export function CategoryCard({ txs, period, link = true, bubbles }: { txs: { booking_date: string; amount_cents: number; category?: string | null }[]; period: { start: string; end: string }; /** Offer the button to the full list (not on the list itself). */ link?: boolean; /** Draw the categories as bubbles (the bigger the share the bigger the bubble) instead of a donut. */ bubbles?: boolean }) {
   const router = useRouter();
   const colour = useSeriesColor();
   const { total, shares } = categoryShares(txs, period, 5);
@@ -25,6 +27,15 @@ export function CategoryCard({ txs, period, link = true }: { txs: { booking_date
         </Box>
         {link ? <Button label="All spending" size="sm" variant="ghost" onPress={() => router.push("/spending")} /> : null}
       </Row>
+      {bubbles ? (
+        <BubbleCloud
+          bubbles={shares.map((s) => {
+            const c = categoryIcon(s.category);
+            return { key: s.category, label: s.label, share: s.share, icon: asIcon(c.icon), tone: toTone(c.tone), value: formatMoney(s.cents) };
+          })}
+          summary={sharesSummary(total, shares)}
+        />
+      ) : (
       <Row gap="lg" wrap align="center">
         <DonutChart
           slices={shares.map((s) => ({ key: s.category, share: s.share, other: s.category === "other" }))}
@@ -45,6 +56,7 @@ export function CategoryCard({ txs, period, link = true }: { txs: { booking_date
           ))}
         </Box>
       </Row>
+      )}
     </Card>
   );
 }

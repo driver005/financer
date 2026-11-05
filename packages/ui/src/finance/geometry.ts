@@ -77,3 +77,11 @@ export function donutArcs(shares: number[], r: number, gap: number): { dash: str
     return arc;
   });
 }
+
+/** Which size a share of the whole gets in a bubble cloud: the big shares are big, the small ones stay readable. */
+export function bubbleDim(share: number): "ring-lg" | "avatar-xl" | "avatar-lg" | "avatar-md" {
+  if (share >= 0.3) return "ring-lg";
+  if (share >= 0.15) return "avatar-xl";
+  if (share >= 0.07) return "avatar-lg";
+  return "avatar-md";
+}

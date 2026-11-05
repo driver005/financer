@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Banner, Button, Chip, Divider, EmptyState, IconButton, Row, Screen, SearchBar, Segmented, Skeleton, Spinner, Stack, Text, TopBar } from "@financer/ui";
+import { Banner, Button, Chip, Divider, EmptyState, HeroCaption, HeroCard, HeroChip, HeroNumber, IconButton, Row, Screen, SearchBar, Segmented, Skeleton, Spinner, Stack, Text, TopBar } from "@financer/ui";
 
 import { MailApiError } from "../../api/client";
 import type { Conversation } from "../../api/types";
@@ -41,6 +41,12 @@ export function ChatsScreen() {
 
   const shownList = (list ?? []).filter((c) => !unreadOnly || c.unread > 0);
 
+  // "3 unread" at the end of a day's heading, nothing when everything of that day is read
+  const unreadIn = (group: string) => {
+    const n = shownList.filter((c) => listGroup(c.last_at, now(), fmt) === group).reduce((sum, c) => sum + (c.unread > 0 ? 1 : 0), 0);
+    return n > 0 ? `${n} unread` : "";
+  };
+
   const options = [
     { value: "people" as const, label: unread.people ? `People (${unread.people})` : "People" },
     { value: "topics" as const, label: "Topics" },
@@ -71,6 +77,12 @@ export function ChatsScreen() {
         </Banner>
       ) : null}
       {info?.last_sync?.error ? <Banner tone="warning" title="The last check failed">{info.last_sync.error}</Banner> : null}
+      {!search && unread.people + unread.updates > 0 ? (
+        <HeroCard label="Needs your attention" chip={unread.updates > 0 ? <HeroChip icon="bell-outline" text={`${unread.updates} in updates`} /> : null}>
+          <HeroNumber value={String(unread.people)} suffix={unread.people === 1 ? "unread chat" : "unread chats"} />
+          <HeroCaption>New mail from your people, newest first below.</HeroCaption>
+        </HeroCard>
+      ) : null}
       <Stack gap="md">
         <SearchBar value={search} onChangeText={setSearch} placeholder="Search people, topics and words" />
         <Segmented value={view} onChange={setView} options={options} testID="chat-view" />
@@ -95,9 +107,10 @@ export function ChatsScreen() {
             return (
               <Stack key={c.key} gap="none">
                 {heading ? (
-                  <Stack pt={i === 0 ? "none" : "lg"} pb="xs">
+                  <Row justify="between" pt={i === 0 ? "none" : "lg"} pb="xs">
                     <Text variant="label" tone="muted" level={2}>{group}</Text>
-                  </Stack>
+                    <Text variant="caption" tone="muted">{unreadIn(group)}</Text>
+                  </Row>
                 ) : (
                   <Divider />
                 )}
