@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Banner, Box, Button, Chip, Divider, EmptyState, FloatingButton, IconButton, ListItem, Row, Screen, SearchBar, Sheet, Skeleton, Spinner, Stack, TabStrip, Text, TopBar, type TabStripItem } from "@financer/ui";
+import { Avatar, Banner, Box, Button, EmptyState, FloatingButton, IconButton, ListItem, Screen, Sheet, Skeleton, Spinner, Stack, Text, TextField, TopBar } from "@financer/ui";
 
 import { MailApiError } from "../../api/client";
 import type { Conversation } from "../../api/types";
-import { listGroup } from "../../logic/format";
 import { ConversationRow } from "../components/ConversationRow";
 import { useNav } from "../nav";
 import { useMail } from "../runtime";
@@ -42,33 +41,28 @@ export function ChatsScreen() {
 
   const shownList = (list ?? []).filter((c) => !unreadOnly || c.unread > 0);
 
-  // "3 unread" at the end of a day's heading, nothing when everything of that day is read
-  const unreadIn = (group: string) => {
-    const n = shownList.filter((c) => listGroup(c.last_at, now(), fmt) === group).reduce((sum, c) => sum + (c.unread > 0 ? 1 : 0), 0);
-    return n > 0 ? `${n} unread` : "";
-  };
-
   const embedded = nav.exit === undefined;
-  const tabs: TabStripItem<View>[] = [
-    { key: "people", label: "People", icon: "account-outline", badge: unread.people ? `${unread.people} new` : undefined },
-    { key: "topics", label: "Topics", icon: "tag-outline" },
-    { key: "updates", label: "Updates", icon: "bell-outline", badge: unread.updates ? `${unread.updates} new` : undefined },
-  ];
-  const tools = (
-    <>
-      {syncing ? <Spinner /> : <IconButton icon="sync" label="Check for new mail" onPress={() => void syncNow()} disabled={!info?.configured} />}
-      <IconButton icon="dots-vertical" label="More: calendar, templates and mailbox" onPress={() => setMenu(true)} />
-    </>
-  );
+  const label = view === "people" ? "People" : view === "topics" ? "Topics" : "Updates";
+  const count = view === "people" ? unread.people : view === "updates" ? unread.updates : 0;
+  const me = info?.address ? (info.address.name ?? info.address.email) : "Me";
+  const go = (t: "calendar" | "templates" | "mailbox") => {
+    setMenu(false);
+    nav.reset();
+    nav.setTab(t);
+  };
+  const pick = (v: View) => {
+    setMenu(false);
+    setView(v);
+  };
 
   return (
     <Screen
-      // like Gmail: no title bar, the search is the first thing on the page; a host that gives the module a way out
-      // gets its back button in a bar of its own
-      header={embedded ? undefined : <TopBar title="Mail" subtitle={info?.address ? info.address.email : undefined} onBack={nav.exit} actions={tools} />}
+      // like Gmail: no title bar, the search pill is the first thing on the page; a host that gives the module
+      // a way out gets a bar of its own with the back button
+      header={embedded ? undefined : <TopBar title="Mail" subtitle={info?.address ? info.address.email : undefined} onBack={nav.exit} />}
       footer={
         <Box>
-          <FloatingButton icon="pencil-outline" label="Compose" extended onPress={() => nav.push({ name: "compose" })} />
+          <FloatingButton icon="pencil-outline" label="Compose" extended soft onPress={() => nav.push({ name: "compose" })} />
         </Box>
       }
       maxW="normal"
@@ -80,18 +74,19 @@ export function ChatsScreen() {
         </Banner>
       ) : null}
       {info?.last_sync?.error ? <Banner tone="warning" title="The last check failed">{info.last_sync.error}</Banner> : null}
-      <Stack gap="sm">
-        <Row gap="xs">
-          <Box grow>
-            <SearchBar value={search} onChangeText={setSearch} placeholder="Search in mail" />
-          </Box>
-          {embedded ? tools : null}
-        </Row>
-        <TabStrip items={tabs} value={view} onChange={setView} />
-        <Divider />
-        <Row gap="sm">
-          <Chip label="Unread" icon="email-outline" selected={unreadOnly} onPress={() => setUnreadOnly(!unreadOnly)} testID="chat-unread-only" />
-        </Row>
+      <Stack gap="md">
+        <TextField
+          variant="primary"
+          pill
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search in mail"
+          returnKeyType="search"
+          clearable
+          left={<IconButton icon="menu" label="Mail menu" size="sm" onPress={() => setMenu(true)} />}
+          right={syncing ? <Spinner /> : <Avatar name={me} size="sm" />}
+        />
+        <Text variant="label" tone="muted">{count > 0 ? `${label} · ${count} new` : label}</Text>
       </Stack>
       {list === null ? (
         <Stack gap="md"><Skeleton /><Skeleton /><Skeleton /></Stack>
@@ -104,30 +99,21 @@ export function ChatsScreen() {
         />
       ) : (
         <Stack gap="none">
-          {shownList.map((c, i) => {
-            const group = listGroup(c.last_at, now(), fmt);
-            const heading = i === 0 || group !== listGroup(shownList[i - 1].last_at, now(), fmt);
-            return (
-              <Stack key={c.key} gap="none">
-                {heading ? (
-                  <Row justify="between" pt={i === 0 ? "none" : "lg"} pb="xs">
-                    <Text variant="label" tone="muted" level={2}>{group}</Text>
-                    <Text variant="caption" tone="muted">{unreadIn(group)}</Text>
-                  </Row>
-                ) : (
-                  <Divider />
-                )}
-                <ConversationRow c={c} now={now()} fmt={fmt} onPress={() => nav.push({ name: "chat", key: c.key })} />
-              </Stack>
-            );
-          })}
+          {shownList.map((c) => (
+            <ConversationRow key={c.key} c={c} now={now()} fmt={fmt} onPress={() => nav.push({ name: "chat", key: c.key })} />
+          ))}
         </Stack>
       )}
       <Sheet visible={menu} onClose={() => setMenu(false)} title="Mail">
         <Stack gap="none" px="xl" pb="xl">
-          <ListItem icon="calendar-month-outline" tile title="Calendar" subtitle="Events found in your mail" onPress={() => { setMenu(false); nav.reset(); nav.setTab("calendar"); }} />
-          <ListItem icon="text-box-outline" tile title="Templates" subtitle="Greeting and closing" onPress={() => { setMenu(false); nav.reset(); nav.setTab("templates"); }} />
-          <ListItem icon="email-outline" tile title="Mailbox" subtitle="The account the mail comes from" onPress={() => { setMenu(false); nav.reset(); nav.setTab("mailbox"); }} />
+          <ListItem icon="account-outline" tile title="People" subtitle={view === "people" ? "Showing now" : undefined} value={unread.people ? `${unread.people} new` : undefined} onPress={() => pick("people")} />
+          <ListItem icon="tag-outline" tile title="Topics" subtitle={view === "topics" ? "Showing now" : undefined} onPress={() => pick("topics")} />
+          <ListItem icon="bell-outline" tile title="Updates" subtitle={view === "updates" ? "Showing now" : undefined} value={unread.updates ? `${unread.updates} new` : undefined} onPress={() => pick("updates")} />
+          <ListItem icon="email-outline" tile title="Unread only" subtitle={unreadOnly ? "On" : "Off"} role="switch" checked={unreadOnly} onPress={() => { setUnreadOnly(!unreadOnly); setMenu(false); }} />
+          <ListItem icon="sync" tile title="Check for new mail" onPress={() => { setMenu(false); void syncNow(); }} />
+          <ListItem icon="calendar-month-outline" tile title="Calendar" subtitle="Events found in your mail" onPress={() => go("calendar")} />
+          <ListItem icon="text-box-outline" tile title="Templates" subtitle="Greeting and closing" onPress={() => go("templates")} />
+          <ListItem icon="cog-outline" tile title="Mailbox" subtitle="The account the mail comes from" onPress={() => go("mailbox")} />
         </Stack>
       </Sheet>
     </Screen>

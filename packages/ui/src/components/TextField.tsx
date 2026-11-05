@@ -34,6 +34,10 @@ export type TextFieldProps = {
   capitalize?: boolean | "words" | "characters";
   /** Something at the end of the field (a unit, a button). */
   right?: ReactNode;
+  /** Something at the start of the field in place of the icon (a menu button). */
+  left?: ReactNode;
+  /** A fully rounded field, like the search bar of a mail app. */
+  pill?: boolean;
   /** Do not let the keyboard fix the text (codes, IBANs, names of files). */
   autoCorrect?: boolean;
   editable?: boolean;
@@ -45,7 +49,7 @@ export type TextFieldProps = {
 
 export function TextField({
   label, value, onChangeText, placeholder, helper, error, icon, multiline, compact, secure, keyboardType, returnKeyType, onSubmit,
-  clearable, variant = "secondary", autoFocus, capitalize, right, autoCorrect = false, editable = true, onBlur, maxLength, testID,
+  clearable, variant = "secondary", autoFocus, capitalize, right, left, pill, autoCorrect = false, editable = true, onBlur, maxLength, testID,
 }: TextFieldProps) {
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
@@ -56,7 +60,7 @@ export function TextField({
         gap="sm"
         px="md"
         bg={variant === "primary" ? "field" : "sunken"}
-        radius="field"
+        radius={pill ? "full" : "field"}
         align={multiline ? "start" : "center"}
         control="md"
         // HeroUI: no outline at rest; the accent colour on focus, red on error (the border is always
@@ -65,7 +69,7 @@ export function TextField({
         borderTone={error ? "danger" : focused ? "focus" : "clear"}
         shadow={variant === "primary" ? "field" : undefined}
       >
-        {icon ? <Icon name={icon} size="md" tone="muted" /> : null}
+        {left ?? (icon ? <Icon name={icon} size="md" tone="muted" /> : null)}
         <Box grow>
           <TextInput
             value={value}

@@ -1,6 +1,4 @@
-import { useState } from "react";
-
-import { Avatar, Badge, Box, Card, ChatBubble, DateBadge, DividerLabel, Row, Stack, TabStrip, Text, tones, type Tone } from "@financer/ui";
+import { Avatar, Badge, Box, Card, ChatBubble, DateBadge, DividerLabel, Row, Stack, Text, tones, type Tone } from "@financer/ui";
 
 import type { StoryDef } from "../Story";
 
@@ -64,23 +62,7 @@ function DividerLabels() {
   );
 }
 
-function Tabs() {
-  const [v, setV] = useState("people");
-  return (
-    <TabStrip
-      value={v}
-      onChange={setV}
-      items={[
-        { key: "people", label: "People", icon: "account-outline", badge: "2 new" },
-        { key: "topics", label: "Topics", icon: "tag-outline" },
-        { key: "updates", label: "Updates", icon: "bell-outline", badge: "1 new" },
-      ]}
-    />
-  );
-}
-
 export const mailStories: StoryDef[] = [
-  { id: "tab-strip", title: "Tab strip", note: "How Gmail sets Primary, Social and Promotions apart: an icon and a name, the chosen one underlined, a small \"2 new\" under a tab that has something. It switches what the list below shows.", render: () => <Tabs /> },
   { id: "avatar", title: "Avatar", note: "A person as their initials. The colour comes from the name, so the same person always looks the same.", render: () => <Avatars /> },
   { id: "bubble", title: "Chat bubble", note: "Yours on the right in the accent colour, theirs on the left; both stop short of the far edge.", render: () => <Bubbles /> },
   { id: "date-badge", title: "Date badge", note: "A day as a small calendar tile, for the agenda.", render: () => <DateBadges /> },

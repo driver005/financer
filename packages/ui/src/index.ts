@@ -38,7 +38,6 @@ export { Segmented, type SegmentedOption } from "./components/Segmented";
 export { Skeleton } from "./components/Skeleton";
 export { Sparkline } from "./components/Sparkline";
 export { Spinner } from "./components/Spinner";
-export { TabStrip, type TabStripItem } from "./components/TabStrip";
 export { Switch, SwitchRow } from "./components/Switch";
 export { SearchBar, TextField, type TextFieldProps } from "./components/TextField";
 export { Thumbnail } from "./components/Thumbnail";
