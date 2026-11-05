@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { BarChart, Box, Chip, ChipRow, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, IconButton, Note, Section, Text, VirtualList } from "@financer/ui";
+import { BarChart, Box, Chip, ChipRow, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, IconButton, Note, SearchBar, Section, Text, VirtualList } from "@financer/ui";
 
 import type { Split, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -18,7 +18,8 @@ import { defaultSource, needsSetup, type SourceId } from "@/bankSetup";
 import { pickFileBytes } from "@/native/files";
 import { localIsoDate } from "@/period";
 import { useBankSources } from "@/useBankSources";
-import { TX_FILTERS, dayTotal, emptyFilterText, filterTx, type TxFilter } from "@/spendingView";
+import { TX_FILTERS, dayTotal, emptyFilterText, filterTx, searchTx, type TxFilter } from "@/spendingView";
+import { CategoryCard } from "@/components/today/CategoryCard";
 
 const TREND_DAYS = 14;
 
@@ -45,6 +46,7 @@ export default function Spending() {
   const [splits, setSplits] = useState<Split[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [filter, setFilter] = useState<TxFilter>("all");
+  const [query, setQuery] = useState("");
   const [source, setSource] = useState<SourceId | null>(null);
   const [setup, setSetup] = useState<{ open: boolean; start?: SourceId }>({ open: false });
 
@@ -95,7 +97,10 @@ export default function Spending() {
   const activeSource = source ?? defaultSource(connections);
 
   const today = localIsoDate();
-  const groups = useMemo(() => groupByDay(filterTx(items, filter)), [items, filter]);
+  const shown = useMemo(() => searchTx(filterTx(items, filter), query), [items, filter, query]);
+  const groups = useMemo(() => groupByDay(shown), [shown]);
+  // the span of what is listed, for the "Where it went" card (the list comes newest first)
+  const span = useMemo(() => (shown.length ? { start: shown[shown.length - 1].booking_date, end: shown[0].booking_date } : null), [shown]);
   const splitIds = useMemo(() => new Set(splits.map((s) => s.transaction_id)), [splits]);
   const trend = useMemo(() => spendingTrend(items, today, TREND_DAYS), [items, today]);
 
@@ -174,6 +179,8 @@ export default function Spending() {
                   <BarChart values={trend.series} highlight={trend.peak} summary={sentence} onCard />
                   <HeroCaption>{sentence}</HeroCaption>
                 </HeroCard>
+                {filter !== "income" && span ? <CategoryCard txs={shown} period={span} link={false} /> : null}
+                <SearchBar value={query} onChangeText={setQuery} placeholder="Search shops, words and categories" />
                 <ChipRow>
                   {TX_FILTERS.map((f) => (
                     <Chip key={f.value} label={f.label} selected={filter === f.value} onPress={() => setFilter(f.value)} />
@@ -189,7 +196,7 @@ export default function Spending() {
           !fetched ? (
             <Loading rows={5} />
           ) : items.length > 0 ? (
-            <Text variant="body" tone="muted">{emptyFilterText(filter)}</Text>
+            <Text variant="body" tone="muted">{query.trim() ? "No booking matches that search." : emptyFilterText(filter)}</Text>
           ) : (
             <Empty
               title="No transactions yet"

@@ -1198,6 +1198,11 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg::<String>(&args, "zone")?,
             &arg::<mail_format::Pack>(&args, "pack")?,
         )?),
+        "mail_format.list_group" => json(mail_format::list_group(
+            arg(&args, "ts")?,
+            arg(&args, "now_ts")?,
+            &arg::<String>(&args, "zone")?,
+        )?),
         "mail_format.ago" => json(mail_format::ago(arg(&args, "ts")?, arg(&args, "now_ts")?)),
         "mail_format.agenda_days" => json(mail_format::agenda_days(
             &arg::<Vec<Value>>(&args, "events")?,
@@ -1295,6 +1300,10 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
         "app_misc.filter_tx" => json(app_misc::filter_tx(
             &arg::<Vec<Value>>(&args, "items")?,
             &arg::<String>(&args, "filter")?,
+        )),
+        "app_misc.search_tx" => json(app_misc::search_tx(
+            &arg::<Vec<Value>>(&args, "items")?,
+            &arg::<String>(&args, "query")?,
         )),
         "app_misc.day_total" => json(app_misc::day_total(&arg::<Vec<Value>>(&args, "items")?)),
         "app_misc.empty_filter_text" => json(app_misc::empty_filter_text(&arg::<String>(

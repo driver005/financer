@@ -10,7 +10,7 @@ import { categoryShares, sharesSummary } from "@/todayCharts";
  * row per category with its amount and share. The colours only tell the slices apart; every row
  * names its category, so nothing depends on telling hues apart.
  */
-export function CategoryCard({ txs, period }: { txs: { booking_date: string; amount_cents: number; category?: string | null }[]; period: { start: string; end: string } }) {
+export function CategoryCard({ txs, period, link = true }: { txs: { booking_date: string; amount_cents: number; category?: string | null }[]; period: { start: string; end: string }; /** Offer the button to the full list (not on the list itself). */ link?: boolean }) {
   const router = useRouter();
   const colour = useSeriesColor();
   const { total, shares } = categoryShares(txs, period, 5);
@@ -23,7 +23,7 @@ export function CategoryCard({ txs, period }: { txs: { booking_date: string; amo
           <Text variant="bodyStrong" level={3}>Where it went</Text>
           <Text variant="caption" tone="muted">{periodLabel(period)}</Text>
         </Box>
-        <Button label="All spending" size="sm" variant="ghost" onPress={() => router.push("/spending")} />
+        {link ? <Button label="All spending" size="sm" variant="ghost" onPress={() => router.push("/spending")} /> : null}
       </Row>
       <Row gap="lg" wrap align="center">
         <DonutChart

@@ -17,6 +17,9 @@ export const TX_FILTERS: readonly { value: TxFilter; label: string }[] = [
 /** The bookings that match `filter`; the input order is kept. */
 export const filterTx = <T extends Tx>(items: T[], filter: TxFilter): T[] => (filter === "all" ? items : logic("app_misc.filter_tx", { items, filter }));
 
+/** The bookings whose counterparty, purpose or category contain every word typed in the search box. */
+export const searchTx = <T extends Tx>(items: T[], query: string): T[] => (query.trim() === "" ? items : logic("app_misc.search_tx", { items, query }));
+
 /** Net amount of a day's bookings: income minus spending. */
 export const dayTotal = (items: Tx[]): number => logic("app_misc.day_total", { items });
 

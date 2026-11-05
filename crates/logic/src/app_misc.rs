@@ -26,6 +26,34 @@ pub fn filter_tx(items: &[Value], filter: &str) -> Vec<Value> {
         .collect()
 }
 
+/// The bookings that match what was typed in the search box: every word of `query` must appear
+/// (any case) in the counterparty, the purpose or the category. A blank query keeps everything.
+pub fn search_tx(items: &[Value], query: &str) -> Vec<Value> {
+    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    if words.is_empty() {
+        return items.to_vec();
+    }
+    let text = |t: &Value, key: &str| {
+        t.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_lowercase()
+    };
+    items
+        .iter()
+        .filter(|t| {
+            let hay = format!(
+                "{} {} {}",
+                text(t, "counterparty"),
+                text(t, "purpose"),
+                text(t, "category")
+            );
+            words.iter().all(|w| hay.contains(w.as_str()))
+        })
+        .cloned()
+        .collect()
+}
+
 /// Net amount of a day's bookings: income minus spending.
 pub fn day_total(items: &[Value]) -> i64 {
     items.iter().map(|t| cents(t) as i64).sum()
@@ -192,6 +220,22 @@ mod tests {
         assert_eq!(filter_tx(&items, "all").len(), 3);
         assert_eq!(day_total(&items), 300);
         assert_eq!(empty_filter_text("income"), "No income to show.");
+    }
+
+    #[test]
+    fn the_search_finds_every_word_in_the_counterparty_purpose_or_category() {
+        let items = [
+            json!({ "counterparty": "REWE Markt GmbH", "purpose": "Einkauf 14.10.", "category": "groceries" }),
+            json!({ "counterparty": "Netflix International", "purpose": "Abo", "category": "subscriptions" }),
+            json!({ "counterparty": "Hausverwaltung Schmidt", "purpose": "Miete November", "category": null }),
+        ];
+        assert_eq!(search_tx(&items, "").len(), 3);
+        assert_eq!(search_tx(&items, "   ").len(), 3);
+        assert_eq!(search_tx(&items, "rewe").len(), 1);
+        assert_eq!(search_tx(&items, "REWE einkauf").len(), 1);
+        assert_eq!(search_tx(&items, "rewe netflix").len(), 0);
+        assert_eq!(search_tx(&items, "groceries").len(), 1);
+        assert_eq!(search_tx(&items, "miete").len(), 1);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ago, clock, dayKey, dayLabel, dayOfMonth, dayText, daysBetween, listTime, localClock, shiftDay, weekdayShort } from "../src/logic/format";
+import { ago, clock, dayKey, dayLabel, dayOfMonth, dayText, daysBetween, listGroup, listTime, localClock, shiftDay, weekdayShort } from "../src/logic/format";
 
 const f = { locale: "en-GB", timeZone: "Europe/Berlin" };
 // 2026-11-03 09:00 UTC = 10:00 in Berlin, a Tuesday
@@ -54,6 +54,13 @@ describe("times", () => {
     assert.equal(listTime(at(2026, 10, 30, 12), NOW, f), "Fri", "this week: the weekday");
     assert.equal(listTime(at(2026, 10, 20, 12), NOW, f), "20 Oct", "older: the date");
     assert.equal(listTime(at(2025, 12, 24, 12), NOW, f), "24 Dec 2025", "another year: with the year");
+  });
+
+  it("groups a conversation list under Today, Yesterday, This week and Earlier", () => {
+    assert.equal(listGroup(at(2026, 11, 3, 6, 15), NOW, f), "Today");
+    assert.equal(listGroup(at(2026, 11, 2, 12), NOW, f), "Yesterday");
+    assert.equal(listGroup(at(2026, 10, 30, 12), NOW, f), "This week");
+    assert.equal(listGroup(at(2026, 10, 20, 12), NOW, f), "Earlier");
   });
 
   it("says how long ago", () => {

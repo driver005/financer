@@ -85,6 +85,9 @@ export const dayLabel = (key: string, todayKey: string, f: Fmt = {}): string => 
 /** For a conversation list: the time today, "Yesterday", the weekday this week, else the date. */
 export const listTime = (ts: number, nowTs: number, f: Fmt = {}): string => withFmt("mail_format.list_time", { ts, now_ts: nowTs }, f, "both");
 
+/** The heading a chat list groups under: Today, Yesterday, This week or Earlier. */
+export const listGroup = (ts: number, nowTs: number, f: Fmt = {}): string => withFmt("mail_format.list_group", { ts, now_ts: nowTs }, f, "zone");
+
 /** "just now", "5 min ago", "2 h ago", "3 days ago": how long ago something was. */
 export const ago = (ts: number, nowTs: number): string => logic("mail_format.ago", { ts, now_ts: nowTs });
 

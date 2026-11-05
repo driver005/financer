@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Banner, Button, Divider, EmptyState, IconButton, Screen, SearchBar, Segmented, Skeleton, Spinner, Stack, TopBar } from "@financer/ui";
+import { Banner, Button, Divider, EmptyState, IconButton, Screen, SearchBar, Segmented, Skeleton, Spinner, Stack, Text, TopBar } from "@financer/ui";
 
 import { MailApiError } from "../../api/client";
 import type { Conversation } from "../../api/types";
+import { listGroup } from "../../logic/format";
 import { ConversationRow } from "../components/ConversationRow";
 import { useNav } from "../nav";
 import { useMail } from "../runtime";
@@ -82,12 +83,22 @@ export function ChatsScreen() {
         />
       ) : (
         <Stack gap="none">
-          {list.map((c, i) => (
-            <Stack key={c.key} gap="none">
-              {i > 0 ? <Divider /> : null}
-              <ConversationRow c={c} now={now()} fmt={fmt} onPress={() => nav.push({ name: "chat", key: c.key })} />
-            </Stack>
-          ))}
+          {list.map((c, i) => {
+            const group = listGroup(c.last_at, now(), fmt);
+            const heading = i === 0 || group !== listGroup(list[i - 1].last_at, now(), fmt);
+            return (
+              <Stack key={c.key} gap="none">
+                {heading ? (
+                  <Stack pt={i === 0 ? "none" : "lg"} pb="xs">
+                    <Text variant="label" tone="muted" level={2}>{group}</Text>
+                  </Stack>
+                ) : (
+                  <Divider />
+                )}
+                <ConversationRow c={c} now={now()} fmt={fmt} onPress={() => nav.push({ name: "chat", key: c.key })} />
+              </Stack>
+            );
+          })}
         </Stack>
       )}
     </Screen>

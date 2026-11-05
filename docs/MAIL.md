@@ -50,7 +50,8 @@ Mail is **not** part of the finance export or backup: it is bulky and private, a
 is one chat of bubbles, yours on the right. A mail to several people is a chat of its own. The bubble
 shows what was said: the quoted reply chain (English, German, Outlook), the signature and the greeting and
 closing are left out (tap a bubble marked "quoted text hidden" to read the original). When the subject
-changes inside a chat, a topic marker shows it.
+changes inside a chat, a topic marker shows it. The list of chats is grouped under Today, Yesterday, This
+week and Earlier (the rule is `mail_format.list_group` in `crates/logic`).
 
 **Topics.** The same mail grouped by subject instead: one thread per subject, whoever takes part. Threads
 follow `In-Reply-To` and `References`; when a client dropped them, the same subject with a person in

@@ -194,6 +194,20 @@ pub fn list_time(ts: f64, now_ts: f64, zone: &str, p: &Pack) -> Result<String, S
         .join(" "))
 }
 
+/// The heading a conversation list groups its chats under: Today, Yesterday, This week (the last
+/// six days) or Earlier. The same days `list_time` writes as a time, "Yesterday" and a weekday.
+pub fn list_group(ts: f64, now_ts: f64, zone: &str) -> Result<&'static str, String> {
+    let key = day_key(ts, zone)?;
+    let today = day_key(now_ts, zone)?;
+    let age = days_between(&key, &today)?;
+    Ok(match age {
+        i64::MIN..=0 => "Today",
+        1 => "Yesterday",
+        2..=6 => "This week",
+        _ => "Earlier",
+    })
+}
+
 /// "just now", "5 min ago", "2 h ago", "3 days ago": how long ago something was.
 pub fn ago(ts: f64, now_ts: f64) -> String {
     let s = (now_ts - ts).max(0.0);
@@ -539,6 +553,19 @@ mod tests {
         assert_eq!(list_time(at(314, 12), NOW, z, &p).unwrap(), "24 Dec 2025");
         assert_eq!(ago(NOW - 5.0 * 60.0, NOW), "5 min ago");
         assert_eq!(ago(NOW + 100.0, NOW), "just now");
+    }
+
+    #[test]
+    fn a_list_groups_its_chats_under_a_heading() {
+        let z = "Europe/Berlin";
+        let at = |d: i64, h: i64| NOW - (d * 86_400) as f64 + (h - 9) as f64 * 3600.0;
+        assert_eq!(list_group(at(0, 6), NOW, z).unwrap(), "Today");
+        assert_eq!(list_group(at(1, 12), NOW, z).unwrap(), "Yesterday");
+        assert_eq!(list_group(at(2, 12), NOW, z).unwrap(), "This week");
+        assert_eq!(list_group(at(6, 12), NOW, z).unwrap(), "This week");
+        assert_eq!(list_group(at(7, 12), NOW, z).unwrap(), "Earlier");
+        // something stamped after now is still today
+        assert_eq!(list_group(NOW + 3600.0, NOW, z).unwrap(), "Today");
     }
 
     #[test]
