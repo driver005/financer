@@ -1,4 +1,4 @@
-import { IconBadge, ListItem, Money } from "@financer/ui";
+import { Box, IconBadge, ListItem, Money } from "@financer/ui";
 
 import type { Transaction } from "@/api/client";
 import { categoryIcon, categoryLabel } from "@/categoryIcons";
@@ -18,7 +18,7 @@ export function TransactionRow({ item, split, onPress }: { item: Transaction; sp
       leading={<IconBadge icon={asIcon(cat.icon)} tone={toTone(cat.tone)} />}
       title={name}
       subtitle={split ? "Split" : categoryLabel(item.category)}
-      trailing={<Money cents={item.amount_cents} variant="bodyStrong" signed />}
+      trailing={<Box shrink={false}><Money cents={item.amount_cents} variant="bodyStrong" signed /></Box>}
       label={`${name}, ${spokenMoney(item.amount_cents)}, ${split ? "split" : categoryLabel(item.category)}. Change category or split`}
       onPress={onPress}
     />

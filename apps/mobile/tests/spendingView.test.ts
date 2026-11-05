@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { dayTotal, filterTx, incomeSpent, searchTx } from "../src/spendingView";
+import { NO_FILTERS, applyFilters, dayTotal, filterChips, filterTx, incomeSpent, searchTx, withoutFilter, type BookingFilters } from "../src/spendingView";
 
 const tx = (counterparty: string, purpose: string, category: string | null, amount_cents: number) => ({ counterparty, purpose, category, amount_cents });
 
@@ -27,5 +27,39 @@ describe("the Spending list", () => {
     const spending = filterTx(items, "spending");
     assert.equal(searchTx(spending, "gehalt").length, 0);
     assert.equal(dayTotal(searchTx(spending, "netflix")), -1299);
+  });
+});
+
+const booking = (booking_date: string, counterparty: string, category: string | null, amount_cents: number) => ({ booking_date, counterparty, purpose: "", category, amount_cents });
+const book = [
+  booking("2026-11-05", "REWE", "groceries", -4674),
+  booking("2026-11-03", "Lidl", "groceries", -1294),
+  booking("2026-10-30", "Netflix", "subscriptions", -1299),
+  booking("2026-10-01", "Arbeitgeber", null, 285000),
+];
+const today = "2026-11-05";
+
+describe("the filters of the list", () => {
+  it("shows everything with no filter, newest first", () => {
+    assert.deepEqual(applyFilters(book, NO_FILTERS, today).map((t) => t.counterparty), ["REWE", "Lidl", "Netflix", "Arbeitgeber"]);
+    assert.deepEqual(filterChips(NO_FILTERS), []);
+  });
+  it("narrows by kind, category, period and amount together", () => {
+    const f: BookingFilters = { ...NO_FILTERS, kind: "spending", categories: ["groceries"], preset: "30d", max_cents: 2000 };
+    assert.deepEqual(applyFilters(book, f, today).map((t) => t.counterparty), ["Lidl"]);
+    assert.deepEqual(applyFilters(book, { ...NO_FILTERS, categories: ["uncategorized"] }, today).map((t) => t.counterparty), ["Arbeitgeber"]);
+  });
+  it("orders by amount, whichever way it went", () => {
+    assert.deepEqual(applyFilters(book, { ...NO_FILTERS, sort: "largest" }, today).map((t) => t.counterparty), ["Arbeitgeber", "REWE", "Netflix", "Lidl"]);
+    assert.deepEqual(applyFilters(book, { ...NO_FILTERS, sort: "oldest" }, today).map((t) => t.counterparty), ["Arbeitgeber", "Netflix", "Lidl", "REWE"]);
+  });
+  it("has a chip for every filter that is on, and each chip switches its filter off", () => {
+    const f: BookingFilters = { ...NO_FILTERS, query: "re", kind: "spending", categories: ["groceries", "utilities"], preset: "month", min_cents: 500, sort: "largest" };
+    const chips = filterChips(f);
+    assert.deepEqual(chips.map((c) => c.key), ["query", "kind", "preset", "category:groceries", "category:utilities", "amount", "sort"]);
+    let left = f;
+    for (const c of chips) left = withoutFilter(left, c.key);
+    assert.deepEqual(left, NO_FILTERS);
+    assert.deepEqual(withoutFilter(f, "category:groceries").categories, ["utilities"]);
   });
 });

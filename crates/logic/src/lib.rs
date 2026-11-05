@@ -1301,6 +1301,14 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg::<Vec<Value>>(&args, "items")?,
             &arg::<String>(&args, "filter")?,
         )),
+        "app_misc.apply_filters" => json(app_misc::apply_filters(
+            &arg::<Vec<Value>>(&args, "items")?,
+            &arg::<app_misc::Filters>(&args, "filters")?,
+            &arg::<String>(&args, "today")?,
+        )?),
+        "app_misc.filter_chips" => json(app_misc::filter_chips(&arg::<app_misc::Filters>(
+            &args, "filters",
+        )?)),
         "app_misc.search_tx" => json(app_misc::search_tx(
             &arg::<Vec<Value>>(&args, "items")?,
             &arg::<String>(&args, "query")?,
