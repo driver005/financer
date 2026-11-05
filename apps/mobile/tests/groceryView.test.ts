@@ -5,6 +5,7 @@ import type { Price, RecipeMatch } from "../src/api/client";
 import {
   MEAL_TONES,
   chainTone,
+  clampServings,
   costPerServing,
   extraText,
   hashText,
@@ -14,6 +15,7 @@ import {
   mealTone,
   percentDone,
   rankPrices,
+  scaleAmount,
   shortList,
   summarizePrices,
 } from "../src/groceryView";
@@ -154,5 +156,17 @@ describe("progress", () => {
     assert.equal(percentDone(1, 3), 33);
     assert.equal(percentDone(3, 3), 100);
     assert.equal(percentDone(0, 0), 0);
+  });
+});
+
+describe("a recipe page", () => {
+  it("scales amounts to the chosen servings and writes them like a recipe", () => {
+    assert.equal(scaleAmount("250 g", 4, 2), "500 g");
+    assert.equal(scaleAmount("2 Eier", 3, 4), "1½ Eier");
+    assert.equal(scaleAmount("nach Geschmack", 8, 2), "nach Geschmack");
+  });
+  it("keeps the servings between one and twenty-four", () => {
+    assert.equal(clampServings(0), 1);
+    assert.equal(clampServings(100), 24);
   });
 });

@@ -27,7 +27,7 @@ export const size = {
   /** A dialog or sheet on a wide screen stays this wide; on a phone it is full width. */
   sheet: { maxWidth: content.narrow, handle: spacing[1], handleWidth: spacing[10] },
   /** The calendar: height of one hour in the day and week views, the hour labels, month cells */
-  calendar: { hour: spacing[14], gutter: spacing[12], monthCell: spacing[24], monthCellCompact: spacing[16], dot: spacing[1.5], allDayRow: spacing[6], miniCell: spacing[9] },
+  calendar: { hour: spacing[14], gutter: spacing[12], monthCell: spacing[24], monthCellCompact: spacing[20], dot: spacing[1.5], nowDot: spacing[2.5], dateColumn: spacing[12], allDayRow: spacing[6], miniCell: spacing[9] },
   content,
 } as const;
 

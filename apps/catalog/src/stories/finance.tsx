@@ -3,7 +3,7 @@ import { useState } from "react";
 import {
   BarChart, Box, Button, Card, ChoiceCard, ColumnChart, CompareBars, ConfirmAction, CurveChart, DonutChart, Dot, Expandable, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, HeroNumber,
   HeroProgress, HeroStats, IconBadge, ListItem, Mascot, MascotFace, Money, Note, ProgressRing, Row, ScanFrame, Snackbar, Stack, Stepper, Text, TileButton, ToggleRow, useSeriesColor,
-  Icon,
+  Icon, IngredientRow, RecipeCover, RecipeFacts, RecipeStep, ServingsPicker,
 } from "@financer/ui";
 
 import type { StoryDef } from "../Story";
@@ -147,11 +147,38 @@ function Friends() {
   );
 }
 
+function RecipePage() {
+  const [servings, setServings] = useState(4);
+  const amounts = [["250 g", "Spaghetti", "have"], ["1 Dose", "Tomaten", "missing"], ["2 Zehen", "Knoblauch", "offer"]] as const;
+  return (
+    <Stack gap="lg">
+      <RecipeCover tone="warning" letter="S">
+        <ProgressRing progress={0.67} box="md" stroke="lg" label="You already buy 67 percent">
+          <Text variant="number">67%</Text>
+        </ProgressRing>
+      </RecipeCover>
+      <Text variant="title" level={1}>Spaghetti al pomodoro</Text>
+      <RecipeFacts facts={[{ icon: "clock-outline", label: "Time", value: "25 min" }, { icon: "account-multiple-outline", label: "Servings", value: "4 servings" }, { icon: "cash", label: "To buy per serving", value: "0,85 €" }]} />
+      <ServingsPicker label="Servings" value={servings} unit="servings" onChange={setServings} />
+      <Card gap="none">
+        {amounts.map(([a, n, st]) => (
+          <IngredientRow key={n} amount={a} name={n} state={st} />
+        ))}
+      </Card>
+      <Card gap="xs">
+        <RecipeStep n={1} text="Bring salted water to the boil and cook the pasta until it has a little bite." />
+        <RecipeStep n={2} text="Fry the garlic gently, add the tomatoes and let it reduce for ten minutes." />
+      </Card>
+    </Stack>
+  );
+}
+
 export const financeStories: StoryDef[] = [
   { id: "money", title: "Money", note: "An amount, set the same way everywhere.", render: () => <Money_ /> },
   { id: "hero", title: "Hero card", note: "One per screen, for the number the screen is about.", render: () => <Hero /> },
   { id: "charts", title: "Charts", note: "Every chart has a sentence that says the same in words.", render: () => <Charts /> },
   { id: "rows", title: "Rows, switches, steppers, tiles", note: "The settings and list vocabulary of the finance app.", render: () => <Rows /> },
   { id: "choices", title: "Choices, notes, confirm", note: "Setup answers and the confirm-first danger action.", render: () => <Choices /> },
+  { id: "recipe", title: "Recipe page", note: "A recipe as a full page: cover, facts, a servings stepper that rescales the amounts, ingredients that show how they fit what you buy, numbered steps.", render: () => <RecipePage /> },
   { id: "friends", title: "Mascot, scan frame, snackbar", render: () => <Friends /> },
 ];

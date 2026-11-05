@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { type GestureResponderEvent, Pressable, ScrollView, type ScrollViewInstance, View } from "react-native";
 
 import { opacity, overlap } from "../constants/misc";
-import { borderWidth } from "../constants/radius";
+import { borderWidth, radius } from "../constants/radius";
 import { size } from "../constants/sizes";
 import { space } from "../constants/spacing";
 import { Box } from "../primitives/Box";
@@ -85,7 +85,9 @@ export function TimeGrid({ days, nowMinutes, onSlot, onSelectDay }: { days: DayC
                 <Block key={b.key} block={b} />
               ))}
               {d.today && nowMinutes !== undefined ? (
-                <View pointerEvents="none" style={{ position: "absolute", top: (nowMinutes / 60) * hour - size.stroke.sm, left: 0, right: 0, height: size.stroke.sm * 2, backgroundColor: colors.tones.danger.solid }} />
+                <View pointerEvents="none" style={{ position: "absolute", top: (nowMinutes / 60) * hour - size.stroke.sm, left: 0, right: 0, height: size.stroke.sm * 2, backgroundColor: colors.tones.danger.solid }}>
+                  <View style={{ position: "absolute", left: -size.calendar.nowDot / 2, top: size.stroke.sm - size.calendar.nowDot / 2, width: size.calendar.nowDot, height: size.calendar.nowDot, borderRadius: radius.full, backgroundColor: colors.tones.danger.solid }} />
+                </View>
               ) : null}
             </View>
           ))}
@@ -106,9 +108,9 @@ function AllDayChip({ item }: { item: CalendarItem }) {
 
 /**
  * One event. Events that overlap in time lie on top of each other, each a little further right so
- * every title stays readable, and each fill is see-through: where two overlap their colours mix
- * (blue over green looks teal), so a clash is visible at a glance. Events that start together
- * (their titles would hide each other) share the width side by side instead.
+ * every title stays readable. Each is a solid tile in its calendar's colour with the ink that reads
+ * on it, as in Google Calendar. Events that start together (their titles would hide each other)
+ * share the width side by side instead.
  */
 function Block({ block: b }: { block: TimeBlock }) {
   const { colors } = useTheme();
@@ -129,11 +131,10 @@ function Block({ block: b }: { block: TimeBlock }) {
       }}
     >
       <Touchable onPress={b.onPress} label={b.subtitle ? `${b.title}, ${b.subtitle}` : b.title} hit={false} radius="md" overflow="hidden" grow>
-        <View pointerEvents="none" style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colors.tones[b.tone].solid, opacity: opacity[40] }} />
-        <View pointerEvents="none" style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: size.stroke.md, backgroundColor: colors.tones[b.tone].solid }} />
-        <Box p="xs" pl="sm">
-          <Text variant="caption" tone={`on-${b.tone}-soft`} numberOfLines={tall ? 2 : 1}>{b.title}</Text>
-          {tall && b.subtitle ? <Text variant="caption" tone={`on-${b.tone}-soft`} numberOfLines={1}>{b.subtitle}</Text> : null}
+        <View pointerEvents="none" style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colors.tones[b.tone].solid }} />
+        <Box p="xs" px="sm">
+          <Text variant="caption" tone={`on-${b.tone}-solid`} numberOfLines={tall ? 2 : 1}>{b.title}</Text>
+          {tall && b.subtitle ? <Text variant="caption" tone={`on-${b.tone}-solid`} numberOfLines={1}>{b.subtitle}</Text> : null}
         </Box>
       </Touchable>
     </View>

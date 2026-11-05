@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AgendaList, Box, Button, Card, FloatingButton, IconButton, MiniMonth, MonthGrid, Row, Scroll, Section, Segmented, Snackbar, Stack, Text, TextField, TimeGrid, useLayout } from "@financer/ui";
+import { AgendaList, Box, Button, Card, FloatingButton, Icon, IconButton, MiniMonth, MonthGrid, OptionList, Row, Scroll, Section, Sheet, Snackbar, Stack, Text, TextField, TimeGrid, Touchable, useLayout } from "@financer/ui";
 
 import type { Calendar, CalendarEvent } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -43,6 +43,8 @@ export default function CalendarScreen() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [calendarsOpen, setCalendarsOpen] = useState(false);
+  const [viewsOpen, setViewsOpen] = useState(false);
+  const [jumpOpen, setJumpOpen] = useState(false);
   const [quick, setQuick] = useState("");
   const [quickOpen, setQuickOpen] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -205,6 +207,9 @@ export default function CalendarScreen() {
     );
   }
 
+  // one letter on a phone, as Google draws it
+  const weekdayNames = WEEKDAY_SHORT.map((w) => (wide ? w : w.slice(0, 1)));
+
   const columns =
     view === "week"
       ? weekOf(anchor)
@@ -212,32 +217,52 @@ export default function CalendarScreen() {
         ? [anchor, addDays(anchor, 1), addDays(anchor, 2)]
         : [anchor];
 
+  const todayButton = <IconButton icon="calendar-today" label="Today" onPress={() => go(today)} />;
+  const viewButton = <IconButton icon="eye-outline" label={`View: ${VIEWS.find((v) => v.value === view)?.label ?? ""}`} onPress={() => setViewsOpen(true)} />;
+
+  // Google's top bar: the month with an arrow that drops the small month down, then Today and the view menu
   const nav = (
-    <Row gap="sm" align="center">
-      <Box grow>
+    <Row gap="xs" align="center">
+      <Touchable onPress={() => setJumpOpen(!jumpOpen)} label={`${titleFor(view, anchor)}, jump to a date`} selected={jumpOpen} hit={false} direction="row" align="center" gap="xs" grow>
         <Text variant="heading" numberOfLines={1}>{titleFor(view, anchor)}</Text>
-      </Box>
-      <Button label="Today" variant="outline" size="sm" onPress={() => go(today)} />
-      <Row>
-        <IconButton icon="chevron-left" label="Previous" onPress={() => go(step(view, anchor, -1))} />
-        <IconButton icon="chevron-right" label="Next" onPress={() => go(step(view, anchor, 1))} />
-      </Row>
+        <Icon name={jumpOpen ? "menu-up" : "menu-down"} size="md" tone="muted" />
+      </Touchable>
+      {wide ? todayButton : null}
+      <IconButton icon="chevron-left" label="Previous" onPress={() => go(step(view, anchor, -1))} />
+      <IconButton icon="chevron-right" label="Next" onPress={() => go(step(view, anchor, 1))} />
+      {wide ? viewButton : null}
     </Row>
   );
+
+  const jump = jumpOpen && !wide ? (
+    <Card>
+      <MiniMonth
+        title={titleFor("month", anchor)}
+        weekdays={WEEKDAY_SHORT.map((w) => w.slice(0, 1))}
+        weeks={miniCells(anchor, today, anchor, occurrences)}
+        onSelect={(d) => {
+          go(d);
+          setJumpOpen(false);
+        }}
+        onPrev={() => go(step("month", anchor, -1))}
+        onNext={() => go(step("month", anchor, 1))}
+      />
+    </Card>
+  ) : null;
 
   const main = (
     <Stack gap="md" grow>
       {nav}
-      <Segmented value={view} onChange={pickView} options={VIEWS} testID="calendar-views" />
+      {jump}
       {error ? <Text tone="danger">{error}</Text> : null}
       {view === "month" ? (
         <Scroll>
           {wide ? (
-            <MonthGrid weekdays={WEEKDAY_SHORT.slice()} weeks={monthCells(anchor, today, anchor, occurrences, open)} onSelectDay={selectDay} />
+            <MonthGrid weekdays={weekdayNames} weeks={monthCells(anchor, today, anchor, occurrences, open)} onSelectDay={selectDay} />
           ) : (
             <>
               <Card>
-                <MonthGrid weekdays={WEEKDAY_SHORT.slice()} weeks={monthCells(anchor, today, anchor, occurrences, open)} onSelectDay={selectDay} />
+                <MonthGrid weekdays={weekdayNames} weeks={monthCells(anchor, today, anchor, occurrences, open)} onSelectDay={selectDay} />
               </Card>
               <Text variant="subheading">{anchor === today ? `Today, ${longDay(anchor)}` : longDay(anchor, today)}</Text>
               <AgendaList days={agendaDays(anchor, anchor, today, occurrences, open).map((d) => ({ ...d, heading: "" }))} empty="Nothing planned this day." />
@@ -282,7 +307,13 @@ export default function CalendarScreen() {
       fixed
       actions={
         <>
-          {wide ? null : <IconButton icon="flash-outline" label="Quick add" onPress={() => setQuickOpen(!quickOpen)} selected={quickOpen} />}
+          {wide ? null : (
+            <>
+              {todayButton}
+              {viewButton}
+              <IconButton icon="flash-outline" label="Quick add" onPress={() => setQuickOpen(!quickOpen)} selected={quickOpen} />
+            </>
+          )}
           <IconButton icon="calendar-multiple" label="Calendars" onPress={() => setCalendarsOpen(true)} />
         </>
       }
@@ -325,6 +356,16 @@ export default function CalendarScreen() {
         onOpenLink={(href) => router.push(href as never)}
       />
       <EventEditor draft={draft} calendars={calendars} saving={saving} error={saveError} onChange={setDraft} onSave={() => void save()} onClose={() => setDraft(null)} />
+      <Sheet visible={viewsOpen} onClose={() => setViewsOpen(false)} title="View">
+        <OptionList
+          options={VIEWS}
+          value={view}
+          onChange={(v) => {
+            pickView(v);
+            setViewsOpen(false);
+          }}
+        />
+      </Sheet>
       <CalendarsSheet
         visible={calendarsOpen}
         calendars={calendars}
