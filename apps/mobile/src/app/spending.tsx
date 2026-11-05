@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { BarChart, Box, Chip, ChipRow, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, IconButton, Note, SearchBar, Section, Text, VirtualList } from "@financer/ui";
+import { BarChart, Box, Card, Chip, ChipRow, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, IconButton, Note, Row, SearchBar, Section, Text, VirtualList } from "@financer/ui";
 
 import type { Split, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -18,7 +18,7 @@ import { defaultSource, needsSetup, type SourceId } from "@/bankSetup";
 import { pickFileBytes } from "@/native/files";
 import { localIsoDate } from "@/period";
 import { useBankSources } from "@/useBankSources";
-import { TX_FILTERS, dayTotal, emptyFilterText, filterTx, searchTx, type TxFilter } from "@/spendingView";
+import { TX_FILTERS, dayTotal, emptyFilterText, filterTx, incomeSpent, searchTx, type TxFilter } from "@/spendingView";
 import { CategoryCard } from "@/components/today/CategoryCard";
 
 const TREND_DAYS = 14;
@@ -99,6 +99,7 @@ export default function Spending() {
   const today = localIsoDate();
   const shown = useMemo(() => searchTx(filterTx(items, filter), query), [items, filter, query]);
   const groups = useMemo(() => groupByDay(shown), [shown]);
+  const totals = useMemo(() => incomeSpent(shown), [shown]);
   // the span of what is listed, for the "Where it went" card (the list comes newest first)
   const span = useMemo(() => (shown.length ? { start: shown[shown.length - 1].booking_date, end: shown[0].booking_date } : null), [shown]);
   const splitIds = useMemo(() => new Set(splits.map((s) => s.transaction_id)), [splits]);
@@ -179,6 +180,18 @@ export default function Spending() {
                   <BarChart values={trend.series} highlight={trend.peak} summary={sentence} onCard />
                   <HeroCaption>{sentence}</HeroCaption>
                 </HeroCard>
+                {shown.length > 0 ? (
+                  <Row gap="md" align="stretch">
+                    <Card tone="success" gap="2xs" fill>
+                      <Text variant="label" tone="on-success-soft">Came in</Text>
+                      <Text variant="price" tone="on-success-soft">{formatMoney(totals.income)}</Text>
+                    </Card>
+                    <Card tone="accent" gap="2xs" fill>
+                      <Text variant="label" tone="on-accent-soft">Spent</Text>
+                      <Text variant="price" tone="on-accent-soft">{formatMoney(totals.spent)}</Text>
+                    </Card>
+                  </Row>
+                ) : null}
                 {filter !== "income" && span ? <CategoryCard txs={shown} period={span} link={false} /> : null}
                 <SearchBar value={query} onChangeText={setQuery} placeholder="Search shops, words and categories" />
                 <ChipRow>

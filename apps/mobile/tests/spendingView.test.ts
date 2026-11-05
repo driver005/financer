@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { dayTotal, filterTx, searchTx } from "../src/spendingView";
+import { dayTotal, filterTx, incomeSpent, searchTx } from "../src/spendingView";
 
 const tx = (counterparty: string, purpose: string, category: string | null, amount_cents: number) => ({ counterparty, purpose, category, amount_cents });
 
@@ -17,6 +17,11 @@ describe("the Spending list", () => {
     assert.equal(searchTx(items, "REWE einkauf").length, 1);
     assert.equal(searchTx(items, "rewe netflix").length, 0);
     assert.equal(searchTx(items, "subscriptions").length, 1);
+  });
+  it("adds up what came in and what went out of what is listed", () => {
+    assert.deepEqual(incomeSpent(items), { income: 285000, spent: 5973 });
+    assert.deepEqual(incomeSpent(searchTx(items, "netflix")), { income: 0, spent: 1299 });
+    assert.deepEqual(incomeSpent([]), { income: 0, spent: 0 });
   });
   it("works together with the filter and the day total", () => {
     const spending = filterTx(items, "spending");

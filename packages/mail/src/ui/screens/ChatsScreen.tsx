@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Banner, Button, Divider, EmptyState, IconButton, Screen, SearchBar, Segmented, Skeleton, Spinner, Stack, Text, TopBar } from "@financer/ui";
+import { Banner, Button, Chip, Divider, EmptyState, IconButton, Row, Screen, SearchBar, Segmented, Skeleton, Spinner, Stack, Text, TopBar } from "@financer/ui";
 
 import { MailApiError } from "../../api/client";
 import type { Conversation } from "../../api/types";
@@ -17,6 +17,7 @@ export function ChatsScreen() {
   const nav = useNav();
   const [view, setView] = useState<View>("people");
   const [search, setSearch] = useState("");
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [list, setList] = useState<Conversation[] | null>(null);
   const [unread, setUnread] = useState({ people: 0, updates: 0 });
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +38,8 @@ export function ChatsScreen() {
     const timer = setTimeout(() => void load(), search ? 250 : 0);
     return () => clearTimeout(timer);
   }, [load, version, search]);
+
+  const shownList = (list ?? []).filter((c) => !unreadOnly || c.unread > 0);
 
   const options = [
     { value: "people" as const, label: unread.people ? `People (${unread.people})` : "People" },
@@ -71,21 +74,24 @@ export function ChatsScreen() {
       <Stack gap="md">
         <SearchBar value={search} onChangeText={setSearch} placeholder="Search people, topics and words" />
         <Segmented value={view} onChange={setView} options={options} testID="chat-view" />
+        <Row gap="sm">
+          <Chip label="Unread only" icon="email-outline" selected={unreadOnly} onPress={() => setUnreadOnly(!unreadOnly)} testID="chat-unread-only" />
+        </Row>
       </Stack>
       {list === null ? (
         <Stack gap="md"><Skeleton /><Skeleton /><Skeleton /></Stack>
-      ) : list.length === 0 ? (
+      ) : shownList.length === 0 ? (
         <EmptyState
           icon={view === "updates" ? "bell-outline" : "message-text-outline"}
-          title={search ? "Nothing found" : view === "updates" ? "No newsletters or notifications" : "No chats yet"}
+          title={search ? "Nothing found" : unreadOnly ? "Nothing unread" : view === "updates" ? "No newsletters or notifications" : "No chats yet"}
           message={search ? "Try another name, topic or word." : view === "updates" ? "Mail from shops and mailing lists is kept here, away from your people." : "Mail from the same person arrives as one chat, so a conversation reads like one."}
           action={!search && view !== "updates" ? <Button label="Write a message" icon="pencil-plus-outline" onPress={() => nav.push({ name: "compose" })} /> : undefined}
         />
       ) : (
         <Stack gap="none">
-          {list.map((c, i) => {
+          {shownList.map((c, i) => {
             const group = listGroup(c.last_at, now(), fmt);
-            const heading = i === 0 || group !== listGroup(list[i - 1].last_at, now(), fmt);
+            const heading = i === 0 || group !== listGroup(shownList[i - 1].last_at, now(), fmt);
             return (
               <Stack key={c.key} gap="none">
                 {heading ? (

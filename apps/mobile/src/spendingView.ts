@@ -20,6 +20,9 @@ export const filterTx = <T extends Tx>(items: T[], filter: TxFilter): T[] => (fi
 /** The bookings whose counterparty, purpose or category contain every word typed in the search box. */
 export const searchTx = <T extends Tx>(items: T[], query: string): T[] => (query.trim() === "" ? items : logic("app_misc.search_tx", { items, query }));
 
+/** What came in and what went out of these bookings, as positive cents each. */
+export const incomeSpent = (items: Tx[]): { income: number; spent: number } => logic("app_misc.income_spent", { items });
+
 /** Net amount of a day's bookings: income minus spending. */
 export const dayTotal = (items: Tx[]): number => logic("app_misc.day_total", { items });
 

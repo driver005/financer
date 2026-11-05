@@ -54,6 +54,20 @@ pub fn search_tx(items: &[Value], query: &str) -> Vec<Value> {
         .collect()
 }
 
+/// What came in and what went out of these bookings, as positive cents each: `{ income, spent }`.
+pub fn income_spent(items: &[Value]) -> Value {
+    let (mut income, mut spent) = (0_i64, 0_i64);
+    for t in items {
+        let c = cents(t) as i64;
+        if c > 0 {
+            income += c;
+        } else {
+            spent -= c;
+        }
+    }
+    json!({ "income": income, "spent": spent })
+}
+
 /// Net amount of a day's bookings: income minus spending.
 pub fn day_total(items: &[Value]) -> i64 {
     items.iter().map(|t| cents(t) as i64).sum()
@@ -220,6 +234,21 @@ mod tests {
         assert_eq!(filter_tx(&items, "all").len(), 3);
         assert_eq!(day_total(&items), 300);
         assert_eq!(empty_filter_text("income"), "No income to show.");
+    }
+
+    #[test]
+    fn the_listed_bookings_add_up_to_income_and_spent() {
+        let items = [
+            json!({ "amount_cents": -500 }),
+            json!({ "amount_cents": 285000 }),
+            json!({ "amount_cents": -1299 }),
+            json!({ "amount_cents": 0 }),
+        ];
+        assert_eq!(
+            income_spent(&items),
+            json!({ "income": 285000, "spent": 1799 })
+        );
+        assert_eq!(income_spent(&[]), json!({ "income": 0, "spent": 0 }));
     }
 
     #[test]

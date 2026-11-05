@@ -1305,6 +1305,9 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg::<Vec<Value>>(&args, "items")?,
             &arg::<String>(&args, "query")?,
         )),
+        "app_misc.income_spent" => {
+            json(app_misc::income_spent(&arg::<Vec<Value>>(&args, "items")?))
+        }
         "app_misc.day_total" => json(app_misc::day_total(&arg::<Vec<Value>>(&args, "items")?)),
         "app_misc.empty_filter_text" => json(app_misc::empty_filter_text(&arg::<String>(
             &args, "filter",
