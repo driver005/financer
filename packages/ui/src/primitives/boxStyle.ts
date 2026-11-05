@@ -139,6 +139,7 @@ export function boxStyle(p: BoxProps, theme: Theme, width: number): ViewStyle {
   }
   if (p.equal) style.flexBasis = 0;
   if (p.shrink === false) style.flexShrink = 0;
+  if (p.shrink === true && !p.grow && !p.equal) style.flexShrink = 1;
   const basis = resolve(p.basis, width);
   if (basis) style.width = BASIS[basis];
   if (p.maxW) {
