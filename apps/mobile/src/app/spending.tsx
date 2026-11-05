@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Badge, Balance, BarChart, Box, Button, Card, Chip, ChipRow, Expandable, Group, IconButton, Note, QuickActions, Row, SearchBar, Section, Text, VirtualList } from "@financer/ui";
+import { Box, Chip, ChipRow, Group, IconButton, ListItem, Note, Pill, PillRow, QuickActions, SearchBar, Section, Sheet, Text, VirtualList } from "@financer/ui";
 
 import type { Split, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -12,18 +12,14 @@ import { SectionSwitch } from "@/components/SectionSwitch";
 import { SourceSwitcher } from "@/components/SourceSwitcher";
 import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import { TransactionRow } from "@/components/TransactionRow";
-import { peakText, spendingTrend, trendSummary } from "@/charts";
-import { dayHeading, formatMoney, spokenMoney } from "@/format";
+import { dayHeading } from "@/format";
 import { defaultSource, needsSetup, type SourceId } from "@/bankSetup";
 import { pickFileBytes } from "@/native/files";
 import { localIsoDate } from "@/period";
 import { useBankSources } from "@/useBankSources";
 import { BookingFiltersSheet, type CategoryOption } from "@/components/BookingFiltersSheet";
 import { categoryLabel } from "@/categoryIcons";
-import { NO_FILTERS, SORTS, TX_FILTERS, applyFilters, dayTotal, filterChips, incomeSpent, withoutFilter, type BookingFilters } from "@/spendingView";
-import { CategoryCard } from "@/components/today/CategoryCard";
-
-const TREND_DAYS = 14;
+import { NO_FILTERS, SORTS, TX_FILTERS, applyFilters, filterChips, withoutFilter, type BookingFilters } from "@/spendingView";
 
 type DayGroup = { date: string; items: Transaction[] };
 
@@ -49,6 +45,8 @@ export default function Spending() {
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [filters, setFilters] = useState<BookingFilters>(NO_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [more, setMore] = useState(false);
   const [source, setSource] = useState<SourceId | null>(null);
   const [setup, setSetup] = useState<{ open: boolean; start?: SourceId }>({ open: false });
 
@@ -103,7 +101,6 @@ export default function Spending() {
   // the order the list is in decides how it is grouped: by day, or in one run for the amount orders
   const byAmount = filters.sort === "largest" || filters.sort === "smallest";
   const groups = useMemo(() => (byAmount ? (shown.length ? [{ date: "", items: shown }] : []) : groupByDay(shown)), [shown, byAmount]);
-  const totals = useMemo(() => incomeSpent(shown), [shown]);
   const chips = useMemo(() => filterChips(filters), [filters]);
   // what the filter sheet offers: every category there is, with how many bookings it has
   const categories = useMemo<CategoryOption[]>(() => {
@@ -111,40 +108,26 @@ export default function Spending() {
     for (const t of items) counts.set(t.category ?? "uncategorized", (counts.get(t.category ?? "uncategorized") ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, label: categoryLabel(key === "uncategorized" ? null : key), count }));
   }, [items]);
-  // the span of what is listed, for the "Where it went" card
-  const span = useMemo(() => {
-    if (!shown.length) return null;
-    const dates = shown.map((t) => t.booking_date).sort();
-    return { start: dates[0], end: dates[dates.length - 1] };
-  }, [shown]);
   const splitIds = useMemo(() => new Set(splits.map((s) => s.transaction_id)), [splits]);
-  const trend = useMemo(() => spendingTrend(items, today, TREND_DAYS), [items, today]);
 
   if (!loaded) return <Page title="Spending"><Loading /></Page>;
   if (!api) return <Page title="Spending"><SectionSwitch /><NeedsSetup /></Page>;
 
-  const summary = trendSummary(trend, TREND_DAYS);
-  const peak = peakText(trend);
-  const delta = trend.deltaPercent;
-  const sentence = `${summary}${peak ? ` ${peak}.` : ""}`;
-
   const connected = banks.list !== null && connections.length > 0;
   const firstTime = banks.list !== null && connections.length === 0;
-  const filtered = chips.length > 0;
+  // what is on besides the Income / Expenses pills: those two stay in the pills, the rest are chips
+  const extra = chips.filter((c) => c.key !== "kind");
 
   return (
     <Page
-      title="Spending"
-      subtitle={items.length > 0 ? (filtered ? `${shown.length} of ${items.length} bookings` : `${items.length} bookings`) : undefined}
+      title=""
       fixed
       actions={
-        connected ? (
-          <>
-            <IconButton icon="bank-transfer" label="Sync with your bank" onPress={() => router.push("/sync")} />
-            <IconButton icon="link-variant" label="Connected banks and sources" onPress={() => setSetup({ open: true })} />
-            <IconButton icon="storefront-outline" label="Spending by store" onPress={() => router.push("/stores")} />
-          </>
-        ) : undefined
+        <>
+          <IconButton icon="magnify" label="Search bookings" onPress={() => setSearching(!searching)} selected={searching || filters.query.trim() !== ""} />
+          <IconButton icon="calendar-month-outline" label="Filter bookings by period, category and amount" onPress={() => setFiltersOpen(true)} selected={extra.some((c) => c.key !== "query")} />
+          <IconButton icon="dots-horizontal" label="More: sync, banks, stores and import" onPress={() => setMore(true)} />
+        </>
       }
     >
       <BankSetupSheet
@@ -171,15 +154,27 @@ export default function Spending() {
         }}
       />
       <BookingFiltersSheet visible={filtersOpen} onClose={() => setFiltersOpen(false)} filters={filters} onChange={setFilters} categories={categories} resultCount={shown.length} />
+      <Sheet visible={more} onClose={() => setMore(false)} title="More">
+        <Box px="xl" pb="xl">
+          <ListItem icon="file-delimited-outline" tile title="Import a CSV file" subtitle="The export of your online banking" onPress={() => { setMore(false); void importCsv(); }} />
+          {connected ? <ListItem icon="bank-transfer" tile title="Sync with your bank" onPress={() => { setMore(false); router.push("/sync"); }} /> : null}
+          <ListItem icon="link-variant" tile title={connected ? "Connected banks and sources" : "Connect a bank"} onPress={() => { setMore(false); setSetup({ open: true }); }} />
+          <ListItem icon="storefront-outline" tile title="Spending by store" onPress={() => { setMore(false); router.push("/stores"); }} />
+        </Box>
+      </Sheet>
       <VirtualList
         data={groups}
         keyExtractor={(g) => g.date || "all"}
         refreshing={busy && fetched}
         onRefresh={load}
-        gap="lg"
+        gap="xl"
         header={
-          <Box gap="md">
+          <Box gap="lg">
             <SectionSwitch />
+            <Box gap="sm">
+              <Text variant="display" level={1} tone="on-success-soft">Transactions</Text>
+              <Text variant="subheading" tone="muted">Track your spending and stay in control of your money.</Text>
+            </Box>
             {firstTime ? (
               <>
                 <QuickActions
@@ -208,52 +203,20 @@ export default function Spending() {
             ) : null}
             {items.length > 0 ? (
               <>
-                <Balance
-                  label={`Spent, last ${TREND_DAYS} days`}
-                  cents={trend.total}
-                  spoken={`Spent ${spokenMoney(trend.total)} in the last ${TREND_DAYS} days`}
-                  chip={delta !== null && delta !== 0 ? <Badge tone={delta > 0 ? "warning" : "success"} icon={delta > 0 ? "trending-up" : "trending-down"} label={`${Math.abs(delta)} % ${delta > 0 ? "more" : "less"} than before`} /> : undefined}
-                />
-                <Expandable icon="chart-box-outline" title="Charts and where it went" summary="The last 14 days, what came in and went out, and the categories">
-                  <BarChart values={trend.series} highlight={trend.peak} summary={sentence} />
-                  {shown.length > 0 ? (
-                    <Row gap="md" align="stretch">
-                      <Card tone="success" gap="2xs" fill>
-                        <Text variant="label" tone="on-success-soft">Came in</Text>
-                        <Text variant="price" tone="on-success-soft">{formatMoney(totals.income)}</Text>
-                      </Card>
-                      <Card tone="accent" gap="2xs" fill>
-                        <Text variant="label" tone="on-accent-soft">Spent</Text>
-                        <Text variant="price" tone="on-accent-soft">{formatMoney(totals.spent)}</Text>
-                      </Card>
-                    </Row>
-                  ) : null}
-                  {filters.kind !== "income" && span ? <CategoryCard txs={shown} period={span} link={false} bubbles /> : null}
-                </Expandable>
-
-                <SearchBar value={filters.query} onChangeText={(query) => setFilters({ ...filters, query })} placeholder="Search shops, words and categories" />
-                <Row gap="sm" align="center">
-                  <Box grow>
-                    <ChipRow>
-                      {TX_FILTERS.map((f) => (
-                        <Chip key={f.value} label={f.label} selected={filters.kind === f.value} onPress={() => setFilters({ ...filters, kind: f.value })} />
-                      ))}
-                    </ChipRow>
-                  </Box>
-                  <Button label={chips.length > 0 ? `Filters · ${chips.length}` : "Filters"} icon="tune-variant" variant={chips.length > 0 ? "soft" : "outline"} size="sm" onPress={() => setFiltersOpen(true)} />
-                </Row>
-                {chips.length > 0 ? (
+                {searching ? <SearchBar value={filters.query} onChangeText={(query) => setFilters({ ...filters, query })} placeholder="Search shops, words and categories" /> : null}
+                <PillRow>
+                  {TX_FILTERS.map((f) => (
+                    <Pill key={f.value} label={f.label} selected={filters.kind === f.value} onPress={() => setFilters({ ...filters, kind: f.value })} />
+                  ))}
+                </PillRow>
+                {extra.length > 0 ? (
                   <ChipRow>
-                    {chips.map((c) => (
-                      <Chip key={c.key} label={c.label} onRemove={() => setFilters(withoutFilter(filters, c.key))} />
+                    {extra.map((c) => (
+                      <Chip key={c.key} label={c.label} tone="success" onRemove={() => setFilters(withoutFilter(filters, c.key))} />
                     ))}
                     <Chip label="Clear all" icon="close-circle-outline" onPress={() => setFilters(NO_FILTERS)} />
                   </ChipRow>
                 ) : null}
-                <Row justify="between" gap="md" accessible accessibilityLabel={`${shown.length} bookings, ${spokenMoney(totals.income)} came in, ${spokenMoney(totals.spent)} spent`}>
-                  <Text variant="label" tone="muted">{`${shown.length} ${shown.length === 1 ? "booking" : "bookings"}`}</Text>
-                  <Text variant="label" tone="muted">{`${formatMoney(totals.income)} in · ${formatMoney(totals.spent)} out`}</Text>
-                </Row>
               </>
             ) : null}
             {message ? <Note>{message}</Note> : null}
@@ -282,13 +245,14 @@ export default function Spending() {
           )
         }
         renderItem={(g) => (
-          <Section title={g.date ? dayHeading(g.date, today) : (SORTS.find((o) => o.value === filters.sort)?.label ?? "")} aside={formatMoney(dayTotal(g.items), { signed: true })}>
-            <Group>
+          <Box gap="sm">
+            <Text variant="bodyStrong" level={2} tone="on-success-soft">{g.date ? dayHeading(g.date, today) : (SORTS.find((o) => o.value === filters.sort)?.label ?? "")}</Text>
+            <Group inset>
               {g.items.map((t) => (
                 <TransactionRow key={t.id} item={t} split={splitIds.has(t.id)} onPress={() => setSelected(t)} />
               ))}
             </Group>
-          </Section>
+          </Box>
         )}
       />
     </Page>

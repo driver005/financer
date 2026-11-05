@@ -3,7 +3,7 @@ import { useState } from "react";
 import {
   Badge, BarChart, Box, Button, Card, ChoiceCard, ColumnChart, CompareBars, ConfirmAction, CurveChart, DonutChart, Dot, Expandable, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, HeroNumber,
   HeroProgress, HeroStats, IconBadge, ListItem, Mascot, MascotFace, Money, Note, ProgressRing, Row, ScanFrame, Snackbar, Stack, Stepper, Text, TileButton, ToggleRow, useSeriesColor,
-  Balance, BubbleCloud, Icon, QuickActions,
+  Balance, BubbleCloud, Icon, Pill, PillRow, QuickActions,
 } from "@financer/ui";
 
 import type { StoryDef } from "../Story";
@@ -163,6 +163,27 @@ function BalanceAndActions() {
   );
 }
 
+function Pills() {
+  const [v, setV] = useState("all");
+  return (
+    <Stack gap="lg">
+      <PillRow>
+        {[["all", "All"], ["income", "Income"], ["expenses", "Expenses"]].map(([k, l]) => (
+          <Pill key={k} label={l} selected={v === k} onPress={() => setV(k)} />
+        ))}
+      </PillRow>
+      <Group inset>
+        <IconRow />
+        <IconRow />
+      </Group>
+    </Stack>
+  );
+}
+
+function IconRow() {
+  return <ListItem leading={<IconBadge icon="silverware-fork-knife" tone="success" />} title="Cafe Bloom" subtitle="Food & Dining · 25.04." trailing={<Money cents={-1250} variant="bodyStrong" signed />} />;
+}
+
 function Bubbles() {
   return (
     <BubbleCloud
@@ -185,6 +206,7 @@ export const financeStories: StoryDef[] = [
   { id: "rows", title: "Rows, switches, steppers, tiles", note: "The settings and list vocabulary of the finance app.", render: () => <Rows /> },
   { id: "choices", title: "Choices, notes, confirm", note: "Setup answers and the confirm-first danger action.", render: () => <Choices /> },
   { id: "balance", title: "Balance and quick actions", note: "A money screen opens with its one figure, big and centred on the page, then the few things you do from it as round buttons with their names under them.", render: () => <BalanceAndActions /> },
+  { id: "pills", title: "Pills and an inset list", note: "The filter row of a transactions screen (the chosen pill filled, the others outlined) over rows with a pale tile, \"Category · date\" and the amount; the hairlines stop short of the card's sides.", render: () => <Pills /> },
   { id: "bubbles", title: "Bubble cloud", note: "Where the money went: the bigger the share, the bigger the bubble. Each is named with its amount, so sizes and colours are never the only signal.", render: () => <Bubbles /> },
   { id: "friends", title: "Mascot, scan frame, snackbar", render: () => <Friends /> },
 ];

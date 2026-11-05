@@ -184,7 +184,7 @@ pub fn filter_chips(f: &Filters) -> Vec<Value> {
         );
     }
     match f.kind.as_str() {
-        "spending" => add("kind".into(), "Spending".into()),
+        "spending" => add("kind".into(), "Expenses".into()),
         "income" => add("kind".into(), "Income".into()),
         _ => {}
     }
@@ -579,7 +579,7 @@ mod tests {
             (key(0), label(0)),
             ("query".into(), "\u{201c}lidl\u{201d}".into())
         );
-        assert_eq!((key(1), label(1)), ("kind".into(), "Spending".into()));
+        assert_eq!((key(1), label(1)), ("kind".into(), "Expenses".into()));
         assert_eq!((key(2), label(2)), ("preset".into(), "Last 30 days".into()));
         assert_eq!(
             (key(3), label(3)),

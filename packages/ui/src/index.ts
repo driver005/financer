@@ -26,6 +26,7 @@ export { ChatBubble, type ChatBubbleProps } from "./components/ChatBubble";
 export { DateBadge, type DateBadgeProps } from "./components/DateBadge";
 export { Checkbox } from "./components/Checkbox";
 export { Chip, ChipRow, type ChipProps } from "./components/Chip";
+export { Pill, PillRow } from "./components/Pill";
 export { Divider, DividerLabel } from "./components/Divider";
 export { Hint } from "./components/Hint";
 export { MatchBadge } from "./components/MatchBadge";

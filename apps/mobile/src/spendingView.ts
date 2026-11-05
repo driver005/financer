@@ -10,8 +10,8 @@ export type TxFilter = "all" | "spending" | "income";
 
 export const TX_FILTERS: readonly { value: TxFilter; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "spending", label: "Spending" },
   { value: "income", label: "Income" },
+  { value: "spending", label: "Expenses" },
 ];
 
 /** The bookings that match `filter`; the input order is kept. */
