@@ -44,13 +44,20 @@ export FINANCER_MAIL_NAME='Paul Meier'               # shown to the people you w
 Without `FINANCER_MAIL_IMAP_HOST` the templates and the calendar still work; reading and sending do not.
 Mail is **not** part of the finance export or backup: it is bulky and private, and lives in its own database.
 
+## Where it lives, and how it looks
+
+Mail is a tab of the app (Spending, Mail, Calendar, Groceries): the app's tab bar is around it, so the module has none of its own (`MailHost.embedded`; on its own it still has a bar, a rail or a sidebar). The chat list follows current Gmail: no title bar, a search pill ("Search in mail") with the menu button at its start and your avatar at its end, the name of what you are looking at under it (People, Topics or Updates, with "3 new"), then flat rows without dividers: the avatar, the sender with the number of messages and the time, the subject and a snippet, all in bold while there is something new. **Compose** is an extended button in the soft accent colour. The menu button opens People, Topics and Updates, "Unread only", "Check for new mail", and Calendar (the events found in mail), Templates and Mailbox; those three have a back button to the chats.
+
 ## What it does
 
 **Chats.** Mail is grouped by person: everything exchanged with Max, in both directions and across subjects,
 is one chat of bubbles, yours on the right. A mail to several people is a chat of its own. The bubble
 shows what was said: the quoted reply chain (English, German, Outlook), the signature and the greeting and
 closing are left out (tap a bubble marked "quoted text hidden" to read the original). When the subject
-changes inside a chat, a topic marker shows it.
+changes inside a chat, a topic marker shows it. The list of chats is grouped under Today, Yesterday, This
+week and Earlier (the rule is `mail_format.list_group` in `crates/logic`). An "Unread only" chip under the tabs
+shows just the chats with something new. A card at the top says how many chats need your attention, and each
+day's heading says how many of its chats are unread.
 
 **Topics.** The same mail grouped by subject instead: one thread per subject, whoever takes part. Threads
 follow `In-Reply-To` and `References`; when a client dropped them, the same subject with a person in

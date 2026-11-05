@@ -17,7 +17,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   if (areaFor(pathname) !== "tab") return <>{children}</>;
-  const active = tabFor(pathname) ?? "today";
+  const active = tabFor(pathname) ?? "money";
   return (
     <AppShell
       items={ITEMS}
@@ -26,7 +26,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
       onChange={(id) => {
         tap();
         const tab = TABS.find((t) => t.id === id);
-        if (tab && id !== active) router.navigate(tab.href as never);
+        if (tab && pathname !== tab.href) router.navigate(tab.href as never);
       }}
       sidebarFooter={<Button label="Settings" icon="cog-outline" variant="ghost" onPress={() => router.push("/settings")} />}
     >

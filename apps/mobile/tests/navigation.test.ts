@@ -40,7 +40,9 @@ describe("tabs", () => {
 
 describe("areaFor and tabFor", () => {
   it("maps screens to their tab", () => {
-    assert.equal(tabFor("/"), "today");
+    assert.equal(tabFor("/"), "money");
+    assert.equal(tabFor("/mail"), "mail");
+    assert.equal(areaFor("/mail"), "tab");
     assert.equal(tabFor("/budget"), "money");
     assert.equal(tabFor("/recipes"), "groceries");
     assert.equal(tabFor("/stores"), "money");
@@ -56,13 +58,14 @@ describe("areaFor and tabFor", () => {
   it("ignores a trailing slash and falls back to an everyday screen", () => {
     assert.equal(tabFor("/budget/"), "money");
     assert.equal(areaFor("/nope"), "tab");
-    assert.equal(tabFor("/nope"), "today");
+    assert.equal(tabFor("/nope"), "money");
   });
 });
 
 describe("switchFor", () => {
   it("is offered on the lead screens of Money and Groceries", () => {
-    assert.equal(switchFor("/spending")?.items.length, 2);
+    assert.deepEqual(switchFor("/spending")?.items.map((i) => i.label), ["Today", "Spending", "Budget"]);
+    assert.equal(switchFor("/")?.active, "/");
     assert.equal(switchFor("/mealplan")?.items.length, 4);
     assert.equal(switchFor("/mealplan")?.active, "/mealplan");
   });

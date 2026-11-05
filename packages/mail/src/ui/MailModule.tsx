@@ -24,18 +24,18 @@ const TABS: NavItem<Tab>[] = [
  * bar, rail or sidebar).
  */
 export function MailModule({ host }: { host: MailHost }) {
-  return (
-    <ThemeProvider>
-      <MailRuntime host={host}>
-        <NavProvider exit={host.onExit}>
-          <Shell />
-        </NavProvider>
-      </MailRuntime>
-    </ThemeProvider>
+  const body = (
+    <MailRuntime host={host}>
+      <NavProvider exit={host.onExit} embedded={host.embedded}>
+        <Shell embedded={host.embedded} />
+      </NavProvider>
+    </MailRuntime>
   );
+  // in a host's tab the host's theme applies; on its own the module follows the system
+  return host.embedded ? body : <ThemeProvider>{body}</ThemeProvider>;
 }
 
-function Shell() {
+function Shell({ embedded }: { embedded?: boolean }) {
   const mail = useMail();
   const nav = useNav();
   const top = nav.stack[nav.stack.length - 1];
@@ -59,6 +59,7 @@ function Shell() {
     );
   const badge = mail.info?.unread ?? 0;
   const items = TABS.map((t) => (t.key === "chats" && badge > 0 ? { ...t, label: `Chats (${badge})` } : t));
+  if (embedded) return <Box grow>{content}</Box>;
   return (
     <AppShell items={items} active={nav.tab} onChange={(t) => { nav.reset(); nav.setTab(t); }} title="Mail">
       <Box grow>{content}</Box>

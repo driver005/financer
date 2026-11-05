@@ -1,9 +1,9 @@
 import { useState } from "react";
 
 import {
-  BarChart, Box, Button, Card, ChoiceCard, ColumnChart, CompareBars, ConfirmAction, CurveChart, DonutChart, Dot, Expandable, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, HeroNumber,
+  Badge, BarChart, Box, Button, Card, ChoiceCard, ColumnChart, CompareBars, ConfirmAction, CurveChart, DonutChart, Dot, Expandable, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, HeroNumber,
   HeroProgress, HeroStats, IconBadge, ListItem, Mascot, MascotFace, Money, Note, ProgressRing, Row, ScanFrame, Snackbar, Stack, Stepper, Text, TileButton, ToggleRow, useSeriesColor,
-  Icon,
+  Balance, BubbleCloud, Icon, Pill, PillRow, QuickActions,
 } from "@financer/ui";
 
 import type { StoryDef } from "../Story";
@@ -147,11 +147,66 @@ function Friends() {
   );
 }
 
+function BalanceAndActions() {
+  return (
+    <Stack gap="lg">
+      <Balance label="Spent, last 14 days" cents={99359} chip={<Badge tone="warning" icon="trending-up" label="731 % more than before" />} caption="Most on 02.11.2026: 870,00 €." />
+      <QuickActions
+        actions={[
+          { icon: "file-delimited-outline", label: "Import", onPress: () => undefined },
+          { icon: "bank-transfer", label: "Sync", onPress: () => undefined },
+          { icon: "bank-plus", label: "Banks", onPress: () => undefined },
+          { icon: "storefront-outline", label: "Stores", onPress: () => undefined, disabled: true },
+        ]}
+      />
+    </Stack>
+  );
+}
+
+function Pills() {
+  const [v, setV] = useState("all");
+  return (
+    <Stack gap="lg">
+      <PillRow>
+        {[["all", "All"], ["income", "Income"], ["expenses", "Expenses"]].map(([k, l]) => (
+          <Pill key={k} label={l} selected={v === k} onPress={() => setV(k)} />
+        ))}
+      </PillRow>
+      <Group inset>
+        <IconRow />
+        <IconRow />
+      </Group>
+    </Stack>
+  );
+}
+
+function IconRow() {
+  return <ListItem leading={<IconBadge icon="silverware-fork-knife" tone="success" />} title="Cafe Bloom" subtitle="Food & Dining · 25.04." trailing={<Money cents={-1250} variant="bodyStrong" signed />} />;
+}
+
+function Bubbles() {
+  return (
+    <BubbleCloud
+      summary="Housing 62 percent, groceries 22 percent, utilities 9 percent, shopping 4 percent, subscriptions 3 percent."
+      bubbles={[
+        { key: "housing", label: "Housing", share: 0.62, icon: "home-outline", tone: "accent", value: "2.610,00 €" },
+        { key: "groceries", label: "Groceries", share: 0.22, icon: "cart-outline", tone: "success", value: "426,02 €" },
+        { key: "utilities", label: "Utilities", share: 0.09, icon: "lightning-bolt", tone: "warning", value: "119,97 €" },
+        { key: "shopping", label: "Shopping", share: 0.04, icon: "shopping-outline", tone: "info", value: "42,70 €" },
+        { key: "subs", label: "Subscriptions", share: 0.03, icon: "calendar-sync-outline", tone: "danger", value: "38,97 €" },
+      ]}
+    />
+  );
+}
+
 export const financeStories: StoryDef[] = [
   { id: "money", title: "Money", note: "An amount, set the same way everywhere.", render: () => <Money_ /> },
   { id: "hero", title: "Hero card", note: "One per screen, for the number the screen is about.", render: () => <Hero /> },
   { id: "charts", title: "Charts", note: "Every chart has a sentence that says the same in words.", render: () => <Charts /> },
   { id: "rows", title: "Rows, switches, steppers, tiles", note: "The settings and list vocabulary of the finance app.", render: () => <Rows /> },
   { id: "choices", title: "Choices, notes, confirm", note: "Setup answers and the confirm-first danger action.", render: () => <Choices /> },
+  { id: "balance", title: "Balance and quick actions", note: "A money screen opens with its one figure, big and centred on the page, then the few things you do from it as round buttons with their names under them.", render: () => <BalanceAndActions /> },
+  { id: "pills", title: "Pills and an inset list", note: "The filter row of a transactions screen (the chosen pill filled, the others outlined) over rows with a pale tile, \"Category · date\" and the amount; the hairlines stop short of the card's sides.", render: () => <Pills /> },
+  { id: "bubbles", title: "Bubble cloud", note: "Where the money went: the bigger the share, the bigger the bubble. Each is named with its amount, so sizes and colours are never the only signal.", render: () => <Bubbles /> },
   { id: "friends", title: "Mascot, scan frame, snackbar", render: () => <Friends /> },
 ];
