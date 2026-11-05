@@ -1,0 +1,20 @@
+[package]
+name = "financer-host"
+description = "Builds the finance backend from its configuration: the one assembly the server and the phone's backend both use"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+financer-api = { path = "../api" }
+financer-config = { path = "../config" }
+financer-core = { path = "../core" }
+financer-llm = { path = "../llm" }
+financer-openbanking = { path = "../openbanking" }
+financer-prices = { path = "../prices" }
+financer-receipt-sources = { path = "../receipt-sources" }
+financer-store = { path = "../store" }
+serde_json.workspace = true
+tokio = { version = "1", features = ["rt", "time", "macros"] }
+tracing = "0.1"

@@ -4,18 +4,16 @@
 //! Bindings (Kotlin, Swift, TypeScript) are generated from this crate with UniFFI; see
 //! docs/EMBEDDED.md. The types below are plain Rust and are tested natively.
 
-use std::sync::Arc;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock, RwLock, Weak};
 
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode, Uri};
 use axum::Router;
-use financer_api::{Api, AppState, LlmKeys, PriceSourceConfig, TokenHash};
-use financer_openbanking::fints::FintsBank;
-use financer_prices::{PoliteHttp, ReqwestHttp};
-use financer_receipt_sources::{
-    KauflandCardConfig, LidlPlusConfig, ReceiptSourcesConfig, ReceiptSyncer,
-};
+use financer_api::{Api, TokenHash};
+use financer_config::{Admin, Change, Env, Loader, MapEnv, Overlay, SettingsFile};
+use financer_host::{assemble, HostOptions, Tasks};
+use financer_receipt_sources::ReceiptSyncer;
 use financer_store::Store;
 use http_body_util::BodyExt;
 use time::OffsetDateTime;
@@ -26,12 +24,15 @@ pub mod shop;
 
 uniffi::setup_scaffolding!();
 
-const USER_AGENT: &str =
-    "financer-personal/0.1 (personal use; +https://github.com/driver005/financer)";
 const MAX_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
 
-/// What the app tells the backend when it starts. Keys live in the app's secure storage and are
-/// passed in; there is no server environment on the phone.
+/// What the app tells the backend when it starts.
+///
+/// The backend is configured exactly like the server: the same settings (`docs/CONFIG.md`), kept in
+/// a settings file next to the database, and changed from the app's Server settings screen. Only
+/// two things come from the app: where the database is, and the secret that seals the stored
+/// logins. The other fields are the values the app used to keep itself; they are read once, when
+/// there is no settings file yet, and then belong to the settings file.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct StartConfig {
     /// Absolute path of the SQLite file (app document directory).
@@ -113,15 +114,35 @@ impl EmbeddedError {
     }
 }
 
-#[derive(uniffi::Object)]
-pub struct Backend {
+/// One running assembly of the backend. A saved setting builds a new one and swaps it in.
+struct Live {
     router: Router,
-    state: AppState,
+    state: financer_api::AppState,
     /// The receipt import, when a source is switched on.
     receipts: Option<Arc<ReceiptSyncer>>,
+    /// The background work of this assembly; dropped (and so stopped) with it.
+    _tasks: Tasks,
+}
+
+/// What an assembly is built from: the settings and what the host decides.
+struct Ctx {
     /// Random per start; the backend adds it to every in-process request, so the unchanged
     /// router (which requires a token) can be reused.
     token: String,
+    /// The settings screen's backend: the same one the server has.
+    admin: Arc<Admin>,
+    env: Arc<MapEnv>,
+    data_dir: PathBuf,
+    /// Seals the stored bank access and receipt sign-ins; from the app's secure storage.
+    secret: String,
+    /// Whether the app gave a secret of its own (something sealed needs one).
+    has_device_secret: bool,
+}
+
+#[derive(uniffi::Object)]
+pub struct Backend {
+    live: RwLock<Arc<Live>>,
+    ctx: Arc<Ctx>,
 }
 
 impl HttpResponse {
@@ -167,6 +188,60 @@ impl financer_sdk::Transport for InProcess {
     }
 }
 
+impl Ctx {
+    /// Build one assembly from the settings in `overlay`.
+    async fn build(
+        &self,
+        overlay: &Overlay,
+        restart: &Arc<dyn Fn() + Send + Sync>,
+    ) -> Result<Live, EmbeddedError> {
+        let loaded = Loader::load_with(None, &*self.env, &self.data_dir, overlay).map_err(|e| {
+            EmbeddedError::Config {
+                message: e.to_string(),
+            }
+        })?;
+        let problems = loaded.config.problems_for_server();
+        if !problems.is_empty() {
+            return Err(EmbeddedError::Config {
+                message: problems.join("\n"),
+            });
+        }
+        // Anything that seals a login needs the app's own secret: without it a stored sign-in
+        // could not be opened again after the next start.
+        let seals = loaded.config.receipts.value.any_enabled()
+            || loaded.config.bank.plaid.configured()
+            || loaded.config.bank.gocardless.configured()
+            || loaded.config.bank.finapi.configured();
+        if seals && !self.has_device_secret {
+            return Err(EmbeddedError::Config {
+                message: "receipt import and bank links need a device secret from the app".into(),
+            });
+        }
+        let store = Store::connect(&loaded.config.database.url.value)
+            .await
+            .map_err(|e| EmbeddedError::Database {
+                message: e.to_string(),
+            })?;
+        let assembled = assemble(
+            &loaded.config,
+            store,
+            HostOptions {
+                secret: self.secret.clone(),
+                admin: Some((self.admin.clone(), restart.clone())),
+            },
+        )
+        .await
+        .map_err(|message| EmbeddedError::Config { message })?;
+        let router = Api::router(assembled.state.clone(), TokenHash::new(&self.token));
+        Ok(Live {
+            router,
+            state: assembled.state,
+            receipts: assembled.receipts,
+            _tasks: assembled.tasks,
+        })
+    }
+}
+
 impl Backend {
     pub async fn start_with(config: StartConfig) -> Result<Arc<Backend>, EmbeddedError> {
         if config.db_path.trim().is_empty() {
@@ -174,110 +249,193 @@ impl Backend {
                 message: "db_path is empty".into(),
             });
         }
-        let sources: Vec<PriceSourceConfig> =
-            match config.price_sources_json.as_deref().map(str::trim) {
-                None | Some("") => Vec::new(),
-                Some(json) => serde_json::from_str(json).map_err(|e| EmbeddedError::Config {
-                    message: format!("price sources: {e}"),
-                })?,
-            };
-        let store = Store::connect(&format!("sqlite://{}?mode=rwc", config.db_path))
-            .await
-            .map_err(|e| EmbeddedError::Database {
-                message: e.to_string(),
-            })?;
-
-        let receipt_store = store.clone();
-        let http = ReqwestHttp::new(USER_AGENT).map_err(|e| EmbeddedError::Failed {
-            message: e.to_string(),
-        })?;
-        let mut state = AppState::new(store)
-            .with_http(Arc::new(PoliteHttp::new(
-                http,
-                "financer",
-                Duration::from_secs(3),
-            )))
-            .with_price_sources(sources)
-            .with_llm_keys(LlmKeys {
-                claude: config.claude_api_key.filter(|k| !k.trim().is_empty()),
-                openai: config.openai_api_key.filter(|k| !k.trim().is_empty()),
-            });
-        if let Some(id) = config.fints_product_id.filter(|k| !k.trim().is_empty()) {
-            state = state.with_bank(Arc::new(FintsBank::new(&id)));
-        }
-
-        let mut cfg = ReceiptSourcesConfig::default();
-        if config.lidl_plus {
-            cfg.lidl_plus = LidlPlusConfig {
-                enabled: true,
-                country: config
-                    .lidl_country
-                    .filter(|c| !c.trim().is_empty())
-                    .unwrap_or_else(|| "DE".into()),
-                language: config
-                    .lidl_language
-                    .filter(|c| !c.trim().is_empty())
-                    .unwrap_or_else(|| "de".into()),
-                poll_hours: config.lidl_poll_hours.map_or(12, u64::from),
-                ..LidlPlusConfig::default()
-            };
-        }
-        if config.kaufland {
-            cfg.kaufland = KauflandCardConfig {
-                enabled: true,
-                country: cfg.lidl_plus.country.clone(),
-                language: cfg.lidl_plus.language.clone(),
-                poll_hours: config.lidl_poll_hours.map_or(12, u64::from),
-                ..KauflandCardConfig::default()
-            };
-        }
-        let receipts = match config.device_secret.as_deref().map(str::trim) {
-            Some(secret) if !secret.is_empty() => {
-                ReceiptSyncer::for_device(receipt_store, cfg, secret, &[])
-                    .map_err(|message| EmbeddedError::Config { message })?
-            }
-            _ if cfg.any_enabled() => {
-                return Err(EmbeddedError::Config {
-                    message: "receipt import needs a device secret from the app".into(),
-                })
-            }
-            _ => None,
-        };
-        if let Some(syncer) = &receipts {
-            state = state.with_receipt_syncer(syncer.clone());
-        }
-
+        let db_path = PathBuf::from(config.db_path.trim());
+        let data_dir = db_path
+            .parent()
+            .filter(|d| !d.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
         let token = format!(
             "{}{}",
             uuid::Uuid::new_v4().simple(),
             uuid::Uuid::new_v4().simple()
         );
-        let router = Api::router(state.clone(), TokenHash::new(&token));
-        Ok(Arc::new(Backend {
-            router,
-            state,
-            receipts,
+        // no process environment on the phone: the configuration sees only these
+        let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+        let env = Arc::new(MapEnv::new(&[
+            ("FINANCER_DATABASE_URL", &db_url),
+            ("FINANCER_API_TOKEN", &token),
+        ]));
+        let file = SettingsFile::locate(&*env, &db_url, &data_dir);
+        let admin = Arc::new(Admin::new(
+            None,
+            data_dir.clone(),
+            env.clone() as Arc<dyn Env + Send + Sync>,
+            file,
+        ));
+        let device_secret = config
+            .device_secret
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        // what the app kept in its own settings before this backend had the server's
+        let seeded = Self::seed_from_legacy(&admin, &config)?;
+
+        let secret = device_secret.clone().unwrap_or_else(|| token.clone());
+        let ctx = Arc::new(Ctx {
             token,
-        }))
+            admin,
+            env,
+            data_dir,
+            secret,
+            has_device_secret: device_secret.is_some(),
+        });
+        let slot: Arc<OnceLock<Weak<Backend>>> = Arc::new(OnceLock::new());
+        let restart: Arc<dyn Fn() + Send + Sync> = {
+            let slot = slot.clone();
+            Arc::new(move || {
+                if let Some(backend) = slot.get().and_then(Weak::upgrade) {
+                    tokio::spawn(async move { backend.reload().await });
+                }
+            })
+        };
+
+        // the same start as the server's: a changed setting that does not start is rolled back
+        let begin = ctx.admin.file().begin();
+        let live = match ctx.build(&begin.overlay, &restart).await {
+            Ok(live) => live,
+            // the app's own old values do not start: say so, and let the next start seed again
+            Err(e) if seeded => {
+                let _ = std::fs::remove_file(ctx.admin.file().path());
+                return Err(e);
+            }
+            Err(e) if begin.applying && ctx.admin.file().fail(&e.to_string()) => {
+                let begin = ctx.admin.file().begin();
+                ctx.build(&begin.overlay, &restart).await?
+            }
+            Err(e) => return Err(e),
+        };
+        ctx.admin.file().confirm();
+        let backend = Arc::new(Backend {
+            live: RwLock::new(Arc::new(live)),
+            ctx,
+        });
+        let _ = slot.set(Arc::downgrade(&backend));
+        Ok(backend)
+    }
+
+    /// Apply a saved setting: build a new assembly and swap it in, going back to the previous
+    /// settings when the new ones do not start (as the server does).
+    async fn reload(self: &Arc<Self>) {
+        let restart = self.restart_hook();
+        let begin = self.ctx.admin.file().begin();
+        let built = match self.ctx.build(&begin.overlay, &restart).await {
+            Ok(live) => Some(live),
+            Err(e) if begin.applying && self.ctx.admin.file().fail(&e.to_string()) => {
+                let begin = self.ctx.admin.file().begin();
+                self.ctx.build(&begin.overlay, &restart).await.ok()
+            }
+            Err(_) => None,
+        };
+        if let Some(live) = built {
+            *self.live.write().unwrap_or_else(|p| p.into_inner()) = Arc::new(live);
+            self.ctx.admin.file().confirm();
+        }
+    }
+
+    /// What a saved setting calls to have the backend rebuilt.
+    fn restart_hook(self: &Arc<Self>) -> Arc<dyn Fn() + Send + Sync> {
+        let weak = Arc::downgrade(self);
+        Arc::new(move || {
+            if let Some(backend) = weak.upgrade() {
+                tokio::spawn(async move { backend.reload().await });
+            }
+        })
+    }
+
+    fn live(&self) -> Arc<Live> {
+        self.live.read().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    /// The old on-phone values become settings, once: when there is no settings file yet.
+    fn seed_from_legacy(admin: &Admin, config: &StartConfig) -> Result<bool, EmbeddedError> {
+        if admin.file().path().exists() {
+            return Ok(false);
+        }
+        fn text(v: &Option<String>) -> Option<&str> {
+            v.as_deref().map(str::trim).filter(|s| !s.is_empty())
+        }
+        let mut set = std::collections::BTreeMap::new();
+        let mut put = |key: &str, value: serde_json::Value| {
+            set.insert(key.to_string(), value);
+        };
+        if let Some(k) = text(&config.claude_api_key) {
+            put("llm.anthropic_api_key", k.into());
+        }
+        if let Some(k) = text(&config.openai_api_key) {
+            put("llm.openai_api_key", k.into());
+        }
+        if let Some(k) = text(&config.fints_product_id) {
+            put("bank.fints_product_id", k.into());
+        }
+        if let Some(json) = text(&config.price_sources_json) {
+            let sources: serde_json::Value =
+                serde_json::from_str(json).map_err(|e| EmbeddedError::Config {
+                    message: format!("price sources: {e}"),
+                })?;
+            put("prices.sources", sources);
+        }
+        for (on, key) in [
+            (config.lidl_plus, "lidl_plus"),
+            (config.kaufland, "kaufland"),
+        ] {
+            if !on {
+                continue;
+            }
+            put(&format!("receipts.{key}.enabled"), true.into());
+            if let Some(c) = text(&config.lidl_country) {
+                put(&format!("receipts.{key}.country"), c.into());
+            }
+            if let Some(l) = text(&config.lidl_language) {
+                put(&format!("receipts.{key}.language"), l.into());
+            }
+            if let Some(h) = config.lidl_poll_hours {
+                put(&format!("receipts.{key}.poll_hours"), h.into());
+            }
+        }
+        if set.is_empty() {
+            return Ok(false);
+        }
+        admin
+            .update(&Change {
+                set,
+                reset: Vec::new(),
+            })
+            .map(|_| true)
+            .map_err(|e| EmbeddedError::Config {
+                message: format!("{e:?}"),
+            })
     }
 
     fn wire(&self) -> Arc<financer_sdk::Wire> {
         financer_sdk::Wire::with_transport(Arc::new(InProcess {
-            router: self.router.clone(),
-            token: Some(self.token.clone()),
+            router: self.live().router.clone(),
+            token: Some(self.ctx.token.clone()),
         }))
     }
 
     /// Serve one request. Never panics: malformed input becomes a 4xx response.
     pub async fn handle_request(&self, req: HttpRequest) -> HttpResponse {
-        dispatch(&self.router, Some(&self.token), req).await
+        dispatch(&self.live().router, Some(&self.ctx.token), req).await
     }
 
     /// Import new receipts from the switched-on sources whose turn it is (call on app open and
     /// from the OS background task slot, right after `refresh`). Cheap when nothing is due, and
     /// it does nothing until you have signed in to Lidl Plus. Returns a one-line summary.
     pub async fn sync_receipts(&self) -> Result<String, EmbeddedError> {
-        let Some(syncer) = &self.receipts else {
+        let live = self.live();
+        let Some(syncer) = &live.receipts else {
             return Ok("receipt import is off".into());
         };
         let due = syncer
@@ -303,7 +461,7 @@ impl Backend {
     /// Refresh prices now (call on app open and from the OS background task slot). Returns a
     /// one-line summary.
     pub async fn refresh(&self) -> Result<String, EmbeddedError> {
-        Api::refresh_prices_summary(&self.state)
+        Api::refresh_prices_summary(&self.live().state)
             .await
             .map_err(|message| EmbeddedError::Failed { message })
     }
@@ -407,6 +565,8 @@ pub fn generate_device_secret() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     /// Builders and readers shared by the tests.
@@ -436,6 +596,26 @@ mod tests {
             }
         }
 
+        /// A fixed secret, so the same database can be started again with it.
+        const SECRET: &'static str =
+            "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
+
+        fn with_secret(name: &str) -> StartConfig {
+            StartConfig {
+                device_secret: Some(Self::SECRET.into()),
+                ..Self::config(name)
+            }
+        }
+
+        /// The same database again, with the same secret as `with_secret` made for it.
+        fn with_secret_at(db_path: &str) -> StartConfig {
+            StartConfig {
+                db_path: db_path.into(),
+                device_secret: Some(Self::SECRET.into()),
+                ..Self::config("unused")
+            }
+        }
+
         fn with_kaufland(name: &str) -> StartConfig {
             StartConfig {
                 kaufland: true,
@@ -449,6 +629,16 @@ mod tests {
                 lidl_plus: true,
                 device_secret: Some(generate_device_secret()),
                 ..Self::config(name)
+            }
+        }
+
+        /// A request with a JSON body.
+        fn put(path: &str, body: serde_json::Value) -> HttpRequest {
+            HttpRequest {
+                method: "PUT".into(),
+                path_and_query: path.into(),
+                content_type: Some("application/json".into()),
+                body: body.to_string().into_bytes(),
             }
         }
 
@@ -776,6 +966,157 @@ mod tests {
             Backend::start_with(short).await.err().unwrap(),
             EmbeddedError::Config { .. }
         ));
+    }
+
+    /// The `/v1/server-config` key by its path.
+    fn config_key(view: &serde_json::Value, path: &str) -> serde_json::Value {
+        view["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|g| g["keys"].as_array().unwrap().iter())
+            .find(|k| k["path"] == path)
+            .unwrap_or_else(|| panic!("no key {path}"))
+            .clone()
+    }
+
+    /// Wait until `ready` holds for what the backend answers (a saved setting rebuilds it a
+    /// moment after the answer).
+    async fn eventually<F: Fn(&serde_json::Value) -> bool>(
+        b: &Backend,
+        path: &str,
+        ready: F,
+    ) -> serde_json::Value {
+        for _ in 0..80 {
+            let res = b.handle_request(Fixtures::get(path)).await;
+            let v = Fixtures::json(&res);
+            if ready(&v) {
+                return v;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        panic!("{path} never became ready");
+    }
+
+    #[tokio::test]
+    async fn the_phone_has_the_servers_settings_screen() {
+        let b = Backend::start_with(Fixtures::with_secret("settings-screen"))
+            .await
+            .unwrap();
+        let res = b.handle_request(Fixtures::get("/v1/server-config")).await;
+        assert_eq!(res.status, 200, "{}", String::from_utf8_lossy(&res.body));
+        let view = Fixtures::json(&res);
+        // the same keys as the server, with what the host decides locked
+        assert_eq!(config_key(&view, "bank.plaid.client_id")["locked"], false);
+        assert_eq!(config_key(&view, "database.url")["locked"], true);
+        assert_eq!(config_key(&view, "auth.api_token")["locked"], true);
+        // the token is never shown
+        assert!(!String::from_utf8_lossy(&res.body).contains(&b.ctx.token));
+    }
+
+    #[tokio::test]
+    async fn a_bank_provider_set_up_in_the_app_is_available_after_the_backend_rebuilds() {
+        let b = Backend::start_with(Fixtures::with_secret("plaid-on-the-phone"))
+            .await
+            .unwrap();
+        let providers =
+            Fixtures::json(&b.handle_request(Fixtures::get("/v1/bank/providers")).await);
+        let plaid = |v: &serde_json::Value| {
+            v.as_array()
+                .unwrap()
+                .iter()
+                .find(|p| p["kind"] == "plaid")
+                .unwrap()["available"]
+                .as_bool()
+                .unwrap()
+        };
+        assert!(!plaid(&providers));
+
+        let saved = b
+            .handle_request(Fixtures::put(
+                "/v1/server-config",
+                serde_json::json!({ "set": {
+                    "bank.plaid.client_id": "client-id",
+                    "bank.plaid.secret": "plaid-secret",
+                    "bank.plaid.environment": "sandbox",
+                }}),
+            ))
+            .await;
+        assert_eq!(
+            saved.status,
+            200,
+            "{}",
+            String::from_utf8_lossy(&saved.body)
+        );
+        assert_eq!(Fixtures::json(&saved)["restarting"], true);
+        eventually(&b, "/v1/bank/providers", plaid).await;
+        // the data stayed, and the screen shows the new value as set
+        let view = Fixtures::json(&b.handle_request(Fixtures::get("/v1/server-config")).await);
+        assert_eq!(config_key(&view, "bank.plaid.client_id")["is_set"], true);
+    }
+
+    #[tokio::test]
+    async fn a_setting_that_does_not_start_is_rolled_back_like_on_the_server() {
+        // no device secret: receipt import cannot start, so the change is undone
+        let b = Backend::start_with(Fixtures::config("setting-rolls-back"))
+            .await
+            .unwrap();
+        let saved = b
+            .handle_request(Fixtures::put(
+                "/v1/server-config",
+                serde_json::json!({ "set": { "receipts.lidl_plus.enabled": true } }),
+            ))
+            .await;
+        assert_eq!(
+            saved.status,
+            200,
+            "{}",
+            String::from_utf8_lossy(&saved.body)
+        );
+        // give the rebuild time to try, fail and go back
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        let view = Fixtures::json(&b.handle_request(Fixtures::get("/v1/server-config")).await);
+        // back to the previous setting: not switched on
+        assert_ne!(
+            config_key(&view, "receipts.lidl_plus.enabled")["value"],
+            serde_json::json!(true)
+        );
+        // and it still answers
+        assert_eq!(
+            b.handle_request(Fixtures::get("/v1/transactions"))
+                .await
+                .status,
+            200
+        );
+    }
+
+    #[tokio::test]
+    async fn what_the_app_kept_before_becomes_the_settings_once() {
+        let mut cfg = Fixtures::with_secret("legacy-values");
+        cfg.claude_api_key = Some("sk-ant-old".into());
+        cfg.fints_product_id = Some("PRODUCT-ID".into());
+        let db = cfg.db_path.clone();
+        let b = Backend::start_with(cfg).await.unwrap();
+        let view = Fixtures::json(&b.handle_request(Fixtures::get("/v1/server-config")).await);
+        assert_eq!(config_key(&view, "llm.anthropic_api_key")["is_set"], true);
+        assert_eq!(config_key(&view, "bank.fints_product_id")["is_set"], true);
+
+        // changed on the settings screen, then started again with the old values still passed:
+        // the settings file wins
+        b.handle_request(Fixtures::put(
+            "/v1/server-config",
+            serde_json::json!({ "set": { "llm.anthropic_api_key": null } }),
+        ))
+        .await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        drop(b);
+        let again = StartConfig {
+            claude_api_key: Some("sk-ant-old".into()),
+            ..Fixtures::with_secret_at(&db)
+        };
+        let b = Backend::start_with(again).await.unwrap();
+        let view = Fixtures::json(&b.handle_request(Fixtures::get("/v1/server-config")).await);
+        assert_eq!(config_key(&view, "llm.anthropic_api_key")["is_set"], false);
     }
 
     #[test]

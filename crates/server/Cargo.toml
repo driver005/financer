@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 financer-api = { path = "../api" }
 financer-config = { path = "../config" }
+financer-host = { path = "../host" }
 financer-core = { path = "../core" }
 financer-llm = { path = "../llm" }
 financer-openbanking = { path = "../openbanking" }

@@ -2936,7 +2936,7 @@
             }
           },
           "404": {
-            "description": "This backend has no server configuration (the on-phone one)",
+            "description": "This backend was started without a settings screen",
             "content": {
               "application/json": {
                 "schema": {
@@ -2989,7 +2989,7 @@
             }
           },
           "404": {
-            "description": "This backend has no server configuration",
+            "description": "This backend was started without a settings screen",
             "content": {
               "application/json": {
                 "schema": {

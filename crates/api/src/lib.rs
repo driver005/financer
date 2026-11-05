@@ -118,8 +118,8 @@ impl AppState {
     }
 
     /// The server's configuration as a settings screen (`/v1/server-config`). `restart` is called
-    /// a moment after a saved change, to apply it; the hosted server re-executes itself there.
-    /// Without this the endpoints answer 404 (the on-phone backend has no configuration file).
+    /// a moment after a saved change, to apply it; the hosted server re-executes itself there, the
+    /// backend inside the phone rebuilds itself. Without this the endpoints answer 404.
     pub fn with_config_admin(
         mut self,
         admin: Arc<financer_config::Admin>,

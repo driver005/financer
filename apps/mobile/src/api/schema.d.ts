@@ -5003,7 +5003,7 @@ export interface operations {
                     "application/json": components["schemas"]["ConfigDto"];
                 };
             };
-            /** @description This backend has no server configuration (the on-phone one) */
+            /** @description This backend was started without a settings screen */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5044,7 +5044,7 @@ export interface operations {
                     "application/json": components["schemas"]["ConfigProblems"];
                 };
             };
-            /** @description This backend has no server configuration */
+            /** @description This backend was started without a settings screen */
             404: {
                 headers: {
                     [name: string]: unknown;

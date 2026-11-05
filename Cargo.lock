@@ -1704,6 +1704,8 @@ dependencies = [
  "async-trait",
  "axum",
  "financer-api",
+ "financer-config",
+ "financer-host",
  "financer-openbanking",
  "financer-prices",
  "financer-receipt-sources",
@@ -1718,6 +1720,23 @@ dependencies = [
  "tower",
  "uniffi",
  "uuid",
+]
+
+[[package]]
+name = "financer-host"
+version = "0.1.0"
+dependencies = [
+ "financer-api",
+ "financer-config",
+ "financer-core",
+ "financer-llm",
+ "financer-openbanking",
+ "financer-prices",
+ "financer-receipt-sources",
+ "financer-store",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1928,6 +1947,7 @@ dependencies = [
  "financer-api",
  "financer-config",
  "financer-core",
+ "financer-host",
  "financer-llm",
  "financer-mail-api",
  "financer-openbanking",

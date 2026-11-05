@@ -2,8 +2,9 @@
 //! `financer.toml` with its value and where it comes from, `PUT /v1/server-config` saves a change.
 //!
 //! A saved change is written to the server's settings file and takes effect when the server
-//! restarts, which it does by itself a moment after answering. The on-phone backend has no
-//! configuration file, so there these endpoints do not exist (404) and the app hides the screen.
+//! restarts, which it does by itself a moment after answering: the server starts again, and the
+//! backend inside the phone is rebuilt in the same process. Both are built by the same code from
+//! the same settings, so this is one screen for both.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -71,7 +72,7 @@ fn control(state: &AppState) -> Result<&Arc<ConfigControl>, ApiError> {
     path = "/v1/server-config",
     responses(
         (status = 200, body = ConfigView),
-        (status = 404, description = "This backend has no server configuration (the on-phone one)", body = ErrorBody),
+        (status = 404, description = "This backend was started without a settings screen", body = ErrorBody),
     ),
     security(("bearer" = []))
 )]
@@ -95,7 +96,7 @@ pub async fn get_config(State(state): State<AppState>) -> Result<Json<ConfigView
         (status = 200, body = ConfigSavedDto),
         (status = 409, description = "A key is decided by an environment variable, or a restart is under way", body = ConfigProblems),
         (status = 400, description = "The change was refused", body = ConfigProblems),
-        (status = 404, description = "This backend has no server configuration", body = ErrorBody),
+        (status = 404, description = "This backend was started without a settings screen", body = ErrorBody),
         (status = 503, description = "The settings file cannot be written", body = ErrorBody),
     ),
     security(("bearer" = []))
