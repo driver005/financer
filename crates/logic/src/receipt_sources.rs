@@ -182,91 +182,54 @@ pub fn sync_result_text(imported: i64, linked: i64) -> String {
     )
 }
 
-/// Setup steps. With `on_phone` (the on-phone backend, which has no financer.toml and no server)
-/// only Lidl Plus can be switched on, from the app; the other two need a server.
-pub fn setup_steps(s: &str, on_phone: bool) -> Vec<&'static str> {
-    if on_phone {
-        return match s {
-            "lidl_plus" => vec![
-                "Switch it on below. The setting stays on this phone.",
-                "Then tap Connect. You sign in on Lidl's own page; Financer never sees your password.",
-            ],
-            "kaufland_card" => vec![
-                "Switch it on below. The setting stays on this phone.",
-                "Then tap Connect. You sign in on Kaufland's own page; Financer never sees your password.",
-            ],
-            "email" => vec![
-                "Not available on this phone: reading a mailbox needs a server that can stay connected. Connect your own server (Settings > Backend) to use it, or forward receipts to the Receipts screen by hand.",
-            ],
-            "folder" => vec![
-                "Not available on this phone: the app cannot watch a folder. Use Receipts > PDF to import a file you saved, or connect your own server.",
-            ],
-            _ => vec![],
-        };
-    }
+/// Setup steps of a source. The same on the phone as on a server: both are configured through the
+/// Server settings screen (or `financer.toml`), and a saved change restarts the backend by itself.
+pub fn setup_steps(s: &str) -> Vec<&'static str> {
     match s {
         "email" => vec![
-            "Set the password in an environment variable on the server, for example FINANCER_IMAP_PASSWORD. It never goes into the config file.",
-            "Add a [receipts.email] section to financer.toml with your mail server (host), your login (username) and the folder.",
-            "Restart the server. Only mails from the shops' own addresses are downloaded; all other mail stays untouched.",
+            "Set the password in an environment variable of the backend, for example FINANCER_IMAP_PASSWORD. It never goes into the settings.",
+            "Add your mail server (host), your login (username) and the folder under Settings > Server settings > Receipts, or in a [receipts.email] section of financer.toml.",
+            "Only mails from the shops' own addresses are downloaded; all other mail stays untouched.",
         ],
         "lidl_plus" => vec![
-            "Switch it on with enabled = true under [receipts.lidl_plus] in financer.toml and restart the server.",
+            "Switch it on under Settings > Server settings > Lidl Plus (enabled), or with enabled = true under [receipts.lidl_plus] in financer.toml. The backend restarts by itself.",
             "Come back here and tap Connect. You sign in on Lidl's own page; Financer never sees your password.",
         ],
         "kaufland_card" => vec![
-            "Switch it on with enabled = true under [receipts.kaufland] in financer.toml and restart the server.",
+            "Switch it on under Settings > Server settings > Kaufland Card (enabled), or with enabled = true under [receipts.kaufland] in financer.toml. The backend restarts by itself.",
             "Come back here and tap Connect. You sign in on Kaufland's own page; Financer never sees your password.",
         ],
         "folder" => vec![
-            "Add a [receipts.folder] section to financer.toml with the path of a folder on the server.",
-            "Restart the server, then drop receipt PDFs, text or web pages into that folder (a synced cloud folder works well).",
+            "Set the path of a folder the backend can read under Settings > Server settings > Receipts, or in a [receipts.folder] section of financer.toml.",
+            "Then drop receipt PDFs, text or web pages into that folder (a synced cloud folder works well).",
         ],
         _ => vec![],
     }
 }
 
 /// The short, plain statements shown on the sign-in card of a shop (`Lidl`, `Kaufland`).
-pub fn sign_in_promises(shop: &str, on_phone: bool) -> Vec<String> {
+pub fn sign_in_promises(shop: &str) -> Vec<String> {
     vec![
         format!("You sign in on {shop}'s own page. Financer never sees your password."),
-        format!(
-            "Only a refresh token is stored, {}, encrypted.",
-            if on_phone {
-                "on this phone"
-            } else {
-                "on your server"
-            }
-        ),
+        "Only a refresh token is stored, in the backend's database, encrypted.".into(),
         format!("This is unofficial. {shop} has no public interface for this, so it can stop working at any time."),
         "You can disconnect whenever you like. That deletes the token; receipts already imported stay.".into(),
     ]
 }
 
 /// The statements of the Lidl Plus card.
-pub fn lidl_promises(on_phone: bool) -> Vec<String> {
-    sign_in_promises("Lidl", on_phone)
+pub fn lidl_promises() -> Vec<String> {
+    sign_in_promises("Lidl")
 }
 
-/// Where "Disconnect" says the saved sign-in is deleted from.
-pub fn disconnected_text(on_phone: bool) -> String {
-    format!(
-        "Disconnected. The saved sign-in was deleted from {}.",
-        if on_phone {
-            "this phone"
-        } else {
-            "your server"
-        }
-    )
+/// What "Disconnect" says happened to the saved sign-in.
+pub fn disconnected_text() -> &'static str {
+    "Disconnected. The saved sign-in was deleted from the backend."
 }
 
 /// The empty state when no receipt source is on.
-pub fn no_source_text(on_phone: bool) -> &'static str {
-    if on_phone {
-        "On this phone the receipts can come from Lidl Plus or the Kaufland Card. Switch one on in its card below. Mailbox and folder import need your own server."
-    } else {
-        "Receipts can arrive from your mailbox, from Lidl Plus, from the Kaufland Card or from a folder. Sources are switched on in the server's financer.toml; the cards below say how."
-    }
+pub fn no_source_text() -> &'static str {
+    "Receipts can arrive from your mailbox, from Lidl Plus, from the Kaufland Card or from a folder. Sources are switched on under Settings > Server settings; the cards below say how."
 }
 
 /// Where the sign-in can be completed: inside the app (a browser sheet that hands the address back) or by pasting it.
@@ -311,7 +274,6 @@ pub fn sign_in_state_text(
     state: &str,
     connected_at: Option<f64>,
     now_sec: f64,
-    on_phone: bool,
 ) -> String {
     match state {
         s if is_signed_in(s) => match connected_at.filter(|t| *t != 0.0) {
@@ -323,21 +285,13 @@ pub fn sign_in_state_text(
         },
         "needs_signin" => format!("{shop} no longer accepts the saved sign-in"),
         "never" | "not_connected" => "Not connected".into(),
-        _ => format!(
-            "Switched off on this {}",
-            if on_phone { "phone" } else { "server" }
-        ),
+        _ => "Switched off".into(),
     }
 }
 
 /// The one-line state of the Lidl card.
-pub fn lidl_state_text(
-    state: &str,
-    connected_at: Option<f64>,
-    now_sec: f64,
-    on_phone: bool,
-) -> String {
-    sign_in_state_text("Lidl", state, connected_at, now_sec, on_phone)
+pub fn lidl_state_text(state: &str, connected_at: Option<f64>, now_sec: f64) -> String {
+    sign_in_state_text("Lidl", state, connected_at, now_sec)
 }
 
 /// The sources that run on a schedule or that you sign in to: the ones with a card of their own in
@@ -408,34 +362,29 @@ mod tests {
         assert_eq!(source_title("kaufland_card"), "Kaufland Card");
         assert_eq!(source_title("rewe_app"), "REWE eBon (app)");
         assert_eq!(source_icon("kaufland_card"), "card-account-details-outline");
-        assert!(
-            sign_in_promises("Kaufland", true)[0].starts_with("You sign in on Kaufland's own page")
-        );
-        assert!(sign_in_promises("Kaufland", true)[1].contains("on this phone"));
-        assert!(sign_in_promises("Lidl", false)[2].contains("Lidl has no public interface"));
+        assert!(sign_in_promises("Kaufland")[0].starts_with("You sign in on Kaufland's own page"));
+        assert!(sign_in_promises("Kaufland")[1].contains("in the backend's database"));
+        assert!(sign_in_promises("Lidl")[2].contains("Lidl has no public interface"));
         assert_eq!(
-            sign_in_state_text("Kaufland", "needs_signin", None, 0.0, false),
+            sign_in_state_text("Kaufland", "needs_signin", None, 0.0),
             "Kaufland no longer accepts the saved sign-in"
         );
         assert_eq!(
-            sign_in_state_text("Kaufland", "ok", Some(990.0), 1000.0, false),
+            sign_in_state_text("Kaufland", "ok", Some(990.0), 1000.0),
             "Connected just now"
         );
         assert_eq!(
-            sign_in_state_text("Lidl", "not_connected", None, 0.0, false),
+            sign_in_state_text("Lidl", "not_connected", None, 0.0),
             "Not connected"
         );
         assert_eq!(
-            sign_in_state_text("Lidl", "disabled", None, 0.0, true),
-            "Switched off on this phone"
+            sign_in_state_text("Lidl", "disabled", None, 0.0),
+            "Switched off"
         );
         assert!(
             is_signed_in("running") && !is_signed_in("needs_signin") && !is_signed_in("disabled")
         );
-        assert!(
-            !setup_steps("kaufland_card", false).is_empty()
-                && !setup_steps("kaufland_card", true).is_empty()
-        );
+        assert!(!setup_steps("kaufland_card").is_empty());
     }
 
     #[test]

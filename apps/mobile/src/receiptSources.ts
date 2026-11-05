@@ -61,26 +61,23 @@ export const summaryText = (list: readonly SourceLike[]): string => logic("recei
 /** What a finished sync did, for a short message under the button. */
 export const syncResultText = (imported: number, linked: number): string => logic("receipt_sources.sync_result_text", { imported, linked });
 
-/**
- * Setup steps. With `onPhone` (the on-phone backend, which has no financer.toml and no server)
- * only Lidl Plus can be switched on, from the app; the other two need a server.
- */
-export const setupSteps = (s: string, onPhone = false): string[] => logic("receipt_sources.setup_steps", { s, on_phone: onPhone });
+/** Setup steps of a source: the same wherever the backend runs (Server settings, or financer.toml). */
+export const setupSteps = (s: string): string[] => logic("receipt_sources.setup_steps", { s });
 
 /** The shops whose receipts come in by signing in on the shop's own page. */
 export type SignInShop = "Lidl" | "Kaufland";
 
 /** The short, plain statements shown on the sign-in card of a shop. */
-export const signInPromises = (shop: SignInShop, onPhone = false): string[] => logic("receipt_sources.sign_in_promises", { shop, on_phone: onPhone });
+export const signInPromises = (shop: SignInShop): string[] => logic("receipt_sources.sign_in_promises", { shop });
 
 /** The statements of the Lidl Plus card. */
-export const lidlPromises = (onPhone = false): string[] => signInPromises("Lidl", onPhone);
+export const lidlPromises = (): string[] => signInPromises("Lidl");
 
-/** Where "Disconnect" says the saved sign-in is deleted from. */
-export const disconnectedText = (onPhone: boolean): string => logic("receipt_sources.disconnected_text", { on_phone: onPhone });
+/** What "Disconnect" says happened to the saved sign-in. */
+export const disconnectedText = (): string => logic("receipt_sources.disconnected_text");
 
 /** The empty state when no receipt source is on. */
-export const noSourceText = (onPhone: boolean): string => logic("receipt_sources.no_source_text", { on_phone: onPhone });
+export const noSourceText = (): string => logic("receipt_sources.no_source_text");
 
 /** Where the sign-in can be completed: inside the app (a browser sheet that hands the address back) or by pasting it. */
 export type SignInMode = "auth-session" | "paste";
@@ -102,12 +99,12 @@ export const callbackHasResult = (url: string): boolean => logic("receipt_source
 export const isSignedIn = (state: string): boolean => logic("receipt_sources.is_signed_in", { state });
 
 /** The one-line state of the sign-in card of a shop. */
-export const signInStateText = (shop: SignInShop, state: string, connectedAt: number | null | undefined, nowSec: number, onPhone = false): string =>
-  logic("receipt_sources.sign_in_state_text", { shop, state, connected_at: connectedAt ?? null, now_sec: nowSec, on_phone: onPhone });
+export const signInStateText = (shop: SignInShop, state: string, connectedAt: number | null | undefined, nowSec: number): string =>
+  logic("receipt_sources.sign_in_state_text", { shop, state, connected_at: connectedAt ?? null, now_sec: nowSec });
 
 /** The one-line state of the Lidl card. */
-export const lidlStateText = (state: string, connectedAt: number | null | undefined, nowSec: number, onPhone = false): string =>
-  signInStateText("Lidl", state, connectedAt, nowSec, onPhone);
+export const lidlStateText = (state: string, connectedAt: number | null | undefined, nowSec: number): string =>
+  signInStateText("Lidl", state, connectedAt, nowSec);
 
 /** The sources that run on a schedule or that you sign in to: the ones with a card of their own in the list. */
 export const listedSources = <T extends { flow: string }>(list: readonly T[]): T[] => logic("receipt_sources.listed_sources", { list });

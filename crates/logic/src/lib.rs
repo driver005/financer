@@ -712,14 +712,14 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             arg(&args, "imported")?,
             arg(&args, "linked")?,
         )),
-        "receipt_sources.setup_steps" => json(receipt_sources::setup_steps(
-            &arg::<String>(&args, "s")?,
-            opt(&args, "on_phone")?.unwrap_or(false),
-        )),
-        "receipt_sources.sign_in_promises" => json(receipt_sources::sign_in_promises(
-            &arg::<String>(&args, "shop")?,
-            opt(&args, "on_phone")?.unwrap_or(false),
-        )),
+        "receipt_sources.setup_steps" => {
+            json(receipt_sources::setup_steps(&arg::<String>(&args, "s")?))
+        }
+        "receipt_sources.sign_in_promises" => {
+            json(receipt_sources::sign_in_promises(&arg::<String>(
+                &args, "shop",
+            )?))
+        }
         "receipt_sources.is_signed_in" => json(receipt_sources::is_signed_in(&arg::<String>(
             &args, "state",
         )?)),
@@ -728,22 +728,15 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg::<String>(&args, "state")?,
             opt(&args, "connected_at")?,
             arg(&args, "now_sec")?,
-            opt(&args, "on_phone")?.unwrap_or(false),
         )),
         "receipt_sources.listed_sources" => {
             json(receipt_sources::listed_sources(&arg::<Vec<Value>>(
                 &args, "list",
             )?))
         }
-        "receipt_sources.lidl_promises" => json(receipt_sources::lidl_promises(
-            opt(&args, "on_phone")?.unwrap_or(false),
-        )),
-        "receipt_sources.disconnected_text" => {
-            json(receipt_sources::disconnected_text(arg(&args, "on_phone")?))
-        }
-        "receipt_sources.no_source_text" => {
-            json(receipt_sources::no_source_text(arg(&args, "on_phone")?))
-        }
+        "receipt_sources.lidl_promises" => json(receipt_sources::lidl_promises()),
+        "receipt_sources.disconnected_text" => json(receipt_sources::disconnected_text()),
+        "receipt_sources.no_source_text" => json(receipt_sources::no_source_text()),
         "receipt_sources.sign_in_mode" => json(receipt_sources::sign_in_mode(&arg::<String>(
             &args,
             "platform_os",
@@ -759,7 +752,6 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg::<String>(&args, "state")?,
             opt(&args, "connected_at")?,
             arg(&args, "now_sec")?,
-            opt(&args, "on_phone")?.unwrap_or(false),
         )),
         "bank_connections.is_busy" => json(bank_connections::is_busy(&arg(&args, "c")?)),
         "bank_connections.links_once" => json(bank_connections::links_once(&arg(&args, "c")?)),
@@ -815,7 +807,7 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             json(bank_connections::connection_key(&arg(&args, "c")?))
         }
         "bank_connections.live_sync_missing" => {
-            let (title, body) = bank_connections::live_sync_missing(arg(&args, "on_phone")?);
+            let (title, body) = bank_connections::live_sync_missing();
             json(serde_json::json!({ "title": title, "body": body }))
         }
         "calendar_feeds.payday_occurrences" => json(calendar_feeds::payday_occurrences(

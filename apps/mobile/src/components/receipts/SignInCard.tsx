@@ -1,9 +1,9 @@
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Platform } from "react-native";
 import { Badge, Box, Button, Card, ConfirmAction, Expandable, Group, Icon, IconBadge, ListItem, Note, Row, Text, TextField } from "@financer/ui";
 
 import type { Api, ReceiptSource, SourceConnect } from "@/api/client";
-import { useApi } from "@/api/config";
 import { openInBrowser, openSignInPage } from "@/native/authSession";
 import { celebrate } from "@/native/haptics";
 import {
@@ -38,7 +38,6 @@ type Brand = {
   finish: (api: Api, state: string, url: string) => Promise<ReceiptSource>;
   disconnect: (api: Api) => Promise<ReceiptSource>;
   /** The switch of the on-phone backend. */
-  phoneKey: "lidlPlus" | "kaufland";
   howItWorks: string;
   androidNote: string;
 };
@@ -52,7 +51,6 @@ const BRANDS: Record<BrandKey, Brand> = {
     start: (a) => a.connectSource("lidl_plus"),
     finish: (a, s, u) => a.finishSource("lidl_plus", s, u),
     disconnect: (a) => a.disconnectSource("lidl_plus"),
-    phoneKey: "lidlPlus",
     howItWorks:
       "Lidl has no public interface for third parties. Financer uses the same sign-in the Lidl Plus app uses (an OpenID Connect sign-in with PKCE) and then reads your receipts with a long-lived token. The method was worked out by the open-source Lidl Plus client by Andre0512; Financer reimplements it and does not copy its code.",
     androidNote: "On Android the sign-in returns to Financer through the address com.lidlplus.app://. If the Lidl app is installed, Android may offer to open that instead; choose Financer.",
@@ -65,7 +63,6 @@ const BRANDS: Record<BrandKey, Brand> = {
     start: (a) => a.connectSource("kaufland_card"),
     finish: (a, s, u) => a.finishSource("kaufland_card", s, u),
     disconnect: (a) => a.disconnectSource("kaufland_card"),
-    phoneKey: "kaufland",
     howItWorks:
       "Kaufland has no public interface for third parties. Financer signs in the way the Kaufland app does (an OAuth sign-in with PKCE on Kaufland's own account page) and then reads your digital receipts with a long-lived token. The method was worked out by the open-source project Bonfire; Financer reimplements it and does not copy its code. Only receipts you chose to get digitally (\"Papierbon sparen\" in the Kaufland app) exist.",
     androidNote: "On Android the sign-in returns to Financer through the address com.kaufland.kaufland://. If the Kaufland app is installed, Android may offer to open that instead; choose Financer.",
@@ -91,9 +88,7 @@ export function SignInCard({
   onChanged: () => Promise<void> | void;
 }) {
   const brand = BRANDS[brandKey];
-  const { mode: backendMode, embedded, saveEmbedded } = useApi();
-  // On the phone's own backend there is no server and no financer.toml: each shop is a switch here.
-  const onPhone = backendMode === "embedded";
+  const router = useRouter();
   const now = Math.floor(Date.now() / 1000);
   const mode = signInMode(Platform.OS);
   const pill = healthPill(source);
@@ -173,26 +168,12 @@ export function SignInCard({
     }
   }
 
-  async function switchPhone(on: boolean) {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await saveEmbedded({ ...embedded, [brand.phoneKey]: on }); // restarts the on-phone backend
-      setMessage({ tone: "info", text: on ? `${brand.name} is switched on.` : `${brand.name} is switched off. A saved sign-in stays until you disconnect.` });
-      await onChanged();
-    } catch (e) {
-      setMessage({ tone: "error", text: e instanceof Error ? e.message : "Could not change the setting" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function disconnect() {
     setBusy(true);
     setMessage(null);
     try {
       await brand.disconnect(api);
-      setMessage({ tone: "info", text: disconnectedText(onPhone) });
+      setMessage({ tone: "info", text: disconnectedText() });
       await onChanged();
     } catch (e) {
       setMessage({ tone: "error", text: e instanceof Error ? e.message : "Could not disconnect" });
@@ -214,19 +195,19 @@ export function SignInCard({
         </Box>
       </Row>
 
-      <Text variant="body">{signInStateText(brand.shop, state, status?.connected_at, now, onPhone)}</Text>
+      <Text variant="body">{signInStateText(brand.shop, state, status?.connected_at, now)}</Text>
 
       {switchedOff ? (
         <Box gap="sm">
-          {setupSteps(brand.source, onPhone).map((s, i) => (
+          {setupSteps(brand.source).map((s, i) => (
             <Text key={i} variant="label" tone="muted">{`${i + 1}. ${s}`}</Text>
           ))}
-          {onPhone ? <Button label={busy ? "Switching on…" : `Switch on ${brand.name}`} icon="power" onPress={() => void switchPhone(true)} disabled={busy} /> : null}
+          <Button label="Open Server settings" icon="cog-outline" onPress={() => router.push("/server-config")} />
         </Box>
       ) : (
         <>
           <Box gap="sm">
-            {signInPromises(brand.shop, onPhone).map((t) => (
+            {signInPromises(brand.shop).map((t) => (
               <Row key={t} gap="sm" align="start">
                 <Icon name={t.startsWith("This is unofficial") ? "alert-outline" : "check-circle-outline"} size="sm" tone="muted" />
                 <Box grow><Text variant="label">{t}</Text></Box>
@@ -272,7 +253,7 @@ export function SignInCard({
                     label="Disconnect"
                     icon="link-off"
                     question={`Disconnect ${brand.name}?`}
-                    consequence={`The saved sign-in is deleted from ${onPhone ? "this phone" : "your server"}. Receipts you already imported stay. You can connect again any time.`}
+                    consequence="The saved sign-in is deleted from the backend. Receipts you already imported stay. You can connect again any time."
                     confirmLabel="Disconnect"
                     onConfirm={() => void disconnect()}
                     disabled={busy}
@@ -285,18 +266,6 @@ export function SignInCard({
           )}
 
           {message ? <Note tone={message.tone}>{message.text}</Note> : null}
-
-          {onPhone ? (
-            <ConfirmAction
-              label={`Switch off ${brand.name}`}
-              icon="power"
-              question={`Switch off ${brand.name}?`}
-              consequence="Receipts stop being imported. A saved sign-in stays on this phone until you disconnect it."
-              confirmLabel="Switch off"
-              onConfirm={() => void switchPhone(false)}
-              disabled={busy}
-            />
-          ) : null}
 
           <Expandable icon="help-circle-outline" title="How this works">
             <Text variant="caption" tone="muted">

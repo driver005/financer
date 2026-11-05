@@ -44,7 +44,6 @@ async function loadAll(api: Api): Promise<Loaded> {
 export default function ReceiptSources() {
   const { api, loaded, mode: backendMode } = useApi();
   const router = useRouter();
-  const onPhone = backendMode === "embedded";
   const { data, error, busy, reload } = useScreenData(loadAll);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "error" | "ok" | "info"; text: string } | null>(null);
@@ -88,7 +87,7 @@ export default function ReceiptSources() {
           <Box gap="md">
             {error && !data ? <Empty title="Could not load the sources" message={error} actionLabel="Try again" actionIcon="refresh" onAction={() => void reload()} mood="worried" /> : null}
             {!data && !error ? <Loading rows={3} /> : null}
-            {data && allOff ? <Empty title="No source is switched on" message={noSourceText(onPhone)} mood="happy" /> : null}
+            {data && allOff ? <Empty title="No source is switched on" message={noSourceText()} mood="happy" /> : null}
             {attention > 0 ? <Note tone="error">{attention === 1 ? "One source needs your attention." : `${attention} sources need your attention.`}</Note> : null}
             {anySyncable ? <Button label={syncing === "all" ? "Syncing…" : "Sync all now"} icon="sync" onPress={() => void sync()} disabled={syncing !== null} /> : null}
             {message ? <Note tone={message.tone}>{message.text}</Note> : null}
@@ -124,7 +123,7 @@ export default function ReceiptSources() {
           (s.source === "lidl_plus" || s.source === "kaufland_card") && data ? (
             <SignInCard brand={s.source} api={api} source={s} status={s} onChanged={reload} />
           ) : (
-            <SourceCard s={s} now={now} onPhone={onPhone} syncing={syncing === s.source} disabled={syncing !== null} onSync={() => void sync(s.source)} />
+            <SourceCard s={s} now={now} syncing={syncing === s.source} disabled={syncing !== null} onSync={() => void sync(s.source)} />
           )
         }
       />
@@ -133,7 +132,7 @@ export default function ReceiptSources() {
 }
 
 /** Mailbox and folder: status, numbers, last problem, Sync now and setup help. */
-function SourceCard({ s, now, onPhone, syncing, disabled, onSync }: { s: ReceiptSource; now: number; onPhone: boolean; syncing: boolean; disabled: boolean; onSync: () => void }) {
+function SourceCard({ s, now, syncing, disabled, onSync }: { s: ReceiptSource; now: number; syncing: boolean; disabled: boolean; onSync: () => void }) {
   const pill = healthPill(s);
   const next = nextRunText(s.next_run, now);
   return (
@@ -153,7 +152,7 @@ function SourceCard({ s, now, onPhone, syncing, disabled, onSync }: { s: Receipt
       </Group>
       {canSyncNow(s) ? <Button label={syncing ? "Syncing…" : `Sync ${sourceTitle(s.source).toLowerCase()} now`} icon="sync" variant="outline" onPress={onSync} disabled={disabled} /> : null}
       <Expandable icon="help-circle-outline" title={s.enabled ? "Setup help" : "How to switch it on"}>
-        {setupSteps(s.source, onPhone).map((step, i) => (
+        {setupSteps(s.source).map((step, i) => (
           <Text key={i} variant="caption" tone="muted">{`${i + 1}. ${step}`}</Text>
         ))}
       </Expandable>

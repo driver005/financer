@@ -263,19 +263,13 @@ pub fn connection_key(c: &Value) -> String {
     s(c, "name").trim().to_lowercase()
 }
 
-/// What to tell someone when live bank sync has no FinTS product id yet.
-pub fn live_sync_missing(on_phone: bool) -> (&'static str, &'static str) {
-    if on_phone {
-        (
-            "Live sync is not set up on this phone",
-            "It needs a FinTS product id, which you request from the Deutsche Kreditwirtschaft. Add it under Settings > On-phone settings. See docs/FINTS.md. Until then, import a CSV export on the Spending tab.",
-        )
-    } else {
-        (
-            "Live sync is not set up on the server",
-            "It needs a FinTS product id, which you request from the Deutsche Kreditwirtschaft. Add it under Settings, Server settings, Bank providers (or set FINANCER_FINTS_PRODUCT_ID, or bank.fints_product_id in financer.toml). See docs/FINTS.md. Until then, import a CSV export on the Spending tab.",
-        )
-    }
+/// What to tell someone when live bank sync has no FinTS product id yet. The same wherever the
+/// backend runs.
+pub fn live_sync_missing() -> (&'static str, &'static str) {
+    (
+        "Live sync is not set up",
+        "It needs a FinTS product id, which you request from the Deutsche Kreditwirtschaft. Add it under Settings, Server settings, Bank providers (or set bank.fints_product_id in financer.toml). See docs/FINTS.md. Until then, import a CSV export on the Spending tab.",
+    )
 }
 
 // ---------------------------------------------------------------- one protocol for every provider

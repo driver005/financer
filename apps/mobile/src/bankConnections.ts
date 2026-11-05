@@ -74,8 +74,7 @@ export const isSafeLinkUrl = (url: string | null | undefined): url is string =>
 export const connectionKey = (c: BankConnection): string => logic("bank_connections.connection_key", { c });
 
 /** What to tell someone when live bank sync has no FinTS product id yet. */
-export const liveSyncMissing = (onPhone: boolean): { title: string; body: string } =>
-  logic("bank_connections.live_sync_missing", { on_phone: onPhone });
+export const liveSyncMissing = (): { title: string; body: string } => logic("bank_connections.live_sync_missing");
 
 // ---------------------------------------------------------------- one protocol for every provider
 
