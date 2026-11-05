@@ -79,3 +79,11 @@ export const shortList = (names: readonly string[], max = 2): { shown: string[];
 
 /** Shopping list progress as a whole percent, 0 for an empty list. */
 export const percentDone = (done: number, total: number): number => logic("grocery_view.percent_done", { done, total });
+
+// ---- a recipe page ----
+
+/** An amount text for `servings` instead of the `base` the recipe is written for ("250 g" for 2 is "500 g" for 4). */
+export const scaleAmount = (text: string, servings: number, base: number): string => logic("recipe_view.scale_amount", { text, servings, base });
+
+/** The servings a person can pick: at least one, at most 24. */
+export const clampServings = (n: number): number => logic("recipe_view.clamp_servings", { n });

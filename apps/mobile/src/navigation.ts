@@ -14,7 +14,7 @@ export const TABS: readonly TabDef[] = [
   { id: "today", title: "Today", icon: "home-variant", href: "/", screens: ["/", "/trophies"] },
   { id: "calendar", title: "Calendar", icon: "calendar-month-outline", href: "/calendar", screens: ["/calendar"] },
   { id: "money", title: "Money", icon: "swap-vertical", href: "/spending", screens: ["/spending", "/budget", "/stores"] },
-  { id: "groceries", title: "Groceries", icon: "cart-outline", href: "/prices", screens: ["/prices", "/recipes", "/mealplan", "/basket"] },
+  { id: "groceries", title: "Groceries", icon: "cart-outline", href: "/prices", screens: ["/prices", "/recipes", "/recipe", "/mealplan", "/basket"] },
 ];
 
 /**
