@@ -4,7 +4,7 @@ module(
 )
 
 # Same rule set as congelado. Its patch of rules_cc for the C++ modules build variables is not carried
-# over: this tree builds with plain headers (see docs/nextcloud-cpp/architecture.md, "Toolchain").
+# over: this tree builds with plain headers (see docs/architecture.md, "Toolchain").
 bazel_dep(name = "rules_cc", version = "0.2.22")
 bazel_dep(name = "platforms", version = "1.0.0")
 

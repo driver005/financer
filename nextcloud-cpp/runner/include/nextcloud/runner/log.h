@@ -1,11 +1,11 @@
 #pragma once
 
+#include "nextcloud/plugin.h"
+
 #include <functional>
 #include <mutex>
 #include <string>
 #include <string_view>
-
-#include "nextcloud/plugin.h"
 
 namespace nc {
 
@@ -13,7 +13,8 @@ namespace nc {
 class Logger
 {
 public:
-    using Sink = std::function<void(LogLevel level, std::string_view source, std::string_view message)>;
+    using Sink =
+        std::function<void(LogLevel level, std::string_view source, std::string_view message)>;
 
     /// @brief Logs to stderr at INFO and above.
     Logger();
@@ -35,4 +36,4 @@ private:
     Sink m_sink{};
 };
 
-}  // namespace nc
+} // namespace nc

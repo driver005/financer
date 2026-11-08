@@ -1,28 +1,27 @@
 /**
  * @file http.h
- * @brief The request and response a route handler sees. Plain value types, header only, so the runner
- * and every plugin use the same definition without sharing a binary. Code style: see CODESTYLE.md.
+ * @brief The request and response a route handler sees. Plain value types, header only, so the
+ * runner and every plugin use the same definition without sharing a binary. Code style: see
+ * CODESTYLE.md.
  */
 #pragma once
+
+#include "nextcloud/util/text.h"
 
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include "nextcloud/util/text.h"
-
 namespace nc::http {
 
 using Header = std::pair<std::string, std::string>;
 
 /// @brief Case-insensitive lookup in a list of name/value pairs; empty view when absent.
-[[nodiscard]] inline std::string_view find_pair(
-    const std::vector<Header>& pairs,
-    std::string_view key
-) noexcept
+[[nodiscard]] inline std::string_view
+find_pair(const std::vector<Header>& pairs, std::string_view key) noexcept
 {
-    for (const Header& pair : pairs) {
+    for (const Header& pair: pairs) {
         if (util::equals_ignore_case(pair.first, key)) {
             return pair.second;
         }
@@ -37,9 +36,9 @@ public:
     Request() noexcept = default;
 
     /// @brief A request with only method and path.
-    Request(std::string&& method, std::string&& path) noexcept
-        : m_method{std::move(method)},
-          m_path{std::move(path)}
+    Request(std::string&& method, std::string&& path) noexcept :
+        m_method{std::move(method)},
+        m_path{std::move(path)}
     {
     }
 
@@ -52,14 +51,14 @@ public:
         std::string&& user,
         std::vector<Header>&& headers,
         std::vector<Header>&& params
-    ) noexcept
-        : m_method{std::move(method)},
-          m_path{std::move(path)},
-          m_query{std::move(query)},
-          m_body{std::move(body)},
-          m_user{std::move(user)},
-          m_headers{std::move(headers)},
-          m_params{std::move(params)}
+    ) noexcept :
+        m_method{std::move(method)},
+        m_path{std::move(path)},
+        m_query{std::move(query)},
+        m_body{std::move(body)},
+        m_user{std::move(user)},
+        m_headers{std::move(headers)},
+        m_params{std::move(params)}
     {
     }
 
@@ -75,29 +74,111 @@ public:
         return *this;
     }
 
-    void set_method(std::string&& method) noexcept { m_method = std::move(method); }
-    void set_path(std::string&& path) noexcept { m_path = std::move(path); }
-    void set_query(std::string&& query) noexcept { m_query = std::move(query); }
-    void set_body(std::string&& body) noexcept { m_body = std::move(body); }
-    void set_user(std::string&& user) noexcept { m_user = std::move(user); }
-    void set_headers(std::vector<Header>&& headers) noexcept { m_headers = std::move(headers); }
-    void set_params(std::vector<Header>&& params) noexcept { m_params = std::move(params); }
+    void set_method(std::string&& method) noexcept
+    {
+        m_method = std::move(method);
+    }
 
-    [[nodiscard]] std::string& get_method() noexcept { return m_method; }
-    [[nodiscard]] const std::string& get_method() const noexcept { return m_method; }
-    [[nodiscard]] std::string& get_path() noexcept { return m_path; }
-    [[nodiscard]] const std::string& get_path() const noexcept { return m_path; }
-    [[nodiscard]] std::string& get_query() noexcept { return m_query; }
-    [[nodiscard]] const std::string& get_query() const noexcept { return m_query; }
-    [[nodiscard]] std::string& get_body() noexcept { return m_body; }
-    [[nodiscard]] const std::string& get_body() const noexcept { return m_body; }
+    void set_path(std::string&& path) noexcept
+    {
+        m_path = std::move(path);
+    }
+
+    void set_query(std::string&& query) noexcept
+    {
+        m_query = std::move(query);
+    }
+
+    void set_body(std::string&& body) noexcept
+    {
+        m_body = std::move(body);
+    }
+
+    void set_user(std::string&& user) noexcept
+    {
+        m_user = std::move(user);
+    }
+
+    void set_headers(std::vector<Header>&& headers) noexcept
+    {
+        m_headers = std::move(headers);
+    }
+
+    void set_params(std::vector<Header>&& params) noexcept
+    {
+        m_params = std::move(params);
+    }
+
+    [[nodiscard]] std::string& get_method() noexcept
+    {
+        return m_method;
+    }
+
+    [[nodiscard]] const std::string& get_method() const noexcept
+    {
+        return m_method;
+    }
+
+    [[nodiscard]] std::string& get_path() noexcept
+    {
+        return m_path;
+    }
+
+    [[nodiscard]] const std::string& get_path() const noexcept
+    {
+        return m_path;
+    }
+
+    [[nodiscard]] std::string& get_query() noexcept
+    {
+        return m_query;
+    }
+
+    [[nodiscard]] const std::string& get_query() const noexcept
+    {
+        return m_query;
+    }
+
+    [[nodiscard]] std::string& get_body() noexcept
+    {
+        return m_body;
+    }
+
+    [[nodiscard]] const std::string& get_body() const noexcept
+    {
+        return m_body;
+    }
+
     /// @brief The authenticated user id; empty when anonymous.
-    [[nodiscard]] std::string& get_user() noexcept { return m_user; }
-    [[nodiscard]] const std::string& get_user() const noexcept { return m_user; }
-    [[nodiscard]] std::vector<Header>& get_headers() noexcept { return m_headers; }
-    [[nodiscard]] const std::vector<Header>& get_headers() const noexcept { return m_headers; }
-    [[nodiscard]] std::vector<Header>& get_params() noexcept { return m_params; }
-    [[nodiscard]] const std::vector<Header>& get_params() const noexcept { return m_params; }
+    [[nodiscard]] std::string& get_user() noexcept
+    {
+        return m_user;
+    }
+
+    [[nodiscard]] const std::string& get_user() const noexcept
+    {
+        return m_user;
+    }
+
+    [[nodiscard]] std::vector<Header>& get_headers() noexcept
+    {
+        return m_headers;
+    }
+
+    [[nodiscard]] const std::vector<Header>& get_headers() const noexcept
+    {
+        return m_headers;
+    }
+
+    [[nodiscard]] std::vector<Header>& get_params() noexcept
+    {
+        return m_params;
+    }
+
+    [[nodiscard]] const std::vector<Header>& get_params() const noexcept
+    {
+        return m_params;
+    }
 
     /// @brief Header value by case-insensitive name; empty when absent.
     [[nodiscard]] std::string_view header(std::string_view key) const noexcept
@@ -108,7 +189,7 @@ public:
     /// @brief Value of a `{name}` segment of the matched route; empty when absent.
     [[nodiscard]] std::string_view param(std::string_view key) const noexcept
     {
-        for (const Header& pair : m_params) {
+        for (const Header& pair: m_params) {
             if (pair.first == key) {
                 return pair.second;
             }
@@ -119,12 +200,13 @@ public:
     /// @brief Value of `key` in the query string (percent-decoded); empty when absent.
     [[nodiscard]] std::string query_value(std::string_view key) const
     {
-        for (const std::string& part : util::split(m_query, '&')) {
+        for (const std::string& part: util::split(m_query, '&')) {
             const std::size_t equals = part.find('=');
             const std::string name = util::url_decode(part.substr(0, equals), true);
             if (name == key) {
-                return equals == std::string::npos ? std::string{}
-                                                   : util::url_decode(part.substr(equals + 1), true);
+                return equals == std::string::npos
+                           ? std::string{}
+                           : util::url_decode(part.substr(equals + 1), true);
             }
         }
         return {};
@@ -147,8 +229,8 @@ public:
     Response() noexcept = default;
 
     /// @brief A response with status only.
-    explicit Response(int status) noexcept
-        : m_status{status}
+    explicit Response(int status) noexcept :
+        m_status{status}
     {
     }
 
@@ -158,11 +240,11 @@ public:
         std::string&& content_type,
         std::string&& body,
         std::vector<Header>&& headers
-    ) noexcept
-        : m_status{status},
-          m_content_type{std::move(content_type)},
-          m_body{std::move(body)},
-          m_headers{std::move(headers)}
+    ) noexcept :
+        m_status{status},
+        m_content_type{std::move(content_type)},
+        m_body{std::move(body)},
+        m_headers{std::move(headers)}
     {
     }
 
@@ -187,21 +269,60 @@ public:
         return *this;
     }
 
-    void set_status(int status) noexcept { m_status = status; }
+    void set_status(int status) noexcept
+    {
+        m_status = status;
+    }
+
     void set_content_type(std::string&& content_type) noexcept
     {
         m_content_type = std::move(content_type);
     }
-    void set_body(std::string&& body) noexcept { m_body = std::move(body); }
-    void set_headers(std::vector<Header>&& headers) noexcept { m_headers = std::move(headers); }
 
-    [[nodiscard]] int get_status() const noexcept { return m_status; }
-    [[nodiscard]] std::string& get_content_type() noexcept { return m_content_type; }
-    [[nodiscard]] const std::string& get_content_type() const noexcept { return m_content_type; }
-    [[nodiscard]] std::string& get_body() noexcept { return m_body; }
-    [[nodiscard]] const std::string& get_body() const noexcept { return m_body; }
-    [[nodiscard]] std::vector<Header>& get_headers() noexcept { return m_headers; }
-    [[nodiscard]] const std::vector<Header>& get_headers() const noexcept { return m_headers; }
+    void set_body(std::string&& body) noexcept
+    {
+        m_body = std::move(body);
+    }
+
+    void set_headers(std::vector<Header>&& headers) noexcept
+    {
+        m_headers = std::move(headers);
+    }
+
+    [[nodiscard]] int get_status() const noexcept
+    {
+        return m_status;
+    }
+
+    [[nodiscard]] std::string& get_content_type() noexcept
+    {
+        return m_content_type;
+    }
+
+    [[nodiscard]] const std::string& get_content_type() const noexcept
+    {
+        return m_content_type;
+    }
+
+    [[nodiscard]] std::string& get_body() noexcept
+    {
+        return m_body;
+    }
+
+    [[nodiscard]] const std::string& get_body() const noexcept
+    {
+        return m_body;
+    }
+
+    [[nodiscard]] std::vector<Header>& get_headers() noexcept
+    {
+        return m_headers;
+    }
+
+    [[nodiscard]] const std::vector<Header>& get_headers() const noexcept
+    {
+        return m_headers;
+    }
 
     [[nodiscard]] std::string_view header(std::string_view key) const noexcept
     {
@@ -215,13 +336,14 @@ private:
     std::vector<Header> m_headers{};
 };
 
-/// @brief An OCS v2 JSON envelope, the answer shape of Nextcloud's `/ocs/v2.php` API. `data_json` is
-/// already JSON ("{}" when there is nothing to say). The HTTP status is the OCS status code.
+/// @brief An OCS v2 JSON envelope, the answer shape of Nextcloud's `/ocs/v2.php` API. `data_json`
+/// is already JSON ("{}" when there is nothing to say). The HTTP status is the OCS status code.
 [[nodiscard]] inline Response ocs(int status, std::string_view message, std::string_view data_json)
 {
     std::string body = R"({"ocs":{"meta":{"status":")";
     body += status < 300 ? "ok" : "failure";
-    body += R"(","statuscode":)" + std::to_string(status) + R"(,"message":")" + util::json_escape(message);
+    body += R"(","statuscode":)" + std::to_string(status) + R"(,"message":")" +
+            util::json_escape(message);
     body += R"("},"data":)";
     body += data_json.empty() ? std::string_view{"{}"} : data_json;
     body += "}}";
@@ -270,11 +392,15 @@ private:
             return "Internal Server Error";
         case 501:
             return "Not Implemented";
+        case 502:
+            return "Bad Gateway";
         case 503:
             return "Service Unavailable";
+        case 507:
+            return "Insufficient Storage";
         default:
             return "Unknown";
     }
 }
 
-}  // namespace nc::http
+} // namespace nc::http

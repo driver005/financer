@@ -11,4 +11,4 @@ namespace nc::util {
 /// @brief "Sun, 06 Nov 1994 08:49:37 +0000", the format of the mail `Date` header.
 [[nodiscard]] std::string mail_date(std::chrono::system_clock::time_point point);
 
-}  // namespace nc::util
+} // namespace nc::util

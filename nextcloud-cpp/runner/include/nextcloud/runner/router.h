@@ -1,5 +1,8 @@
 #pragma once
 
+#include "nextcloud/http.h"
+#include "nextcloud/runner/error.h"
+
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -7,16 +10,13 @@
 #include <string_view>
 #include <vector>
 
-#include "nextcloud/http.h"
-#include "nextcloud/runner/error.h"
-
 namespace nc {
 
 /// @brief Maps method + path to a handler, the counterpart of Nextcloud's routes.php / `OC\Route`.
 ///
-/// Patterns are `/`-separated. A segment is a literal, `{name}` (one segment, captured) or `{*name}` (the
-/// rest of the path, captured, last segment only). When several routes match, the one with more literal
-/// segments wins, a catch-all loses to everything.
+/// Patterns are `/`-separated. A segment is a literal, `{name}` (one segment, captured) or
+/// `{*name}` (the rest of the path, captured, last segment only). When several routes match, the
+/// one with more literal segments wins, a catch-all loses to everything.
 class Router
 {
 public:
@@ -40,13 +40,10 @@ public:
 
     Router() noexcept = default;
 
-    /// @brief Adds a route; `method` `*` matches every method. Fails for a malformed pattern or when the
-    /// same method + pattern is taken.
-    Result<void> add(
-        std::string_view method,
-        std::string_view pattern,
-        std::string_view owner,
-        Handler&& handler
+    /// @brief Adds a route; `method` `*` matches every method. Fails for a malformed pattern or
+    /// when the same method + pattern is taken.
+    Result<void>
+    add(std::string_view method, std::string_view pattern, std::string_view owner, Handler&& handler
     );
 
     void remove_owner(std::string_view owner);
@@ -89,4 +86,4 @@ private:
     std::vector<Route> m_routes{};
 };
 
-}  // namespace nc
+} // namespace nc

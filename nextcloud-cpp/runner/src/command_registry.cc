@@ -9,17 +9,30 @@ Result<void> CommandRegistry::add(CommandInfo&& info, Handler&& handler)
     if (m_entries.find(name) != m_entries.end()) {
         return fail(ErrorCode::ALREADY_EXISTS, "command " + name + " already exists");
     }
-    m_entries.emplace(name, Entry{std::move(info), std::make_shared<const Handler>(std::move(handler))});
+    m_entries.emplace(
+        name,
+        Entry{std::move(info), std::make_shared<const Handler>(std::move(handler))}
+    );
     return {};
 }
 
 void CommandRegistry::remove_owner(std::string_view owner)
 {
     const std::lock_guard lock{m_mutex};
-    std::erase_if(m_entries, [owner](const auto& item) { return item.second.info.get_owner() == owner; });
+    std::erase_if(
+        m_entries,
+        [owner](const auto& item)
+        {
+            return item.second.info.get_owner() == owner;
+        }
+    );
 }
 
-int CommandRegistry::run(std::string_view name, const std::vector<std::string>& args, std::string& out) const
+int CommandRegistry::run(
+    std::string_view name,
+    const std::vector<std::string>& args,
+    std::string& out
+) const
 {
     std::shared_ptr<const Handler> handler;
     {
@@ -43,10 +56,10 @@ std::vector<CommandInfo> CommandRegistry::list() const
 {
     const std::lock_guard lock{m_mutex};
     std::vector<CommandInfo> infos;
-    for (const auto& [name, entry] : m_entries) {
+    for (const auto& [name, entry]: m_entries) {
         infos.push_back(entry.info);
     }
     return infos;
 }
 
-}  // namespace nc
+} // namespace nc

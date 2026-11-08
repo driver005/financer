@@ -1,5 +1,9 @@
 #pragma once
 
+#include "nextcloud/http.h"
+#include "nextcloud/runner/error.h"
+#include "nextcloud/runner/kernel.h"
+
 #include <atomic>
 #include <cstdint>
 #include <mutex>
@@ -7,10 +11,6 @@
 #include <string_view>
 #include <thread>
 #include <vector>
-
-#include "nextcloud/http.h"
-#include "nextcloud/runner/error.h"
-#include "nextcloud/runner/kernel.h"
 
 namespace nc {
 
@@ -24,20 +24,23 @@ struct RequestHead
     std::size_t head_size{0};
 };
 
-/// @brief Parses the head of an HTTP/1.1 request out of `raw`. Pure, so it is tested without a socket.
-/// `Content-Length` bodies only; `Transfer-Encoding` is refused.
+/// @brief Parses the head of an HTTP/1.1 request out of `raw`. Pure, so it is tested without a
+/// socket. `Content-Length` bodies only; `Transfer-Encoding` is refused.
 [[nodiscard]] Result<RequestHead> parse_request_head(std::string_view raw);
 [[nodiscard]] http::Request request_from_head(const RequestHead& head, std::string&& body);
 [[nodiscard]] std::string serialize_response(const http::Response& response);
 
-/// @brief A small HTTP/1.1 server over POSIX sockets: one thread per connection, `Connection: close`.
-/// It is the transport only; every request goes to `Kernel::handle`.
+/// @brief A small HTTP/1.1 server over POSIX sockets: one thread per connection, `Connection:
+/// close`. It is the transport only; every request goes to `Kernel::handle`.
 class HttpServer
 {
 public:
-    explicit HttpServer(const Kernel& kernel, std::size_t max_body = 512U * 1024U * 1024U) noexcept
-        : m_kernel{&kernel},
-          m_max_body{max_body}
+    explicit HttpServer(
+        const Kernel& kernel,
+        std::size_t max_body = 512U * 1'024U * 1'024U
+    ) noexcept :
+        m_kernel{&kernel},
+        m_max_body{max_body}
     {
     }
 
@@ -65,4 +68,4 @@ private:
     std::thread m_acceptor{};
 };
 
-}  // namespace nc
+} // namespace nc

@@ -1,29 +1,29 @@
 #include "nextcloud/runner/config.h"
 
+#include "nextcloud/util/text.h"
+
 #include <cerrno>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
 
-#include "nextcloud/util/text.h"
-
 namespace nc {
 
 namespace {
 
-std::string compose(std::string_view section, std::string_view key)
-{
-    return section.empty() ? std::string{key} : std::string{section} + "." + std::string{key};
-}
+    std::string compose(std::string_view section, std::string_view key)
+    {
+        return section.empty() ? std::string{key} : std::string{section} + "." + std::string{key};
+    }
 
-}  // namespace
+} // namespace
 
 Result<Config> Config::parse(std::string_view text)
 {
     Config config;
     std::string section;
     std::size_t line_number = 0;
-    for (const std::string& raw : util::split(text, '\n')) {
+    for (const std::string& raw: util::split(text, '\n')) {
         ++line_number;
         const std::string_view line = util::trim(raw);
         if (line.empty() || line.front() == '#') {
@@ -31,18 +31,27 @@ Result<Config> Config::parse(std::string_view text)
         }
         if (line.front() == '[') {
             if (line.back() != ']') {
-                return fail(ErrorCode::INVALID_ARGUMENT, "line " + std::to_string(line_number) + ": unclosed [section]");
+                return fail(
+                    ErrorCode::INVALID_ARGUMENT,
+                    "line " + std::to_string(line_number) + ": unclosed [section]"
+                );
             }
             section = std::string{util::trim(line.substr(1, line.size() - 2))};
             continue;
         }
         const std::size_t equals = line.find('=');
         if (equals == std::string_view::npos) {
-            return fail(ErrorCode::INVALID_ARGUMENT, "line " + std::to_string(line_number) + ": expected key = value");
+            return fail(
+                ErrorCode::INVALID_ARGUMENT,
+                "line " + std::to_string(line_number) + ": expected key = value"
+            );
         }
         const std::string_view key = util::trim(line.substr(0, equals));
         if (key.empty()) {
-            return fail(ErrorCode::INVALID_ARGUMENT, "line " + std::to_string(line_number) + ": empty key");
+            return fail(
+                ErrorCode::INVALID_ARGUMENT,
+                "line " + std::to_string(line_number) + ": empty key"
+            );
         }
         config.set(compose(section, key), std::string{util::trim(line.substr(equals + 1))});
     }
@@ -77,7 +86,8 @@ const std::string* Config::find(std::string_view section, std::string_view key) 
     return found == m_values.end() ? nullptr : &found->second;
 }
 
-std::string Config::get_plugin(std::string_view section, std::string_view key, std::string_view fallback) const
+std::string
+Config::get_plugin(std::string_view section, std::string_view key, std::string_view fallback) const
 {
     const std::string* value = find(section, key);
     return value == nullptr ? std::string{fallback} : *value;
@@ -100,4 +110,4 @@ long Config::get_integer(std::string_view key, long fallback) const noexcept
     return (errno != 0 || end == value->c_str() || *end != '\0') ? fallback : parsed;
 }
 
-}  // namespace nc
+} // namespace nc

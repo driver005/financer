@@ -1,15 +1,14 @@
 #include "nextcloud/runner/http_server.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include "nextcloud/util/text.h"
 
+#include <arpa/inet.h>
 #include <cerrno>
 #include <chrono>
 #include <cstring>
-
-#include "nextcloud/util/text.h"
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace nc {
 
@@ -34,7 +33,10 @@ Result<RequestHead> parse_request_head(std::string_view raw)
         if (colon == std::string_view::npos || colon == 0) {
             return fail(ErrorCode::INVALID_ARGUMENT, "bad header line");
         }
-        head.headers.emplace_back(std::string{util::trim(line.substr(0, colon))}, std::string{util::trim(line.substr(colon + 1))});
+        head.headers.emplace_back(
+            std::string{util::trim(line.substr(0, colon))},
+            std::string{util::trim(line.substr(colon + 1))}
+        );
     }
     if (!http::find_pair(head.headers, "Transfer-Encoding").empty()) {
         return fail(ErrorCode::INVALID_ARGUMENT, "chunked requests are not supported");
@@ -42,7 +44,7 @@ Result<RequestHead> parse_request_head(std::string_view raw)
     const std::string_view length = http::find_pair(head.headers, "Content-Length");
     if (!length.empty()) {
         std::size_t value = 0;
-        for (const char digit : length) {
+        for (const char digit: length) {
             if (digit < '0' || digit > '9' || value > (SIZE_MAX / 10)) {
                 return fail(ErrorCode::INVALID_ARGUMENT, "bad Content-Length");
             }
@@ -62,17 +64,27 @@ http::Request request_from_head(const RequestHead& head, std::string&& body)
         const std::size_t slash = path.find('/', path.find("//") + 2);
         path = slash == std::string::npos ? "/" : path.substr(slash);
     }
-    std::string query = question == std::string::npos ? std::string{} : head.target.substr(question + 1);
-    http::Request request{std::string{head.method}, std::move(path), std::move(query), std::move(body), {}, {}, {}};
+    std::string query =
+        question == std::string::npos ? std::string{} : head.target.substr(question + 1);
+    http::Request request{
+        std::string{head.method},
+        std::move(path),
+        std::move(query),
+        std::move(body),
+        {},
+        {},
+        {}
+    };
     request.set_headers(std::vector<http::Header>(head.headers));
     return request;
 }
 
 std::string serialize_response(const http::Response& response)
 {
-    std::string out = "HTTP/1.1 " + std::to_string(response.get_status()) + " " + std::string(http::reason_phrase(response.get_status())) + "\r\n";
+    std::string out = "HTTP/1.1 " + std::to_string(response.get_status()) + " " +
+                      std::string(http::reason_phrase(response.get_status())) + "\r\n";
     bool has_length = false;
-    for (const http::Header& header : response.get_headers()) {
+    for (const http::Header& header: response.get_headers()) {
         has_length = has_length || util::equals_ignore_case(header.first, "Content-Length");
         out += header.first + ": " + header.second + "\r\n";
     }
@@ -89,22 +101,22 @@ std::string serialize_response(const http::Response& response)
 
 namespace {
 
-bool write_all(int fd, std::string_view data) noexcept
-{
-    while (!data.empty()) {
-        const ssize_t written = ::send(fd, data.data(), data.size(), MSG_NOSIGNAL);
-        if (written < 0) {
-            if (errno == EINTR) {
-                continue;
+    bool write_all(int fd, std::string_view data) noexcept
+    {
+        while (!data.empty()) {
+            const ssize_t written = ::send(fd, data.data(), data.size(), MSG_NOSIGNAL);
+            if (written < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                return false;
             }
-            return false;
+            data.remove_prefix(static_cast<std::size_t>(written));
         }
-        data.remove_prefix(static_cast<std::size_t>(written));
+        return true;
     }
-    return true;
-}
 
-}  // namespace
+} // namespace
 
 HttpServer::~HttpServer()
 {
@@ -129,16 +141,24 @@ Result<std::uint16_t> HttpServer::start(const std::string& address, std::uint16_
         ::close(fd);
         return fail(ErrorCode::INVALID_ARGUMENT, "bad listen address " + address);
     }
-    if (::bind(fd, reinterpret_cast<const sockaddr*>(&socket_address), sizeof(socket_address)) != 0 || ::listen(fd, 128) != 0) {
+    if (::bind(fd, reinterpret_cast<const sockaddr*>(&socket_address), sizeof(socket_address)) !=
+            0 ||
+        ::listen(fd, 128) != 0) {
         const std::string reason = std::strerror(errno);
         ::close(fd);
-        return fail(ErrorCode::IO, "cannot listen on " + address + ":" + std::to_string(port) + ": " + reason);
+        return fail(
+            ErrorCode::IO,
+            "cannot listen on " + address + ":" + std::to_string(port) + ": " + reason
+        );
     }
     socklen_t size = sizeof(socket_address);
     ::getsockname(fd, reinterpret_cast<sockaddr*>(&socket_address), &size);
     m_listen_fd = fd;
     m_running = true;
-    m_acceptor = std::thread{[this] { accept_loop(); }};
+    m_acceptor = std::thread{[this]
+                             {
+                                 accept_loop();
+                             }};
     return ntohs(socket_address.sin_port);
 }
 
@@ -156,11 +176,13 @@ void HttpServer::accept_loop()
             break;
         }
         ++m_active;
-        std::thread{[this, client] {
-            serve(client);
-            ::close(client);
-            --m_active;
-        }}.detach();
+        std::thread{[this, client]
+                    {
+                        serve(client);
+                        ::close(client);
+                        --m_active;
+                    }
+        }.detach();
     }
 }
 
@@ -171,7 +193,7 @@ void HttpServer::serve(int client)
     ::setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
     std::string buffer;
-    char chunk[16384];
+    char chunk[16'384];
     Result<RequestHead> head = fail(ErrorCode::INVALID_ARGUMENT, "incomplete head");
     while (!head) {
         const ssize_t got = ::recv(client, chunk, sizeof(chunk), 0);
@@ -179,13 +201,22 @@ void HttpServer::serve(int client)
             return;
         }
         buffer.append(chunk, static_cast<std::size_t>(got));
-        if (buffer.size() > 64U * 1024U && buffer.find("\r\n\r\n") == std::string::npos) {
-            write_all(client, serialize_response(http::Response::text(431, "Request Header Fields Too Large")));
+        if (buffer.size() > 64U * 1'024U && buffer.find("\r\n\r\n") == std::string::npos) {
+            write_all(
+                client,
+                serialize_response(http::Response::text(431, "Request Header Fields Too Large"))
+            );
             return;
         }
         head = parse_request_head(buffer);
         if (!head && buffer.find("\r\n\r\n") != std::string::npos) {
-            write_all(client, serialize_response(http::Response::text(head.error().get_message().starts_with("chunked") ? 501 : 400, head.error().get_message())));
+            write_all(
+                client,
+                serialize_response(http::Response::text(
+                    head.error().get_message().starts_with("chunked") ? 501 : 400,
+                    head.error().get_message()
+                ))
+            );
             return;
         }
     }
@@ -228,4 +259,4 @@ void HttpServer::stop() noexcept
     }
 }
 
-}  // namespace nc
+} // namespace nc

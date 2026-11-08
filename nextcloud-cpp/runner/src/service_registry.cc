@@ -7,7 +7,10 @@ Result<void> ServiceRegistry::add(std::string_view name, std::string_view owner,
     const std::lock_guard lock{m_mutex};
     const auto found = m_entries.find(name);
     if (found != m_entries.end()) {
-        return fail(ErrorCode::ALREADY_EXISTS, "service " + std::string(name) + " is already offered by " + found->second.owner);
+        return fail(
+            ErrorCode::ALREADY_EXISTS,
+            "service " + std::string(name) + " is already offered by " + found->second.owner
+        );
     }
     m_entries.emplace(
         std::string{name},
@@ -19,7 +22,13 @@ Result<void> ServiceRegistry::add(std::string_view name, std::string_view owner,
 void ServiceRegistry::remove_owner(std::string_view owner)
 {
     const std::lock_guard lock{m_mutex};
-    std::erase_if(m_entries, [owner](const auto& item) { return item.second.owner == owner; });
+    std::erase_if(
+        m_entries,
+        [owner](const auto& item)
+        {
+            return item.second.owner == owner;
+        }
+    );
 }
 
 http::Response ServiceRegistry::call(std::string_view name, std::string_view args) const
@@ -52,4 +61,4 @@ std::size_t ServiceRegistry::size() const noexcept
     return m_entries.size();
 }
 
-}  // namespace nc
+} // namespace nc

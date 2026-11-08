@@ -1,5 +1,8 @@
 #pragma once
 
+#include "nextcloud/http.h"
+#include "nextcloud/runner/error.h"
+
 #include <functional>
 #include <map>
 #include <memory>
@@ -7,13 +10,11 @@
 #include <string>
 #include <string_view>
 
-#include "nextcloud/http.h"
-#include "nextcloud/runner/error.h"
-
 namespace nc {
 
 /// @brief Named services plugins offer each other, the counterpart of Nextcloud's server container
-/// (`OCP\IServerContainer`): a plugin asks for `users.authenticate`, it does not know who provides it.
+/// (`OCP\IServerContainer`): a plugin asks for `users.authenticate`, it does not know who provides
+/// it.
 class ServiceRegistry
 {
 public:
@@ -41,4 +42,4 @@ private:
     std::map<std::string, Entry, std::less<>> m_entries{};
 };
 
-}  // namespace nc
+} // namespace nc

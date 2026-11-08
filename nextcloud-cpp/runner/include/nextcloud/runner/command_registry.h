@@ -1,5 +1,7 @@
 #pragma once
 
+#include "nextcloud/runner/error.h"
+
 #include <functional>
 #include <map>
 #include <memory>
@@ -7,8 +9,6 @@
 #include <string>
 #include <string_view>
 #include <vector>
-
-#include "nextcloud/runner/error.h"
 
 namespace nc {
 
@@ -18,29 +18,63 @@ class CommandInfo
 public:
     CommandInfo() noexcept = default;
 
-    CommandInfo(std::string&& name, std::string&& description) noexcept
-        : m_name{std::move(name)},
-          m_description{std::move(description)}
+    CommandInfo(std::string&& name, std::string&& description) noexcept :
+        m_name{std::move(name)},
+        m_description{std::move(description)}
     {
     }
 
-    CommandInfo(std::string&& name, std::string&& description, std::string&& owner) noexcept
-        : m_name{std::move(name)},
-          m_description{std::move(description)},
-          m_owner{std::move(owner)}
+    CommandInfo(std::string&& name, std::string&& description, std::string&& owner) noexcept :
+        m_name{std::move(name)},
+        m_description{std::move(description)},
+        m_owner{std::move(owner)}
     {
     }
 
-    void set_name(std::string&& name) noexcept { m_name = std::move(name); }
-    void set_description(std::string&& description) noexcept { m_description = std::move(description); }
-    void set_owner(std::string&& owner) noexcept { m_owner = std::move(owner); }
+    void set_name(std::string&& name) noexcept
+    {
+        m_name = std::move(name);
+    }
 
-    [[nodiscard]] std::string& get_name() noexcept { return m_name; }
-    [[nodiscard]] const std::string& get_name() const noexcept { return m_name; }
-    [[nodiscard]] std::string& get_description() noexcept { return m_description; }
-    [[nodiscard]] const std::string& get_description() const noexcept { return m_description; }
-    [[nodiscard]] std::string& get_owner() noexcept { return m_owner; }
-    [[nodiscard]] const std::string& get_owner() const noexcept { return m_owner; }
+    void set_description(std::string&& description) noexcept
+    {
+        m_description = std::move(description);
+    }
+
+    void set_owner(std::string&& owner) noexcept
+    {
+        m_owner = std::move(owner);
+    }
+
+    [[nodiscard]] std::string& get_name() noexcept
+    {
+        return m_name;
+    }
+
+    [[nodiscard]] const std::string& get_name() const noexcept
+    {
+        return m_name;
+    }
+
+    [[nodiscard]] std::string& get_description() noexcept
+    {
+        return m_description;
+    }
+
+    [[nodiscard]] const std::string& get_description() const noexcept
+    {
+        return m_description;
+    }
+
+    [[nodiscard]] std::string& get_owner() noexcept
+    {
+        return m_owner;
+    }
+
+    [[nodiscard]] const std::string& get_owner() const noexcept
+    {
+        return m_owner;
+    }
 
 private:
     std::string m_name{};
@@ -62,7 +96,8 @@ public:
     void remove_owner(std::string_view owner);
 
     /// @brief Runs `name`; exit code 127 and a message in `out` when the command is unknown.
-    [[nodiscard]] int run(std::string_view name, const std::vector<std::string>& args, std::string& out) const;
+    [[nodiscard]] int
+    run(std::string_view name, const std::vector<std::string>& args, std::string& out) const;
 
     [[nodiscard]] std::vector<CommandInfo> list() const;
 
@@ -77,4 +112,4 @@ private:
     std::map<std::string, Entry, std::less<>> m_entries{};
 };
 
-}  // namespace nc
+} // namespace nc

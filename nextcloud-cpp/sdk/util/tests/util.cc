@@ -6,8 +6,14 @@ int main()
 {
     using namespace nc::util;
 
-    NC_CHECK_EQ(to_hex(sha256("")), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-    NC_CHECK_EQ(to_hex(sha256("abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    NC_CHECK_EQ(
+        to_hex(sha256("")),
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+    NC_CHECK_EQ(
+        to_hex(sha256("abc")),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
     NC_CHECK_EQ(
         to_hex(hmac_sha256("key", "The quick brown fox jumps over the lazy dog")),
         "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"
@@ -29,6 +35,19 @@ int main()
     NC_CHECK_EQ(xml_escape("a<b&\"c\""), "a&lt;b&amp;&quot;c&quot;");
     NC_CHECK_EQ(json_escape("a\"b\n"), "a\\\"b\\n");
 
+    const auto form = parse_form("to=a%40b.de&subject=Hi+there&empty=&flag");
+    NC_CHECK_EQ(form.size(), std::size_t{4});
+    NC_CHECK_EQ(form_value(form, "to"), "a@b.de");
+    NC_CHECK_EQ(form_value(form, "subject"), "Hi there");
+    NC_CHECK_EQ(form_value(form, "nope"), "");
+    NC_CHECK_EQ(form_encode({{"k", "a b&c"}, {"x", "ü"}}), "k=a%20b%26c&x=%C3%BC");
+    NC_CHECK_EQ(form_value(parse_form(form_encode({{"k", "a b&c=d"}})), "k"), "a b&c=d");
+    NC_CHECK_EQ(std::string(mime_type_for("Photo.JPG")), "image/jpeg");
+    NC_CHECK_EQ(std::string(mime_type_for("noext")), "application/octet-stream");
+    NC_CHECK(
+        is_valid_email("a.b@example.org") && !is_valid_email("a@b") && !is_valid_email("a@x..y")
+    );
+    NC_CHECK(!is_valid_email("a@example.org\r\nBcc: x@y.z") && !is_valid_email("<a@b.de>"));
     NC_CHECK_EQ(split("a//b", '/').size(), std::size_t{3});
     NC_CHECK_EQ(std::string(trim("  hi \n")), "hi");
     NC_CHECK(equals_ignore_case("Content-Type", "content-type"));

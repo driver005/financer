@@ -1,11 +1,15 @@
-#include <string>
-#include <vector>
+#include "nextcloud/runner/kernel.h"
 
 #include "nextcloud/plugin.h"
 #include "nextcloud/runner/http_server.h"
-#include "nextcloud/runner/kernel.h"
 #include "nextcloud/test.h"
 #include "nextcloud/util/crypto.h"
+
+#include <atomic>
+#include <map>
+#include <string>
+#include <thread>
+#include <vector>
 
 namespace {
 
@@ -20,39 +24,101 @@ std::vector<std::string> g_order;
 class AlphaPlugin final : public nc::Plugin
 {
 public:
-    std::string_view get_name() const noexcept override { return "alpha"; }
-    std::string_view get_version() const noexcept override { return "1.0"; }
+    std::string_view get_name() const noexcept override
+    {
+        return "alpha";
+    }
+
+    std::string_view get_version() const noexcept override
+    {
+        return "1.0";
+    }
 
     void on_load(nc::Host& host) override
     {
         g_order.push_back("alpha");
-        host.add_route("GET", "/alpha/{name}", [](const Request& request) {
-            return Response::text(200, "hello " + std::string(request.param("name")) + " as [" + request.get_user() + "]");
-        });
-        host.add_route("GET", "/alpha/special", [](const Request&) { return Response::text(200, "special"); });
-        host.add_route("POST", "/alpha/{name}", [](const Request& request) {
-            return Response::text(201, request.get_body());
-        });
-        host.add_route("GET", "/boom", [](const Request&) -> Response { throw std::runtime_error("kaboom"); });
-        host.add_service("auth.authenticate", [](std::string_view args) {
-            return args == "alice:secret" ? Response::text(200, "alice") : Response::text(401, "");
-        });
-        host.add_service("alpha.echo", [](std::string_view args) { return Response::text(200, std::string(args)); });
-        host.add_command("alpha:say", "says something", [](const std::vector<std::string>& args, std::string& out) {
-            out = args.empty() ? "nothing\n" : args[0] + "\n";
-            return args.empty() ? 1 : 0;
-        });
-        host.subscribe("thing.*", [](std::string_view topic, std::string_view payload) {
-            g_events.push_back("alpha:" + std::string(topic) + "=" + std::string(payload));
-        });
+        host.add_route(
+            "GET",
+            "/alpha/{name}",
+            [](const Request& request)
+            {
+                return Response::text(
+                    200,
+                    "hello " + std::string(request.param("name")) + " as [" + request.get_user() +
+                        "]"
+                );
+            }
+        );
+        host.add_route(
+            "GET",
+            "/alpha/special",
+            [](const Request&)
+            {
+                return Response::text(200, "special");
+            }
+        );
+        host.add_route(
+            "POST",
+            "/alpha/{name}",
+            [](const Request& request)
+            {
+                return Response::text(201, request.get_body());
+            }
+        );
+        host.add_route(
+            "GET",
+            "/boom",
+            [](const Request&) -> Response
+            {
+                throw std::runtime_error("kaboom");
+            }
+        );
+        host.add_service(
+            "auth.authenticate",
+            [](std::string_view args)
+            {
+                return args == "alice:secret" ? Response::text(200, "alice")
+                                              : Response::text(401, "");
+            }
+        );
+        host.add_service(
+            "alpha.echo",
+            [](std::string_view args)
+            {
+                return Response::text(200, std::string(args));
+            }
+        );
+        host.add_command(
+            "alpha:say",
+            "says something",
+            [](const std::vector<std::string>& args, std::string& out)
+            {
+                out = args.empty() ? "nothing\n" : args[0] + "\n";
+                return args.empty() ? 1 : 0;
+            }
+        );
+        host.subscribe(
+            "thing.*",
+            [](std::string_view topic, std::string_view payload)
+            {
+                g_events.push_back("alpha:" + std::string(topic) + "=" + std::string(payload));
+            }
+        );
     }
 };
 
 class BetaPlugin final : public nc::Plugin
 {
 public:
-    std::string_view get_name() const noexcept override { return "beta"; }
-    std::string_view get_version() const noexcept override { return "2.0"; }
+    std::string_view get_name() const noexcept override
+    {
+        return "beta";
+    }
+
+    std::string_view get_version() const noexcept override
+    {
+        return "2.0";
+    }
 
     std::span<const std::string_view> get_requires() const noexcept override
     {
@@ -63,17 +129,29 @@ public:
     void on_load(nc::Host& host) override
     {
         g_order.push_back("beta");
-        host.add_route("GET", "/beta", [&host](const Request&) {
-            // Calls the service of another plugin through the kernel.
-            return host.call_service("alpha.echo", "from beta");
-        });
-        host.subscribe("thing.made", [](std::string_view, std::string_view payload) {
-            g_events.push_back("beta:" + std::string(payload));
-        });
+        host.add_route(
+            "GET",
+            "/beta",
+            [&host](const Request&)
+            {
+                // Calls the service of another plugin through the kernel.
+                return host.call_service("alpha.echo", "from beta");
+            }
+        );
+        host.subscribe(
+            "thing.made",
+            [](std::string_view, std::string_view payload)
+            {
+                g_events.push_back("beta:" + std::string(payload));
+            }
+        );
         mode = host.config("mode", "default");
     }
 
-    void on_ready(nc::Host& host) noexcept override { host.publish("thing.made", "ready-" + mode); }
+    void on_ready(nc::Host& host) noexcept override
+    {
+        host.publish("thing.made", "ready-" + mode);
+    }
 
     std::string mode{};
 };
@@ -81,24 +159,51 @@ public:
 class OrphanPlugin final : public nc::Plugin
 {
 public:
-    std::string_view get_name() const noexcept override { return "orphan"; }
-    std::string_view get_version() const noexcept override { return "1"; }
+    std::string_view get_name() const noexcept override
+    {
+        return "orphan";
+    }
+
+    std::string_view get_version() const noexcept override
+    {
+        return "1";
+    }
+
     std::span<const std::string_view> get_requires() const noexcept override
     {
         static constexpr std::string_view REQUIRED[] = {"missing"};
         return REQUIRED;
     }
-    void on_load(nc::Host&) override { g_order.push_back("orphan"); }
+
+    void on_load(nc::Host&) override
+    {
+        g_order.push_back("orphan");
+    }
 };
 
 class BrokenPlugin final : public nc::Plugin
 {
 public:
-    std::string_view get_name() const noexcept override { return "broken"; }
-    std::string_view get_version() const noexcept override { return "1"; }
+    std::string_view get_name() const noexcept override
+    {
+        return "broken";
+    }
+
+    std::string_view get_version() const noexcept override
+    {
+        return "1";
+    }
+
     void on_load(nc::Host& host) override
     {
-        host.add_route("GET", "/broken", [](const Request&) { return Response::text(200, "x"); });
+        host.add_route(
+            "GET",
+            "/broken",
+            [](const Request&)
+            {
+                return Response::text(200, "x");
+            }
+        );
         throw std::runtime_error("cannot start");
     }
 };
@@ -106,18 +211,29 @@ public:
 class DependentOfBroken final : public nc::Plugin
 {
 public:
-    std::string_view get_name() const noexcept override { return "dependent"; }
-    std::string_view get_version() const noexcept override { return "1"; }
+    std::string_view get_name() const noexcept override
+    {
+        return "dependent";
+    }
+
+    std::string_view get_version() const noexcept override
+    {
+        return "1";
+    }
+
     std::span<const std::string_view> get_requires() const noexcept override
     {
         static constexpr std::string_view REQUIRED[] = {"broken"};
         return REQUIRED;
     }
-    void on_load(nc::Host&) override { g_order.push_back("dependent"); }
+
+    void on_load(nc::Host&) override
+    {
+        g_order.push_back("dependent");
+    }
 };
 
-template<typename PluginClass>
-void add(nc::Kernel& kernel)
+template<typename PluginClass> void add(nc::Kernel& kernel)
 {
     const auto result = kernel.add_plugin_api(nc::detail::api_for<PluginClass>());
     NC_CHECK(result.has_value());
@@ -138,12 +254,60 @@ std::string basic(const std::string& credentials)
 void test_router()
 {
     nc::Router router;
-    NC_CHECK(router.add("GET", "/files/{user}/{*path}", "t", [](const Request&) { return Response::text(200, "rest"); }));
-    NC_CHECK(router.add("GET", "/files/{user}/special", "t", [](const Request&) { return Response::text(200, "lit"); }));
-    NC_CHECK(router.add("PUT", "/files/{user}/{*path}", "t", [](const Request&) { return Response::text(200, "put"); }));
-    NC_CHECK(!router.add("GET", "/files/{user}/{*path}", "t", [](const Request&) { return Response{}; }));
-    NC_CHECK(!router.add("GET", "/a/{*rest}/b", "t", [](const Request&) { return Response{}; }));
-    NC_CHECK(!router.add("GET", "/a/x{y}", "t", [](const Request&) { return Response{}; }));
+    NC_CHECK(router.add(
+        "GET",
+        "/files/{user}/{*path}",
+        "t",
+        [](const Request&)
+        {
+            return Response::text(200, "rest");
+        }
+    ));
+    NC_CHECK(router.add(
+        "GET",
+        "/files/{user}/special",
+        "t",
+        [](const Request&)
+        {
+            return Response::text(200, "lit");
+        }
+    ));
+    NC_CHECK(router.add(
+        "PUT",
+        "/files/{user}/{*path}",
+        "t",
+        [](const Request&)
+        {
+            return Response::text(200, "put");
+        }
+    ));
+    NC_CHECK(!router.add(
+        "GET",
+        "/files/{user}/{*path}",
+        "t",
+        [](const Request&)
+        {
+            return Response{};
+        }
+    ));
+    NC_CHECK(!router.add(
+        "GET",
+        "/a/{*rest}/b",
+        "t",
+        [](const Request&)
+        {
+            return Response{};
+        }
+    ));
+    NC_CHECK(!router.add(
+        "GET",
+        "/a/x{y}",
+        "t",
+        [](const Request&)
+        {
+            return Response{};
+        }
+    ));
 
     auto found = router.match("GET", "/files/bob/docs/a%20b.txt");
     NC_CHECK(found.outcome == nc::Router::Outcome::FOUND);
@@ -171,8 +335,9 @@ void test_router()
 
 void test_config()
 {
-    const nc::Config config = config_of("# comment\nport = 9000\nplugins = a, b\n\n[mail]\nspool = /tmp/x # no inline comments\n[cloud]\nquota=5\n");
-    NC_CHECK_EQ(config.get_integer("port", 1), 9000L);
+    const nc::Config config = config_of("# comment\nport = 9000\nplugins = a, b\n\n[mail]\nspool = "
+                                        "/tmp/x # no inline comments\n[cloud]\nquota=5\n");
+    NC_CHECK_EQ(config.get_integer("port", 1), 9'000L);
     NC_CHECK_EQ(config.get_integer("nope", 7), 7L);
     NC_CHECK_EQ(config.get_plugin("mail", "spool"), "/tmp/x # no inline comments");
     NC_CHECK_EQ(config.get_plugin("cloud", "quota"), "5");
@@ -186,9 +351,30 @@ void test_events_and_services()
 {
     nc::EventBus bus;
     std::vector<std::string> seen;
-    bus.subscribe("a.*", "one", [&](std::string_view topic, std::string_view) { seen.push_back("one:" + std::string(topic)); });
-    bus.subscribe("a.b", "two", [&](std::string_view, std::string_view) { throw std::runtime_error("handler failure"); });
-    bus.subscribe("a.b", "three", [&](std::string_view, std::string_view payload) { seen.push_back("three:" + std::string(payload)); });
+    bus.subscribe(
+        "a.*",
+        "one",
+        [&](std::string_view topic, std::string_view)
+        {
+            seen.push_back("one:" + std::string(topic));
+        }
+    );
+    bus.subscribe(
+        "a.b",
+        "two",
+        [&](std::string_view, std::string_view)
+        {
+            throw std::runtime_error("handler failure");
+        }
+    );
+    bus.subscribe(
+        "a.b",
+        "three",
+        [&](std::string_view, std::string_view payload)
+        {
+            seen.push_back("three:" + std::string(payload));
+        }
+    );
     NC_CHECK_EQ(bus.publish("a.b", "p"), std::size_t{3});
     NC_CHECK_EQ(seen.size(), std::size_t{2});
     NC_CHECK_EQ(bus.publish("x.y", ""), std::size_t{0});
@@ -196,17 +382,39 @@ void test_events_and_services()
     NC_CHECK_EQ(bus.size(), std::size_t{2});
 
     nc::ServiceRegistry services;
-    NC_CHECK(services.add("s", "o", [](std::string_view args) { return Response::text(200, std::string(args)); }));
-    NC_CHECK(!services.add("s", "p", [](std::string_view) { return Response{}; }));
+    NC_CHECK(services.add(
+        "s",
+        "o",
+        [](std::string_view args)
+        {
+            return Response::text(200, std::string(args));
+        }
+    ));
+    NC_CHECK(!services.add(
+        "s",
+        "p",
+        [](std::string_view)
+        {
+            return Response{};
+        }
+    ));
     NC_CHECK_EQ(services.call("s", "hi").get_body(), "hi");
     NC_CHECK_EQ(services.call("missing", "").get_status(), 404);
-    NC_CHECK(services.add("t", "o", [](std::string_view) -> Response { throw std::runtime_error("bad"); }));
+    NC_CHECK(services.add(
+        "t",
+        "o",
+        [](std::string_view) -> Response
+        {
+            throw std::runtime_error("bad");
+        }
+    ));
     NC_CHECK_EQ(services.call("t", "").get_status(), 500);
 }
 
 void test_http_wire()
 {
-    const std::string raw = "PUT /remote.php/dav/files/alice/a%20b.txt?x=1&y=two%20words HTTP/1.1\r\nHost: h\r\ncontent-length: 5\r\nX-A:  v \r\n\r\nhello";
+    const std::string raw = "PUT /remote.php/dav/files/alice/a%20b.txt?x=1&y=two%20words "
+                            "HTTP/1.1\r\nHost: h\r\ncontent-length: 5\r\nX-A:  v \r\n\r\nhello";
     const auto head = nc::parse_request_head(raw);
     NC_CHECK(head.has_value());
     NC_CHECK_EQ(head->method, "PUT");
@@ -220,7 +428,9 @@ void test_http_wire()
 
     NC_CHECK(!nc::parse_request_head("GET / HTTP/1.1\r\nHost: h").has_value());
     NC_CHECK(!nc::parse_request_head("GARBAGE\r\n\r\n").has_value());
-    NC_CHECK(!nc::parse_request_head("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n").has_value());
+    NC_CHECK(
+        !nc::parse_request_head("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n").has_value()
+    );
     NC_CHECK(!nc::parse_request_head("POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n").has_value());
 
     const std::string wire = nc::serialize_response(Response::json(200, "{}"));
@@ -243,7 +453,7 @@ void test_kernel()
     add<BetaPlugin>(kernel);
     add<BrokenPlugin>(kernel);
     add<AlphaPlugin>(kernel);
-    NC_CHECK(!kernel.add_plugin_api(nc::detail::api_for<AlphaPlugin>()).has_value());  // duplicate
+    NC_CHECK(!kernel.add_plugin_api(nc::detail::api_for<AlphaPlugin>()).has_value()); // duplicate
 
     NC_CHECK(kernel.start().has_value());
     NC_CHECK(!kernel.start().has_value());
@@ -251,7 +461,7 @@ void test_kernel()
     NC_CHECK(g_order == (std::vector<std::string>{"alpha", "beta"}));
 
     std::map<std::string, nc::PluginInfo> by_name;
-    for (const nc::PluginInfo& info : kernel.plugins()) {
+    for (const nc::PluginInfo& info: kernel.plugins()) {
         by_name[info.get_name()] = info;
     }
     NC_CHECK(by_name["alpha"].get_state() == nc::PluginState::RUNNING);
@@ -262,8 +472,10 @@ void test_kernel()
     NC_CHECK(by_name["dependent"].get_state() == nc::PluginState::SKIPPED);
 
     // on_ready ran after everything loaded, and the config of the plugin reached it.
-    NC_CHECK(g_events == (std::vector<std::string>{"beta:ready-fast", "alpha:thing.made=ready-fast"}) ||
-             g_events == (std::vector<std::string>{"alpha:thing.made=ready-fast", "beta:ready-fast"}));
+    NC_CHECK(
+        g_events == (std::vector<std::string>{"beta:ready-fast", "alpha:thing.made=ready-fast"}) ||
+        g_events == (std::vector<std::string>{"alpha:thing.made=ready-fast", "beta:ready-fast"})
+    );
 
     // Routing: params, the more specific route, bodies, failures.
     NC_CHECK_EQ(kernel.handle(Request{"GET", "/alpha/world"}).get_body(), "hello world as []");
@@ -273,7 +485,10 @@ void test_kernel()
     NC_CHECK_EQ(created.get_body(), "payload");
     NC_CHECK_EQ(kernel.handle(Request{"GET", "/nope"}).get_status(), 404);
     NC_CHECK_EQ(kernel.handle(Request{"GET", "/boom"}).get_status(), 500);
-    NC_CHECK_EQ(kernel.handle(Request{"GET", "/broken"}).get_status(), 404);  // its routes were rolled back
+    NC_CHECK_EQ(
+        kernel.handle(Request{"GET", "/broken"}).get_status(),
+        404
+    ); // its routes were rolled back
     const Response not_allowed = kernel.handle(Request{"DELETE", "/alpha/x"});
     NC_CHECK_EQ(not_allowed.get_status(), 405);
     NC_CHECK(std::string(not_allowed.header("Allow")).find("GET") != std::string::npos);
@@ -285,7 +500,8 @@ void test_kernel()
     // A plugin calling a service of another plugin.
     NC_CHECK_EQ(kernel.handle(Request{"GET", "/beta"}).get_body(), "from beta");
 
-    // Authentication goes through whoever offers auth.authenticate, and the client cannot set the user.
+    // Authentication goes through whoever offers auth.authenticate, and the client cannot set the
+    // user.
     Request signed_in{"GET", "/alpha/me"};
     signed_in.add_header("Authorization", basic("alice:secret"));
     NC_CHECK_EQ(kernel.handle(std::move(signed_in)).get_body(), "hello me as [alice]");
@@ -333,6 +549,51 @@ void test_enabled_filter()
     NC_CHECK_EQ(kernel.handle(Request{"GET", "/beta"}).get_status(), 404);
 }
 
+// Many connections reach the same plugins at once: routes, a plugin calling another plugin's
+// service, and a command, all from several threads. Meant to be run under --config=tsan as well.
+void test_concurrency()
+{
+    nc::Kernel kernel;
+    kernel.get_logger().set_sink({});
+    add<AlphaPlugin>(kernel);
+    add<BetaPlugin>(kernel);
+    NC_CHECK(kernel.start().has_value());
+
+    std::atomic<int> wrong{0};
+    std::vector<std::thread> threads;
+    for (int thread = 0; thread < 8; ++thread) {
+        threads.emplace_back(
+            [&kernel, &wrong, thread]
+            {
+                for (int round = 0; round < 200; ++round) {
+                    const std::string name =
+                        "t" + std::to_string(thread) + "r" + std::to_string(round);
+                    Request signed_in{"GET", "/alpha/" + name};
+                    signed_in.add_header(
+                        "Authorization",
+                        "Basic " + nc::util::base64_encode("alice:secret")
+                    );
+                    if (kernel.handle(std::move(signed_in)).get_body() !=
+                        "hello " + name + " as [alice]") {
+                        ++wrong;
+                    }
+                    if (kernel.handle(Request{"GET", "/beta"}).get_body() != "from beta") {
+                        ++wrong;
+                    }
+                    std::string out;
+                    if (kernel.run_command("alpha:say", {name}, out) != 0 || out != name + "\n") {
+                        ++wrong;
+                    }
+                }
+            }
+        );
+    }
+    for (std::thread& thread: threads) {
+        thread.join();
+    }
+    NC_CHECK_EQ(wrong.load(), 0);
+}
+
 void test_http_server()
 {
     nc::Kernel kernel;
@@ -360,7 +621,7 @@ void test_http_server()
     kernel.stop();
 }
 
-}  // namespace
+} // namespace
 
 int main()
 {
@@ -370,6 +631,7 @@ int main()
     test_http_wire();
     test_kernel();
     test_enabled_filter();
+    test_concurrency();
     test_http_server();
     return NC_TEST_RESULT();
 }

@@ -1,92 +1,95 @@
 #include "nextcloud/runner/kernel.h"
 
-#include <dlfcn.h>
+#include "nextcloud/util/crypto.h"
+#include "nextcloud/util/text.h"
 
 #include <algorithm>
+#include <dlfcn.h>
 #include <filesystem>
 #include <map>
 #include <set>
-
-#include "nextcloud/util/crypto.h"
-#include "nextcloud/util/text.h"
 
 namespace nc {
 
 namespace {
 
-/// Keeps the memory behind an NcResponse alive until the next call on this thread.
-struct OutBuffer
-{
-    std::string content_type{};
-    std::string body{};
-    std::vector<http::Header> headers{};
-    std::vector<NcPair> pairs{};
-
-    void fill(const http::Response& response, NcResponse* out)
+    /// Keeps the memory behind an NcResponse alive until the next call on this thread.
+    struct OutBuffer
     {
-        content_type = response.get_content_type();
-        body = response.get_body();
-        headers = response.get_headers();
-        pairs.clear();
-        for (const http::Header& header : headers) {
-            pairs.push_back(NcPair{{header.first.data(), header.first.size()}, {header.second.data(), header.second.size()}});
+        std::string content_type{};
+        std::string body{};
+        std::vector<http::Header> headers{};
+        std::vector<NcPair> pairs{};
+
+        void fill(const http::Response& response, NcResponse* out)
+        {
+            content_type = response.get_content_type();
+            body = response.get_body();
+            headers = response.get_headers();
+            pairs.clear();
+            for (const http::Header& header: headers) {
+                pairs.push_back(NcPair{
+                    {header.first.data(), header.first.size()},
+                    {header.second.data(), header.second.size()}
+                });
+            }
+            out->status = response.get_status();
+            out->content_type = {content_type.data(), content_type.size()};
+            out->body = {body.data(), body.size()};
+            out->headers = pairs.data();
+            out->header_count = pairs.size();
         }
-        out->status = response.get_status();
-        out->content_type = {content_type.data(), content_type.size()};
-        out->body = {body.data(), body.size()};
-        out->headers = pairs.data();
-        out->header_count = pairs.size();
-    }
-};
-
-OutBuffer& out_buffer()
-{
-    thread_local OutBuffer buffer;
-    return buffer;
-}
-
-std::string_view text_of(NcView view) noexcept
-{
-    return view.data == nullptr ? std::string_view{} : std::string_view{view.data, view.size};
-}
-
-NcView view_of(std::string_view text) noexcept
-{
-    return NcView{text.data(), text.size()};
-}
-
-http::Response response_from(const NcResponse& out)
-{
-    http::Response response{
-        out.status,
-        std::string{text_of(out.content_type)},
-        std::string{text_of(out.body)},
-        {}
     };
-    for (std::size_t index = 0; index < out.header_count; ++index) {
-        response.add_header(
-            std::string{text_of(out.headers[index].key)}, std::string{text_of(out.headers[index].value)}
-        );
+
+    OutBuffer& out_buffer()
+    {
+        thread_local OutBuffer buffer;
+        return buffer;
     }
-    return response;
-}
 
-std::vector<NcPair> pairs_of(const std::vector<http::Header>& headers)
-{
-    std::vector<NcPair> pairs;
-    pairs.reserve(headers.size());
-    for (const http::Header& header : headers) {
-        pairs.push_back(NcPair{view_of(header.first), view_of(header.second)});
+    std::string_view text_of(NcView view) noexcept
+    {
+        return view.data == nullptr ? std::string_view{} : std::string_view{view.data, view.size};
     }
-    return pairs;
-}
 
-std::string json_string(std::string_view text)
-{
-    return "\"" + util::json_escape(text) + "\"";
-}
+    NcView view_of(std::string_view text) noexcept
+    {
+        return NcView{text.data(), text.size()};
+    }
 
-}  // namespace
+    http::Response response_from(const NcResponse& out)
+    {
+        http::Response response{
+            out.status,
+            std::string{text_of(out.content_type)},
+            std::string{text_of(out.body)},
+            {}
+        };
+        for (std::size_t index = 0; index < out.header_count; ++index) {
+            response.add_header(
+                std::string{text_of(out.headers[index].key)},
+                std::string{text_of(out.headers[index].value)}
+            );
+        }
+        return response;
+    }
+
+    std::vector<NcPair> pairs_of(const std::vector<http::Header>& headers)
+    {
+        std::vector<NcPair> pairs;
+        pairs.reserve(headers.size());
+        for (const http::Header& header: headers) {
+            pairs.push_back(NcPair{view_of(header.first), view_of(header.second)});
+        }
+        return pairs;
+    }
+
+    std::string json_string(std::string_view text)
+    {
+        return "\"" + util::json_escape(text) + "\"";
+    }
+
+} // namespace
 
 /// One plugin as the kernel holds it: the library, its API table and its live instance.
 class Kernel::Slot
@@ -96,15 +99,20 @@ public:
     void* library{nullptr};
     const NcPluginApi* api{nullptr};
     void* instance{nullptr};
-    /// Topic patterns the plugin subscribed to. The kernel puts one catch-all handler per plugin on the
-    /// bus and filters here, so an event that matches two patterns still reaches the plugin once.
+    /// Topic patterns the plugin subscribed to. The kernel puts one catch-all handler per plugin on
+    /// the bus and filters here, so an event that matches two patterns still reaches the plugin
+    /// once.
     std::vector<std::string> subscriptions{};
 
     [[nodiscard]] bool wants(std::string_view topic) const
     {
-        return std::ranges::any_of(subscriptions, [topic](const std::string& pattern) {
-            return EventBus::matches(pattern, topic);
-        });
+        return std::ranges::any_of(
+            subscriptions,
+            [topic](const std::string& pattern)
+            {
+                return EventBus::matches(pattern, topic);
+            }
+        );
     }
 
     [[nodiscard]] http::Response route(std::uint32_t id, const http::Request& request) const
@@ -143,11 +151,12 @@ public:
         api->on_event(instance, view_of(topic), view_of(payload));
     }
 
-    [[nodiscard]] int command(std::uint32_t id, const std::vector<std::string>& args, std::string& output) const
+    [[nodiscard]] int
+    command(std::uint32_t id, const std::vector<std::string>& args, std::string& output) const
     {
         std::vector<NcView> views;
         views.reserve(args.size());
-        for (const std::string& arg : args) {
+        for (const std::string& arg: args) {
             views.push_back(view_of(arg));
         }
         NcResponse out{};
@@ -174,8 +183,8 @@ Kernel::Kernel()
     install_builtins();
 }
 
-Kernel::Kernel(Config&& config)
-    : Kernel()
+Kernel::Kernel(Config&& config) :
+    Kernel()
 {
     m_config = std::move(config);
     m_logger.set_level(Logger::parse_level(m_config.get("log_level", "info")));
@@ -184,7 +193,7 @@ Kernel::Kernel(Config&& config)
 Kernel::~Kernel()
 {
     stop();
-    for (const std::unique_ptr<Slot>& slot : m_slots) {
+    for (const std::unique_ptr<Slot>& slot: m_slots) {
         if (slot->library != nullptr) {
             dlclose(slot->library);
         }
@@ -196,10 +205,17 @@ Kernel::~Kernel()
 Result<void> Kernel::add_plugin_api(const NcPluginApi* api, std::string path)
 {
     if (api == nullptr || api->struct_size < sizeof(NcPluginApi)) {
-        return fail(ErrorCode::ABI_MISMATCH, path + ": plugin API table is missing or older than this runner");
+        return fail(
+            ErrorCode::ABI_MISMATCH,
+            path + ": plugin API table is missing or older than this runner"
+        );
     }
     if (api->abi_version != NC_ABI_VERSION) {
-        return fail(ErrorCode::ABI_MISMATCH, path + ": ABI version " + std::to_string(api->abi_version) + ", runner speaks " + std::to_string(NC_ABI_VERSION));
+        return fail(
+            ErrorCode::ABI_MISMATCH,
+            path + ": ABI version " + std::to_string(api->abi_version) + ", runner speaks " +
+                std::to_string(NC_ABI_VERSION)
+        );
     }
     const std::string name{text_of(api->name)};
     if (name.empty()) {
@@ -247,17 +263,20 @@ Result<std::size_t> Kernel::scan_directory(const std::string& directory)
     std::error_code error;
     std::filesystem::directory_iterator iterator{directory, error};
     if (error) {
-        return fail(ErrorCode::IO, "cannot read plugin directory " + directory + ": " + error.message());
+        return fail(
+            ErrorCode::IO,
+            "cannot read plugin directory " + directory + ": " + error.message()
+        );
     }
     std::vector<std::string> files;
-    for (const auto& entry : iterator) {
+    for (const auto& entry: iterator) {
         if (entry.is_regular_file() && entry.path().extension() == ".so") {
             files.push_back(entry.path().string());
         }
     }
     std::ranges::sort(files);
     std::size_t added = 0;
-    for (const std::string& file : files) {
+    for (const std::string& file: files) {
         Result<void> result = add_plugin_library(file);
         if (result) {
             ++added;
@@ -270,7 +289,7 @@ Result<std::size_t> Kernel::scan_directory(const std::string& directory)
 
 Kernel::Slot* Kernel::find_slot(std::string_view name) const noexcept
 {
-    for (const std::unique_ptr<Slot>& slot : m_slots) {
+    for (const std::unique_ptr<Slot>& slot: m_slots) {
         if (slot->info.get_name() == name) {
             return slot.get();
         }
@@ -284,7 +303,7 @@ bool Kernel::enabled(std::string_view name) const
     if (list == nullptr || util::trim(*list).empty()) {
         return true;
     }
-    for (const std::string& item : util::split(*list, ',')) {
+    for (const std::string& item: util::split(*list, ',')) {
         if (util::trim(item) == name) {
             return true;
         }
@@ -311,7 +330,8 @@ Result<void> Kernel::start()
     std::map<Slot*, Mark> marks;
     std::vector<Slot*> order;
     std::set<Slot*> cyclic;
-    auto visit = [&](auto&& self, Slot* slot) -> void {
+    auto visit = [&](auto&& self, Slot* slot) -> void
+    {
         Mark& mark = marks[slot];
         if (mark == Mark::DONE) {
             return;
@@ -321,7 +341,7 @@ Result<void> Kernel::start()
             return;
         }
         mark = Mark::VISITING;
-        for (const std::string& required : slot->info.get_requires()) {
+        for (const std::string& required: slot->info.get_requires()) {
             Slot* dependency = find_slot(required);
             if (dependency != nullptr) {
                 self(self, dependency);
@@ -330,11 +350,11 @@ Result<void> Kernel::start()
         marks[slot] = Mark::DONE;
         order.push_back(slot);
     };
-    for (const std::unique_ptr<Slot>& slot : m_slots) {
+    for (const std::unique_ptr<Slot>& slot: m_slots) {
         visit(visit, slot.get());
     }
 
-    for (Slot* slot : order) {
+    for (Slot* slot: order) {
         PluginInfo& info = slot->info;
         if (!enabled(info.get_name())) {
             info.set_state(PluginState::SKIPPED);
@@ -347,7 +367,7 @@ Result<void> Kernel::start()
             continue;
         }
         std::string blocked;
-        for (const std::string& required : info.get_requires()) {
+        for (const std::string& required: info.get_requires()) {
             const Slot* dependency = find_slot(required);
             if (dependency == nullptr) {
                 blocked = "requires " + required + ", which is not installed";
@@ -379,9 +399,10 @@ Result<void> Kernel::start()
         }
         info.set_state(PluginState::RUNNING);
         m_start_order.push_back(slot);
-        m_logger.log(LogLevel::INFO, "kernel", "started " + info.get_name() + " " + info.get_version());
+        m_logger
+            .log(LogLevel::INFO, "kernel", "started " + info.get_name() + " " + info.get_version());
     }
-    for (Slot* slot : m_start_order) {
+    for (Slot* slot: m_start_order) {
         slot->api->ready(slot->instance);
     }
     m_events.publish("kernel.ready", "");
@@ -420,7 +441,7 @@ void Kernel::stop() noexcept
 std::vector<PluginInfo> Kernel::plugins() const
 {
     std::vector<PluginInfo> infos;
-    for (const std::unique_ptr<Slot>& slot : m_slots) {
+    for (const std::unique_ptr<Slot>& slot: m_slots) {
         infos.push_back(slot->info);
     }
     return infos;
@@ -441,7 +462,8 @@ std::string Kernel::authenticate(const http::Request& request, bool& rejected) c
         return {};
     }
     const auto decoded = util::base64_decode(util::trim(header.substr(6)));
-    if (!decoded || decoded->find(':') == std::string::npos || !m_services.contains("auth.authenticate")) {
+    if (!decoded || decoded->find(':') == std::string::npos ||
+        !m_services.contains("auth.authenticate")) {
         rejected = true;
         return {};
     }
@@ -464,8 +486,13 @@ http::Response Kernel::handle(http::Request&& request) const
     }
     request.set_user(std::move(user));
 
+    // HEAD is GET without the body: the handler sees a GET, the body is dropped below.
     const bool head = request.get_method() == "HEAD";
-    const std::string method = head ? "GET" : request.get_method();
+    if (head) {
+        request.set_method("GET");
+    }
+    const std::string method = request.get_method();
+    const std::string original_method = head ? "HEAD" : method;
     const Router::Match match = m_router.match(method, request.get_path());
 
     http::Response response;
@@ -474,12 +501,16 @@ http::Response Kernel::handle(http::Request&& request) const
         try {
             response = (*match.handler)(request);
         } catch (const std::exception& error) {
-            m_logger.log(LogLevel::ERROR, "kernel", request.get_method() + " " + request.get_path() + " threw: " + error.what());
+            m_logger.log(
+                LogLevel::ERROR,
+                "kernel",
+                original_method + " " + request.get_path() + " threw: " + error.what()
+            );
             response = http::Response::text(500, "Internal Server Error");
         }
     } else if (match.outcome == Router::Outcome::METHOD_NOT_ALLOWED) {
         std::string allow = "OPTIONS";
-        for (const std::string& allowed : match.allowed) {
+        for (const std::string& allowed: match.allowed) {
             allow += ", " + allowed;
         }
         if (request.get_method() == "OPTIONS") {
@@ -498,7 +529,11 @@ http::Response Kernel::handle(http::Request&& request) const
     return response;
 }
 
-int Kernel::run_command(std::string_view name, const std::vector<std::string>& args, std::string& out) const
+int Kernel::run_command(
+    std::string_view name,
+    const std::vector<std::string>& args,
+    std::string& out
+) const
 {
     return m_commands.run(name, args, out);
 }
@@ -507,10 +542,17 @@ int Kernel::run_command(std::string_view name, const std::vector<std::string>& a
 
 void Kernel::host_log(void* ctx, std::int32_t level, NcView plugin, NcView message)
 {
-    static_cast<Kernel*>(ctx)->m_logger.log(static_cast<LogLevel>(level), text_of(plugin), text_of(message));
+    static_cast<Kernel*>(ctx)
+        ->m_logger.log(static_cast<LogLevel>(level), text_of(plugin), text_of(message));
 }
 
-std::int32_t Kernel::host_register_route(void* ctx, NcView plugin, NcView method, NcView pattern, std::uint32_t id)
+std::int32_t Kernel::host_register_route(
+    void* ctx,
+    NcView plugin,
+    NcView method,
+    NcView pattern,
+    std::uint32_t id
+)
 {
     auto* kernel = static_cast<Kernel*>(ctx);
     const Slot* slot = kernel->find_slot(text_of(plugin));
@@ -521,7 +563,10 @@ std::int32_t Kernel::host_register_route(void* ctx, NcView plugin, NcView method
         text_of(method),
         text_of(pattern),
         text_of(plugin),
-        [slot, id](const http::Request& request) { return slot->route(id, request); }
+        [slot, id](const http::Request& request)
+        {
+            return slot->route(id, request);
+        }
     );
     if (!added) {
         kernel->m_logger.log(LogLevel::ERROR, text_of(plugin), added.error().get_message());
@@ -540,7 +585,10 @@ std::int32_t Kernel::host_register_service(void* ctx, NcView plugin, NcView name
     Result<void> added = kernel->m_services.add(
         text_of(name),
         text_of(plugin),
-        [slot, id](std::string_view args) { return slot->service(id, args); }
+        [slot, id](std::string_view args)
+        {
+            return slot->service(id, args);
+        }
     );
     if (!added) {
         kernel->m_logger.log(LogLevel::ERROR, text_of(plugin), added.error().get_message());
@@ -551,7 +599,8 @@ std::int32_t Kernel::host_register_service(void* ctx, NcView plugin, NcView name
 
 std::int32_t Kernel::host_call_service(void* ctx, NcView name, NcView args, NcResponse* out)
 {
-    const http::Response response = static_cast<Kernel*>(ctx)->m_services.call(text_of(name), text_of(args));
+    const http::Response response =
+        static_cast<Kernel*>(ctx)->m_services.call(text_of(name), text_of(args));
     out_buffer().fill(response, out);
     return out->status;
 }
@@ -569,7 +618,8 @@ std::int32_t Kernel::host_subscribe(void* ctx, NcView plugin, NcView topic)
         kernel->m_events.subscribe(
             "*",
             text_of(plugin),
-            [slot](std::string_view event_topic, std::string_view payload) {
+            [slot](std::string_view event_topic, std::string_view payload)
+            {
                 if (slot->wants(event_topic)) {
                     slot->event(event_topic, payload);
                 }
@@ -584,7 +634,13 @@ void Kernel::host_publish(void* ctx, NcView topic, NcView payload)
     static_cast<Kernel*>(ctx)->m_events.publish(text_of(topic), text_of(payload));
 }
 
-std::int32_t Kernel::host_register_command(void* ctx, NcView plugin, NcView name, NcView description, std::uint32_t id)
+std::int32_t Kernel::host_register_command(
+    void* ctx,
+    NcView plugin,
+    NcView name,
+    NcView description,
+    std::uint32_t id
+)
 {
     auto* kernel = static_cast<Kernel*>(ctx);
     const Slot* slot = kernel->find_slot(text_of(plugin));
@@ -592,8 +648,13 @@ std::int32_t Kernel::host_register_command(void* ctx, NcView plugin, NcView name
         return -1;
     }
     Result<void> added = kernel->m_commands.add(
-        CommandInfo{std::string{text_of(name)}, std::string{text_of(description)}, std::string{text_of(plugin)}},
-        [slot, id](const std::vector<std::string>& args, std::string& output) {
+        CommandInfo{
+            std::string{text_of(name)},
+            std::string{text_of(description)},
+            std::string{text_of(plugin)}
+        },
+        [slot, id](const std::vector<std::string>& args, std::string& output)
+        {
             return slot->command(id, args, output);
         }
     );
@@ -606,7 +667,13 @@ std::int32_t Kernel::host_register_command(void* ctx, NcView plugin, NcView name
 
 NcView Kernel::host_config_get(void* ctx, NcView plugin, NcView key)
 {
-    const std::string* value = static_cast<Kernel*>(ctx)->m_config.find(text_of(plugin), text_of(key));
+    // `[plugin] key` first, then the runner-wide `key` (so `data_dir` is set once for every
+    // plugin).
+    const Config& config = static_cast<Kernel*>(ctx)->m_config;
+    const std::string* value = config.find(text_of(plugin), text_of(key));
+    if (value == nullptr) {
+        value = config.find({}, text_of(key));
+    }
     return value == nullptr ? NcView{nullptr, 0} : view_of(*value);
 }
 
@@ -614,78 +681,112 @@ NcView Kernel::host_config_get(void* ctx, NcView plugin, NcView key)
 
 void Kernel::install_builtins()
 {
-    (void)m_router.add("GET", "/status.php", "kernel", [this](const http::Request&) {
-        std::string body = R"({"installed":true,"maintenance":false,"needsDbUpgrade":false,"version":)";
-        body += json_string(VERSION) + R"(,"versionstring":)" + json_string(VERSION_STRING);
-        body += R"(,"edition":"","productname":)" + json_string(PRODUCT) + R"(,"extendedSupport":false,"plugins":[)";
-        bool first = true;
-        for (const PluginInfo& info : plugins()) {
-            body += first ? "" : ",";
-            first = false;
-            body += R"({"name":)" + json_string(info.get_name()) + R"(,"version":)" + json_string(info.get_version());
-            body += R"(,"state":)" + json_string(PluginInfo::state_name(info.get_state())) + "}";
-        }
-        body += "]}";
-        return http::Response::json(200, std::move(body));
-    });
-
-    (void)m_router.add("GET", "/ocs/v2.php/cloud/plugins", "kernel", [this](const http::Request&) {
-        std::string data = "[";
-        bool first = true;
-        for (const PluginInfo& info : plugins()) {
-            data += first ? "" : ",";
-            first = false;
-            data += R"({"id":)" + json_string(info.get_name()) + R"(,"version":)" + json_string(info.get_version());
-            data += R"(,"description":)" + json_string(info.get_description());
-            data += R"(,"state":)" + json_string(PluginInfo::state_name(info.get_state()));
-            data += R"(,"requires":[)";
-            bool first_required = true;
-            for (const std::string& required : info.get_requires()) {
-                data += first_required ? "" : ",";
-                first_required = false;
-                data += json_string(required);
+    (void)m_router.add(
+        "GET",
+        "/status.php",
+        "kernel",
+        [this](const http::Request&)
+        {
+            std::string body =
+                R"({"installed":true,"maintenance":false,"needsDbUpgrade":false,"version":)";
+            body += json_string(VERSION) + R"(,"versionstring":)" + json_string(VERSION_STRING);
+            body += R"(,"edition":"","productname":)" + json_string(PRODUCT) +
+                    R"(,"extendedSupport":false,"plugins":[)";
+            bool first = true;
+            for (const PluginInfo& info: plugins()) {
+                body += first ? "" : ",";
+                first = false;
+                body += R"({"name":)" + json_string(info.get_name()) + R"(,"version":)" +
+                        json_string(info.get_version());
+                body +=
+                    R"(,"state":)" + json_string(PluginInfo::state_name(info.get_state())) + "}";
             }
-            data += "]}";
+            body += "]}";
+            return http::Response::json(200, std::move(body));
         }
-        data += "]";
-        return http::ocs(200, "OK", data);
-    });
+    );
 
-    (void)m_commands.add(CommandInfo{"list", "Lists all commands", "kernel"}, [this](const std::vector<std::string>&, std::string& out) {
-        for (const CommandInfo& info : m_commands.list()) {
-            out += info.get_name() + "\t" + info.get_description() + "\n";
+    (void)m_router.add(
+        "GET",
+        "/ocs/v2.php/cloud/plugins",
+        "kernel",
+        [this](const http::Request&)
+        {
+            std::string data = "[";
+            bool first = true;
+            for (const PluginInfo& info: plugins()) {
+                data += first ? "" : ",";
+                first = false;
+                data += R"({"id":)" + json_string(info.get_name()) + R"(,"version":)" +
+                        json_string(info.get_version());
+                data += R"(,"description":)" + json_string(info.get_description());
+                data += R"(,"state":)" + json_string(PluginInfo::state_name(info.get_state()));
+                data += R"(,"requires":[)";
+                bool first_required = true;
+                for (const std::string& required: info.get_requires()) {
+                    data += first_required ? "" : ",";
+                    first_required = false;
+                    data += json_string(required);
+                }
+                data += "]}";
+            }
+            data += "]";
+            return http::ocs(200, "OK", data);
         }
-        return 0;
-    });
+    );
 
-    (void)m_commands.add(CommandInfo{"status", "Shows the version and the running plugins", "kernel"}, [this](const std::vector<std::string>&, std::string& out) {
-        out += std::string(PRODUCT) + " " + std::string(VERSION_STRING) + "\n";
-        out += "  plugins running: " + std::to_string(running_count()) + "\n";
-        return 0;
-    });
+    (void)m_commands.add(
+        CommandInfo{"list", "Lists all commands", "kernel"},
+        [this](const std::vector<std::string>&, std::string& out)
+        {
+            for (const CommandInfo& info: m_commands.list()) {
+                out += info.get_name() + "\t" + info.get_description() + "\n";
+            }
+            return 0;
+        }
+    );
 
-    (void)m_commands.add(CommandInfo{"plugin:list", "Lists the installed plugins and their state", "kernel"}, [this](const std::vector<std::string>&, std::string& out) {
-        for (const PluginInfo& info : plugins()) {
-            out += info.get_name() + "\t" + info.get_version() + "\t" + PluginInfo::state_name(info.get_state());
-            out += info.get_error().empty() ? "" : "\t(" + info.get_error() + ")";
-            out += "\n";
+    (void)m_commands.add(
+        CommandInfo{"status", "Shows the version and the running plugins", "kernel"},
+        [this](const std::vector<std::string>&, std::string& out)
+        {
+            out += std::string(PRODUCT) + " " + std::string(VERSION_STRING) + "\n";
+            out += "  plugins running: " + std::to_string(running_count()) + "\n";
+            return 0;
         }
-        return 0;
-    });
+    );
 
-    (void)m_commands.add(CommandInfo{"config:get", "Prints a config value: config:get <key>", "kernel"}, [this](const std::vector<std::string>& args, std::string& out) {
-        if (args.size() != 1) {
-            out = "usage: config:get <key>\n";
-            return 1;
+    (void)m_commands.add(
+        CommandInfo{"plugin:list", "Lists the installed plugins and their state", "kernel"},
+        [this](const std::vector<std::string>&, std::string& out)
+        {
+            for (const PluginInfo& info: plugins()) {
+                out += info.get_name() + "\t" + info.get_version() + "\t" +
+                       PluginInfo::state_name(info.get_state());
+                out += info.get_error().empty() ? "" : "\t(" + info.get_error() + ")";
+                out += "\n";
+            }
+            return 0;
         }
-        const std::string* value = m_config.find({}, args[0]);
-        if (value == nullptr) {
-            out = "not set\n";
-            return 1;
+    );
+
+    (void)m_commands.add(
+        CommandInfo{"config:get", "Prints a config value: config:get <key>", "kernel"},
+        [this](const std::vector<std::string>& args, std::string& out)
+        {
+            if (args.size() != 1) {
+                out = "usage: config:get <key>\n";
+                return 1;
+            }
+            const std::string* value = m_config.find({}, args[0]);
+            if (value == nullptr) {
+                out = "not set\n";
+                return 1;
+            }
+            out = *value + "\n";
+            return 0;
         }
-        out = *value + "\n";
-        return 0;
-    });
+    );
 }
 
-}  // namespace nc
+} // namespace nc

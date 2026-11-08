@@ -1,31 +1,33 @@
 #include "nextcloud/runner/log.h"
 
+#include "nextcloud/util/text.h"
+
 #include <chrono>
 #include <cstdio>
 #include <ctime>
 
-#include "nextcloud/util/text.h"
-
 namespace nc {
 
-Logger::Logger()
-    : m_sink{[](LogLevel level, std::string_view source, std::string_view message) {
-          const std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-          std::tm parts{};
-          gmtime_r(&now, &parts);
-          char stamp[32];
-          std::strftime(stamp, sizeof(stamp), "%Y-%m-%dT%H:%M:%SZ", &parts);
-          std::fprintf(
-              stderr,
-              "%s [%s] %.*s: %.*s\n",
-              stamp,
-              std::string(level_name(level)).c_str(),
-              static_cast<int>(source.size()),
-              source.data(),
-              static_cast<int>(message.size()),
-              message.data()
-          );
-      }}
+Logger::Logger() :
+    m_sink{[](LogLevel level, std::string_view source, std::string_view message)
+           {
+               const std::time_t now =
+                   std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+               std::tm parts{};
+               gmtime_r(&now, &parts);
+               char stamp[32];
+               std::strftime(stamp, sizeof(stamp), "%Y-%m-%dT%H:%M:%SZ", &parts);
+               std::fprintf(
+                   stderr,
+                   "%s [%s] %.*s: %.*s\n",
+                   stamp,
+                   std::string(level_name(level)).c_str(),
+                   static_cast<int>(source.size()),
+                   source.data(),
+                   static_cast<int>(message.size()),
+                   message.data()
+               );
+           }}
 {
 }
 
@@ -75,7 +77,7 @@ std::string_view Logger::level_name(LogLevel level) noexcept
 
 LogLevel Logger::parse_level(std::string_view name) noexcept
 {
-    for (const LogLevel level :
+    for (const LogLevel level:
          {LogLevel::DEBUG, LogLevel::INFO, LogLevel::WARNING, LogLevel::ERROR, LogLevel::FATAL}) {
         if (util::equals_ignore_case(name, level_name(level))) {
             return level;
@@ -84,4 +86,4 @@ LogLevel Logger::parse_level(std::string_view name) noexcept
     return LogLevel::INFO;
 }
 
-}  // namespace nc
+} // namespace nc

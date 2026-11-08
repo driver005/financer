@@ -1,3 +1,6 @@
+#include "nextcloud/runner/http_server.h"
+#include "nextcloud/runner/kernel.h"
+
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -7,9 +10,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#include "nextcloud/runner/http_server.h"
-#include "nextcloud/runner/kernel.h"
 
 namespace {
 
@@ -22,16 +22,14 @@ void on_signal(int /*signal*/)
 
 void usage()
 {
-    std::puts(
-        "usage: nextcloud [--config FILE] [--plugins DIR] <command> [args]\n"
-        "\n"
-        "  serve [--listen ADDRESS] [--port N]   run the HTTP server\n"
-        "  occ <command> [args]                  run a command (try: occ list)\n"
-        "  <command> [args]                      same as occ <command>\n"
-    );
+    std::puts("usage: nextcloud [--config FILE] [--plugins DIR] <command> [args]\n"
+              "\n"
+              "  serve [--listen ADDRESS] [--port N]   run the HTTP server\n"
+              "  occ <command> [args]                  run a command (try: occ list)\n"
+              "  <command> [args]                      same as occ <command>\n");
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv)
 {
@@ -60,12 +58,22 @@ int main(int argc, char** argv)
     if (std::filesystem::exists(config_path)) {
         nc::Result<nc::Config> loaded = nc::Config::load_file(config_path);
         if (!loaded) {
-            std::fprintf(stderr, "%s: %s\n", config_path.c_str(), loaded.error().get_message().c_str());
+            std::fprintf(
+                stderr,
+                "%s: %s\n",
+                config_path.c_str(),
+                loaded.error().get_message().c_str()
+            );
             return 2;
         }
         config = std::move(*loaded);
     }
     nc::Kernel kernel{std::move(config)};
+    // A command line call prints its result, not the start-up of every plugin; `log_level`
+    // overrides.
+    if (rest.front() != "serve" && kernel.get_config().find({}, "log_level") == nullptr) {
+        kernel.get_logger().set_level(nc::LogLevel::WARNING);
+    }
     if (plugin_dir.empty()) {
         plugin_dir = kernel.get_config().get("plugin_dir", "plugins");
     }
@@ -98,7 +106,7 @@ int main(int argc, char** argv)
     }
 
     std::string listen = kernel.get_config().get("listen", "127.0.0.1");
-    long port = kernel.get_config().get_integer("port", 8080);
+    long port = kernel.get_config().get_integer("port", 8'080);
     for (std::size_t index = 0; index < command_args.size(); ++index) {
         if (command_args[index] == "--listen" && index + 1 < command_args.size()) {
             listen = command_args[++index];
@@ -115,7 +123,13 @@ int main(int argc, char** argv)
     }
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
-    std::fprintf(stderr, "listening on http://%s:%u with %zu plugin(s)\n", listen.c_str(), static_cast<unsigned>(*bound), kernel.running_count());
+    std::fprintf(
+        stderr,
+        "listening on http://%s:%u with %zu plugin(s)\n",
+        listen.c_str(),
+        static_cast<unsigned>(*bound),
+        kernel.running_count()
+    );
     while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds{100});
     }

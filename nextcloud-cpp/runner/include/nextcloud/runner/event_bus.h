@@ -1,12 +1,12 @@
 #pragma once
 
+#include "nextcloud/runner/log.h"
+
 #include <functional>
 #include <mutex>
 #include <string>
 #include <string_view>
 #include <vector>
-
-#include "nextcloud/runner/log.h"
 
 namespace nc {
 
@@ -18,8 +18,8 @@ class EventBus
 public:
     using Handler = std::function<void(std::string_view topic, std::string_view payload)>;
 
-    explicit EventBus(const Logger* logger = nullptr) noexcept
-        : m_logger{logger}
+    explicit EventBus(const Logger* logger = nullptr) noexcept :
+        m_logger{logger}
     {
     }
 
@@ -47,4 +47,4 @@ private:
     std::vector<Subscription> m_subscriptions{};
 };
 
-}  // namespace nc
+} // namespace nc

@@ -1,0 +1,38 @@
+name: nextcloud-cpp
+
+# The C++ plugin runner in nextcloud-cpp/. Runs only when it, or this file, changes.
+on:
+  push:
+    paths:
+      - "nextcloud-cpp/**"
+      - ".github/workflows/nextcloud-cpp.yml"
+  pull_request:
+    paths:
+      - "nextcloud-cpp/**"
+      - ".github/workflows/nextcloud-cpp.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # "" is the plain build; the others are congelado's sanitizer configs (nextcloud-cpp/bazel/ci.bazelrc).
+        config: ["", "asan", "ubsan", "tsan"]
+    defaults:
+      run:
+        working-directory: nextcloud-cpp
+    steps:
+      - uses: actions/checkout@v7
+      # The toolchain (bazel/toolchain/system_cc) uses the system clang from /usr/bin and lld, like congelado's.
+      - name: Install the toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang lld libclang-rt-dev clang-format
+      - uses: bazelbuild/setup-bazelisk@v3
+      - name: Test
+        run: bazelisk test //... ${{ matrix.config != '' && format('--config={0}', matrix.config) || '' }} --config=ci --test_output=errors
+      - name: Format check
+        if: matrix.config == ''
+        run: tools/format.sh --check
+      - name: Smoke test (the real binary with the built plugins)
+        if: matrix.config == ''
+        run: tools/smoke.sh

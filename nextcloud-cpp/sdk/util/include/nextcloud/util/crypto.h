@@ -14,11 +14,8 @@ namespace nc::util {
 [[nodiscard]] std::string hmac_sha256(std::string_view key, std::string_view message);
 
 /// @brief PBKDF2 with HMAC-SHA-256, 32 raw bytes of output.
-[[nodiscard]] std::string pbkdf2_sha256(
-    std::string_view password,
-    std::string_view salt,
-    std::uint32_t iterations
-);
+[[nodiscard]] std::string
+pbkdf2_sha256(std::string_view password, std::string_view salt, std::uint32_t iterations);
 
 [[nodiscard]] std::string to_hex(std::string_view bytes);
 
@@ -33,4 +30,4 @@ namespace nc::util {
 /// @brief Compares two byte strings in time that depends only on their length.
 [[nodiscard]] bool constant_time_equals(std::string_view left, std::string_view right) noexcept;
 
-}  // namespace nc::util
+} // namespace nc::util
