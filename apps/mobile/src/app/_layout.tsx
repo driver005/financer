@@ -39,6 +39,7 @@ export default function RootLayout() {
           <Tabs.Screen name="prices" options={{ title: "Prices" }} />
           <Tabs.Screen name="recipes" options={{ title: "Recipes" }} />
           <Tabs.Screen name="settings" options={{ title: "Settings" }} />
+          <Tabs.Screen name="recipe" options={{ title: "Recipe" }} />
           <Tabs.Screen name="mealplan" options={{ title: "Meal plan" }} />
           <Tabs.Screen name="basket" options={{ title: "Usual items" }} />
           <Tabs.Screen name="receipts" options={{ title: "Receipts" }} />

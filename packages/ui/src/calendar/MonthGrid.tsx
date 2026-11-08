@@ -1,7 +1,6 @@
 import { View } from "react-native";
 
-import { borderWidth, radius } from "../constants/radius";
-import { opacity } from "../constants/misc";
+import { borderWidth } from "../constants/radius";
 import { size } from "../constants/sizes";
 import { Box, Row } from "../primitives/Box";
 import { Dot } from "../primitives/Dot";
@@ -12,9 +11,9 @@ import { useTheme } from "../theme/ThemeProvider";
 import type { CalendarItem, MonthCell } from "./types";
 
 /**
- * A month: weekday names, then the weeks. On a phone a day shows its number and a few coloured dots;
- * on a tablet or laptop it shows the titles of its first events and "+2 more". Tapping a day selects
- * it; tapping an event on a wide screen opens it.
+ * A month the way Google Calendar draws it: weekday names, then the weeks, each day with its number
+ * and a coloured bar with the title of each of its first events (all-day events filled, timed ones
+ * soft with a dot) and "+2" for the rest. Tapping a day selects it; tapping an event opens it.
  */
 export function MonthGrid({ weekdays, weeks, onSelectDay }: { weekdays: string[]; weeks: MonthCell[][]; onSelectDay: (date: string) => void }) {
   const { colors } = useTheme();
@@ -24,8 +23,8 @@ export function MonthGrid({ weekdays, weeks, onSelectDay }: { weekdays: string[]
   return (
     <Box accessibilityRole="grid">
       <Row>
-        {weekdays.map((w) => (
-          <Box key={w} equal align="center" py="xs"><Text variant="caption" tone="muted">{w}</Text></Box>
+        {weekdays.map((w, i) => (
+          <Box key={`${w}-${i}`} equal align="center" py="xs"><Text variant="caption" tone="muted">{w}</Text></Box>
         ))}
       </Row>
       {weeks.map((week, i) => (
@@ -47,20 +46,12 @@ export function MonthGrid({ weekdays, weeks, onSelectDay }: { weekdays: string[]
                 <Box dim="icon-lg" radius="full" align="center" justify="center" bg={c.today ? "accent-solid" : undefined}>
                   <Text variant="caption" tone={c.today ? "on-accent-solid" : c.inMonth ? "default" : "subtle"}>{c.number}</Text>
                 </Box>
-                {wide ? (
-                  <Box full gap="2xs">
-                    {c.items.map((it) => (
-                      <Chip key={it.key} item={it} />
-                    ))}
-                    {c.more > 0 ? <Text variant="caption" tone="muted" numberOfLines={1}>{`+${c.more} more`}</Text> : null}
-                  </Box>
-                ) : (
-                  <Row gap="2xs" justify="center" wrap>
-                    {c.items.slice(0, 3).map((it) => (
-                      <ToneDot key={it.key} item={it} />
-                    ))}
-                  </Row>
-                )}
+                <Box full gap="2xs">
+                  {c.items.map((it) => (
+                    <Chip key={it.key} item={it} solid={!wide} />
+                  ))}
+                  {c.more > 0 ? <Text variant="caption" tone="muted" numberOfLines={1}>{`+${c.more}`}</Text> : null}
+                </Box>
               </Touchable>
             </View>
           ))}
@@ -70,24 +61,15 @@ export function MonthGrid({ weekdays, weeks, onSelectDay }: { weekdays: string[]
   );
 }
 
-function ToneDot({ item }: { item: CalendarItem }) {
-  const { colors } = useTheme();
-  return (
-    <View
-      accessibilityElementsHidden
-      style={{ width: size.calendar.dot, height: size.calendar.dot, borderRadius: radius.full, backgroundColor: colors.tones[item.tone].solid, opacity: item.faded ? opacity[40] : opacity[100] }}
-    />
-  );
-}
-
-function Chip({ item }: { item: CalendarItem }) {
+/** On a phone every event is a solid bar with only its title, as there is no room for a time; on a wide screen a timed one is soft with a dot and its time. */
+function Chip({ item, solid }: { item: CalendarItem; solid: boolean }) {
   const { colors } = useTheme();
   const body = (
-    <Row gap="2xs" px="xs" radius="sm" bg={item.allDay ? `${item.tone}-solid` : `${item.tone}-soft`} align="center">
-      {item.allDay ? null : <Dot color={colors.tones[item.tone].solid} />}
+    <Row gap="2xs" px="xs" radius="sm" bg={item.allDay || solid ? `${item.tone}-solid` : `${item.tone}-soft`} align="center">
+      {item.allDay || solid ? null : <Dot color={colors.tones[item.tone].solid} />}
       <Box grow>
-        <Text variant="caption" tone={item.allDay ? `on-${item.tone}-solid` : `on-${item.tone}-soft`} numberOfLines={1}>
-          {item.time ? `${item.time} ${item.title}` : item.title}
+        <Text variant="caption" tone={item.allDay || solid ? `on-${item.tone}-solid` : `on-${item.tone}-soft`} numberOfLines={1}>
+          {item.time && !solid ? `${item.time} ${item.title}` : item.title}
         </Text>
       </Box>
     </Row>

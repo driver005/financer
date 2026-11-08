@@ -16,6 +16,7 @@ export function Page({
   actions,
   footer,
   fixed,
+  back: withBack,
   children,
 }: {
   title: string;
@@ -24,6 +25,8 @@ export function Page({
   footer?: ReactNode;
   /** The content scrolls by itself (a long list); the page does not. */
   fixed?: boolean;
+  /** Start the bar with a back button (a page opened from a list, like one recipe). */
+  back?: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
@@ -38,7 +41,7 @@ export function Page({
         <TopBar
           title={title}
           subtitle={subtitle}
-          onBack={area === "settings" ? back : undefined}
+          onBack={area === "settings" || withBack ? back : undefined}
           actions={
             <>
               {actions}

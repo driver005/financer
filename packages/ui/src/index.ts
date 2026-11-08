@@ -86,6 +86,7 @@ export { TileButton } from "./components/TileButton";
 export { ChoiceCard } from "./components/ChoiceCard";
 export { Confetti } from "./finance/Confetti";
 export { Cover, fill } from "./layout/Cover";
+export { IngredientRow, RecipeCover, RecipeFacts, RecipeStep, ServingsPicker, type IngredientState, type RecipeFact } from "./food/Recipe";
 
 export { AgendaList } from "./calendar/AgendaList";
 export { FloatingButton } from "./calendar/FloatingButton";

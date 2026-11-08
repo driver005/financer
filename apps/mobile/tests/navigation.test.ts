@@ -45,6 +45,7 @@ describe("areaFor and tabFor", () => {
     assert.equal(areaFor("/mail"), "tab");
     assert.equal(tabFor("/budget"), "money");
     assert.equal(tabFor("/recipes"), "groceries");
+    assert.equal(tabFor("/recipe"), "groceries");
     assert.equal(tabFor("/stores"), "money");
   });
   it("puts Settings and the screens opened from it in their own area, with no tab", () => {

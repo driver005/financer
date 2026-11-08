@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Badge, Box, Card, Chip, ChipRow, Expandable, HeroCaption, HeroCard, HeroChip, HeroNumber, IconBadge, IconButton, Icon, Note, ProgressRing, Row, Text, TextField, VirtualList } from "@financer/ui";
+import { Badge, Box, Card, Chip, ChipRow, HeroCaption, HeroCard, HeroChip, HeroNumber, IconBadge, IconButton, Icon, Note, ProgressRing, Row, Text, TextField, VirtualList } from "@financer/ui";
 
 import type { Idea, RecipeMatch } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -10,6 +10,7 @@ import { Empty, Loading, NeedsSetup } from "@/components/Status";
 import { formatCents, parseEuroInput, servingsText } from "@/format";
 import { costPerServing, initials, mealTone, shortList } from "@/groceryView";
 import { useScreenData } from "@/hooks";
+import { IDEA_ID, stashIdea } from "@/recipeStash";
 
 const TAGS = ["vegetarisch", "vegan", "günstig", "schnell", "fleisch", "fisch"];
 
@@ -83,7 +84,14 @@ export default function Recipes() {
             />
             {ideaMessage ? <Note tone="error">{ideaMessage}</Note> : null}
             {ideas.map((idea) => (
-              <IdeaCard key={idea.title} idea={idea} />
+              <IdeaCard
+                key={idea.title}
+                idea={idea}
+                onOpen={() => {
+                  stashIdea(idea);
+                  router.push({ pathname: "/recipe", params: { id: IDEA_ID } });
+                }}
+              />
             ))}
             {error ? <Note tone="error">{error}</Note> : null}
             {loading ? <Loading rows={3} /> : null}
@@ -108,7 +116,7 @@ export default function Recipes() {
             />
           )
         }
-        renderItem={(item, index) => <RecipeCard recipe={item} best={index === 0} />}
+        renderItem={(item, index) => <RecipeCard recipe={item} best={index === 0} onOpen={() => router.push({ pathname: "/recipe", params: { id: item.id } })} />}
       />
     </Page>
   );
@@ -123,14 +131,14 @@ function Meta({ icon, text }: { icon: "clock-outline" | "account-multiple-outlin
   );
 }
 
-function RecipeCard({ recipe: r, best }: { recipe: RecipeMatch; best: boolean }) {
+function RecipeCard({ recipe: r, best, onOpen }: { recipe: RecipeMatch; best: boolean; onOpen: () => void }) {
   const names = new Map(r.ingredients.map((i) => [i.item, i.name]));
   const nameOf = (k: string) => names.get(k) ?? k;
   const perServing = costPerServing(r);
   const missing = shortList(r.missing.map((k) => nameOf(k) + (r.unpriced.includes(k) ? " (no price yet)" : "")), 2);
   const offers = shortList(r.on_offer.map(nameOf), 2);
   return (
-    <Card gap="md">
+    <Card gap="md" onPress={onOpen} label={`Open recipe ${r.title}`}>
       <Row gap="md">
         <IconBadge tone={mealTone(r.id)} text={initials(r.title)} square />
         <Box grow gap="2xs">
@@ -180,24 +188,17 @@ function RecipeCard({ recipe: r, best }: { recipe: RecipeMatch; best: boolean })
         </Row>
       ) : null}
 
-      <Expandable title="Ingredients and steps">
-        {r.ingredients.map((i) => (
-          <Row key={i.item} justify="between" gap="md">
-            <Box grow><Text variant="label">{i.name}</Text></Box>
-            <Text variant="caption" tone="muted">{i.amount}</Text>
-          </Row>
-        ))}
-        {r.steps.map((s, n) => (
-          <Text key={n} variant="label">{`${n + 1}. ${s}`}</Text>
-        ))}
-      </Expandable>
+      <Row gap="xs" justify="end">
+        <Text variant="label" tone="accent">Open recipe</Text>
+        <Icon name="chevron-right" size="sm" tone="accent" />
+      </Row>
     </Card>
   );
 }
 
-function IdeaCard({ idea }: { idea: Idea }) {
+function IdeaCard({ idea, onOpen }: { idea: Idea; onOpen: () => void }) {
   return (
-    <Card tone="accent" gap="md">
+    <Card tone="accent" gap="md" onPress={onOpen} label={`Open idea ${idea.title}`}>
       <Row gap="md">
         <IconBadge tone={mealTone(idea.title)} text={initials(idea.title)} square />
         <Box grow gap="2xs">
@@ -210,17 +211,10 @@ function IdeaCard({ idea }: { idea: Idea }) {
         <Meta icon="clock-outline" text={`${idea.minutes} min`} />
         <Meta icon="account-multiple-outline" text={servingsText(idea.servings)} />
       </Row>
-      <Expandable title="Ingredients and steps">
-        {idea.ingredients.map((i, n) => (
-          <Row key={`${i.name}-${n}`} justify="between" gap="md">
-            <Box grow><Text variant="label">{i.name}</Text></Box>
-            <Text variant="caption" tone="muted">{i.amount}</Text>
-          </Row>
-        ))}
-        {idea.steps.map((s, n) => (
-          <Text key={n} variant="label">{`${n + 1}. ${s}`}</Text>
-        ))}
-      </Expandable>
+      <Row gap="xs" justify="end">
+        <Text variant="label" tone="accent">Open recipe</Text>
+        <Icon name="chevron-right" size="sm" tone="accent" />
+      </Row>
     </Card>
   );
 }

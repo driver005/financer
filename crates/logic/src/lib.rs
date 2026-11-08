@@ -27,6 +27,7 @@ pub mod notify_plan;
 pub mod onboarding;
 pub mod period;
 pub mod receipt_sources;
+pub mod recipe_view;
 pub mod rules;
 pub mod safe_to_spend;
 pub mod scan;
@@ -407,6 +408,12 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg::<String>(&args, "passphrase")?,
             opt::<String>(&args, "confirm")?.as_deref(),
         )),
+        "recipe_view.scale_amount" => json(recipe_view::scale_amount(
+            &arg::<String>(&args, "text")?,
+            arg(&args, "servings")?,
+            arg(&args, "base")?,
+        )),
+        "recipe_view.clamp_servings" => json(recipe_view::clamp_servings(arg(&args, "n")?)),
         "grocery_view.hash_text" => json(grocery_view::hash_text(&arg::<String>(&args, "text")?)),
         "grocery_view.meal_tone" => json(grocery_view::meal_tone(&arg::<String>(&args, "seed")?)),
         "grocery_view.chain_tone" => {

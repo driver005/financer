@@ -3,7 +3,7 @@ import { useState } from "react";
 import {
   Badge, BarChart, Box, Button, Card, ChoiceCard, ColumnChart, CompareBars, ConfirmAction, CurveChart, DonutChart, Dot, Expandable, Group, HeroCaption, HeroCard, HeroChip, HeroFigure, HeroNumber,
   HeroProgress, HeroStats, IconBadge, ListItem, Mascot, MascotFace, Money, Note, ProgressRing, Row, ScanFrame, Snackbar, Stack, Stepper, Text, TileButton, ToggleRow, useSeriesColor,
-  Balance, BubbleCloud, Icon, Pill, PillRow, QuickActions,
+  Balance, BubbleCloud, Icon, IngredientRow, Pill, PillRow, QuickActions, RecipeCover, RecipeFacts, RecipeStep, ServingsPicker,
 } from "@financer/ui";
 
 import type { StoryDef } from "../Story";
@@ -180,6 +180,31 @@ function Pills() {
   );
 }
 
+function RecipePage() {
+  const [servings, setServings] = useState(4);
+  const amounts = [["250 g", "Spaghetti", "have"], ["1 Dose", "Tomaten", "missing"], ["2 Zehen", "Knoblauch", "offer"]] as const;
+  return (
+    <Stack gap="lg">
+      <RecipeCover tone="warning" letter="S">
+        <ProgressRing progress={0.67} box="md" stroke="lg" label="You already buy 67 percent">
+          <Text variant="number">67%</Text>
+        </ProgressRing>
+      </RecipeCover>
+      <Text variant="title" level={1}>Spaghetti al pomodoro</Text>
+      <RecipeFacts facts={[{ icon: "clock-outline", label: "Time", value: "25 min" }, { icon: "account-multiple-outline", label: "Servings", value: "4 servings" }, { icon: "cash", label: "To buy per serving", value: "0,85 €" }]} />
+      <ServingsPicker label="Servings" value={servings} unit="servings" onChange={setServings} />
+      <Card gap="none">
+        {amounts.map(([a, n, st]) => (
+          <IngredientRow key={n} amount={a} name={n} state={st} />
+        ))}
+      </Card>
+      <Card gap="xs">
+        <RecipeStep n={1} text="Bring salted water to the boil and cook the pasta until it has a little bite." />
+        <RecipeStep n={2} text="Fry the garlic gently, add the tomatoes and let it reduce for ten minutes." />
+      </Card>    </Stack>
+  );
+}
+
 function IconRow() {
   return <ListItem leading={<IconBadge icon="silverware-fork-knife" tone="success" />} title="Cafe Bloom" subtitle="Food & Dining · 25.04." trailing={<Money cents={-1250} variant="bodyStrong" signed />} />;
 }
@@ -208,5 +233,6 @@ export const financeStories: StoryDef[] = [
   { id: "balance", title: "Balance and quick actions", note: "A money screen opens with its one figure, big and centred on the page, then the few things you do from it as round buttons with their names under them.", render: () => <BalanceAndActions /> },
   { id: "pills", title: "Pills and an inset list", note: "The filter row of a transactions screen (the chosen pill filled, the others outlined) over rows with a pale tile, \"Category · date\" and the amount; the hairlines stop short of the card's sides.", render: () => <Pills /> },
   { id: "bubbles", title: "Bubble cloud", note: "Where the money went: the bigger the share, the bigger the bubble. Each is named with its amount, so sizes and colours are never the only signal.", render: () => <Bubbles /> },
+  { id: "recipe", title: "Recipe page", note: "A recipe as a full page: cover, facts, a servings stepper that rescales the amounts, ingredients that show how they fit what you buy, numbered steps.", render: () => <RecipePage /> },
   { id: "friends", title: "Mascot, scan frame, snackbar", render: () => <Friends /> },
 ];

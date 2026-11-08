@@ -6,15 +6,19 @@ phone or internet contract.
 
 ## What you can do
 
-- **Views**: month, week, 3 days, day and schedule (a list of what is coming). The last view is remembered.
+- **Views**: month, week, 3 days, day and schedule (a list of what is coming), chosen from the eye button at the
+  top. The last view is remembered. It is laid out like Google Calendar: the month with an arrow (it drops a
+  small month to jump to a date), a Today button, a coloured bar with the title for each event in the month
+  (also on a phone), solid coloured tiles in the day and week, a line with a dot for now, and in the schedule a
+  column with the weekday and day number (today in a circle) beside the events.
   On a tablet or laptop a side panel shows a small month, quick add and the calendars.
-- **Add**: the round button, a tap on an empty place of the week, 3-day or day view (the event starts there), or
+- **Add**: the rounded-square button, a tap on an empty place of the week, 3-day or day view (the event starts there), or
   the quick-add line: `Lunch with Anna tomorrow 12:30-13:30`, `Dentist friday 3pm`, `Rent 1/12 all day`.
 - **Change and delete**: tap an event for its details, then Edit or Delete. For a repeating event, Delete asks
   "this event" (only that day is skipped) or "all events".
 - **Events**: title, all day or from/to (date and time), repeat, calendar, reminders, location, notes.
-- **Overlaps**: events at the same time lie on top of each other and their colours mix (blue over green looks
-  teal), so a clash shows at a glance; events that start together (within half an hour, where the titles would hide
+- **Overlaps**: events at the same time lie on top of each other, each a little further right so every title
+  stays readable; events that start together (within half an hour, where the titles would hide
   each other) sit side by side instead.
 - **Repeats**: every n days, weeks (on chosen weekdays), months or years, ending never, on a date or after n
   times. A monthly event on the 31st happens on the last day of shorter months.
