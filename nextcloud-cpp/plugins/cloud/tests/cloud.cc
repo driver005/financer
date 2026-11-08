@@ -518,6 +518,223 @@ void test_plugins()
     fs::remove_all(dir);
 }
 
+Request
+user_req(std::string method, std::string path, std::string body, const std::string& credentials)
+{
+    Request request{
+        std::move(method),
+        std::move(path),
+        std::string{},
+        std::move(body),
+        std::string{},
+        {},
+        {}
+    };
+    request.add_header("Authorization", "Basic " + nc::util::base64_encode(credentials));
+    return request;
+}
+
+void test_received_shares()
+{
+    const std::string dir = temp_dir("mounts");
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "groups", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    for (const char* name: {"alice", "bob", "carol"}) {
+        ::setenv("OC_PASS", (std::string{name} + " password").c_str(), 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {name}, out), 0);
+    }
+    ::unsetenv("OC_PASS");
+    NC_CHECK_EQ(kernel.run_command("group:add", {"team"}, out), 0);
+    NC_CHECK_EQ(kernel.run_command("group:adduser", {"team", "bob"}, out), 0);
+    const std::string alice = "alice:alice password";
+    const std::string bob = "bob:bob password";
+    const std::string carol = "carol:carol password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const std::string b = "/remote.php/dav/files/bob";
+    const std::string shares = "/ocs/v2.php/apps/files_sharing/api/v1/shares";
+
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Documents", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Documents/a.txt", "AAA", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Team", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", a + "/note.txt", "NOTE", alice)).get_status(), 201);
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", b + "/note.txt", "BOBS", bob)).get_status(), 201);
+
+    // Before anything is shared, bob sees only his own tree.
+    NC_CHECK(
+        kernel.handle(user_req("PROPFIND", b + "/", "", bob)).get_body().find("Documents") ==
+        std::string::npos
+    );
+
+    // A read-only user share: it appears in bob's top folder and can be read, not changed.
+    NC_CHECK_EQ(
+        kernel
+            .handle(user_req(
+                "POST",
+                shares,
+                "path=%2FDocuments&shareType=0&shareWith=bob&permissions=1",
+                alice
+            ))
+            .get_status(),
+        200
+    );
+    const auto top = kernel.handle(user_req("PROPFIND", b + "/", "", bob)).get_body();
+    NC_CHECK(top.find("<d:href>" + b + "/Documents/</d:href>") != std::string::npos);
+    NC_CHECK(top.find("<d:href>" + b + "/note.txt</d:href>") != std::string::npos);
+    NC_CHECK_EQ(kernel.handle(user_req("GET", b + "/Documents/a.txt", "", bob)).get_body(), "AAA");
+    const auto inside = kernel.handle(user_req("PROPFIND", b + "/Documents", "", bob)).get_body();
+    NC_CHECK(inside.find("<d:href>" + b + "/Documents/a.txt</d:href>") != std::string::npos);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", b + "/Documents/b.txt", "no", bob)).get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", b + "/Documents/a.txt", "no", bob)).get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", b + "/Documents/a.txt", "", bob)).get_status(),
+        403
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", b + "/Documents/sub", "", bob)).get_status(), 403);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Documents/a.txt", "", alice)).get_body(),
+        "AAA"
+    ); // untouched
+    // Nobody else sees it, and the path cannot leave the share.
+    NC_CHECK(
+        kernel.handle(user_req("PROPFIND", "/remote.php/dav/files/carol/", "", carol))
+            .get_body()
+            .find("Documents") == std::string::npos
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", "/remote.php/dav/files/carol/Documents/a.txt", "", carol))
+            .get_status(),
+        404
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", b + "/Documents/..%2f..%2fnote.txt", "", bob)).get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", b + "/Documents/../note.txt", "", bob)).get_status(),
+        400
+    );
+
+    // A group share with every permission: members write into the owner's folder.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=%2FTeam&shareType=1&shareWith=nogroup", alice))
+            .get_status(),
+        404
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=%2FTeam&shareType=1&shareWith=team", alice))
+            .get_status(),
+        200
+    );
+    NC_CHECK(
+        kernel.handle(user_req("PROPFIND", b + "/", "", bob))
+            .get_body()
+            .find("<d:href>" + b + "/Team/</d:href>") != std::string::npos
+    );
+    NC_CHECK(
+        kernel.handle(user_req("PROPFIND", "/remote.php/dav/files/carol/", "", carol))
+            .get_body()
+            .find("Team") == std::string::npos
+    ); // not a member
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", b + "/Team/new.txt", "from bob", bob)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Team/new.txt", "", alice)).get_body(),
+        "from bob"
+    ); // it is in alice's tree
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", b + "/Team/new.txt", "edited", bob)).get_status(),
+        204
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", b + "/Team/sub", "", bob)).get_status(), 201);
+    Request move = user_req("MOVE", b + "/Team/new.txt", "", bob);
+    move.add_header("Destination", b + "/Team/sub/moved.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(move)).get_status(), 201);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Team/sub/moved.txt", "", alice)).get_body(),
+        "edited"
+    );
+    Request leave =
+        user_req("MOVE", b + "/Team/sub/moved.txt", "", bob); // out of the share: refused
+    leave.add_header("Destination", b + "/stolen.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(leave)).get_status(), 502);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", b + "/Team/sub/moved.txt", "", bob)).get_status(),
+        204
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Team/sub/moved.txt", "", alice)).get_status(),
+        404
+    );
+
+    // A shared file whose name is taken in bob's folder gets a number; update permission lets him
+    // replace it.
+    NC_CHECK_EQ(
+        kernel
+            .handle(user_req(
+                "POST",
+                shares,
+                "path=%2Fnote.txt&shareType=0&shareWith=bob&permissions=3",
+                alice
+            ))
+            .get_status(),
+        200
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("GET", b + "/note.txt", "", bob)).get_body(), "BOBS");
+    NC_CHECK_EQ(kernel.handle(user_req("GET", b + "/note%20(2).txt", "", bob)).get_body(), "NOTE");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", b + "/note%20(2).txt", "NOTE v2", bob)).get_status(),
+        204
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/note.txt", "", alice)).get_body(), "NOTE v2");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", b + "/note%20(2).txt", "", bob)).get_status(),
+        403
+    );
+    NC_CHECK(
+        kernel.handle(user_req("PROPFIND", b + "/", "", bob))
+            .get_body()
+            .find("note%20%282%29.txt") != std::string::npos
+    );
+
+    // The sharing API lists what bob received, directly and through the group.
+    Request received{"GET", std::string{shares}};
+    received.set_query("shared_with_me=true");
+    received.add_header("Authorization", "Basic " + nc::util::base64_encode(bob));
+    const auto listing = kernel.handle(std::move(received)).get_body();
+    NC_CHECK(listing.find("\"path\":\"/Documents\"") != std::string::npos);
+    NC_CHECK(listing.find("\"path\":\"/Team\"") != std::string::npos);
+    NC_CHECK(listing.find("\"path\":\"/note.txt\"") != std::string::npos);
+
+    // Leaving the group takes the share away; deleting the share does too.
+    NC_CHECK_EQ(kernel.run_command("group:removeuser", {"team", "bob"}, out), 0);
+    NC_CHECK_EQ(kernel.handle(user_req("GET", b + "/Team/sub", "", bob)).get_status(), 404);
+    NC_CHECK_EQ(kernel.handle(user_req("DELETE", shares + "/1", "", alice)).get_status(), 200);
+    NC_CHECK_EQ(kernel.handle(user_req("GET", b + "/Documents/a.txt", "", bob)).get_status(), 404);
+
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 void test_quota_through_dav()
 {
     const std::string dir = temp_dir("quota");
@@ -570,6 +787,7 @@ int main()
     test_storage();
     test_share_store();
     test_plugins();
+    test_received_shares();
     test_quota_through_dav();
     test_missing_requirement();
     return NC_TEST_RESULT();

@@ -48,10 +48,9 @@ style (`CODESTYLE.md`).
 - [x] CI workflow (plain, asan, ubsan, tsan; clang 22 / C++26 with -Werror).
 - [x] Second tranche, to close the gaps of the first porting map: background jobs in the ABI, the `db` plugin
       (SQLite and migrations), groups, activity, notifications, app passwords, TOTP two-factor, trash bin,
-      versions, CalDAV, CardDAV, chunked request bodies.
+      versions, CalDAV, CardDAV, chunked request bodies, group shares and received shares in the recipient's tree.
 - [ ] Still not ported (see `docs/porting-map.md`): federation, LDAP/OAuth2/SAML, encryption, external
-      storage, previews, tags/comments, settings/theming, group and federated shares, a received share in
-      the recipient's tree, iTIP scheduling and calendar sharing, TLS in the server, C++26 modules.
+      storage, previews, tags/comments, settings/theming, federated shares, iTIP scheduling and calendar sharing, TLS in the server, C++26 modules.
 
 ## Acceptance criteria
 

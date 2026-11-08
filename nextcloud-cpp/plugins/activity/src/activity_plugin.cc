@@ -90,8 +90,20 @@ public:
                 const auto form = nc::util::parse_form(payload);
                 const std::string owner = nc::util::form_value(form, "owner");
                 const std::string path = nc::util::form_value(form, "path");
-                const std::string recipient = nc::util::form_value(form, "share_with");
-                if (recipient.empty()) {
+                const std::string recipient = nc::util::form_value(form, "type") == "0"
+                                                  ? nc::util::form_value(form, "share_with")
+                                                  : std::string{};
+                const std::string group = nc::util::form_value(form, "type") == "1"
+                                              ? nc::util::form_value(form, "share_with")
+                                              : std::string{};
+                if (!group.empty()) {
+                    record(
+                        owner,
+                        "share.created",
+                        "You shared " + path + " with the group " + group,
+                        path
+                    );
+                } else if (recipient.empty()) {
                     record(owner, "share.created", "You shared " + path + " by link", path);
                 } else {
                     record(

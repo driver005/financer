@@ -103,7 +103,9 @@ public:
             [this](std::string_view, std::string_view payload)
             {
                 const auto form = nc::util::parse_form(payload);
-                const std::string recipient = nc::util::form_value(form, "share_with");
+                const std::string recipient = nc::util::form_value(form, "type") == "0"
+                                                  ? nc::util::form_value(form, "share_with")
+                                                  : std::string{};
                 if (!recipient.empty()) {
                     push(
                         recipient,

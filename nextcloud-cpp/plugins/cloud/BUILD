@@ -34,6 +34,8 @@ nc_cc_test(
     srcs = ["tests/cloud.cc"],
     data = [
         ":libcloud.so",
+        "//plugins/db:libdb.so",
+        "//plugins/groups:libgroups.so",
         "//plugins/mail:libmail.so",
         "//plugins/users:libusers.so",
     ],

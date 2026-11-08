@@ -99,7 +99,8 @@ with GET, PUT, MKCOL, DELETE, MOVE, COPY and PROPFIND; shares by user and by pub
 are never followed, writes are atomic, downloads carry `nosniff` and a sandboxing CSP. Quotas, ETags,
 `X-OC-Mtime`. Before a delete it asks `trashbin.before_delete`, before an overwrite
 `versions.before_write`; it offers `cloud.trash.*` and `cloud.version.*` so those plugins never touch the
-disk.
+disk. Shares with a user or a group are mounted in the recipient's top folder: a request below a mount is
+served by the same WebDAV code against the owner's folder, limited by the share's permissions.
 
 **trashbin**, **versions**: the records (original path, time, size; version list) in the database, with
 restore, purge and expiry jobs; the bytes stay in `<user>/files_trashbin` and `<user>/files_versions`,

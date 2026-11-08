@@ -8,6 +8,7 @@ namespace nc::cloud {
 
 /// Share types, as in Nextcloud's `OCP\Share\IShare`.
 inline constexpr int SHARE_TYPE_USER = 0;
+inline constexpr int SHARE_TYPE_GROUP = 1;
 inline constexpr int SHARE_TYPE_LINK = 3;
 
 /// @brief One share: a path of the owner offered to a user or through a public link.

@@ -11,6 +11,7 @@
 #include "share_store.h"
 #include "storage.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
@@ -404,16 +405,280 @@ private:
         if (!safe_user(user)) {
             return Response::text(403, "Forbidden");
         }
+        const std::string path{request.param("path")};
+        const std::vector<Mount> mounts = mounts_for(user);
+        if (!mounts.empty()) {
+            const auto normalized = Storage::normalize("/" + path);
+            if (normalized) {
+                const std::size_t slash = normalized->find('/', 1);
+                const std::string first = normalized->substr(
+                    1,
+                    slash == std::string::npos ? std::string::npos : slash - 1
+                );
+                for (const Mount& mount: mounts) {
+                    if (mount.name == first) {
+                        return serve_mount(
+                            request,
+                            mount,
+                            slash == std::string::npos ? std::string{} : normalized->substr(slash),
+                            base
+                        );
+                    }
+                }
+                if (*normalized == "/" && request.get_method() == "PROPFIND" &&
+                    request.header("Depth") != "0") {
+                    return with_mounts(
+                        nc::cloud::dav_handle(
+                            request,
+                            storage_for(user),
+                            nc::cloud::DavTarget{
+                                std::string{user},
+                                std::string{base},
+                                std::string{path}
+                            },
+                            publisher(),
+                            hooks()
+                        ),
+                        mounts,
+                        base
+                    );
+                }
+            }
+        }
         return nc::cloud::dav_handle(
             request,
             storage_for(user),
-            nc::cloud::DavTarget{
-                std::string{user},
-                std::move(base),
-                std::string{request.param("path")}
-            },
+            nc::cloud::DavTarget{std::string{user}, std::move(base), std::string{path}},
             publisher(),
             hooks()
+        );
+    }
+
+    // ---- received shares appear in the recipient's tree
+    // --------------------------------------------
+
+    /// A share somebody made with `user` (directly or through a group), still valid.
+    [[nodiscard]] bool is_recipient(const Share& share, const std::string& user) const
+    {
+        if (share.get_type() == nc::cloud::SHARE_TYPE_USER) {
+            return share.get_share_with() == user;
+        }
+        return share.get_type() == nc::cloud::SHARE_TYPE_GROUP &&
+               m_host->call_service(
+                         "groups.is_member",
+                         nc::util::form_encode({{"group", share.get_share_with()}, {"user", user}})
+               ).get_status() == 200;
+    }
+
+    [[nodiscard]] std::vector<Share> received_shares(const std::string& user) const
+    {
+        std::vector<Share> out;
+        for (const Share& share: m_shares->all()) {
+            if (share.get_owner() != user && is_recipient(share, user)) {
+                out.push_back(share);
+            }
+        }
+        return out;
+    }
+
+    /// One received share as the recipient sees it: a name in the top folder, and where it really
+    /// is.
+    struct Mount
+    {
+        Share share{};
+        std::string name{};
+        bool directory{false};
+    };
+
+    [[nodiscard]] std::vector<Mount> mounts_for(const std::string& user) const
+    {
+        std::vector<Mount> mounts;
+        const Storage own = storage_for(user);
+        for (const Share& share: received_shares(user)) {
+            if (share.expired(now_seconds()) || !safe_user(share.get_owner())) {
+                continue;
+            }
+            const auto node = storage_for(share.get_owner()).stat(share.get_path());
+            if (!node) {
+                continue;
+            }
+            // The name is the shared item's name; a clash with the user's own entries or another
+            // share gets a number, like "report (2).txt".
+            const std::string base_name = node->name();
+            const std::size_t dot = node->is_directory() ? std::string::npos : base_name.rfind('.');
+            std::string name = base_name;
+            for (int attempt = 2; attempt < 1'000; ++attempt) {
+                const bool taken =
+                    own.stat("/" + name).has_value() || std::ranges::any_of(
+                                                            mounts,
+                                                            [&](const Mount& other)
+                                                            {
+                                                                return other.name == name;
+                                                            }
+                                                        );
+                if (!taken) {
+                    break;
+                }
+                name = dot == std::string::npos || dot == 0
+                           ? base_name + " (" + std::to_string(attempt) + ")"
+                           : base_name.substr(0, dot) + " (" + std::to_string(attempt) + ")" +
+                                 base_name.substr(dot);
+            }
+            mounts.push_back(Mount{share, name, node->is_directory()});
+        }
+        return mounts;
+    }
+
+    /// The listing of the top folder plus one entry per mount.
+    [[nodiscard]] Response
+    with_mounts(Response listing, const std::vector<Mount>& mounts, const std::string& base) const
+    {
+        if (listing.get_status() != 207) {
+            return listing;
+        }
+        std::vector<nc::cloud::Node> nodes;
+        for (const Mount& mount: mounts) {
+            auto node = storage_for(mount.share.get_owner()).stat(mount.share.get_path());
+            if (!node) {
+                continue;
+            }
+            node->set_path("/" + mount.name);
+            nodes.push_back(*node);
+        }
+        std::string extra;
+        for (const nc::cloud::Node& node: nodes) {
+            const Mount& mount = *std::ranges::find_if(
+                mounts,
+                [&](const Mount& m)
+                {
+                    return "/" + m.name == node.get_path();
+                }
+            );
+            std::string one = nc::cloud::multistatus(
+                {node},
+                base,
+                mount.share.get_owner(),
+                Storage{std::filesystem::path{"/nonexistent"}}
+            );
+            // multistatus() wraps its answer; keep only the <d:response> elements. (The size of a
+            // mounted folder is not worked out here: it reads 0 in the listing of the top folder.)
+            const std::size_t begin = one.find(" <d:response>");
+            const std::size_t end = one.rfind("</d:multistatus>");
+            if (begin != std::string::npos && end != std::string::npos) {
+                extra += one.substr(begin, end - begin);
+            }
+        }
+        std::string body = listing.get_body();
+        const std::size_t close = body.rfind("</d:multistatus>");
+        if (close != std::string::npos) {
+            body.insert(close, extra);
+        }
+        listing.set_body(std::move(body));
+        return listing;
+    }
+
+    /// Serves a request inside a mounted share: the owner's folder is the root, and the share's
+    /// permissions (1 read, 2 update, 4 create, 8 delete) decide what is allowed.
+    [[nodiscard]] Response serve_mount(
+        const Request& request,
+        const Mount& mount,
+        const std::string& rest,
+        const std::string& base
+    ) const
+    {
+        const Share& share = mount.share;
+        const std::string& method = request.get_method();
+        const int permissions = share.get_permissions();
+        const Storage owner_files = storage_for(share.get_owner());
+        const auto denied = []
+        {
+            return Response::text(403, "The share does not allow this");
+        };
+
+        // A shared file is a mount of one file: read it, or replace it with update permission.
+        const std::string parent = share.get_path().substr(0, share.get_path().rfind('/'));
+        const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
+        Storage root = mount.directory ? Storage{std::filesystem::path{m_data_dir} / share.get_owner() / "files" / share.get_path().substr(1)}
+                                       : Storage{std::filesystem::path{m_data_dir} / share.get_owner() / "files" / (parent.empty() ? "" : parent.substr(1))};
+        std::string inner = rest;
+        std::string href_base = mount_base;
+        if (!mount.directory) {
+            if (!rest.empty()) {
+                return Response::text(404, "Not Found");
+            }
+            inner = "/" + share.get_path().substr(share.get_path().rfind('/') + 1);
+            href_base = base; // the single node is reported as /<base>/<name> by the storage path
+        }
+
+        // What the method needs.
+        if (method == "PUT") {
+            const bool exists = root.stat(mount.directory ? inner : inner).has_value();
+            if (!(permissions & (exists ? 2 : 4)) || (!mount.directory && !exists)) {
+                return denied();
+            }
+        } else if (method == "MKCOL") {
+            if (!(permissions & 4) || !mount.directory || inner.empty()) {
+                return denied();
+            }
+        } else if (method == "DELETE") {
+            if (!(permissions & 8) || !mount.directory || inner.empty()) {
+                return denied();
+            }
+        } else if (method == "MOVE" || method == "COPY") {
+            if (!mount.directory || inner.empty() || !(permissions & 4) ||
+                (method == "MOVE" && !(permissions & 8))) {
+                return denied();
+            }
+        } else if (method != "GET" && method != "PROPFIND") {
+            return Response::text(405, "Method Not Allowed");
+        }
+
+        // Changes belong to the owner's tree: events, trash and versions use the owner and the
+        // owner's path.
+        const std::string prefix = mount.directory ? share.get_path() : parent;
+        nc::cloud::Publish publish = [this,
+                                      owner = share.get_owner(),
+                                      prefix](std::string_view topic, std::string_view payload)
+        {
+            auto form = nc::util::parse_form(payload);
+            for (auto& [key, value]: form) {
+                if (key == "user") {
+                    value = owner;
+                } else if (key == "path" || key == "target") {
+                    value = prefix + (value == "/" ? "" : value);
+                }
+            }
+            m_host->publish(topic, nc::util::form_encode(form));
+        };
+        nc::cloud::Hooks hooks = this->hooks();
+        hooks.before_delete =
+            [this, owner = share.get_owner(), prefix](const std::string&, const std::string& path)
+        {
+            return m_host
+                       ->call_service(
+                           "trashbin.before_delete",
+                           nc::util::form_encode({{"user", owner}, {"path", prefix + path}})
+                       )
+                       .get_status() == 200;
+        };
+        hooks.before_overwrite =
+            [this, owner = share.get_owner(), prefix](const std::string&, const std::string& path)
+        {
+            (void)m_host->call_service(
+                "versions.before_write",
+                nc::util::form_encode({{"user", owner}, {"path", prefix + path}})
+            );
+        };
+        return nc::cloud::dav_handle(
+            request,
+            root,
+            nc::cloud::DavTarget{
+                std::string{request.get_user()},
+                std::move(href_base),
+                std::move(inner)
+            },
+            publish,
+            hooks
         );
     }
 
@@ -499,6 +764,19 @@ private:
                         return failure(400, "Invalid permissions");
                     }
                     share.set_permissions(mask);
+                } else if (type == nc::cloud::SHARE_TYPE_GROUP) {
+                    const std::string group = field("shareWith");
+                    if (group.empty() ||
+                        m_host->call_service("groups.exists", group).get_status() != 200) {
+                        return failure(404, "Wrong share recipient");
+                    }
+                    share.set_share_with(std::string{group});
+                    const std::string permissions = field("permissions");
+                    const int mask = permissions.empty() ? 31 : std::atoi(permissions.c_str());
+                    if (mask < 1 || mask > 31) {
+                        return failure(400, "Invalid permissions");
+                    }
+                    share.set_permissions(mask);
                 } else if (type == nc::cloud::SHARE_TYPE_LINK) {
                     share.set_permissions(1); // public links are read-only
                 } else {
@@ -545,7 +823,7 @@ private:
                 const std::string path_filter = request.query_value("path");
                 std::string data = "[";
                 bool first = true;
-                for (const Share& share: received ? m_shares->shared_with(request.get_user())
+                for (const Share& share: received ? received_shares(request.get_user())
                                                   : m_shares->owned_by(request.get_user())) {
                     if (share.expired(now_seconds()) ||
                         (!path_filter.empty() && share.get_path() != path_filter)) {
