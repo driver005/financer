@@ -38,9 +38,9 @@ public:
         socklen_t size = sizeof(address);
         ::getsockname(m_listen, reinterpret_cast<sockaddr*>(&address), &size);
         m_port = std::to_string(ntohs(address.sin_port));
-        m_thread = std::thread{[this]
+        m_thread = std::thread{[this, fd = m_listen.load()]
                                {
-                                   accept_loop();
+                                   accept_loop(fd);
                                }};
     }
 
@@ -104,10 +104,10 @@ private:
         return ber::element(ber::SEARCH_ENTRY, ber::octets(dn) + ber::element(ber::SEQUENCE, list));
     }
 
-    void accept_loop()
+    void accept_loop(int listener)
     {
         while (true) {
-            const int client = ::accept(m_listen, nullptr, nullptr);
+            const int client = ::accept(listener, nullptr, nullptr);
             if (client < 0) {
                 return;
             }
@@ -211,7 +211,7 @@ private:
         }
     }
 
-    int m_listen{-1};
+    std::atomic<int> m_listen{-1};
     std::string m_port{};
     std::thread m_thread{};
     mutable std::mutex m_mutex{};
