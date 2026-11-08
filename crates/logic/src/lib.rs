@@ -1322,6 +1322,7 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
             &arg::<Vec<Value>>(&args, "items")?,
             &arg::<String>(&args, "query")?,
         )),
+        "app_misc.greeting" => json(app_misc::greeting(arg(&args, "hour")?)),
         "app_misc.income_spent" => {
             json(app_misc::income_spent(&arg::<Vec<Value>>(&args, "items")?))
         }

@@ -212,6 +212,16 @@ pub fn filter_chips(f: &Filters) -> Vec<Value> {
     chips
 }
 
+/// The greeting of the home screen for the hour of the day (0 to 23): morning before noon, afternoon
+/// until six, evening after that.
+pub fn greeting(hour: i64) -> &'static str {
+    match hour {
+        i64::MIN..=11 => "Good morning",
+        12..=17 => "Good afternoon",
+        _ => "Good evening",
+    }
+}
+
 /// What came in and what went out of these bookings, as positive cents each: `{ income, spent }`.
 pub fn income_spent(items: &[Value]) -> Value {
     let (mut income, mut spent) = (0_i64, 0_i64);
@@ -392,6 +402,16 @@ mod tests {
         assert_eq!(filter_tx(&items, "all").len(), 3);
         assert_eq!(day_total(&items), 300);
         assert_eq!(empty_filter_text("income"), "No income to show.");
+    }
+
+    #[test]
+    fn the_home_greets_by_the_hour() {
+        assert_eq!(greeting(0), "Good morning");
+        assert_eq!(greeting(11), "Good morning");
+        assert_eq!(greeting(12), "Good afternoon");
+        assert_eq!(greeting(17), "Good afternoon");
+        assert_eq!(greeting(18), "Good evening");
+        assert_eq!(greeting(23), "Good evening");
     }
 
     #[test]
