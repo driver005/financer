@@ -1,0 +1,39 @@
+#include "nextcloud/test.h"
+#include "nextcloud/util/crypto.h"
+#include "nextcloud/util/text.h"
+
+int main()
+{
+    using namespace nc::util;
+
+    NC_CHECK_EQ(to_hex(sha256("")), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    NC_CHECK_EQ(to_hex(sha256("abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    NC_CHECK_EQ(
+        to_hex(hmac_sha256("key", "The quick brown fox jumps over the lazy dog")),
+        "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"
+    );
+    // RFC 7914 section 11 test vector for PBKDF2-HMAC-SHA-256.
+    NC_CHECK_EQ(
+        to_hex(pbkdf2_sha256("passwd", "salt", 1)),
+        "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc"
+    );
+
+    NC_CHECK_EQ(base64_encode("Aladdin:open sesame"), "QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+    NC_CHECK_EQ(base64_decode("QWxhZGRpbjpvcGVuIHNlc2FtZQ==").value_or("?"), "Aladdin:open sesame");
+    NC_CHECK(!base64_decode("a$b").has_value());
+
+    NC_CHECK_EQ(url_decode("a%20b%2Fc+d"), "a b/c+d");
+    NC_CHECK_EQ(url_decode("a+b", true), "a b");
+    NC_CHECK_EQ(url_decode("100%"), "100%");
+    NC_CHECK_EQ(url_encode_path("Photos/my file.txt"), "Photos/my%20file.txt");
+    NC_CHECK_EQ(xml_escape("a<b&\"c\""), "a&lt;b&amp;&quot;c&quot;");
+    NC_CHECK_EQ(json_escape("a\"b\n"), "a\\\"b\\n");
+
+    NC_CHECK_EQ(split("a//b", '/').size(), std::size_t{3});
+    NC_CHECK_EQ(std::string(trim("  hi \n")), "hi");
+    NC_CHECK(equals_ignore_case("Content-Type", "content-type"));
+    NC_CHECK_EQ(random_hex(8).size(), std::size_t{16});
+    NC_CHECK(constant_time_equals("abc", "abc") && !constant_time_equals("abc", "abd"));
+
+    return NC_TEST_RESULT();
+}

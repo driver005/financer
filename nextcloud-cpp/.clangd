@@ -1,0 +1,97 @@
+CompileFlags:
+  Compiler: clang++
+  Add:
+    - "-std=c++23"
+    - "-Wall"
+    - "-Wextra"
+    - "-Wshadow"
+    - "-Wnon-virtual-dtor"
+    - "-Wcast-align"
+    - "-Woverloaded-virtual"
+    - "-Wpedantic"
+    - "-Wconversion"
+    - "-Wsign-conversion"
+    - "-Wdouble-promotion"
+    - "-Wformat=2"
+    - "-Wimplicit-fallthrough"
+    - "-Wunused"
+    - "-Wno-invalid-token-paste"
+    - "-Wno-pragma-once-outside-header"
+    - "-Wno-experimental-header-units"
+    - "-D_GNU_SOURCE"
+    - "-D_POSIX_C_SOURCE=200809L"
+  Remove:
+    - "-Werror"
+    - "-fshow-column"
+    - "-fmodule-mapper=*"
+    - "-fno-module-lazy"
+    - "-fno-fat-lto-objects"
+    - "-fstack-usage"
+
+Hover:
+  ShowAKA: true # was: Yes
+
+InlayHints:
+  Designators: true # was: Yes
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
+  DefaultArguments: true
+
+Diagnostics:
+  Suppress:
+    - "variable_not_template"
+    - "invalid_module_format"
+    - "module_file_not_found"
+    - "missing_module_declaration"
+  UnusedIncludes: None
+  MissingIncludes: None
+  ClangTidy:
+    Add:
+      - "bugprone-*"
+      - "performance-*"
+      - "modernize-*"
+      - "readability-*"
+      - "cppcoreguidelines-*"
+      - "concurrency-*"
+    Remove:
+      - "bugprone-easily-swappable-parameters"
+      - "modernize-use-default-member-init"
+      - "modernize-use-trailing-return-type"
+      - "readability-magic-numbers"
+      - "cppcoreguidelines-avoid-magic-numbers"
+      - "cppcoreguidelines-avoid-c-arrays"
+      - "modernize-avoid-c-arrays"
+      - "cppcoreguidelines-pro-bounds-pointer-arithmetic"
+      - "cppcoreguidelines-narrowing-conversions"
+      - "bugprone-unchecked-optional-access"
+    CheckOptions:
+      readability-identifier-naming.ClassCase: CamelCase
+      readability-identifier-naming.StructCase: CamelCase
+      readability-identifier-naming.FunctionCase: lower_case
+      readability-identifier-naming.VariableCase: lower_case
+      readability-identifier-naming.MemberCase: lower_case
+      readability-identifier-naming.MemberPrefix: "m_"
+      readability-identifier-naming.MemberSuffix: ""
+      readability-identifier-naming.ConstantCase: UPPER_CASE
+      readability-identifier-naming.EnumConstantCase: UPPER_CASE
+      readability-identifier-naming.TemplateParameterCase: CamelCase
+      readability-function-cognitive-complexity.Threshold: "30"
+      readability-identifier-length.MinimumVariableNameLength: "2"
+
+Index:
+  Background: Build
+  StandardLibrary: true # was: Yes
+
+Completion:
+  AllScopes: true # was: Yes
+  ArgumentLists: FullPlaceholders
+
+---
+If:
+  PathMatch: ".*(test|spec).*\\.(cc|cpp)"
+Diagnostics:
+  ClangTidy:
+    Remove:
+      - "cppcoreguidelines-*"
+      - "readability-function-cognitive-complexity"

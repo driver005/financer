@@ -1,0 +1,90 @@
+# Bazel configuration, derived from congelado's .bazelrc. Differences are marked "nextcloud-cpp:".
+
+common --enable_platform_specific_config
+common --announce_rc
+common --config=short_logs
+common --spawn_strategy=standalone
+common --incompatible_enforce_config_setting_visibility
+common --legacy_external_runfiles=true
+
+common --incompatible_autoload_externally=cc_binary,cc_import,cc_library,cc_shared_library,cc_test,cc_toolchain,cc_toolchain_suite,cc_proto_library,fdo_prefetch_hints,fdo_profile,proto_lang_toolchain,proto_library,py_library,py_runtime,py_test,sh_library,sh_test
+
+common --features=-external_include_paths
+common --host_features=-external_include_paths
+
+common:short_logs   --ui_event_filters=-INFO,-FINISH,-SUBCOMMAND
+common:verbose_logs --ui_event_filters=
+
+# nextcloud-cpp: congelado forces "ccache clang". ccache is optional here, plain clang is the default;
+# `--config=ccache` turns it on.
+build --action_env=CC=clang
+build --action_env=CXX=clang++
+build --repo_env=CC=clang
+build --repo_env=CXX=clang++
+build:ccache --action_env=CC="ccache clang"
+build:ccache --action_env=CXX="ccache clang++"
+build:ccache --repo_env=CC="ccache clang"
+build:ccache --repo_env=CXX="ccache clang++"
+build:ccache --action_env=CCACHE_SLOPPINESS="include_file_mtime,include_file_ctime,time_macros"
+
+# nextcloud-cpp: C++23 (congelado: C++20 global + C++26 per target). The code uses std::expected and
+# std::move_only_function, which clang 18 with libstdc++ 13 already provides.
+common:android --cxxopt=-std=gnu++23
+common:android --host_cxxopt=-std=gnu++23
+common:ios --cxxopt=-std=gnu++23
+common:ios --host_cxxopt=-std=gnu++23
+common:linux --cxxopt=-std=gnu++23
+common:linux --host_cxxopt=-std=gnu++23
+common:macos --cxxopt=-std=gnu++23
+common:macos --host_cxxopt=-std=gnu++23
+common:windows --cxxopt=/std:c++23
+common:windows --host_cxxopt=/std:c++23
+
+build --jobs=HOST_CPUS
+build --local_resources=memory=HOST_RAM
+build --spawn_strategy=local
+build --worker_sandboxing=false
+
+build:linux --linkopt="-fuse-ld=lld"
+build:macos --linkopt="-fuse-ld=lld"
+
+build:mold --linkopt="-fuse-ld=mold"
+
+build --disk_cache=~/.cache/bazel-disk
+build --repository_cache=~/.cache/bazel-repo
+build --action_cache_store_output_metadata
+build --incompatible_strict_action_env
+
+common --experimental_repo_remote_exec
+common --incompatible_disallow_empty_glob=false
+
+build:debug --compilation_mode=dbg
+build:debug --copt=-g
+build:debug --strip=never
+build:debug --copt=-gsplit-dwarf
+build:debug --copt="-Wno-error=unused-result"
+build:debug --copt="-Wno-error=switch"
+
+build:prod --compilation_mode=opt
+build:prod --copt="-O3"
+build:prod --copt="-fno-semantic-interposition"
+build:prod --strip=always
+
+test --test_output=errors
+test --test_summary=short
+
+common:android --copt=-w
+common:ios --copt=-w
+common:linux --host_copt=-w
+common:macos --copt=-w
+common:windows --copt=/W0
+common:windows --host_copt=/W0
+
+common:linux --copt="-Wunused-result"
+common:linux --copt="-Werror=unused-result"
+common:linux --copt="-Wswitch"
+common:linux --copt="-Werror=switch"
+
+import %workspace%/warnings.bazelrc
+
+import %workspace%/bazel/ci.bazelrc

@@ -1,0 +1,184 @@
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: Latest
+
+# ── Indentation ───────────────────────────────────────────────────────────────
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+IndentCaseLabels: true
+IndentCaseBlocks: true
+IndentExternBlock: Indent
+IndentPPDirectives: BeforeHash
+IndentRequiresClause: true
+IndentWrappedFunctionNames: false
+NamespaceIndentation: Inner
+
+# ── Braces ────────────────────────────────────────────────────────────────────
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: Never
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: false
+  AfterObjCDeclaration: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: false
+  BeforeElse: false
+  BeforeLambdaBody: true
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: true
+
+# ── Short constructs ──────────────────────────────────────────────────────────
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Empty
+AllowShortLoopsOnASingleLine: false
+AllowShortNamespacesOnASingleLine: false
+
+# ── Line breaking ─────────────────────────────────────────────────────────────
+ColumnLimit: 100
+BreakAdjacentStringLiterals: true
+BreakAfterReturnType: ExceptShortType
+BreakBeforeBinaryOperators: None
+BreakBeforeConceptDeclarations: Always
+BreakBeforeInlineASMColon: Always
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: AfterColon
+BreakInheritanceList: AfterColon
+BreakStringLiterals: true
+BreakTemplateDeclarations: Yes
+AlwaysBreakBeforeMultilineStrings: false
+PackConstructorInitializers: Never
+BinPackParameters: OnePerLine
+BinPackArguments: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+
+# ── Alignment ─────────────────────────────────────────────────────────────────
+AlignAfterOpenBracket: BlockIndent
+AlignEscapedNewlines: Right
+AlignOperands: Align
+
+AlignConsecutiveAssignments:
+  Enabled: false
+  AcrossEmptyLines: false
+  AcrossComments: true
+  AlignCompound: false
+  PadOperators: true
+
+AlignConsecutiveDeclarations:
+  Enabled: false
+  AcrossEmptyLines: false
+  AcrossComments: true
+  AlignCompound: false
+  PadOperators: false
+
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: false
+  PadOperators: false
+
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
+
+# ── Spacing ───────────────────────────────────────────────────────────────────
+BitFieldColonSpacing: None
+PointerAlignment: Left
+ReferenceAlignment: Left
+SpaceAfterCStyleCast: false
+SpaceAfterTemplateKeyword: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: false
+SpacesInAngles: Never
+SpacesInContainerLiterals: false
+SpacesInSquareBrackets: false
+
+# ── Empty lines ───────────────────────────────────────────────────────────────
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: Always
+MaxEmptyLinesToKeep: 2
+SeparateDefinitionBlocks: Always
+KeepEmptyLines:
+  AtEndOfFile: false
+  AtStartOfBlock: false
+  AtStartOfFile: false
+
+# ── Namespaces ────────────────────────────────────────────────────────────────
+CompactNamespaces: false
+FixNamespaceComments: true
+ShortNamespaceLines: 1
+
+# ── Comments ──────────────────────────────────────────────────────────────────
+ReflowComments: Always
+
+# ── Requires / Concepts ───────────────────────────────────────────────────────
+RequiresClausePosition: OwnLine
+RequiresExpressionIndentation: OuterScope
+
+# ── Includes ──────────────────────────────────────────────────────────────────
+IncludeBlocks: Regroup
+SortIncludes:
+  Enabled: true
+  IgnoreCase: false
+  IgnoreExtension: false
+
+# ── Numeric literals ──────────────────────────────────────────────────────────
+IntegerLiteralSeparator:
+  Binary: 4
+  Decimal: 3
+  Hex: 2
+
+NumericLiteralCase:
+  ExponentLetter: Lower
+  HexDigit: Upper
+  Prefix: Lower
+
+RawStringFormats:
+  - Language: Cpp
+    Delimiters:
+      - cpp
+    BasedOnStyle: LLVM
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+InsertNewlineAtEOF: true
+RemoveSemicolon: false
+
+# ── ⚠ Risky options (may produce incorrect output — review diffs carefully) ───
+#
+# InsertBraces: adds {} around braceless control statements.
+# Caveat: clang-format has no full semantic info; edge cases around
+# macros and preprocessor directives can produce invalid code.
+InsertBraces: true
+#
+# QualifierAlignment: reorders const/volatile relative to the type.
+# Caveat: can misparse complex declarators involving function pointers,
+# arrays of pointers, or typedef'd types.
+QualifierAlignment: Left
+#
+# RemoveParentheses: strips redundant parentheses.
+# Caveat: may change operator precedence perception or trigger
+# -Wparentheses warnings in code that relied on explicit grouping.
+# RemoveParentheses: ReturnStatement
+#
+# SortUsingDeclarations: reorders using-declarations lexicographically.
+# Caveat: can break code that relies on declaration order for
+# overload resolution or ADL.
+SortUsingDeclarations: LexicographicNumeric

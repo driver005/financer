@@ -1,0 +1,39 @@
+# CI and sanitizer configurations; see `make ci-*` targets in the makefile.
+
+build:ci --keep_going
+build:ci --show_timestamps
+build:ci --color=no
+build:ci --curses=no
+test:ci --test_output=errors
+test:ci --test_summary=detailed
+# Persisted between CI runs (.github/actions/ci-run); the output/install bases are rebuilt every run on purpose.
+common:ci --repository_cache=~/.cache/bazel-repo
+common:ci --experimental_repository_downloader_retries=10
+build:ci --disk_cache=~/.cache/bazel-disk
+
+build:sanitizer --strip=never
+build:sanitizer --copt=-g
+build:sanitizer --copt=-O1
+build:sanitizer --copt=-fno-omit-frame-pointer
+build:sanitizer --copt=-fno-sanitize-ignorelist
+build:sanitizer --copt=-fno-optimize-sibling-calls
+build:sanitizer --linkopt=-fuse-ld=lld
+
+build:asan --config=sanitizer
+build:asan --copt=-fsanitize=address
+build:asan --copt=-fsanitize-address-use-after-scope
+build:asan --linkopt=-fsanitize=address
+build:asan --copt=-DADDRESS_SANITIZER
+
+build:ubsan --config=sanitizer
+build:ubsan --copt=-fsanitize=undefined
+build:ubsan --copt=-fno-sanitize-recover=all
+build:ubsan --linkopt=-fsanitize=undefined
+
+build:tsan --config=sanitizer
+build:tsan --copt=-fsanitize=thread
+build:tsan --linkopt=-fsanitize=thread
+
+build:fuzz --config=asan
+build:fuzz --copt=-fsanitize=fuzzer-no-link
+build:fuzz --copt=-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION

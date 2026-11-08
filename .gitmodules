@@ -1,0 +1,4 @@
+[submodule "docs/nextcloud-server"]
+	path = docs/nextcloud-server
+	url = https://github.com/nextcloud/server.git
+	shallow = true

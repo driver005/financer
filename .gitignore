@@ -38,3 +38,6 @@ deploy/config/sources.json
 
 # Your own server configuration (may hold secrets; see financer.example.toml)
 financer.toml
+
+# nextcloud-cpp Bazel output
+nextcloud-cpp/bazel-*
