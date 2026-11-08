@@ -172,7 +172,8 @@ Response dav_handle(
     const Request& request,
     const Storage& storage,
     const DavTarget& target,
-    const Publish& publish
+    const Publish& publish,
+    const Hooks& hooks
 )
 {
     const auto normalized = Storage::normalize("/" + target.get_path());
@@ -215,6 +216,12 @@ Response dav_handle(
         if (!asked.empty()) {
             mtime = std::strtoll(std::string{asked}.c_str(), nullptr, 10);
         }
+        if (hooks.before_overwrite) {
+            const auto existing = storage.stat(path);
+            if (existing && !existing->is_directory()) {
+                hooks.before_overwrite(user, path);
+            }
+        }
         auto created = storage.write(path, request.get_body(), mtime);
         if (!created) {
             return failure(created.error());
@@ -243,6 +250,10 @@ Response dav_handle(
     }
 
     if (method == "DELETE") {
+        if (hooks.before_delete && storage.stat(path) && hooks.before_delete(user, path)) {
+            publish("file.deleted", event_payload(user, path));
+            return Response{204};
+        }
         auto removed = storage.remove(path);
         if (!removed) {
             return failure(removed.error());

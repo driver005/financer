@@ -13,6 +13,16 @@ namespace nc::cloud {
 /// bus.
 using Publish = std::function<void(std::string_view topic, std::string_view payload)>;
 
+/// @brief Points where other plugins may step in before the files change; both are optional.
+struct Hooks
+{
+    /// Called before a delete. Returning true means the thing was taken care of (moved to the
+    /// trash), so the storage must not delete it.
+    std::function<bool(const std::string& user, const std::string& path)> before_delete{};
+    /// Called before an existing file is overwritten (to keep a version of it).
+    std::function<void(const std::string& user, const std::string& path)> before_overwrite{};
+};
+
 /// @brief Where a DAV request lands: whose files, under which URL, and which path inside them.
 class DavTarget
 {
@@ -88,7 +98,8 @@ private:
     const nc::http::Request& request,
     const Storage& storage,
     const DavTarget& target,
-    const Publish& publish
+    const Publish& publish,
+    const Hooks& hooks = {}
 );
 
 /// @brief The `207 Multi-Status` XML for a PROPFIND answer.

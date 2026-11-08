@@ -148,7 +148,8 @@ private:
     class Slot;
 
     void install_builtins();
-    [[nodiscard]] std::string authenticate(const http::Request& request, bool& rejected) const;
+    [[nodiscard]] std::string
+    authenticate(const http::Request& request, bool& rejected, bool& second_factor) const;
     [[nodiscard]] bool enabled(std::string_view name) const;
     [[nodiscard]] Slot* find_slot(std::string_view name) const noexcept;
     void release(Slot& slot) noexcept;

@@ -217,6 +217,14 @@ public:
     [[nodiscard]] Result<bool>
     copy(std::string_view from, std::string_view to, bool overwrite) const;
 
+    /// @brief Moves `from` into another storage (the trash, the versions) as `to`; it must not
+    /// exist.
+    [[nodiscard]] Result<void>
+    move_to(const Storage& target, std::string_view from, std::string_view to) const;
+    /// @brief Copies a file into another storage as `to`; it must not exist.
+    [[nodiscard]] Result<void>
+    copy_to(const Storage& target, std::string_view from, std::string_view to) const;
+
     /// @brief Bytes under a path (a file's size, or the sum for a folder).
     [[nodiscard]] Result<std::uint64_t> size_of(std::string_view path) const;
     [[nodiscard]] std::uint64_t used_bytes() const;

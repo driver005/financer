@@ -462,16 +462,31 @@ std::size_t Kernel::running_count() const noexcept
 
 // ---- requests -------------------------------------------------------------------------------
 
-std::string Kernel::authenticate(const http::Request& request, bool& rejected) const
+std::string
+Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_factor) const
 {
     rejected = false;
+    second_factor = false;
     const std::string_view header = request.header("Authorization");
     if (header.size() < 6 || !util::equals_ignore_case(header.substr(0, 6), "Basic ")) {
         return {};
     }
     const auto decoded = util::base64_decode(util::trim(header.substr(6)));
-    if (!decoded || decoded->find(':') == std::string::npos ||
-        !m_services.contains("auth.authenticate")) {
+    if (!decoded || decoded->find(':') == std::string::npos) {
+        rejected = true;
+        return {};
+    }
+    // 1. An app password (token) stands for the whole sign-in: it is what clients keep, and it is
+    // not
+    //    asked for a second factor.
+    if (m_services.contains("auth.token")) {
+        const http::Response token = m_services.call("auth.token", *decoded);
+        if (token.get_status() == 200 && !token.get_body().empty()) {
+            return token.get_body();
+        }
+    }
+    // 2. The account password.
+    if (!m_services.contains("auth.authenticate")) {
         rejected = true;
         return {};
     }
@@ -479,6 +494,19 @@ std::string Kernel::authenticate(const http::Request& request, bool& rejected) c
     if (answer.get_status() != 200 || answer.get_body().empty()) {
         rejected = true;
         return {};
+    }
+    // 3. The second factor, when a plugin offers one and the account uses it. The code comes in a
+    // header.
+    if (m_services.contains("auth.second_factor")) {
+        const http::Response factor = m_services.call(
+            "auth.second_factor",
+            answer.get_body() + "\n" + std::string{request.header("X-NC-OTP")}
+        );
+        if (factor.get_status() != 200) {
+            rejected = true;
+            second_factor = true;
+            return {};
+        }
     }
     return answer.get_body();
 }
@@ -488,9 +516,15 @@ http::Response Kernel::handle(http::Request&& request) const
     // The user comes from authentication only, never from the wire.
     request.set_user(std::string{});
     bool rejected = false;
-    std::string user = authenticate(request, rejected);
+    bool second_factor = false;
+    std::string user = authenticate(request, rejected, second_factor);
     if (rejected) {
-        return http::unauthorized();
+        http::Response refused = http::unauthorized();
+        if (second_factor) {
+            // The password was right; tell the client it must send a code in `X-NC-OTP`.
+            refused.add_header("X-NC-Two-Factor", "required");
+        }
+        return refused;
     }
     request.set_user(std::move(user));
 

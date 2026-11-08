@@ -7,6 +7,9 @@ test_suite(
         "//plugins/groups:groups_test",
         "//plugins/mail:mail_test",
         "//plugins/notifications:notifications_test",
+        "//plugins/trashbin:trashbin_test",
+        "//plugins/twofactor:twofactor_test",
         "//plugins/users:users_test",
+        "//plugins/versions:versions_test",
     ],
 )

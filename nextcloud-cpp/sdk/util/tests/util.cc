@@ -24,6 +24,20 @@ int main()
         "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc"
     );
 
+    // RFC 3174 / RFC 2202 (SHA-1, HMAC-SHA-1), RFC 4648 (base32), RFC 4226 / RFC 6238 (HOTP, TOTP).
+    NC_CHECK_EQ(to_hex(sha1("abc")), "a9993e364706816aba3e25717850c26c9cd0d89d");
+    NC_CHECK_EQ(to_hex(sha1("")), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+    NC_CHECK_EQ(
+        to_hex(hmac_sha1("key", "The quick brown fox jumps over the lazy dog")),
+        "de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9"
+    );
+    NC_CHECK_EQ(base32_encode("foobar"), "MZXW6YTBOI");
+    NC_CHECK_EQ(base32_decode("mzxw6ytboi").value_or("?"), "foobar");
+    NC_CHECK(!base32_decode("MZ1").has_value());
+    NC_CHECK_EQ(hotp("12345678901234567890", 0), "755224");
+    NC_CHECK_EQ(hotp("12345678901234567890", 9), "520489");
+    NC_CHECK_EQ(hotp("12345678901234567890", 59 / 30, 8), "94287082");
+    NC_CHECK_EQ(hotp("12345678901234567890", 1'111'111'109 / 30, 8), "07081804");
     NC_CHECK_EQ(base64_encode("Aladdin:open sesame"), "QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
     NC_CHECK_EQ(base64_decode("QWxhZGRpbjpvcGVuIHNlc2FtZQ==").value_or("?"), "Aladdin:open sesame");
     NC_CHECK(!base64_decode("a$b").has_value());

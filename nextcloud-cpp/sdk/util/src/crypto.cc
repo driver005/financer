@@ -1,5 +1,6 @@
 #include "nextcloud/util/crypto.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <stdexcept>
@@ -147,6 +148,170 @@ pbkdf2_sha256(std::string_view password, std::string_view salt, std::uint32_t it
         }
     }
     return result;
+}
+
+std::string sha1(std::string_view data)
+{
+    std::array<std::uint32_t, 5> hash =
+        {0x67'45'23'01, 0xEF'CD'AB'89, 0x98'BA'DC'FE, 0x10'32'54'76, 0xC3'D2'E1'F0};
+    std::string padded(data);
+    padded.push_back(static_cast<char>(0x80));
+    while (padded.size() % 64 != 56) {
+        padded.push_back('\0');
+    }
+    const std::uint64_t bit_length = std::uint64_t{data.size()} * 8U;
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        padded.push_back(static_cast<char>((bit_length >> static_cast<unsigned>(shift)) & 0xFFU));
+    }
+    const auto rotate_left = [](std::uint32_t value, unsigned amount)
+    {
+        return (value << amount) | (value >> (32U - amount));
+    };
+    for (std::size_t offset = 0; offset < padded.size(); offset += 64) {
+        const auto* block = reinterpret_cast<const unsigned char*>(padded.data()) + offset;
+        std::array<std::uint32_t, 80> words{};
+        for (std::size_t index = 0; index < 16; ++index) {
+            words[index] = (std::uint32_t{block[index * 4]} << 24U) |
+                           (std::uint32_t{block[index * 4 + 1]} << 16U) |
+                           (std::uint32_t{block[index * 4 + 2]} << 8U) |
+                           std::uint32_t{block[index * 4 + 3]};
+        }
+        for (std::size_t index = 16; index < 80; ++index) {
+            words[index] = rotate_left(
+                words[index - 3] ^ words[index - 8] ^ words[index - 14] ^ words[index - 16],
+                1
+            );
+        }
+        auto [a, b, c, d, e] = hash;
+        for (std::size_t index = 0; index < 80; ++index) {
+            std::uint32_t mix = 0;
+            std::uint32_t constant = 0;
+            if (index < 20) {
+                mix = (b & c) | (~b & d);
+                constant = 0x5A'82'79'99;
+            } else if (index < 40) {
+                mix = b ^ c ^ d;
+                constant = 0x6E'D9'EB'A1;
+            } else if (index < 60) {
+                mix = (b & c) | (b & d) | (c & d);
+                constant = 0x8F'1B'BC'DC;
+            } else {
+                mix = b ^ c ^ d;
+                constant = 0xCA'62'C1'D6;
+            }
+            const std::uint32_t temp = rotate_left(a, 5) + mix + e + constant + words[index];
+            e = d;
+            d = c;
+            c = rotate_left(b, 30);
+            b = a;
+            a = temp;
+        }
+        hash[0] += a;
+        hash[1] += b;
+        hash[2] += c;
+        hash[3] += d;
+        hash[4] += e;
+    }
+    std::string out;
+    for (const std::uint32_t word: hash) {
+        for (int shift = 24; shift >= 0; shift -= 8) {
+            out.push_back(static_cast<char>((word >> static_cast<unsigned>(shift)) & 0xFFU));
+        }
+    }
+    return out;
+}
+
+std::string hmac_sha1(std::string_view key, std::string_view message)
+{
+    std::string block_key(key);
+    if (block_key.size() > 64) {
+        block_key = sha1(block_key);
+    }
+    block_key.resize(64, '\0');
+    std::string inner(64, '\0');
+    std::string outer(64, '\0');
+    for (std::size_t index = 0; index < 64; ++index) {
+        inner[index] = static_cast<char>(block_key[index] ^ 0x36);
+        outer[index] = static_cast<char>(block_key[index] ^ 0x5c);
+    }
+    inner.append(message);
+    outer.append(sha1(inner));
+    return sha1(outer);
+}
+
+std::string base32_encode(std::string_view bytes)
+{
+    static constexpr std::string_view ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    std::string out;
+    std::uint32_t buffer = 0;
+    int bits = 0;
+    for (const char letter: bytes) {
+        buffer = (buffer << 8U) | static_cast<unsigned char>(letter);
+        bits += 8;
+        while (bits >= 5) {
+            bits -= 5;
+            out.push_back(ALPHABET[(buffer >> static_cast<unsigned>(bits)) & 31U]);
+        }
+    }
+    if (bits > 0) {
+        out.push_back(ALPHABET[(buffer << static_cast<unsigned>(5 - bits)) & 31U]);
+    }
+    return out;
+}
+
+std::optional<std::string> base32_decode(std::string_view text)
+{
+    std::string out;
+    std::uint32_t buffer = 0;
+    int bits = 0;
+    for (const char raw: text) {
+        if (raw == '=' || raw == ' ' || raw == '-') {
+            continue;
+        }
+        const char letter = (raw >= 'a' && raw <= 'z') ? static_cast<char>(raw - 'a' + 'A') : raw;
+        std::uint32_t value = 0;
+        if (letter >= 'A' && letter <= 'Z') {
+            value = static_cast<std::uint32_t>(letter - 'A');
+        } else if (letter >= '2' && letter <= '7') {
+            value = static_cast<std::uint32_t>(letter - '2' + 26);
+        } else {
+            return std::nullopt;
+        }
+        buffer = (buffer << 5U) | value;
+        bits += 5;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<char>((buffer >> static_cast<unsigned>(bits)) & 0xFFU));
+        }
+    }
+    return out;
+}
+
+std::string hotp(std::string_view secret, std::uint64_t counter, int digits)
+{
+    std::string message(8, '\0');
+    for (int index = 7; index >= 0; --index) {
+        message[static_cast<std::size_t>(index)] = static_cast<char>(counter & 0xFFU);
+        counter >>= 8U;
+    }
+    const std::string mac = hmac_sha1(secret, message);
+    const std::size_t offset = static_cast<unsigned char>(mac[19]) & 0x0FU;
+    const std::uint32_t binary =
+        ((static_cast<std::uint32_t>(static_cast<unsigned char>(mac[offset])) & 0x7FU) << 24U) |
+        (static_cast<std::uint32_t>(static_cast<unsigned char>(mac[offset + 1])) << 16U) |
+        (static_cast<std::uint32_t>(static_cast<unsigned char>(mac[offset + 2])) << 8U) |
+        static_cast<std::uint32_t>(static_cast<unsigned char>(mac[offset + 3]));
+    std::uint32_t modulus = 1;
+    for (int index = 0; index < digits; ++index) {
+        modulus *= 10;
+    }
+    std::string code = std::to_string(binary % modulus);
+    return std::string(
+               static_cast<std::size_t>(digits) -
+                   std::min<std::size_t>(code.size(), static_cast<std::size_t>(digits)),
+               '0'
+           ) +
+           code;
 }
 
 std::string to_hex(std::string_view bytes)

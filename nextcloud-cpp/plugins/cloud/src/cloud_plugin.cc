@@ -113,6 +113,7 @@ public:
         }
         m_host = &host;
 
+        add_storage_services(host);
         add_dav_routes(host);
         add_share_routes(host);
         add_public_routes(host);
@@ -163,6 +164,193 @@ private:
     [[nodiscard]] Storage storage_for(std::string_view user) const
     {
         return Storage{std::filesystem::path{m_data_dir} / std::string{user} / "files", m_quota};
+    }
+
+    [[nodiscard]] Storage trash_for(std::string_view user) const
+    {
+        return Storage{std::filesystem::path{m_data_dir} / std::string{user} / "files_trashbin"};
+    }
+
+    [[nodiscard]] Storage versions_for(std::string_view user) const
+    {
+        return Storage{std::filesystem::path{m_data_dir} / std::string{user} / "files_versions"};
+    }
+
+    /// Other plugins step in here: the trash bin takes a deleted file, the versions plugin keeps
+    /// the old content of an overwritten one. Without them the files are simply deleted or
+    /// overwritten.
+    [[nodiscard]] nc::cloud::Hooks hooks() const
+    {
+        nc::cloud::Hooks hooks;
+        hooks.before_delete = [this](const std::string& user, const std::string& path)
+        {
+            return m_host
+                       ->call_service(
+                           "trashbin.before_delete",
+                           nc::util::form_encode({{"user", user}, {"path", path}})
+                       )
+                       .get_status() == 200;
+        };
+        hooks.before_overwrite = [this](const std::string& user, const std::string& path)
+        {
+            (void)m_host->call_service(
+                "versions.before_write",
+                nc::util::form_encode({{"user", user}, {"path", path}})
+            );
+        };
+        return hooks;
+    }
+
+    /// Services for the trash bin and the versions plugin: they keep the records, this plugin keeps
+    /// the bytes, so all file system access stays behind `Storage`.
+    void add_storage_services(nc::Host& host)
+    {
+        // user, path, name: move the file into the user's trash as `name`. Answers size and dir.
+        host.add_service(
+            "cloud.trash.put",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string user = nc::util::form_value(form, "user");
+                if (!safe_user(user)) {
+                    return Response::text(400, "bad user");
+                }
+                const Storage files = storage_for(user);
+                const auto node = files.stat(nc::util::form_value(form, "path"));
+                if (!node) {
+                    return Response::text(404, "not found");
+                }
+                const std::uint64_t size = files.size_of(node->get_path()).value_or(0);
+                const auto moved = files.move_to(
+                    trash_for(user),
+                    node->get_path(),
+                    "/" + nc::util::form_value(form, "name")
+                );
+                if (!moved) {
+                    return Response::text(500, moved.error().get_message());
+                }
+                return Response::text(
+                    200,
+                    nc::util::form_encode(
+                        {{"size", std::to_string(size)}, {"dir", node->is_directory() ? "1" : "0"}}
+                    )
+                );
+            }
+        );
+        // user, name, target: put it back; if the place is taken, next to it as "... (restored)".
+        host.add_service(
+            "cloud.trash.restore",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string user = nc::util::form_value(form, "user");
+                if (!safe_user(user)) {
+                    return Response::text(400, "bad user");
+                }
+                const auto target = Storage::normalize(nc::util::form_value(form, "target"));
+                if (!target || *target == "/") {
+                    return Response::text(400, "bad target");
+                }
+                const Storage files = storage_for(user);
+                (void)files.ensure_root();
+                std::string destination = *target;
+                const std::size_t slash = destination.rfind('/');
+                if (slash > 0 && !files.stat(destination.substr(0, slash))) {
+                    destination =
+                        "/" +
+                        destination.substr(slash + 1); // the folder is gone: restore to the top
+                }
+                for (int attempt = 0; files.stat(destination) && attempt < 100; ++attempt) {
+                    destination = *target + " (restored" +
+                                  (attempt == 0 ? "" : " " + std::to_string(attempt + 1)) + ")";
+                }
+                const auto moved = trash_for(user).move_to(
+                    files,
+                    "/" + nc::util::form_value(form, "name"),
+                    destination
+                );
+                if (!moved) {
+                    return Response::text(
+                        moved.error().get_code() == nc::cloud::StorageCode::NOT_FOUND ? 404 : 500,
+                        moved.error().get_message()
+                    );
+                }
+                return Response::text(200, destination);
+            }
+        );
+        host.add_service(
+            "cloud.trash.purge",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string user = nc::util::form_value(form, "user");
+                if (!safe_user(user)) {
+                    return Response::text(400, "bad user");
+                }
+                const auto removed =
+                    trash_for(user).remove("/" + nc::util::form_value(form, "name"));
+                return removed ? Response::text(200, "") : Response::text(404, "not found");
+            }
+        );
+        // user, path, name: keep a copy of the current content of a file.
+        host.add_service(
+            "cloud.version.put",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string user = nc::util::form_value(form, "user");
+                if (!safe_user(user)) {
+                    return Response::text(400, "bad user");
+                }
+                const Storage files = storage_for(user);
+                const std::string path = nc::util::form_value(form, "path");
+                const auto node = files.stat(path);
+                if (!node || node->is_directory()) {
+                    return Response::text(404, "not a file");
+                }
+                const auto copied = files.copy_to(
+                    versions_for(user),
+                    path,
+                    "/" + nc::util::form_value(form, "name")
+                );
+                return copied ? Response::text(200, std::to_string(node->get_size()))
+                              : Response::text(500, copied.error().get_message());
+            }
+        );
+        // user, name, path: write the kept content back as the file.
+        host.add_service(
+            "cloud.version.restore",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string user = nc::util::form_value(form, "user");
+                if (!safe_user(user)) {
+                    return Response::text(400, "bad user");
+                }
+                const auto data = versions_for(user).read("/" + nc::util::form_value(form, "name"));
+                if (!data) {
+                    return Response::text(404, "no such version");
+                }
+                const auto written =
+                    storage_for(user).write(nc::util::form_value(form, "path"), *data);
+                return written ? Response::text(200, "")
+                               : Response::text(500, written.error().get_message());
+            }
+        );
+        host.add_service(
+            "cloud.version.purge",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string user = nc::util::form_value(form, "user");
+                if (!safe_user(user)) {
+                    return Response::text(400, "bad user");
+                }
+                return versions_for(user).remove("/" + nc::util::form_value(form, "name"))
+                           ? Response::text(200, "")
+                           : Response::text(404, "no such version");
+            }
+        );
     }
 
     [[nodiscard]] nc::cloud::Publish publisher() const
@@ -224,7 +412,8 @@ private:
                 std::move(base),
                 std::string{request.param("path")}
             },
-            publisher()
+            publisher(),
+            hooks()
         );
     }
 

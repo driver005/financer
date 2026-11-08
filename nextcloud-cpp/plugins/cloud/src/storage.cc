@@ -378,6 +378,81 @@ Result<bool> Storage::copy(std::string_view from, std::string_view to, bool over
     return transfer(from, to, overwrite, true);
 }
 
+Result<void>
+Storage::move_to(const Storage& target, std::string_view from, std::string_view to) const
+{
+    const auto source = normalize(from);
+    const auto destination = normalize(to);
+    if (!source) {
+        return util::unexpected<StorageError>{source.error()};
+    }
+    if (!destination) {
+        return util::unexpected<StorageError>{destination.error()};
+    }
+    if (*source == "/" || *destination == "/") {
+        return fail(StorageCode::INVALID_PATH, "the root cannot be moved");
+    }
+    const auto real_source = resolve(*source);
+    const auto real_target = target.resolve(*destination);
+    if (!real_source) {
+        return util::unexpected<StorageError>{real_source.error()};
+    }
+    if (!real_target) {
+        return util::unexpected<StorageError>{real_target.error()};
+    }
+    if (auto root = target.ensure_root(); !root) {
+        return root;
+    }
+    std::error_code error;
+    if (!fs::exists(*real_source, error)) {
+        return fail(StorageCode::NOT_FOUND, *source);
+    }
+    if (fs::exists(*real_target, error)) {
+        return fail(StorageCode::EXISTS, *destination);
+    }
+    fs::rename(*real_source, *real_target, error);
+    if (error) {
+        return util::unexpected<StorageError>{from_error(error, "cannot move " + *source)};
+    }
+    return {};
+}
+
+Result<void>
+Storage::copy_to(const Storage& target, std::string_view from, std::string_view to) const
+{
+    const auto source = normalize(from);
+    const auto destination = normalize(to);
+    if (!source) {
+        return util::unexpected<StorageError>{source.error()};
+    }
+    if (!destination) {
+        return util::unexpected<StorageError>{destination.error()};
+    }
+    const auto real_source = resolve(*source);
+    const auto real_target = target.resolve(*destination);
+    if (!real_source) {
+        return util::unexpected<StorageError>{real_source.error()};
+    }
+    if (!real_target) {
+        return util::unexpected<StorageError>{real_target.error()};
+    }
+    if (auto root = target.ensure_root(); !root) {
+        return root;
+    }
+    std::error_code error;
+    if (!fs::is_regular_file(*real_source, error)) {
+        return fail(StorageCode::NOT_FOUND, *source);
+    }
+    if (fs::exists(*real_target, error)) {
+        return fail(StorageCode::EXISTS, *destination);
+    }
+    fs::copy_file(*real_source, *real_target, fs::copy_options::none, error);
+    if (error) {
+        return util::unexpected<StorageError>{from_error(error, "cannot copy " + *source)};
+    }
+    return {};
+}
+
 Result<std::uint64_t> Storage::size_of(std::string_view path) const
 {
     const auto normalized = normalize(path);
