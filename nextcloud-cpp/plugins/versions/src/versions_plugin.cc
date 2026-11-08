@@ -65,6 +65,13 @@ public:
         );
 
         host.add_service(
+            "capabilities.files_versions",
+            [](std::string_view)
+            {
+                return Response::json(200, R"({"versioning":true})");
+            }
+        );
+        host.add_service(
             "versions.before_write",
             [this](std::string_view args)
             {

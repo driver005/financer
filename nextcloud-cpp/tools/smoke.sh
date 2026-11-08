@@ -5,7 +5,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-plugins=(db users tokens groups cloud trashbin versions mail activity notifications calendar contacts)
+plugins=(db users tokens groups cloud trashbin versions mail activity notifications calendar contacts systemtags comments twofactor)
 targets=(//runner:nextcloud)
 for plugin in "${plugins[@]}"; do targets+=("//plugins/$plugin:lib$plugin.so"); done
 bazelisk build "${targets[@]}"

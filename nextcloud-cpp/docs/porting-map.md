@@ -44,12 +44,15 @@ here and is tested; **Reduced** means a deliberate subset (stated); **Replaced**
 | `lib/private/Mail/Mailer`, `Message`, `Emailer` | Reduced | `mail`: plain/HTML/alternative messages, UTF-8 headers, spool, sendmail, SMTP (no TLS, no AUTH). No attachments, no email templates |
 | `lib/public/Activity`, the `activity` app | Reduced | `activity`: stream of file, share and account events per user, API, retention job |
 | `lib/public/Notification`, `apps/notifications` | Reduced | `notifications`: push by service, event or command; list/get/dismiss API; retention job. No push to devices |
+| `lib/public/SystemTag`, `apps/systemtags` | Reduced | `systemtags`: tags shared by everybody, put on a user's own files (by owner and path, no file ids), find by tag or by file, follow renames and deletes. No restricted/invisible tags, no tags on shared items |
+| `lib/public/Comments`, `apps/comments` | Reduced | `comments`: comments on a file by its owner and by people it is shared with (access decided by `cloud.can_access`), delete by author or owner, the owner is notified. No threads, mentions, read markers |
+| `lib/public/Capabilities` | Ported | `GET /ocs/v2.php/cloud/capabilities` merges every service named `capabilities.<name>` (cloud, trashbin, versions, calendar, twofactor, systemtags, comments) |
 | `apps/federation`, `federatedfilesharing`, `lookup_server_connector`, `cloud_federation_api` | Not ported | |
-| `apps/user_ldap`, `oauth2`, `encryption`, `files_external`, `systemtags`, `comments`, `settings`, `theming`, `viewer`, `updatenotification`, `workflowengine`, `webhook_listeners`, `user_status`, `weather_status`, ... | Not ported | |
+| `apps/user_ldap`, `oauth2`, `encryption`, `files_external`, `settings`, `theming`, `viewer`, `updatenotification`, `workflowengine`, `webhook_listeners`, `user_status`, `weather_status`, ... | Not ported | |
 
 ## Verified
 
-* `bazelisk test //...` (13 targets) passes with clang 18 (C++23), plain and under `--config=asan`,
+* `bazelisk test //...` (15 targets) passes with clang 18 (C++23), plain and under `--config=asan`,
   `--config=ubsan` and `--config=tsan`.
 * It also passes with clang 22 (C++26, `--define=std=26`) and with congelado's `-Werror` profile
   (`--config=warnings`).

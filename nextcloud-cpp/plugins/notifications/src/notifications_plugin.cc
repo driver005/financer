@@ -118,6 +118,24 @@ public:
             }
         );
 
+        host.subscribe(
+            "comment.created",
+            [this](std::string_view, std::string_view payload)
+            {
+                const auto form = nc::util::parse_form(payload);
+                const std::string owner = nc::util::form_value(form, "owner");
+                const std::string author = nc::util::form_value(form, "author");
+                if (owner != author) {
+                    push(
+                        owner,
+                        author + " commented on \"" + nc::util::form_value(form, "path") + "\"",
+                        "",
+                        ""
+                    );
+                }
+            }
+        );
+
         constexpr std::string_view BASE = "/ocs/v2.php/apps/notifications/api/v2/notifications";
         host.add_route(
             "GET",

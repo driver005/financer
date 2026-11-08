@@ -114,6 +114,16 @@ public:
         }
         m_host = &host;
 
+        host.add_service(
+            "capabilities.files",
+            [this](std::string_view)
+            {
+                return Response::json(
+                    200,
+                    R"({"bigfilechunking":false,"quota_bytes":)" + std::to_string(m_quota) + "}"
+                );
+            }
+        );
         add_storage_services(host);
         add_dav_routes(host);
         add_share_routes(host);
@@ -206,6 +216,58 @@ private:
     /// the bytes, so all file system access stays behind `Storage`.
     void add_storage_services(nc::Host& host)
     {
+        // user, path: does it exist? Answers size and dir.
+        host.add_service(
+            "cloud.stat",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string user = nc::util::form_value(form, "user");
+                if (!safe_user(user)) {
+                    return Response::text(400, "bad user");
+                }
+                const Storage files = storage_for(user);
+                const auto node = files.stat(nc::util::form_value(form, "path"));
+                if (!node) {
+                    return Response::text(404, "not found");
+                }
+                return Response::text(
+                    200,
+                    nc::util::form_encode(
+                        {{"path", node->get_path()},
+                         {"size", std::to_string(files.size_of(node->get_path()).value_or(0))},
+                         {"dir", node->is_directory() ? "1" : "0"}}
+                    )
+                );
+            }
+        );
+        // owner, path, user: may `user` see the item of `owner` (as owner, or through a share of it
+        // or of a folder above it)?
+        host.add_service(
+            "cloud.can_access",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string owner = nc::util::form_value(form, "owner");
+                const std::string user = nc::util::form_value(form, "user");
+                const auto path = Storage::normalize(nc::util::form_value(form, "path"));
+                if (!path || !safe_user(owner) || !storage_for(owner).stat(*path)) {
+                    return Response::text(404, "not found");
+                }
+                if (owner == user) {
+                    return Response::text(200, "owner");
+                }
+                for (const Share& share: m_shares->owned_by(owner)) {
+                    const bool covers =
+                        *path == share.get_path() || share.get_path() == "/" ||
+                        path->compare(0, share.get_path().size() + 1, share.get_path() + "/") == 0;
+                    if (covers && !share.expired(now_seconds()) && is_recipient(share, user)) {
+                        return Response::text(200, "share");
+                    }
+                }
+                return Response::text(403, "no access");
+            }
+        );
         // user, path, name: move the file into the user's trash as `name`. Answers size and dir.
         host.add_service(
             "cloud.trash.put",

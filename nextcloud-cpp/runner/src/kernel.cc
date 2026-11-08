@@ -773,6 +773,32 @@ void Kernel::install_builtins()
         }
     );
 
+    // What this server can do, as the clients ask for it. Every plugin that wants to be listed
+    // offers a service `capabilities.<name>` that answers a JSON object (Nextcloud:
+    // `OCP\Capabilities\ICapability`).
+    (void)m_router.add(
+        "GET",
+        "/ocs/v2.php/cloud/capabilities",
+        "kernel",
+        [this](const http::Request&)
+        {
+            std::string data = R"({"version":{"string":)" + json_string(VERSION) +
+                               R"(,"edition":"","productname":)" + json_string(PRODUCT) +
+                               R"(},"capabilities":{)";
+            bool first = true;
+            for (const std::string& name: m_services.names("capabilities.")) {
+                const http::Response answer = m_services.call(name, "");
+                if (answer.get_status() != 200 || answer.get_body().empty()) {
+                    continue;
+                }
+                data += first ? "" : ",";
+                first = false;
+                data += json_string(name.substr(13)) + ":" + answer.get_body();
+            }
+            return http::ocs(200, "OK", data + "}}");
+        }
+    );
+
     (void)m_router.add(
         "GET",
         "/ocs/v2.php/cloud/plugins",

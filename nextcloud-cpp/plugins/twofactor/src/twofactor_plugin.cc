@@ -78,6 +78,13 @@ public:
             "(uid, digest));"
         );
 
+        host.add_service(
+            "capabilities.twofactor",
+            [](std::string_view)
+            {
+                return Response::json(200, R"({"totp":true,"backup_codes":true})");
+            }
+        );
         // "user\notp" -> 200 when the account needs no second factor or the code is right.
         host.add_service(
             "auth.second_factor",

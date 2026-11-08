@@ -27,6 +27,8 @@ plugins/contacts/  CardDAV
 plugins/mail/      the mail service, a send API, notifications (spool, sendmail or SMTP)
 plugins/activity/  activity stream
 plugins/notifications/ notifications for people
+plugins/systemtags/ tags on files
+plugins/comments/  comments on files
 plugins/davobjects/    the CalDAV/CardDAV server both DAV plugins link
 bazel/             build macros, copts, the system clang toolchain (from congelado)
 tools/             format.sh, smoke.sh
@@ -38,7 +40,7 @@ Bazel 9.2 (through bazelisk), clang and lld are needed. Dependencies come from t
 and SQLite (for the `db` plugin).
 
 ```sh
-bazelisk test //...                 # 13 test targets
+bazelisk test //...                 # 15 test targets
 bazelisk test //... --config=asan   # also ubsan, tsan
 bazelisk test //... --define=std=26 --config=warnings   # C++26, warnings as errors (clang 22 in CI)
 tools/smoke.sh                      # starts the real binary with the built plugins and uses it through curl

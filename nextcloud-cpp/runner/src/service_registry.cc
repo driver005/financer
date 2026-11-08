@@ -55,6 +55,18 @@ bool ServiceRegistry::contains(std::string_view name) const
     return m_entries.find(name) != m_entries.end();
 }
 
+std::vector<std::string> ServiceRegistry::names(std::string_view prefix) const
+{
+    const std::lock_guard lock{m_mutex};
+    std::vector<std::string> out;
+    for (const auto& [name, entry]: m_entries) {
+        if (name.compare(0, prefix.size(), prefix) == 0) {
+            out.push_back(name);
+        }
+    }
+    return out;
+}
+
 std::size_t ServiceRegistry::size() const noexcept
 {
     const std::lock_guard lock{m_mutex};

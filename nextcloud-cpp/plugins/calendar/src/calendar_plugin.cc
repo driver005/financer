@@ -70,6 +70,16 @@ public:
         );
         m_server->install(host);
 
+        host.add_service(
+            "capabilities.dav",
+            [](std::string_view)
+            {
+                return Response::json(
+                    200,
+                    R"({"chunking":"0","calendars":true,"calendar_timerange":true})"
+                );
+            }
+        );
         // The entry points clients try first.
         for (const char* method: {"GET", "PROPFIND"}) {
             host.add_route(

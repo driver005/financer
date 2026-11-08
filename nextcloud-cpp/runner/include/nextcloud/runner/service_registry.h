@@ -9,6 +9,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace nc {
 
@@ -29,6 +30,8 @@ public:
     [[nodiscard]] http::Response call(std::string_view name, std::string_view args) const;
 
     [[nodiscard]] bool contains(std::string_view name) const;
+    /// @brief Names of the services that start with `prefix`, sorted.
+    [[nodiscard]] std::vector<std::string> names(std::string_view prefix) const;
     [[nodiscard]] std::size_t size() const noexcept;
 
 private:

@@ -69,6 +69,13 @@ public:
         );
 
         host.add_service(
+            "capabilities.files_trashbin",
+            [](std::string_view)
+            {
+                return Response::json(200, R"({"undelete":true})");
+            }
+        );
+        host.add_service(
             "trashbin.before_delete",
             [this](std::string_view args)
             {

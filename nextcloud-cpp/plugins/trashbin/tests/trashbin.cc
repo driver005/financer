@@ -117,6 +117,13 @@ int main()
         kernel.handle(req("GET", trash)).get_body().find("original_path") == std::string::npos
     );
 
+    // The server says what it can do: each plugin that offers a capability is listed.
+    const auto capabilities =
+        kernel.handle(Request{"GET", "/ocs/v2.php/cloud/capabilities"}).get_body();
+    NC_CHECK(capabilities.find("\"files_trashbin\":{\"undelete\":true}") != std::string::npos);
+    NC_CHECK(capabilities.find("\"files\":{\"bigfilechunking\":false") != std::string::npos);
+    NC_CHECK(capabilities.find("\"productname\":\"Nextcloud\"") != std::string::npos);
+
     // Without the trash bin plugin the cloud plugin deletes for good.
     kernel.stop();
     nc::Kernel plain{
