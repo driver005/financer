@@ -79,6 +79,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `data_dir` | accounts, shares, files, mail spool | `data` |
 | `[users] pbkdf2_iterations`, `min_password_length` | password hashing | `10000`, `8` |
 | `[cloud] quota_bytes`, `overwrite_url` | per-user quota, public URL for share links | unlimited, from `Host` |
+| `[cloud] encryption_key` or `encryption_key_file` | 64 hex digits: files are stored encrypted | off |
 | `[cloud] external_mounts` | host folders shown to everyone: `Name=/path:ro\|rw[:group]; ...` | none |
 | `[mail] mode` | `spool`, `sendmail`, `smtp`, `null` | `spool` |
 | `[mail] from_address`, `from_name`, `spool_dir`, `sendmail_path`, `smtp_host`, `smtp_port`, `max_recipients` | | |

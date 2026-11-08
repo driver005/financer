@@ -839,6 +839,140 @@ void test_external_storage()
     fs::remove_all(scans);
 }
 
+void test_encryption()
+{
+    const std::string dir = temp_dir("encryption");
+    const std::string key(64, 'a'); // 32 bytes of 0xaa
+    // A file that exists before encryption is switched on.
+    fs::create_directories(dir + "/alice/files");
+    {
+        std::ofstream{dir + "/alice/files/old.txt"} << "written before the key existed";
+    }
+    nc::Kernel kernel{nc::Config::parse(
+                          "data_dir = " + dir +
+                          "\n[users]\npbkdf2_iterations = 3\n[cloud]\nencryption_key = " + key +
+                          "\n"
+    )
+                          .value()};
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    for (const char* name: {"alice", "bob"}) {
+        ::setenv("OC_PASS", (std::string{name} + " password").c_str(), 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {name}, out), 0);
+    }
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string bob = "bob:bob password";
+    const std::string a = "/remote.php/dav/files/alice";
+    NC_CHECK_EQ(kernel.run_command("encryption:status", {}, out), 0);
+    NC_CHECK(out.starts_with("enabled"));
+
+    const std::string secret = "the launch code is 0000";
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", a + "/plan.txt", secret, alice)).get_status(), 201);
+    // On disk there is no readable text, and the file is longer by the fixed overhead.
+    const std::string stored = slurp(dir + "/alice/files/plan.txt");
+    NC_CHECK(stored.starts_with("NCENC1"));
+    NC_CHECK(stored.find("launch") == std::string::npos);
+    NC_CHECK_EQ(stored.size(), secret.size() + 50);
+    // Through the server everything looks normal: content, size, copies, moves, links.
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/plan.txt", "", alice)).get_body(), secret);
+    NC_CHECK(
+        kernel.handle(user_req("PROPFIND", a + "/plan.txt", "", alice))
+            .get_body()
+            .find("<d:getcontentlength>" + std::to_string(secret.size()) + "<") != std::string::npos
+    );
+    Request copy = user_req("COPY", a + "/plan.txt", "", alice);
+    copy.add_header("Destination", a + "/copy.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(copy)).get_status(), 201);
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/copy.txt", "", alice)).get_body(), secret);
+    const auto link = kernel
+                          .handle(user_req(
+                              "POST",
+                              "/ocs/v2.php/apps/files_sharing/api/v1/shares",
+                              "path=/plan.txt&shareType=3",
+                              alice
+                          ))
+                          .get_body();
+    const std::string token = link.substr(link.find("\"token\":\"") + 9, 20);
+    NC_CHECK_EQ(kernel.handle(Request{"GET", "/s/" + token}).get_body(), secret);
+    // Shared with a user, the recipient reads the plain content too.
+    NC_CHECK_EQ(
+        kernel
+            .handle(user_req(
+                "POST",
+                "/ocs/v2.php/apps/files_sharing/api/v1/shares",
+                "path=/plan.txt&shareType=0&shareWith=bob",
+                alice
+            ))
+            .get_status(),
+        200
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", "/remote.php/dav/files/bob/plan.txt", "", bob)).get_body(),
+        secret
+    );
+    // Two writes of the same content never give the same bytes (new salt and nonce each time).
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", a + "/plan.txt", secret, alice)).get_status(), 204);
+    NC_CHECK(slurp(dir + "/alice/files/plan.txt") != stored);
+    // An empty file works too.
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", a + "/empty.txt", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/empty.txt", "", alice)).get_body(), "");
+
+    // The file from before is read as it is, and `encrypt-all` converts it.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/old.txt", "", alice)).get_body(),
+        "written before the key existed"
+    );
+    NC_CHECK_EQ(kernel.run_command("encryption:encrypt-all", {"alice"}, out), 0);
+    NC_CHECK_EQ(out, "encrypted 1 file(s)\n");
+    NC_CHECK(slurp(dir + "/alice/files/old.txt").starts_with("NCENC1"));
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/old.txt", "", alice)).get_body(),
+        "written before the key existed"
+    );
+    NC_CHECK_EQ(kernel.run_command("encryption:encrypt-all", {"alice"}, out), 0);
+    NC_CHECK_EQ(out, "encrypted 0 file(s)\n");
+
+    // Tampering is noticed, and so is a file moved into another account's folder.
+    std::string damaged = slurp(dir + "/alice/files/plan.txt");
+    damaged[damaged.size() / 2] = static_cast<char>(damaged[damaged.size() / 2] ^ 0x01);
+    {
+        std::ofstream{dir + "/alice/files/plan.txt", std::ios::binary | std::ios::trunc} << damaged;
+    }
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/plan.txt", "", alice)).get_status(), 500);
+    fs::create_directories(dir + "/bob/files");
+    fs::copy_file(dir + "/alice/files/copy.txt", dir + "/bob/files/stolen.txt");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", "/remote.php/dav/files/bob/stolen.txt", "", bob))
+            .get_status(),
+        500
+    );
+
+    kernel.stop();
+    // A key that is not 64 hex digits stops the plugin instead of storing files unprotected.
+    nc::Kernel bad{
+        nc::Config::parse("data_dir = " + dir + "\n[cloud]\nencryption_key = nothex\n").value()
+    };
+    bad.get_logger().set_sink({});
+    NC_CHECK(bad.add_plugin_library("plugins/cloud/libcloud.so").has_value());
+    NC_CHECK(bad.add_plugin_library("plugins/users/libusers.so").has_value());
+    NC_CHECK(bad.add_plugin_library("plugins/db/libdb.so").has_value());
+    NC_CHECK(bad.start().has_value());
+    bool cloud_failed = false;
+    for (const nc::PluginInfo& info: bad.plugins()) {
+        cloud_failed = cloud_failed ||
+                       (info.get_name() == "cloud" && info.get_state() == nc::PluginState::FAILED);
+    }
+    NC_CHECK(cloud_failed);
+    fs::remove_all(dir);
+}
+
 void test_quota_through_dav()
 {
     const std::string dir = temp_dir("quota");
@@ -893,6 +1027,7 @@ int main()
     test_plugins();
     test_received_shares();
     test_external_storage();
+    test_encryption();
     test_quota_through_dav();
     test_missing_requirement();
     return NC_TEST_RESULT();

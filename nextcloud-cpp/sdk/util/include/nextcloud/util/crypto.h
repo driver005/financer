@@ -32,6 +32,9 @@ pbkdf2_sha256(std::string_view password, std::string_view salt, std::uint32_t it
 
 [[nodiscard]] std::string to_hex(std::string_view bytes);
 
+/// @brief Decodes hexadecimal digits (either case); nullopt for an odd length or a bad digit.
+[[nodiscard]] std::optional<std::string> from_hex(std::string_view hex);
+
 [[nodiscard]] std::string base64_encode(std::string_view bytes);
 
 /// @brief Decodes standard base64 (padding optional); nullopt on any invalid character.

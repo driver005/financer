@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <span>
 
@@ -110,6 +111,24 @@ public:
         m_public_url = host.config("overwrite_url", "");
         m_host = &host;
         parse_external(host.config("external_mounts", ""));
+        // Encryption at rest: a 64 hex digit key in the config, or in a file the administrator
+        // keeps apart.
+        std::string key_hex = host.config("encryption_key", "");
+        if (const std::string key_file = host.config("encryption_key_file", "");
+            key_hex.empty() && !key_file.empty()) {
+            std::ifstream stream{key_file};
+            std::getline(stream, key_hex);
+            if (!stream && key_hex.empty()) {
+                throw std::runtime_error("cannot read encryption_key_file " + key_file);
+            }
+        }
+        if (!key_hex.empty()) {
+            const auto key = nc::cloud::FileCipher::key_from_hex(nc::util::trim(key_hex));
+            if (!key) {
+                throw std::runtime_error("the encryption key must be 64 hexadecimal digits");
+            }
+            m_encryption_key = *key;
+        }
         m_shares = std::make_unique<nc::cloud::ShareStore>(m_data_dir + "/shares.db");
         if (auto loaded = m_shares->load(); !loaded) {
             throw std::runtime_error(loaded.error());
@@ -176,17 +195,42 @@ public:
 private:
     [[nodiscard]] Storage storage_for(std::string_view user) const
     {
-        return Storage{std::filesystem::path{m_data_dir} / std::string{user} / "files", m_quota};
+        return Storage{
+            std::filesystem::path{m_data_dir} / std::string{user} / "files",
+            m_quota,
+            cipher_for(user)
+        };
+    }
+
+    /// The cipher for one account's files, or none when no server key is configured.
+    [[nodiscard]] std::shared_ptr<const nc::cloud::FileCipher> cipher_for(std::string_view user
+    ) const
+    {
+        if (m_encryption_key.empty()) {
+            return nullptr;
+        }
+        return std::make_shared<const nc::cloud::FileCipher>(
+            std::string{m_encryption_key},
+            std::string{user}
+        );
     }
 
     [[nodiscard]] Storage trash_for(std::string_view user) const
     {
-        return Storage{std::filesystem::path{m_data_dir} / std::string{user} / "files_trashbin"};
+        return Storage{
+            std::filesystem::path{m_data_dir} / std::string{user} / "files_trashbin",
+            0,
+            cipher_for(user)
+        };
     }
 
     [[nodiscard]] Storage versions_for(std::string_view user) const
     {
-        return Storage{std::filesystem::path{m_data_dir} / std::string{user} / "files_versions"};
+        return Storage{
+            std::filesystem::path{m_data_dir} / std::string{user} / "files_versions",
+            0,
+            cipher_for(user)
+        };
     }
 
     /// Other plugins step in here: the trash bin takes a deleted file, the versions plugin keeps
@@ -776,8 +820,8 @@ private:
         // A shared file is a mount of one file: read it, or replace it with update permission.
         const std::string parent = share.get_path().substr(0, share.get_path().rfind('/'));
         const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
-        Storage root = mount.directory ? Storage{std::filesystem::path{m_data_dir} / share.get_owner() / "files" / share.get_path().substr(1)}
-                                       : Storage{std::filesystem::path{m_data_dir} / share.get_owner() / "files" / (parent.empty() ? "" : parent.substr(1))};
+        Storage root = mount.directory ? Storage{std::filesystem::path{m_data_dir} / share.get_owner() / "files" / share.get_path().substr(1), 0, cipher_for(share.get_owner())}
+                                       : Storage{std::filesystem::path{m_data_dir} / share.get_owner() / "files" / (parent.empty() ? "" : parent.substr(1)), 0, cipher_for(share.get_owner())};
         std::string inner = rest;
         std::string href_base = mount_base;
         if (!mount.directory) {
@@ -1159,6 +1203,35 @@ private:
         );
 
         host.add_command(
+            "encryption:status",
+            "Says whether files are encrypted when stored",
+            [this](const std::vector<std::string>&, std::string& out)
+            {
+                out = m_encryption_key.empty() ? "disabled\n"
+                                               : "enabled (ChaCha20-Poly1305, one key per file)\n";
+                return 0;
+            }
+        );
+        host.add_command(
+            "encryption:encrypt-all",
+            "Encrypts the files a user already has: encryption:encrypt-all <user>",
+            [this](const std::vector<std::string>& args, std::string& out)
+            {
+                if (args.size() != 1 || !safe_user(args[0]) || m_encryption_key.empty()) {
+                    out = "usage: encryption:encrypt-all <user> (needs an encryption key in the "
+                          "config)\n";
+                    return 1;
+                }
+                const auto changed = storage_for(args[0]).encrypt_existing();
+                if (!changed) {
+                    out = changed.error().get_message() + "\n";
+                    return 1;
+                }
+                out = "encrypted " + std::to_string(*changed) + " file(s)\n";
+                return 0;
+            }
+        );
+        host.add_command(
             "share:list",
             "Lists all shares",
             [this](const std::vector<std::string>&, std::string& out)
@@ -1190,6 +1263,7 @@ private:
     std::string m_data_dir{"data"};
     std::uint64_t m_quota{0};
     std::string m_public_url{};
+    std::string m_encryption_key{};
 
     struct External
     {

@@ -1,9 +1,11 @@
 #pragma once
 
+#include "file_cipher.h"
 #include "nextcloud/util/expected.h"
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -189,11 +191,22 @@ class Storage
 public:
     /// @param root the directory that is "/"
     /// @param quota_bytes 0 means unlimited
-    explicit Storage(std::filesystem::path root, std::uint64_t quota_bytes = 0) :
+    /// @param cipher when set, files are encrypted on write and decrypted on read (sizes are
+    /// reported for the plain content)
+    explicit Storage(
+        std::filesystem::path root,
+        std::uint64_t quota_bytes = 0,
+        std::shared_ptr<const FileCipher> cipher = nullptr
+    ) :
         m_root{std::move(root)},
-        m_quota{quota_bytes}
+        m_quota{quota_bytes},
+        m_cipher{std::move(cipher)}
     {
     }
+
+    /// @brief Encrypts the plain files that are already there (after the key was switched on);
+    /// returns how many it changed. Does nothing without a cipher.
+    [[nodiscard]] Result<std::size_t> encrypt_existing() const;
 
     [[nodiscard]] static Result<std::string> normalize(std::string_view path);
 
@@ -242,7 +255,10 @@ private:
     transfer(std::string_view from, std::string_view to, bool overwrite, bool keep_source) const;
 
     std::filesystem::path m_root{};
+    [[nodiscard]] std::uint64_t plain_size(const std::filesystem::path& real) const;
+
     std::uint64_t m_quota{0};
+    std::shared_ptr<const FileCipher> m_cipher{};
 };
 
 } // namespace nc::cloud

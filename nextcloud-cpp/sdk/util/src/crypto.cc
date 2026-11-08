@@ -327,6 +327,36 @@ std::string to_hex(std::string_view bytes)
     return out;
 }
 
+std::optional<std::string> from_hex(std::string_view hex)
+{
+    if (hex.size() % 2 != 0) {
+        return std::nullopt;
+    }
+    const auto digit = [](char letter) -> int
+    {
+        if (letter >= '0' && letter <= '9') {
+            return letter - '0';
+        }
+        if (letter >= 'a' && letter <= 'f') {
+            return letter - 'a' + 10;
+        }
+        if (letter >= 'A' && letter <= 'F') {
+            return letter - 'A' + 10;
+        }
+        return -1;
+    };
+    std::string out;
+    for (std::size_t index = 0; index < hex.size(); index += 2) {
+        const int high = digit(hex[index]);
+        const int low = digit(hex[index + 1]);
+        if (high < 0 || low < 0) {
+            return std::nullopt;
+        }
+        out.push_back(static_cast<char>(high * 16 + low));
+    }
+    return out;
+}
+
 std::string base64_encode(std::string_view bytes)
 {
     static constexpr std::string_view ALPHABET =

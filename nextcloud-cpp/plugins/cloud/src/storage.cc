@@ -114,7 +114,7 @@ Result<Node> Storage::node_at(const std::string& normalized, const fs::path& rea
     const std::int64_t mtime = error ? 0 : to_unix(time);
     std::uint64_t size = 0;
     if (!directory) {
-        size = static_cast<std::uint64_t>(fs::file_size(real, error));
+        size = plain_size(real);
     } else {
         // A folder changes when anything directly in it appears or disappears; its mtime moves with
         // that.
@@ -200,6 +200,16 @@ Result<std::string> Storage::read(std::string_view path) const
     }
     std::ostringstream data;
     data << stream.rdbuf();
+    if (m_cipher) {
+        auto plain = m_cipher->decrypt(data.str());
+        if (!plain) {
+            return fail(
+                StorageCode::IO,
+                "cannot decrypt " + *normalized + " (wrong key, or the file was changed)"
+            );
+        }
+        return std::move(*plain);
+    }
     return data.str();
 }
 
@@ -235,7 +245,9 @@ Result<bool> Storage::write(std::string_view path, std::string_view data, std::i
         real->parent_path() / (std::string(TEMP_PREFIX) + util::random_hex(6));
     {
         std::ofstream stream{temporary, std::ios::binary | std::ios::trunc};
-        stream.write(data.data(), static_cast<std::streamsize>(data.size()));
+        const std::string stored = m_cipher ? m_cipher->encrypt(data) : std::string{};
+        const std::string_view payload = m_cipher ? std::string_view{stored} : data;
+        stream.write(payload.data(), static_cast<std::streamsize>(payload.size()));
         stream.flush();
         if (!stream) {
             fs::remove(temporary, error);
@@ -468,15 +480,77 @@ Result<std::uint64_t> Storage::size_of(std::string_view path) const
         return fail(StorageCode::NOT_FOUND, *normalized);
     }
     if (!fs::is_directory(*real, error)) {
-        return static_cast<std::uint64_t>(fs::file_size(*real, error));
+        return plain_size(*real);
     }
     std::uint64_t total = 0;
     for (const auto& entry: fs::recursive_directory_iterator{*real, error}) {
         if (entry.is_regular_file(error) && !hidden_name(entry.path().filename().string())) {
-            total += static_cast<std::uint64_t>(entry.file_size(error));
+            total += plain_size(entry.path());
         }
     }
     return total;
+}
+
+std::uint64_t Storage::plain_size(const fs::path& real) const
+{
+    std::error_code error;
+    const auto size = static_cast<std::uint64_t>(fs::file_size(real, error));
+    if (!m_cipher || size < FileCipher::OVERHEAD) {
+        return size;
+    }
+    std::ifstream stream{real, std::ios::binary};
+    char head[6] = {};
+    stream.read(head, sizeof(head));
+    return FileCipher::has_tag(std::string_view{
+               head,
+               stream.gcount() > 0 ? static_cast<std::size_t>(stream.gcount()) : 0U
+           })
+               ? size - FileCipher::OVERHEAD
+               : size;
+}
+
+Result<std::size_t> Storage::encrypt_existing() const
+{
+    if (!m_cipher) {
+        return std::size_t{0};
+    }
+    std::error_code error;
+    std::size_t changed = 0;
+    for (const auto& entry: fs::recursive_directory_iterator{m_root, error}) {
+        if (!entry.is_regular_file(error) || hidden_name(entry.path().filename().string()) ||
+            entry.is_symlink(error)) {
+            continue;
+        }
+        std::ostringstream raw;
+        {
+            std::ifstream stream{entry.path(), std::ios::binary};
+            raw << stream.rdbuf();
+        }
+        if (FileCipher::is_encrypted(raw.str())) {
+            continue;
+        }
+        const fs::path temporary =
+            entry.path().parent_path() / (std::string(TEMP_PREFIX) + util::random_hex(6));
+        {
+            std::ofstream out{temporary, std::ios::binary | std::ios::trunc};
+            const std::string stored = m_cipher->encrypt(raw.str());
+            out.write(stored.data(), static_cast<std::streamsize>(stored.size()));
+            out.flush();
+            if (!out) {
+                fs::remove(temporary, error);
+                return fail(StorageCode::IO, "cannot write " + entry.path().string());
+            }
+        }
+        fs::rename(temporary, entry.path(), error);
+        if (error) {
+            fs::remove(temporary, error);
+            return util::unexpected<StorageError>{
+                from_error(error, "cannot replace " + entry.path().string())
+            };
+        }
+        ++changed;
+    }
+    return changed;
 }
 
 std::uint64_t Storage::used_bytes() const
