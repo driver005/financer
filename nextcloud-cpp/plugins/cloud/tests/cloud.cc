@@ -735,6 +735,110 @@ void test_received_shares()
     fs::remove_all(dir);
 }
 
+void test_external_storage()
+{
+    const std::string dir = temp_dir("external");
+    const std::string archive = dir + "-archive";
+    const std::string scans = dir + "-scans";
+    fs::create_directories(archive + "/2023");
+    fs::create_directories(scans);
+    {
+        std::ofstream{archive + "/2023/report.txt"} << "old report";
+    }
+    fs::create_directories(dir + "/bob/files/Archive"); // bob already has a folder of that name
+    nc::Kernel kernel{nc::Config::parse(
+                          "data_dir = " + dir +
+                          "\n[users]\npbkdf2_iterations = 3\n[cloud]\nexternal_mounts = Archive=" +
+                          archive + ":ro; Scans=" + scans +
+                          ":rw:team ; Gone=/does/not/exist:rw; Odd/Name=" + archive +
+                          ":rw; Bad=relative:rw\n"
+    )
+                          .value()};
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "groups", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    for (const char* name: {"alice", "bob"}) {
+        ::setenv("OC_PASS", (std::string{name} + " password").c_str(), 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {name}, out), 0);
+    }
+    ::unsetenv("OC_PASS");
+    NC_CHECK_EQ(kernel.run_command("group:add", {"team"}, out), 0);
+    NC_CHECK_EQ(kernel.run_command("group:adduser", {"team", "bob"}, out), 0);
+    const std::string alice = "alice:alice password";
+    const std::string bob = "bob:bob password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const std::string b = "/remote.php/dav/files/bob";
+
+    // Everybody sees Archive, only the group sees Scans, and the broken entries are not there.
+    const auto alice_top = kernel.handle(user_req("PROPFIND", a + "/", "", alice)).get_body();
+    NC_CHECK(alice_top.find("<d:href>" + a + "/Archive/</d:href>") != std::string::npos);
+    NC_CHECK(
+        alice_top.find("Scans") == std::string::npos &&
+        alice_top.find("Gone") == std::string::npos && alice_top.find("Odd") == std::string::npos
+    );
+    const auto bob_top = kernel.handle(user_req("PROPFIND", b + "/", "", bob)).get_body();
+    NC_CHECK(
+        bob_top.find("/Archive/") != std::string::npos &&           // his own folder keeps the name
+        bob_top.find("/Archive%20%282%29/") != std::string::npos && // the mount is numbered
+        bob_top.find("/Scans/") != std::string::npos
+    );
+
+    // Read-only: readable, listable, not changeable.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Archive/2023/report.txt", "", alice)).get_body(),
+        "old report"
+    );
+    NC_CHECK(
+        kernel.handle(user_req("PROPFIND", a + "/Archive/2023", "", alice))
+            .get_body()
+            .find(a + "/Archive/2023/report.txt") != std::string::npos
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Archive/new.txt", "x", alice)).get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", a + "/Archive/2023/report.txt", "", alice)).get_status(),
+        403
+    );
+    NC_CHECK(fs::exists(archive + "/2023/report.txt"));
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Archive/../../etc/passwd", "", alice)).get_status(),
+        400
+    );
+
+    // Read-write for the group, and the bytes land in the host folder; a clash with an own name is
+    // numbered.
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/Scans/x", "", alice)).get_status(), 404);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", b + "/Scans/scan1.pdf", "PDF", bob)).get_status(),
+        201
+    );
+    NC_CHECK(fs::exists(scans + "/scan1.pdf"));
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", b + "/Scans/box", "", bob)).get_status(), 201);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", b + "/Scans/scan1.pdf", "", bob)).get_status(),
+        204
+    );
+    NC_CHECK(!fs::exists(scans + "/scan1.pdf"));
+    const auto renamed = kernel.handle(user_req("PROPFIND", b + "/", "", bob)).get_body();
+    NC_CHECK(renamed.find("Archive%20%282%29") != std::string::npos);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", b + "/Archive%20(2)/2023/report.txt", "", bob)).get_body(),
+        "old report"
+    );
+
+    kernel.stop();
+    fs::remove_all(dir);
+    fs::remove_all(archive);
+    fs::remove_all(scans);
+}
+
 void test_quota_through_dav()
 {
     const std::string dir = temp_dir("quota");
@@ -788,6 +892,7 @@ int main()
     test_share_store();
     test_plugins();
     test_received_shares();
+    test_external_storage();
     test_quota_through_dav();
     test_missing_requirement();
     return NC_TEST_RESULT();

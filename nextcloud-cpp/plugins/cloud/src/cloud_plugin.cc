@@ -108,6 +108,8 @@ public:
         m_data_dir = host.config("data_dir", "data");
         m_quota = std::strtoull(host.config("quota_bytes", "0").c_str(), nullptr, 10);
         m_public_url = host.config("overwrite_url", "");
+        m_host = &host;
+        parse_external(host.config("external_mounts", ""));
         m_shares = std::make_unique<nc::cloud::ShareStore>(m_data_dir + "/shares.db");
         if (auto loaded = m_shares->load(); !loaded) {
             throw std::runtime_error(loaded.error());
@@ -543,6 +545,39 @@ private:
         return out;
     }
 
+    /// `Name=/host/path:ro` or `:rw`, optionally `:group`; several separated by `;`. A name must be
+    /// a plain file name and the path an existing absolute folder, else the entry is ignored and
+    /// logged.
+    void parse_external(const std::string& text)
+    {
+        for (const std::string& entry: nc::util::split(text, ';')) {
+            if (nc::util::trim(entry).empty()) {
+                continue;
+            }
+            const std::size_t equals = entry.find('=');
+            const std::vector<std::string> parts = nc::util::split(
+                equals == std::string::npos ? std::string{} : entry.substr(equals + 1),
+                ':'
+            );
+            const std::string name{nc::util::trim(entry.substr(0, equals))};
+            std::error_code error;
+            if (equals == std::string::npos || parts.size() < 2 || parts.size() > 3 ||
+                !Storage::normalize("/" + name) || name.find('/') != std::string::npos ||
+                name == "." || name == ".." || parts[0].empty() || parts[0].front() != '/' ||
+                !std::filesystem::is_directory(parts[0], error) ||
+                (parts[1] != "ro" && parts[1] != "rw")) {
+                m_host->log(nc::LogLevel::WARNING, "ignoring external mount: " + entry);
+                continue;
+            }
+            m_external.push_back(External{
+                name,
+                parts[0],
+                nc::util::trim(parts[1]) == "rw" ? 31 : 1,
+                parts.size() == 3 ? std::string{nc::util::trim(parts[2])} : std::string{}
+            });
+        }
+    }
+
     /// One received share as the recipient sees it: a name in the top folder, and where it really
     /// is.
     struct Mount
@@ -550,6 +585,10 @@ private:
         Share share{};
         std::string name{};
         bool directory{false};
+        /// Set for an external storage (a folder of the host an administrator configured): then
+        /// `share` is unused.
+        std::filesystem::path external_root{};
+        int external_permissions{1};
     };
 
     [[nodiscard]] std::vector<Mount> mounts_for(const std::string& user) const
@@ -586,7 +625,32 @@ private:
                            : base_name.substr(0, dot) + " (" + std::to_string(attempt) + ")" +
                                  base_name.substr(dot);
             }
-            mounts.push_back(Mount{share, name, node->is_directory()});
+            mounts.push_back(Mount{share, name, node->is_directory(), {}, 1});
+        }
+        for (const External& external: m_external) {
+            if (!external.group.empty() &&
+                m_host->call_service(
+                          "groups.is_member",
+                          nc::util::form_encode({{"group", external.group}, {"user", user}})
+                ).get_status() != 200) {
+                continue;
+            }
+            std::string name = external.name;
+            for (int attempt = 2; attempt < 1'000; ++attempt) {
+                const bool taken =
+                    own.stat("/" + name).has_value() || std::ranges::any_of(
+                                                            mounts,
+                                                            [&](const Mount& other)
+                                                            {
+                                                                return other.name == name;
+                                                            }
+                                                        );
+                if (!taken) {
+                    break;
+                }
+                name = external.name + " (" + std::to_string(attempt) + ")";
+            }
+            mounts.push_back(Mount{Share{}, name, true, external.path, external.permissions});
         }
         return mounts;
     }
@@ -600,7 +664,9 @@ private:
         }
         std::vector<nc::cloud::Node> nodes;
         for (const Mount& mount: mounts) {
-            auto node = storage_for(mount.share.get_owner()).stat(mount.share.get_path());
+            auto node = mount.external_root.empty()
+                            ? storage_for(mount.share.get_owner()).stat(mount.share.get_path())
+                            : Storage{mount.external_root}.stat("/");
             if (!node) {
                 continue;
             }
@@ -639,6 +705,53 @@ private:
         return listing;
     }
 
+    /// Serves a request inside an external storage: the configured host folder is the root,
+    /// read-only or read-write for everybody who can see it. Nothing is recorded in a trash bin or
+    /// versions.
+    [[nodiscard]] Response serve_external(
+        const Request& request,
+        const Mount& mount,
+        const std::string& rest,
+        const std::string& base
+    ) const
+    {
+        const std::string& method = request.get_method();
+        const bool writable = mount.external_permissions > 1;
+        if (method == "PUT" || method == "MKCOL" || method == "DELETE" || method == "MOVE" ||
+            method == "COPY") {
+            if (!writable || rest.empty()) {
+                return Response::text(403, "This storage is read-only");
+            }
+        } else if (method != "GET" && method != "PROPFIND") {
+            return Response::text(405, "Method Not Allowed");
+        }
+        const std::string user = request.get_user();
+        const std::string name = mount.name;
+        nc::cloud::Publish publish =
+            [this, user, name](std::string_view topic, std::string_view payload)
+        {
+            auto form = nc::util::parse_form(payload);
+            for (auto& [key, value]: form) {
+                if (key == "user") {
+                    value = user;
+                } else if (key == "path" || key == "target") {
+                    value = "/" + name + (value == "/" ? "" : value);
+                }
+            }
+            m_host->publish(topic, nc::util::form_encode(form));
+        };
+        return nc::cloud::dav_handle(
+            request,
+            Storage{mount.external_root},
+            nc::cloud::DavTarget{
+                std::string{user},
+                base + "/" + nc::util::url_encode_path(mount.name),
+                std::string{rest}
+            },
+            publish
+        );
+    }
+
     /// Serves a request inside a mounted share: the owner's folder is the root, and the share's
     /// permissions (1 read, 2 update, 4 create, 8 delete) decide what is allowed.
     [[nodiscard]] Response serve_mount(
@@ -648,6 +761,9 @@ private:
         const std::string& base
     ) const
     {
+        if (!mount.external_root.empty()) {
+            return serve_external(request, mount, rest, base);
+        }
         const Share& share = mount.share;
         const std::string& method = request.get_method();
         const int permissions = share.get_permissions();
@@ -1074,6 +1190,16 @@ private:
     std::string m_data_dir{"data"};
     std::uint64_t m_quota{0};
     std::string m_public_url{};
+
+    struct External
+    {
+        std::string name{};
+        std::filesystem::path path{};
+        int permissions{1};
+        std::string group{};
+    };
+
+    std::vector<External> m_external{};
     std::unique_ptr<nc::cloud::ShareStore> m_shares{};
     nc::Host* m_host{nullptr};
 };
