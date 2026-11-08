@@ -7,6 +7,7 @@ test_suite(
         "//plugins/comments:comments_test",
         "//plugins/db:db_test",
         "//plugins/groups:groups_test",
+        "//plugins/ldap:ldap_test",
         "//plugins/mail:mail_test",
         "//plugins/notifications:notifications_test",
         "//plugins/systemtags:systemtags_test",

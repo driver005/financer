@@ -59,7 +59,7 @@ kernel starts and stops, not while it serves.
 `Kernel::handle` for every request: (1) the `user` field is cleared (it never comes from the wire);
 (2) with an `Authorization: Basic` header, authentication runs through *services*, so whichever plugins are
 loaded decide: `auth.token` (an app password, which also skips the second factor), else `auth.authenticate`
-(the account password), then `auth.second_factor` (a TOTP or backup code in `X-NC-OTP`); a refusal is a 401,
+(the account password), then `auth.second_factor` (a TOTP or backup code in `X-NC-OTP`); `auth.authenticate*` is tried provider by provider (`users`, then `ldap`); a refusal is a 401,
 with `X-NC-Two-Factor: required` when only the code is missing; (3) the router picks the handler, 404 / 405
 (with `Allow`) / `OPTIONS` / `HEAD` are answered here; (4) a throwing handler becomes a 500. Without an
 authentication service loaded, a request that carries credentials is refused, never treated as anonymous.

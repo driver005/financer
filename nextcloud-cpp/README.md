@@ -16,6 +16,7 @@ sdk/util/          text, URL, XML, base64, SHA-1/256, PBKDF2, TOTP, time, expect
 sdk/testing/       the test harness (a test is a plain `int main`)
 plugins/db/        SQLite and migrations, as services
 plugins/users/     accounts, sign-in, the provisioning API, user:* commands
+plugins/ldap/      sign in with an LDAP directory
 plugins/groups/    groups and membership
 plugins/tokens/    app passwords
 plugins/twofactor/ TOTP second factor with backup codes
@@ -40,7 +41,7 @@ Bazel 9.2 (through bazelisk), clang and lld are needed. Dependencies come from t
 and SQLite (for the `db` plugin).
 
 ```sh
-bazelisk test //...                 # 15 test targets
+bazelisk test //...                 # 16 test targets
 bazelisk test //... --config=asan   # also ubsan, tsan
 bazelisk test //... --define=std=26 --config=warnings   # C++26, warnings as errors (clang 22 in CI)
 tools/smoke.sh                      # starts the real binary with the built plugins and uses it through curl
@@ -83,6 +84,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `[cloud] external_mounts` | host folders shown to everyone: `Name=/path:ro\|rw[:group]; ...` | none |
 | `[mail] mode` | `spool`, `sendmail`, `smtp`, `null` | `spool` |
 | `[mail] from_address`, `from_name`, `spool_dir`, `sendmail_path`, `smtp_host`, `smtp_port`, `max_recipients` | | |
+| `[ldap] host`, `port`, `base_dn`, `bind_dn`, `bind_password`, `user_attribute`, `object_class`, `display_attribute`, `mail_attribute` | directory sign-in | none (plugin stays off) |
 | `[db] file` | SQLite file | `<data_dir>/nextcloud.db` |
 | `[twofactor] issuer` | name shown in authenticator apps | `Nextcloud` |
 | `[trashbin] retention_days`, `[versions] max_versions`, `retention_days`, `[activity] retention_days` | how long things are kept | 30; 10, 365; 365 |

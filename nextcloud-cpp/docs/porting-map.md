@@ -31,6 +31,7 @@ here and is tested; **Reduced** means a deliberate subset (stated); **Replaced**
 | Nextcloud | Status | Plugin |
 | --- | --- | --- |
 | `lib/private/User`, `apps/provisioning_api` | Reduced | `users`: accounts, PBKDF2 passwords, first account is admin, basic auth, create/read/edit/delete/list. No LDAP, no user backends |
+| `apps/user_ldap` | Reduced | `ldap`: sign in with a directory: bind (service account or anonymous), find exactly one entry of an object class by a user attribute (filter built as a structure, so names cannot inject terms), bind as that entry with the password; the person gets an account (`users.ensure`) with display name and mail from the directory. Plain TCP only (no LDAPS/StartTLS), no group sync, no paging, no user listing from the directory, no avatars. Any plugin can now offer `auth.authenticate*` and the kernel tries them in turn |
 | `lib/private/Group` | Reduced | `groups`: groups, membership, OCS group API, `groups.*` services (used by group shares). No subadmins, no group backends |
 | `lib/private/Authentication/Token` | Reduced | `tokens`: app passwords (create, list, revoke), stored as digests |
 | `apps/twofactor_totp`-style, `apps/twofactor_backupcodes` | Reduced | `twofactor`: TOTP (RFC 6238) with replay protection, 10 backup codes. No U2F/WebAuthn, no per-session state |
@@ -50,11 +51,11 @@ here and is tested; **Reduced** means a deliberate subset (stated); **Replaced**
 | `lib/public/Comments`, `apps/comments` | Reduced | `comments`: comments on a file by its owner and by people it is shared with (access decided by `cloud.can_access`), delete by author or owner, the owner is notified. No threads, mentions, read markers |
 | `lib/public/Capabilities` | Ported | `GET /ocs/v2.php/cloud/capabilities` merges every service named `capabilities.<name>` (cloud, trashbin, versions, calendar, twofactor, systemtags, comments) |
 | `apps/federation`, `federatedfilesharing`, `lookup_server_connector`, `cloud_federation_api` | Not ported | |
-| `apps/user_ldap`, `oauth2`, other `files_external` backends, `settings`, `theming`, `viewer`, `updatenotification`, `workflowengine`, `webhook_listeners`, `user_status`, `weather_status`, ... | Not ported | |
+| `oauth2`, other `files_external` backends, `settings`, `theming`, `viewer`, `updatenotification`, `workflowengine`, `webhook_listeners`, `user_status`, `weather_status`, ... | Not ported | |
 
 ## Verified
 
-* `bazelisk test //...` (15 targets) passes with clang 18 (C++23), plain and under `--config=asan`,
+* `bazelisk test //...` (16 targets) passes with clang 18 (C++23), plain and under `--config=asan`,
   `--config=ubsan` and `--config=tsan`.
 * It also passes with clang 22 (C++26, `--define=std=26`) and with congelado's `-Werror` profile
   (`--config=warnings`).

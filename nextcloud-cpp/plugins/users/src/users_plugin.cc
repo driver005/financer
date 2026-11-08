@@ -5,6 +5,7 @@
  * Nextcloud's `lib/private/User` and `apps/provisioning_api`.
  */
 #include "nextcloud/plugin.h"
+#include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 #include "user_store.h"
 
@@ -93,6 +94,43 @@ public:
                 }
                 const auto id = store.authenticate(args.substr(0, colon), args.substr(colon + 1));
                 return id ? Response::text(200, std::string{*id}) : Response::text(401, "");
+            }
+        );
+        // id, displayname, email: make sure the account exists (a person who signs in through a
+        // directory). New accounts get a random password nobody knows, so only the directory can
+        // sign them in.
+        host.add_service(
+            "users.ensure",
+            [&store, &host](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string id = nc::util::form_value(form, "id");
+                if (store.find(id)) {
+                    return Response::text(200, "exists");
+                }
+                std::string email = nc::util::form_value(form, "email");
+                if (!email.empty() && !UserStore::valid_email(email)) {
+                    email.clear(); // a bad address in the directory must not stop a sign-in
+                }
+                auto created = store.create(
+                    id,
+                    nc::util::random_hex(16),
+                    nc::util::form_value(form, "displayname"),
+                    email,
+                    false
+                );
+                if (!created) {
+                    return Response::text(400, created.error());
+                }
+                host.publish(
+                    "user.created",
+                    nc::util::form_encode(
+                        {{"id", id},
+                         {"email", email},
+                         {"displayname", nc::util::form_value(form, "displayname")}}
+                    )
+                );
+                return Response::text(200, "created");
             }
         );
         host.add_service(

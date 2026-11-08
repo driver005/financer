@@ -485,13 +485,18 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
             return token.get_body();
         }
     }
-    // 2. The account password.
-    if (!m_services.contains("auth.authenticate")) {
-        rejected = true;
-        return {};
+    // 2. The account password, or whatever else offers `auth.authenticate*` (a directory): the
+    // first that
+    //    knows the person wins.
+    std::string user;
+    for (const std::string& provider: m_services.names("auth.authenticate")) {
+        const http::Response answer = m_services.call(provider, *decoded);
+        if (answer.get_status() == 200 && !answer.get_body().empty()) {
+            user = answer.get_body();
+            break;
+        }
     }
-    const http::Response answer = m_services.call("auth.authenticate", *decoded);
-    if (answer.get_status() != 200 || answer.get_body().empty()) {
+    if (user.empty()) {
         rejected = true;
         return {};
     }
@@ -500,7 +505,7 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
     if (m_services.contains("auth.second_factor")) {
         const http::Response factor = m_services.call(
             "auth.second_factor",
-            answer.get_body() + "\n" + std::string{request.header("X-NC-OTP")}
+            user + "\n" + std::string{request.header("X-NC-OTP")}
         );
         if (factor.get_status() != 200) {
             rejected = true;
@@ -508,7 +513,7 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
             return {};
         }
     }
-    return answer.get_body();
+    return user;
 }
 
 http::Response Kernel::handle(http::Request&& request) const
