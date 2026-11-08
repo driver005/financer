@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgendaList, Box, Button, Card, FloatingButton, IconButton, MiniMonth, MonthGrid, Row, Scroll, Section, Segmented, Snackbar, Stack, Text, TextField, TimeGrid, useLayout } from "@financer/ui";
 
@@ -29,7 +29,12 @@ export default function CalendarScreen() {
   const today = localIsoDate();
 
   const [view, setView] = useState<CalendarView>("month");
+  const { date: jumpTo } = useLocalSearchParams<{ date?: string }>();
   const [anchor, setAnchor] = useState(today);
+  // the search of the app leads to the day of an event
+  useEffect(() => {
+    if (typeof jumpTo === "string" && /^\d{4}-\d{2}-\d{2}$/.test(jumpTo)) setAnchor(jumpTo);
+  }, [jumpTo]);
   const [scheduleDays, setScheduleDays] = useState(SCHEDULE_DAYS);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);

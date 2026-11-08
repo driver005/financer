@@ -30,6 +30,7 @@ pub mod receipt_sources;
 pub mod rules;
 pub mod safe_to_spend;
 pub mod scan;
+pub mod search;
 pub mod server_config;
 pub mod settings_plan;
 pub mod shop_format;
@@ -1295,6 +1296,12 @@ pub fn call(name: &str, args: &str) -> Result<String, String> {
         "app_misc.filter_tx" => json(app_misc::filter_tx(
             &arg::<Vec<Value>>(&args, "items")?,
             &arg::<String>(&args, "filter")?,
+        )),
+        "search.rank" => json(search::rank(
+            &arg::<Vec<search::Entry>>(&args, "entries")?,
+            &arg::<String>(&args, "query")?,
+            arg(&args, "limit_per_kind")?,
+            arg(&args, "limit")?,
         )),
         "app_misc.apply_filters" => json(app_misc::apply_filters(
             &arg::<Vec<Value>>(&args, "items")?,

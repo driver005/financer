@@ -1,6 +1,6 @@
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
-import { Box, Chip, ChipRow, Group, IconButton, ListItem, Note, Pill, PillRow, QuickActions, SearchBar, Section, Sheet, Text, VirtualList } from "@financer/ui";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Box, Chip, ChipRow, Group, IconButton, ListItem, Note, Pill, PillRow, QuickActions, Section, Sheet, Text, VirtualList } from "@financer/ui";
 
 import type { Split, Transaction } from "@/api/client";
 import { useApi } from "@/api/config";
@@ -43,9 +43,13 @@ export default function Spending() {
   const [message, setMessage] = useState<string | null>(null);
   const [splits, setSplits] = useState<Split[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
+  const { q } = useLocalSearchParams<{ q?: string }>();
   const [filters, setFilters] = useState<BookingFilters>(NO_FILTERS);
+  // the search of the app leads here with a shop in `q`: it becomes the search of the list
+  useEffect(() => {
+    if (typeof q === "string" && q !== "") setFilters((f) => ({ ...f, query: q }));
+  }, [q]);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [searching, setSearching] = useState(false);
   const [more, setMore] = useState(false);
   const [source, setSource] = useState<SourceId | null>(null);
   const [setup, setSetup] = useState<{ open: boolean; start?: SourceId }>({ open: false });
@@ -124,7 +128,6 @@ export default function Spending() {
       fixed
       actions={
         <>
-          <IconButton icon="magnify" label="Search bookings" onPress={() => setSearching(!searching)} selected={searching || filters.query.trim() !== ""} />
           <IconButton icon="calendar-month-outline" label="Filter bookings by period, category and amount" onPress={() => setFiltersOpen(true)} selected={extra.some((c) => c.key !== "query")} />
           <IconButton icon="dots-horizontal" label="More: sync, banks, stores and import" onPress={() => setMore(true)} />
         </>
@@ -203,7 +206,6 @@ export default function Spending() {
             ) : null}
             {items.length > 0 ? (
               <>
-                {searching ? <SearchBar value={filters.query} onChangeText={(query) => setFilters({ ...filters, query })} placeholder="Search shops, words and categories" /> : null}
                 <PillRow>
                   {TX_FILTERS.map((f) => (
                     <Pill key={f.value} label={f.label} selected={filters.kind === f.value} onPress={() => setFilters({ ...filters, kind: f.value })} />

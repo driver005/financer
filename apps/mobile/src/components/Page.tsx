@@ -2,6 +2,7 @@ import { usePathname, useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { IconButton, Screen, TopBar } from "@financer/ui";
 
+import { useGlobalSearch } from "@/components/GlobalSearch";
 import { areaFor } from "@/navigation";
 
 /**
@@ -26,6 +27,7 @@ export function Page({
   children: ReactNode;
 }) {
   const router = useRouter();
+  const search = useGlobalSearch();
   const area = areaFor(usePathname());
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
   return (
@@ -40,6 +42,7 @@ export function Page({
           actions={
             <>
               {actions}
+              <IconButton icon="magnify" label="Search the whole app" onPress={search.open} />
               {area === "tab" ? <IconButton icon="cog-outline" label="Settings" onPress={() => router.push("/settings")} /> : null}
             </>
           }

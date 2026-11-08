@@ -8,6 +8,7 @@ import { ThemeProvider, fill } from "@financer/ui";
 import { ApiProvider } from "@/api/config";
 import { AppLockOverlay } from "@/components/AppLockOverlay";
 import { AppFrame } from "@/components/AppFrame";
+import { GlobalSearchProvider } from "@/components/GlobalSearch";
 import { SdkGate } from "@/components/SdkGate";
 import { BackupOnOpen } from "@/components/BackupOnOpen";
 import "@/native/background"; // defines the background task at startup
@@ -27,6 +28,7 @@ export default function RootLayout() {
         <NotificationSync />
         <ShareRedirect />
         <OnboardingGate />
+        <GlobalSearchProvider>
         <AppFrame>
         <Tabs screenOptions={{ headerShown: false }} tabBar={() => null}>
           {/* the bottom bar (AppFrame) lists three tabs; every route below stays reachable by link */}
@@ -60,6 +62,7 @@ export default function RootLayout() {
           <Tabs.Screen name="onboarding" options={{ title: "Setup" }} />
         </Tabs>
         </AppFrame>
+        </GlobalSearchProvider>
         <BackupOnOpen />
         <AppLockOverlay />
       </ApiProvider>
