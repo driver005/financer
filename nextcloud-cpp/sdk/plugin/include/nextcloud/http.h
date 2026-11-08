@@ -370,8 +370,12 @@ private:
             return "No Content";
         case 207:
             return "Multi-Status";
+        case 301:
+            return "Moved Permanently";
         case 400:
             return "Bad Request";
+        case 415:
+            return "Unsupported Media Type";
         case 401:
             return "Unauthorized";
         case 403:
