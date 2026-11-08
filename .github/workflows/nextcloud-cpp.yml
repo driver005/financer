@@ -26,13 +26,15 @@ jobs:
       - uses: actions/checkout@v7
       # The toolchain (bazel/toolchain/system_cc) uses the system clang from /usr/bin and lld, like congelado's.
       - name: Install the toolchain
-        run: sudo apt-get update && sudo apt-get install -y clang lld libclang-rt-dev clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang lld libclang-rt-dev clang-format-18
       - uses: bazelbuild/setup-bazelisk@v3
       - name: Test
         run: bazelisk test //... ${{ matrix.config != '' && format('--config={0}', matrix.config) || '' }} --config=ci --test_output=errors
+      # The style is checked with clang-format 18, the version the files were formatted with; other
+      # versions format a few constructs differently.
       - name: Format check
         if: matrix.config == ''
-        run: tools/format.sh --check
+        run: CLANG_FORMAT=clang-format-18 tools/format.sh --check
       - name: Smoke test (the real binary with the built plugins)
         if: matrix.config == ''
         run: tools/smoke.sh
