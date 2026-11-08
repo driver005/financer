@@ -21,7 +21,7 @@ here and is tested; **Reduced** means a deliberate subset (stated); **Replaced**
 | `status.php` | Ported | `GET /status.php` (adds the plugin list) |
 | `ocs/`, `lib/private/OCS` | Reduced | `nc::http::ocs()` builds the OCS v2 JSON envelope; no XML format, no `format=` negotiation |
 | `remote.php`, `public.php`, `index.php` | Replaced | one router; the URLs `/remote.php/dav/...` and `/s/<token>` are kept so clients work |
-| HTTP server (Apache/nginx + PHP-FPM) | Replaced | `HttpServer`: HTTP/1.1, one thread per connection, `Content-Length` and chunked bodies, `Expect: 100-continue`, no TLS (put a reverse proxy in front), no keep-alive |
+| HTTP server (Apache/nginx + PHP-FPM) | Replaced | `HttpServer`: HTTP/1.1, one thread per connection, `Content-Length` and chunked bodies, `Expect: 100-continue`, **TLS 1.2+ with BoringSSL** (`tls_cert`, `tls_key`), no keep-alive, no HTTP/2, no certificate reload without a restart |
 | `lib/private/AppFramework` (controllers, middleware, DI of controllers) | Not ported | plugins register handlers directly |
 | `lib/private/Security`, CSP, rate limiting, brute force protection | Reduced | CSP and `nosniff` on downloads, constant time comparisons, uniform answers for bad tokens and unknown users, request smuggling shapes refused. No rate limiting or lockout |
 | `lib/private/Template`, themes, JS front end (`core/`, `apps/*/src`) | Not ported | the runner serves APIs only |

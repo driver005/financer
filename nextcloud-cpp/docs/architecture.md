@@ -130,7 +130,7 @@ setup but not the modules:
 | `std::expected` | `nc::util::expected` (is `std::expected` when the library has it; with clang 22 it is) | clang 18 reports `__cpp_concepts` too low for libstdc++ 13 to enable `<expected>` |
 | `std::move_only_function` | `std::function` | handlers are copied by the event bus so it can publish without holding its lock; a move-only handler would need a `shared_ptr` there |
 | `.clang-format` for clang 22 | same file; `tools/format.sh` skips options an older clang-format does not know | |
-| hermetic third-party repos (`third_party/*`) | `rules_cc` and SQLite from the Bazel registry; the system clang toolchain from `bazel/toolchain/system_cc` | no `import std` source and no other libraries to fetch |
+| hermetic third-party repos (`third_party/*`) | `rules_cc`, SQLite and BoringSSL from the Bazel registry; the system clang toolchain from `bazel/toolchain/system_cc` | no `import std` source and no other libraries to fetch |
 
 Everything else is taken over: Bazel 9.2 (`.bazelversion`), the hand-declared system clang toolchain
 (`bazel/toolchain/system_cc`, needed because rules_cc's auto-detected one is broken under Bazel 9),

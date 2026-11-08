@@ -37,8 +37,8 @@ tools/             format.sh, smoke.sh
 
 ## Build, test, run
 
-Bazel 9.2 (through bazelisk), clang and lld are needed. Dependencies come from the Bazel registry: `rules_cc`
-and SQLite (for the `db` plugin).
+Bazel 9.2 (through bazelisk), clang and lld are needed. Dependencies come from the Bazel registry: `rules_cc`,
+SQLite (for the `db` plugin) and BoringSSL (for HTTPS).
 
 ```sh
 bazelisk test //...                 # 16 test targets
@@ -76,6 +76,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `plugin_dir` | where the `*.so` plugins are | `plugins` |
 | `plugins` | comma list of plugins to start; empty means all | all |
 | `listen`, `port` | HTTP address | `127.0.0.1`, `8080` |
+| `tls_cert`, `tls_key` | PEM files: serve HTTPS (TLS 1.2 or newer) | plain HTTP |
 | `log_level` | debug, info, warning, error, fatal | `info` (`warning` for commands) |
 | `data_dir` | accounts, shares, files, mail spool | `data` |
 | `[users] pbkdf2_iterations`, `min_password_length` | password hashing | `10000`, `8` |

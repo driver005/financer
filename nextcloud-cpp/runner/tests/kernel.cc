@@ -6,6 +6,8 @@
 #include "nextcloud/util/crypto.h"
 
 #include <atomic>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <string>
 #include <thread>
@@ -682,6 +684,81 @@ void test_chunked()
     NC_CHECK(unfinished.feed("5\r\nhel") == State::NEED_MORE);
 }
 
+void test_tls()
+{
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / ("nc-tls-" + nc::util::random_hex(4));
+    fs::create_directories(dir);
+    const std::string cert = (dir / "cert.pem").string();
+    const std::string key = (dir / "key.pem").string();
+    const std::string other_key = (dir / "other.pem").string();
+    const std::string make = "openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "
+                             "/CN=localhost -addext subjectAltName=IP:127.0.0.1 -keyout " +
+                             key + " -out " + cert + " >/dev/null 2>&1 && openssl genrsa -out " +
+                             other_key + " 2048 >/dev/null 2>&1";
+    NC_CHECK_EQ(std::system(make.c_str()), 0);
+
+    nc::Kernel kernel;
+    kernel.get_logger().set_sink({});
+    add<AlphaPlugin>(kernel);
+    NC_CHECK(kernel.start().has_value());
+    nc::HttpServer server{kernel};
+    // Missing files, a key of another certificate and plain nonsense are refused before anything
+    // listens.
+    NC_CHECK(!server.enable_tls((dir / "none.pem").string(), key).has_value());
+    NC_CHECK(!server.enable_tls(cert, (dir / "none.pem").string()).has_value());
+    NC_CHECK(!server.enable_tls(cert, other_key).has_value());
+    NC_CHECK(server.enable_tls(cert, key).has_value());
+    const auto port = server.start("127.0.0.1", 0);
+    NC_CHECK(port.has_value());
+    if (port) {
+        const auto run = [](const std::string& command)
+        {
+            std::string output;
+            if (FILE* pipe = popen(command.c_str(), "r")) {
+                char buffer[512];
+                while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                    output += buffer;
+                }
+                pclose(pipe);
+            }
+            return output;
+        };
+        const std::string base = "127.0.0.1:" + std::to_string(*port);
+        // With the certificate as trust anchor the request works, including a body.
+        const std::string secure =
+            run("curl -s -i --max-time 10 --cacert " + cert + " -X POST -d 'over tls' https://" +
+                base + "/alpha/z");
+        NC_CHECK(secure.starts_with("HTTP/1.1 201 Created"));
+        NC_CHECK(secure.ends_with("over tls"));
+        // A big body crosses several TLS records.
+        const std::string big(300'000, 'x');
+        {
+            std::ofstream{(dir / "big.txt").string()} << big;
+        }
+        const std::string upload =
+            run("curl -s --max-time 20 --cacert " + cert + " -X POST --data-binary @" +
+                (dir / "big.txt").string() + " https://" + base + "/alpha/z");
+        NC_CHECK_EQ(upload.size(), big.size());
+        // Without trusting the certificate curl refuses (exit code 60), and plain HTTP gets
+        // nothing.
+        NC_CHECK_EQ(
+            std::system(
+                ("curl -s --max-time 10 -o /dev/null https://" + base + "/status.php").c_str()
+            ) != 0,
+            true
+        );
+        NC_CHECK(run("curl -s -i --max-time 5 http://" + base + "/status.php").empty());
+        // Old protocol versions are not offered.
+        NC_CHECK(run("curl -s -i --max-time 10 --cacert " + cert + " --tls-max 1.1 https://" +
+                     base + "/status.php")
+                     .empty());
+    }
+    server.stop();
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 void test_http_server()
 {
     nc::Kernel kernel;
@@ -737,6 +814,7 @@ int main()
     test_enabled_filter();
     test_concurrency();
     test_chunked();
+    test_tls();
     test_http_server();
     return NC_TEST_RESULT();
 }

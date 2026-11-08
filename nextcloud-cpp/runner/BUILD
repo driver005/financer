@@ -13,6 +13,7 @@ nc_cc_library(
         "//sdk/plugin:http",
         "//sdk/plugin:sdk",
         "//sdk/util",
+        "@boringssl//:ssl",
     ],
 )
 
@@ -35,3 +36,4 @@ test_suite(
     name = "all_tests",
     tests = [":kernel_test"],
 )
+

@@ -8,6 +8,8 @@
 #include <chrono>
 #include <cstring>
 #include <netinet/in.h>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -193,11 +195,81 @@ namespace {
         return true;
     }
 
+    /// One connection, plain or TLS, with the two operations the request loop needs.
+    struct Channel
+    {
+        int fd{-1};
+        ssl_st* tls{nullptr};
+
+        [[nodiscard]] ssize_t read(void* buffer, std::size_t size) const
+        {
+            if (tls == nullptr) {
+                return ::recv(fd, buffer, size, 0);
+            }
+            const int got = SSL_read(tls, buffer, static_cast<int>(size));
+            return got > 0 ? got : 0;
+        }
+
+        /// Best effort: the caller has nothing better to do when the client is gone.
+        bool write(std::string_view data) const
+        {
+            if (tls == nullptr) {
+                return write_all(fd, data);
+            }
+            while (!data.empty()) {
+                const int written = SSL_write(
+                    tls,
+                    data.data(),
+                    static_cast<int>(std::min<std::size_t>(data.size(), 1U << 20U))
+                );
+                if (written <= 0) {
+                    return false;
+                }
+                data.remove_prefix(static_cast<std::size_t>(written));
+            }
+            return true;
+        }
+    };
+
 } // namespace
 
 HttpServer::~HttpServer()
 {
     stop();
+    if (m_tls != nullptr) {
+        SSL_CTX_free(m_tls);
+    }
+}
+
+Result<void>
+HttpServer::enable_tls(const std::string& certificate_file, const std::string& key_file)
+{
+    SSL_CTX* context = SSL_CTX_new(TLS_server_method());
+    if (context == nullptr) {
+        return fail(ErrorCode::INTERNAL, "cannot create the TLS context");
+    }
+    SSL_CTX_set_min_proto_version(context, TLS1_2_VERSION);
+    SSL_CTX_set_options(context, SSL_OP_NO_COMPRESSION);
+    if (SSL_CTX_use_certificate_chain_file(context, certificate_file.c_str()) != 1) {
+        SSL_CTX_free(context);
+        return fail(ErrorCode::IO, "cannot read the certificate " + certificate_file);
+    }
+    if (SSL_CTX_use_PrivateKey_file(context, key_file.c_str(), SSL_FILETYPE_PEM) != 1) {
+        SSL_CTX_free(context);
+        return fail(ErrorCode::IO, "cannot read the private key " + key_file);
+    }
+    if (SSL_CTX_check_private_key(context) != 1) {
+        SSL_CTX_free(context);
+        return fail(
+            ErrorCode::INVALID_ARGUMENT,
+            "the private key does not belong to the certificate"
+        );
+    }
+    if (m_tls != nullptr) {
+        SSL_CTX_free(m_tls);
+    }
+    m_tls = context;
+    return {};
 }
 
 Result<std::uint16_t> HttpServer::start(const std::string& address, std::uint16_t port)
@@ -253,18 +325,41 @@ void HttpServer::accept_loop()
             break;
         }
         ++m_active;
-        std::thread{[this, client]
-                    {
-                        serve(client);
+        std::thread{
+            [this, client]
+            {
+                ssl_st* tls = nullptr;
+                if (m_tls != nullptr) {
+                    timeval timeout{};
+                    timeout.tv_sec = 10;
+                    ::setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+                    ::setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+                    tls = SSL_new(m_tls);
+                    if (tls == nullptr || SSL_set_fd(tls, client) != 1 || SSL_accept(tls) != 1) {
+                        // A client that does not speak TLS, or gives up half way, is dropped.
+                        if (tls != nullptr) {
+                            SSL_free(tls);
+                        }
                         ::close(client);
                         --m_active;
+                        return;
                     }
+                }
+                serve(client, tls);
+                if (tls != nullptr) {
+                    SSL_shutdown(tls);
+                    SSL_free(tls);
+                }
+                ::close(client);
+                --m_active;
+            }
         }.detach();
     }
 }
 
-void HttpServer::serve(int client)
+void HttpServer::serve(int client, ssl_st* tls)
 {
+    const Channel channel{client, tls};
     timeval timeout{};
     timeout.tv_sec = 60;
     ::setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
@@ -273,32 +368,28 @@ void HttpServer::serve(int client)
     char chunk[16'384];
     Result<RequestHead> head = fail(ErrorCode::INVALID_ARGUMENT, "incomplete head");
     while (!head) {
-        const ssize_t got = ::recv(client, chunk, sizeof(chunk), 0);
+        const ssize_t got = channel.read(chunk, sizeof(chunk));
         if (got <= 0) {
             return;
         }
         buffer.append(chunk, static_cast<std::size_t>(got));
         if (buffer.size() > 64U * 1'024U && buffer.find("\r\n\r\n") == std::string::npos) {
-            write_all(
-                client,
+            channel.write(
                 serialize_response(http::Response::text(431, "Request Header Fields Too Large"))
             );
             return;
         }
         head = parse_request_head(buffer);
         if (!head && buffer.find("\r\n\r\n") != std::string::npos) {
-            write_all(
-                client,
-                serialize_response(http::Response::text(
-                    head.error().get_message().starts_with("unsupported") ? 501 : 400,
-                    head.error().get_message()
-                ))
-            );
+            channel.write(serialize_response(http::Response::text(
+                head.error().get_message().starts_with("unsupported") ? 501 : 400,
+                head.error().get_message()
+            )));
             return;
         }
     }
     if (head->content_length > m_max_body) {
-        write_all(client, serialize_response(http::Response::text(413, "Payload Too Large")));
+        channel.write(serialize_response(http::Response::text(413, "Payload Too Large")));
         return;
     }
     std::string body = buffer.substr(head->head_size);
@@ -307,35 +398,32 @@ void HttpServer::serve(int client)
     if (head->chunked) {
         // "Expect: 100-continue" is what curl and DAV clients send before a large upload.
         if (wants_continue) {
-            write_all(client, "HTTP/1.1 100 Continue\r\n\r\n");
+            channel.write("HTTP/1.1 100 Continue\r\n\r\n");
         }
         ChunkedDecoder decoder{m_max_body};
         ChunkedDecoder::State state = decoder.feed(body);
         while (state == ChunkedDecoder::State::NEED_MORE) {
-            const ssize_t got = ::recv(client, chunk, sizeof(chunk), 0);
+            const ssize_t got = channel.read(chunk, sizeof(chunk));
             if (got <= 0) {
                 return;
             }
             state = decoder.feed(std::string_view{chunk, static_cast<std::size_t>(got)});
         }
         if (state != ChunkedDecoder::State::DONE) {
-            write_all(
-                client,
-                serialize_response(
-                    state == ChunkedDecoder::State::TOO_LARGE
-                        ? http::Response::text(413, "Payload Too Large")
-                        : http::Response::text(400, "Bad chunked body")
-                )
-            );
+            channel.write(serialize_response(
+                state == ChunkedDecoder::State::TOO_LARGE
+                    ? http::Response::text(413, "Payload Too Large")
+                    : http::Response::text(400, "Bad chunked body")
+            ));
             return;
         }
         body = std::move(decoder.body());
     } else {
         if (body.size() < head->content_length && wants_continue) {
-            write_all(client, "HTTP/1.1 100 Continue\r\n\r\n");
+            channel.write("HTTP/1.1 100 Continue\r\n\r\n");
         }
         while (body.size() < head->content_length) {
-            const ssize_t got = ::recv(client, chunk, sizeof(chunk), 0);
+            const ssize_t got = channel.read(chunk, sizeof(chunk));
             if (got <= 0) {
                 return;
             }
@@ -345,8 +433,10 @@ void HttpServer::serve(int client)
     }
 
     http::Response response = m_kernel->handle(request_from_head(*head, std::move(body)));
-    write_all(client, serialize_response(response));
-    ::shutdown(client, SHUT_WR);
+    channel.write(serialize_response(response));
+    if (tls == nullptr) {
+        ::shutdown(client, SHUT_WR);
+    }
 }
 
 void HttpServer::stop() noexcept

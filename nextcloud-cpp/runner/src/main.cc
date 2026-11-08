@@ -115,6 +115,15 @@ int main(int argc, char** argv)
         }
     }
     nc::HttpServer server{kernel};
+    const std::string tls_cert = kernel.get_config().get("tls_cert", "");
+    const std::string tls_key = kernel.get_config().get("tls_key", "");
+    if (!tls_cert.empty() || !tls_key.empty()) {
+        if (const nc::Result<void> secured = server.enable_tls(tls_cert, tls_key); !secured) {
+            std::fprintf(stderr, "tls: %s\n", secured.error().get_message().c_str());
+            kernel.stop();
+            return 1;
+        }
+    }
     const nc::Result<std::uint16_t> bound = server.start(listen, static_cast<std::uint16_t>(port));
     if (!bound) {
         std::fprintf(stderr, "%s\n", bound.error().get_message().c_str());
@@ -125,7 +134,8 @@ int main(int argc, char** argv)
     std::signal(SIGTERM, on_signal);
     std::fprintf(
         stderr,
-        "listening on http://%s:%u with %zu plugin(s)\n",
+        "listening on %s://%s:%u with %zu plugin(s)\n",
+        tls_cert.empty() ? "http" : "https",
         listen.c_str(),
         static_cast<unsigned>(*bound),
         kernel.running_count()

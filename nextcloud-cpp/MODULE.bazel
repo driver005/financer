@@ -11,6 +11,9 @@ bazel_dep(name = "platforms", version = "1.0.0")
 # SQLite for the database plugin (amalgamation from the Bazel registry, compiled with the toolchain below).
 bazel_dep(name = "sqlite3", version = "3.49.1.bcr.1")
 
+# TLS for the HTTP server (BoringSSL builds with plain Bazel rules, no foreign build needed).
+bazel_dep(name = "boringssl", version = "0.20240930.0")
+
 third_party_deps = use_extension("//third_party:extension.bzl", "third_party_deps")
 use_repo(third_party_deps, "system_cc")
 

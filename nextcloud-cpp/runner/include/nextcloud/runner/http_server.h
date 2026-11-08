@@ -12,6 +12,9 @@
 #include <thread>
 #include <vector>
 
+struct ssl_ctx_st;
+struct ssl_st;
+
 namespace nc {
 
 /// @brief Decodes a `Transfer-Encoding: chunked` body (RFC 9112, section 7.1) as bytes arrive, so a
@@ -100,6 +103,11 @@ public:
     HttpServer(HttpServer&&) = delete;
     HttpServer& operator=(HttpServer&&) = delete;
 
+    /// @brief Serves HTTPS from now on: TLS 1.2 or newer, the certificate chain and the private key
+    /// from PEM files. Call before `start`. Plain HTTP stays the default; put a reverse proxy in
+    /// front if you prefer.
+    Result<void> enable_tls(const std::string& certificate_file, const std::string& key_file);
+
     /// @brief Listens on `address:port` (port 0 picks a free one) and returns the port.
     Result<std::uint16_t> start(const std::string& address, std::uint16_t port);
 
@@ -108,10 +116,11 @@ public:
 
 private:
     void accept_loop();
-    void serve(int client);
+    void serve(int client, ssl_st* tls);
 
     const Kernel* m_kernel{nullptr};
     std::size_t m_max_body{0};
+    ssl_ctx_st* m_tls{nullptr};
     int m_listen_fd{-1};
     std::atomic<bool> m_running{false};
     std::atomic<int> m_active{0};
