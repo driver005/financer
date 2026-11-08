@@ -443,10 +443,6 @@ void test_plugins()
 
     // A user share notifies the recipient by mail (cloud event -> mail plugin).
     const std::string spool = dir + "/mail-spool";
-    std::size_t mails_before = 0;
-    for ([[maybe_unused]] const auto& entry: fs::directory_iterator{spool}) {
-        ++mails_before;
-    }
     const Response to_bob = kernel.handle(
         as(req("POST", shares, "", "path=%2Fhello.txt&shareType=0&shareWith=bob"), ALICE)
     );

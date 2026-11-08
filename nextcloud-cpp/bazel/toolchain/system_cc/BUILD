@@ -13,9 +13,9 @@ cc_args(
     allowlist_absolute_include_directories = [
         "/usr/include",
         "/usr/local/include",
-        "/usr/lib/clang",
-        "/usr/lib/gcc",
-        "/usr/lib/llvm-18",
+        # Compiler resource directories and libstdc++ live under /usr/lib (llvm-N, clang, gcc) on Debian
+        # and Ubuntu, whatever clang version is installed.
+        "/usr/lib",
     ],
     tags = ["manual"],
 )
