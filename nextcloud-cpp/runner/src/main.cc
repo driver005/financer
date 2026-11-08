@@ -130,8 +130,15 @@ int main(int argc, char** argv)
         static_cast<unsigned>(*bound),
         kernel.running_count()
     );
+    // The jobs of the plugins run here, once a second, while the server serves (Nextcloud:
+    // cron.php).
+    auto last_jobs = std::chrono::steady_clock::now();
     while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        if (std::chrono::steady_clock::now() - last_jobs >= std::chrono::seconds{1}) {
+            kernel.get_jobs().run_due();
+            last_jobs = std::chrono::steady_clock::now();
+        }
     }
     server.stop();
     kernel.stop();

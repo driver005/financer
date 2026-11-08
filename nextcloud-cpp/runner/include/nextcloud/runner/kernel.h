@@ -12,6 +12,7 @@
 #include "nextcloud/runner/config.h"
 #include "nextcloud/runner/error.h"
 #include "nextcloud/runner/event_bus.h"
+#include "nextcloud/runner/job_scheduler.h"
 #include "nextcloud/runner/log.h"
 #include "nextcloud/runner/plugin_info.h"
 #include "nextcloud/runner/router.h"
@@ -117,6 +118,16 @@ public:
         return m_services;
     }
 
+    [[nodiscard]] JobScheduler& get_jobs() noexcept
+    {
+        return m_jobs;
+    }
+
+    [[nodiscard]] const JobScheduler& get_jobs() const noexcept
+    {
+        return m_jobs;
+    }
+
     [[nodiscard]] CommandRegistry& get_commands() noexcept
     {
         return m_commands;
@@ -159,6 +170,13 @@ private:
         std::uint32_t id
     );
     static NcView host_config_get(void* ctx, NcView plugin, NcView key);
+    static std::int32_t host_register_job(
+        void* ctx,
+        NcView plugin,
+        NcView name,
+        std::uint32_t interval_seconds,
+        std::uint32_t id
+    );
 
     Config m_config{};
     Logger m_logger{};
@@ -166,6 +184,7 @@ private:
     EventBus m_events{&m_logger};
     ServiceRegistry m_services{};
     CommandRegistry m_commands{};
+    JobScheduler m_jobs{&m_logger};
     NcHost m_native{};
     std::vector<std::unique_ptr<Slot>> m_slots{};
     std::vector<Slot*> m_start_order{};

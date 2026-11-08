@@ -40,6 +40,8 @@ common:macos --host_cxxopt=-std=gnu++23
 common:windows --cxxopt=/std:c++23
 common:windows --host_cxxopt=/std:c++23
 
+# nextcloud-cpp: plugins are shared objects, so everything linked into them (SQLite) must be position independent.
+build --force_pic
 build --jobs=HOST_CPUS
 build --local_resources=memory=HOST_RAM
 build --spawn_strategy=local

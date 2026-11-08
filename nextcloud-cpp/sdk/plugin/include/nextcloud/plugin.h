@@ -34,6 +34,8 @@ enum class LogLevel : std::int32_t
 using RouteHandler = std::function<http::Response(const http::Request&)>;
 /// A service takes an opaque argument string and answers with a status and a body.
 using ServiceHandler = std::function<http::Response(std::string_view args)>;
+/// A job returns normally when it went well; throwing marks the run as failed.
+using JobHandler = std::function<void()>;
 using EventHandler = std::function<void(std::string_view topic, std::string_view payload)>;
 /// A command gets its arguments, writes to `out`, and returns the exit code.
 using CommandHandler = std::function<int(const std::vector<std::string>& args, std::string& out)>;
@@ -201,6 +203,24 @@ public:
         m_commands.push_back(std::move(handler));
     }
 
+    /// @brief Runs `handler` every `interval_seconds` (at least 1) while the runner serves, and on
+    /// `occ background:run`.
+    void add_job(std::string_view name, std::uint32_t interval_seconds, JobHandler&& handler)
+    {
+        const auto id = static_cast<std::uint32_t>(m_jobs.size());
+        if (m_native.struct_size < sizeof(NcHost) || m_native.register_job == nullptr ||
+            m_native.register_job(
+                m_native.ctx,
+                detail::view_of(m_plugin),
+                detail::view_of(name),
+                interval_seconds,
+                id
+            ) != 0) {
+            throw std::runtime_error("job rejected: " + std::string(name));
+        }
+        m_jobs.push_back(std::move(handler));
+    }
+
     /// @brief This plugin's config value for `key`, or `fallback` when unset.
     [[nodiscard]] std::string config(std::string_view key, std::string_view fallback = {}) const
     {
@@ -243,6 +263,15 @@ public:
         }
     }
 
+    [[nodiscard]] bool dispatch_job(std::uint32_t id) const
+    {
+        if (id >= m_jobs.size()) {
+            return false;
+        }
+        m_jobs[id]();
+        return true;
+    }
+
     [[nodiscard]] int
     dispatch_command(std::uint32_t id, const std::vector<std::string>& args, std::string& out) const
     {
@@ -256,6 +285,7 @@ private:
     std::vector<ServiceHandler> m_services{};
     std::vector<std::pair<std::string, EventHandler>> m_events{};
     std::vector<CommandHandler> m_commands{};
+    std::vector<JobHandler> m_jobs{};
 };
 
 /// @brief Base class of every plugin. One instance lives from `create` to `destroy`.
@@ -429,6 +459,21 @@ namespace detail {
                     } catch (...) {
                         instance->host.log(LogLevel::ERROR, "unknown error in an event handler");
                     }
+                };
+                api.run_job = [](void* self, std::uint32_t id) -> std::int32_t
+                {
+                    auto* instance = static_cast<Instance*>(self);
+                    try {
+                        return instance->host.dispatch_job(id) ? 0 : 1;
+                    } catch (const std::exception& error) {
+                        instance->host.log(
+                            LogLevel::ERROR,
+                            std::string("job failed: ") + error.what()
+                        );
+                    } catch (...) {
+                        instance->host.log(LogLevel::ERROR, "job failed");
+                    }
+                    return 1;
                 };
                 api.run_command = [](void* self,
                                      std::uint32_t id,

@@ -151,6 +151,12 @@ public:
         api->on_event(instance, view_of(topic), view_of(payload));
     }
 
+    [[nodiscard]] bool job(std::uint32_t id) const
+    {
+        return api->struct_size >= sizeof(NcPluginApi) && api->run_job != nullptr &&
+               api->run_job(instance, id) == 0;
+    }
+
     [[nodiscard]] int
     command(std::uint32_t id, const std::vector<std::string>& args, std::string& output) const
     {
@@ -180,6 +186,7 @@ Kernel::Kernel()
     m_native.publish = &Kernel::host_publish;
     m_native.register_command = &Kernel::host_register_command;
     m_native.config_get = &Kernel::host_config_get;
+    m_native.register_job = &Kernel::host_register_job;
     install_builtins();
 }
 
@@ -417,6 +424,7 @@ void Kernel::release(Slot& slot) noexcept
     m_router.remove_owner(name);
     m_services.remove_owner(name);
     m_commands.remove_owner(name);
+    m_jobs.remove_owner(name);
     if (slot.instance != nullptr) {
         slot.api->destroy(slot.instance);
         slot.instance = nullptr;
@@ -665,6 +673,31 @@ std::int32_t Kernel::host_register_command(
     return 0;
 }
 
+std::int32_t Kernel::host_register_job(
+    void* ctx,
+    NcView plugin,
+    NcView name,
+    std::uint32_t interval_seconds,
+    std::uint32_t id
+)
+{
+    auto* kernel = static_cast<Kernel*>(ctx);
+    const Slot* slot = kernel->find_slot(text_of(plugin));
+    if (slot == nullptr) {
+        return -1;
+    }
+    kernel->m_jobs.add(
+        text_of(name),
+        text_of(plugin),
+        std::chrono::seconds{interval_seconds},
+        [slot, id]()
+        {
+            return slot->job(id);
+        }
+    );
+    return 0;
+}
+
 NcView Kernel::host_config_get(void* ctx, NcView plugin, NcView key)
 {
     // `[plugin] key` first, then the runner-wide `key` (so `data_dir` is set once for every
@@ -752,6 +785,30 @@ void Kernel::install_builtins()
         {
             out += std::string(PRODUCT) + " " + std::string(VERSION_STRING) + "\n";
             out += "  plugins running: " + std::to_string(running_count()) + "\n";
+            return 0;
+        }
+    );
+
+    (void)m_commands.add(
+        CommandInfo{"background:run", "Runs every background job once", "kernel"},
+        [this](const std::vector<std::string>&, std::string& out)
+        {
+            const std::size_t ran = m_jobs.run_due(JobScheduler::Clock::now(), true);
+            out = "ran " + std::to_string(ran) + " job(s)\n";
+            return 0;
+        }
+    );
+
+    (void)m_commands.add(
+        CommandInfo{"background:list", "Lists the background jobs", "kernel"},
+        [this](const std::vector<std::string>&, std::string& out)
+        {
+            for (const JobScheduler::Info& info: m_jobs.list()) {
+                out += info.owner + "\t" + info.name + "\tevery " +
+                       std::to_string(info.interval.count()) + "s\truns " +
+                       std::to_string(info.runs) + "\tfailed " + std::to_string(info.failures) +
+                       "\n";
+            }
             return 0;
         }
     );

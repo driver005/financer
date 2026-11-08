@@ -20,7 +20,10 @@ nc_cc_library(
 # What a plugin includes: the base class, the host wrapper and NC_PLUGIN.
 nc_cc_library(
     name = "sdk",
-    hdrs = ["include/nextcloud/plugin.h"],
+    hdrs = [
+        "include/nextcloud/db.h",
+        "include/nextcloud/plugin.h",
+    ],
     includes = ["include"],
     deps = [
         ":abi",

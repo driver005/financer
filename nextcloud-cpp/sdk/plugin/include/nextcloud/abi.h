@@ -124,6 +124,19 @@ extern "C"
          * unset. Valid for the life of the runner.
          */
         NcView (*config_get)(void* ctx, NcView plugin, NcView key);
+
+        /**
+         * Runs `run_job(id)` of the calling plugin every `interval_seconds` (at least 1) while the
+         * runner serves, and on `occ background:run`. 0 = ok. Appended after the first release:
+         * test `struct_size` before using it.
+         */
+        int32_t (*register_job)(
+            void* ctx,
+            NcView plugin,
+            NcView name,
+            uint32_t interval_seconds,
+            uint32_t id
+        );
     } NcHost;
 
     typedef struct NcPluginApi
@@ -155,6 +168,8 @@ extern "C"
             size_t arg_count,
             NcResponse* out
         );
+        /** Runs a job registered with `register_job`. Returns 0 when it went well. */
+        int32_t (*run_job)(void* self, uint32_t id);
     } NcPluginApi;
 
 /** The one symbol a plugin shared object exports. */

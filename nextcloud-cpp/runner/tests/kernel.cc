@@ -20,6 +20,7 @@ using nc::http::Response;
 
 std::vector<std::string> g_events;
 std::vector<std::string> g_order;
+int g_ticks = 0;
 
 class AlphaPlugin final : public nc::Plugin
 {
@@ -95,6 +96,22 @@ public:
             {
                 out = args.empty() ? "nothing\n" : args[0] + "\n";
                 return args.empty() ? 1 : 0;
+            }
+        );
+        host.add_job(
+            "tick",
+            3'600,
+            []()
+            {
+                ++g_ticks;
+            }
+        );
+        host.add_job(
+            "broken",
+            3'600,
+            []()
+            {
+                throw std::runtime_error("job failed");
             }
         );
         host.subscribe(
@@ -537,6 +554,33 @@ void test_kernel()
     NC_CHECK(!kernel.get_services().contains("alpha.echo"));
 }
 
+void test_jobs()
+{
+    g_ticks = 0;
+    nc::Kernel kernel;
+    kernel.get_logger().set_sink({});
+    add<AlphaPlugin>(kernel);
+    NC_CHECK(kernel.start().has_value());
+
+    // Nothing is due yet; an hour later both are; one failing job does not stop the other.
+    NC_CHECK_EQ(kernel.get_jobs().run_due(), std::size_t{0});
+    NC_CHECK_EQ(
+        kernel.get_jobs().run_due(nc::JobScheduler::Clock::now() + std::chrono::hours{2}),
+        std::size_t{2}
+    );
+    NC_CHECK_EQ(g_ticks, 1);
+    std::string out;
+    NC_CHECK_EQ(kernel.run_command("background:run", {}, out), 0);
+    NC_CHECK_EQ(out, "ran 2 job(s)\n");
+    NC_CHECK_EQ(g_ticks, 2);
+    NC_CHECK_EQ(kernel.run_command("background:list", {}, out), 0);
+    NC_CHECK(out.find("alpha\ttick\tevery 3600s\truns 2\tfailed 0") != std::string::npos);
+    NC_CHECK(out.find("alpha\tbroken\tevery 3600s\truns 2\tfailed 2") != std::string::npos);
+
+    kernel.stop();
+    NC_CHECK_EQ(kernel.get_jobs().list().size(), std::size_t{0});
+}
+
 void test_enabled_filter()
 {
     g_order.clear();
@@ -630,6 +674,7 @@ int main()
     test_events_and_services();
     test_http_wire();
     test_kernel();
+    test_jobs();
     test_enabled_filter();
     test_concurrency();
     test_http_server();
