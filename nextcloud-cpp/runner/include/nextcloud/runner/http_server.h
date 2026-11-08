@@ -14,6 +14,54 @@
 
 namespace nc {
 
+/// @brief Decodes a `Transfer-Encoding: chunked` body (RFC 9112, section 7.1) as bytes arrive, so a
+/// big upload is parsed once and not again for every read.
+class ChunkedDecoder
+{
+public:
+    enum class State
+    {
+        NEED_MORE,
+        DONE,
+        INVALID,
+        TOO_LARGE
+    };
+
+    explicit ChunkedDecoder(std::size_t max_body) noexcept :
+        m_max_body{max_body}
+    {
+    }
+
+    /// @brief Adds received bytes; returns where decoding stands. Bytes after the final chunk are
+    /// left in `leftover()`.
+    State feed(std::string_view bytes);
+
+    [[nodiscard]] std::string& body() noexcept
+    {
+        return m_body;
+    }
+
+    [[nodiscard]] const std::string& body() const noexcept
+    {
+        return m_body;
+    }
+
+private:
+    enum class Part
+    {
+        SIZE_LINE,
+        DATA,
+        DATA_END,
+        TRAILERS
+    };
+
+    std::size_t m_max_body{0};
+    std::string m_body{};
+    std::string m_pending{};
+    Part m_part{Part::SIZE_LINE};
+    std::size_t m_remaining{0};
+};
+
 /// @brief The head of a request, once the blank line has been read.
 struct RequestHead
 {
@@ -21,6 +69,8 @@ struct RequestHead
     std::string target{};
     std::vector<http::Header> headers{};
     std::size_t content_length{0};
+    /// `Transfer-Encoding: chunked` (curl -T - and streaming DAV clients send uploads this way).
+    bool chunked{false};
     std::size_t head_size{0};
 };
 

@@ -2,6 +2,7 @@
 
 #include "nextcloud/util/text.h"
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <cerrno>
 #include <chrono>
@@ -38,10 +39,17 @@ Result<RequestHead> parse_request_head(std::string_view raw)
             std::string{util::trim(line.substr(colon + 1))}
         );
     }
-    if (!http::find_pair(head.headers, "Transfer-Encoding").empty()) {
-        return fail(ErrorCode::INVALID_ARGUMENT, "chunked requests are not supported");
-    }
+    const std::string_view encoding = http::find_pair(head.headers, "Transfer-Encoding");
     const std::string_view length = http::find_pair(head.headers, "Content-Length");
+    if (!encoding.empty()) {
+        if (!util::equals_ignore_case(encoding, "chunked")) {
+            return fail(ErrorCode::INVALID_ARGUMENT, "unsupported Transfer-Encoding");
+        }
+        if (!length.empty()) {
+            return fail(ErrorCode::INVALID_ARGUMENT, "both Content-Length and Transfer-Encoding");
+        }
+        head.chunked = true;
+    }
     if (!length.empty()) {
         std::size_t value = 0;
         for (const char digit: length) {
@@ -77,6 +85,75 @@ http::Request request_from_head(const RequestHead& head, std::string&& body)
     };
     request.set_headers(std::vector<http::Header>(head.headers));
     return request;
+}
+
+ChunkedDecoder::State ChunkedDecoder::feed(std::string_view bytes)
+{
+    m_pending.append(bytes);
+    while (true) {
+        switch (m_part) {
+            case Part::SIZE_LINE:
+                {
+                    const std::size_t end = m_pending.find("\r\n");
+                    if (end == std::string::npos) {
+                        return m_pending.size() > 1'024 ? State::INVALID : State::NEED_MORE;
+                    }
+                    // "1a2b;extension" : the hexadecimal size, then optional extensions that are
+                    // ignored.
+                    const std::string line = m_pending.substr(0, end);
+                    const std::string digits = line.substr(0, line.find(';'));
+                    if (digits.empty() || digits.size() > 15 ||
+                        digits.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
+                        return State::INVALID;
+                    }
+                    m_remaining =
+                        static_cast<std::size_t>(std::strtoull(digits.c_str(), nullptr, 16));
+                    m_pending.erase(0, end + 2);
+                    if (m_remaining > m_max_body || m_body.size() + m_remaining > m_max_body) {
+                        return State::TOO_LARGE;
+                    }
+                    m_part = m_remaining == 0 ? Part::TRAILERS : Part::DATA;
+                    break;
+                }
+            case Part::DATA:
+                {
+                    const std::size_t take = std::min(m_remaining, m_pending.size());
+                    m_body.append(m_pending, 0, take);
+                    m_pending.erase(0, take);
+                    m_remaining -= take;
+                    if (m_remaining > 0) {
+                        return State::NEED_MORE;
+                    }
+                    m_part = Part::DATA_END;
+                    break;
+                }
+            case Part::DATA_END:
+                if (m_pending.size() < 2) {
+                    return State::NEED_MORE;
+                }
+                if (m_pending.compare(0, 2, "\r\n") != 0) {
+                    return State::INVALID;
+                }
+                m_pending.erase(0, 2);
+                m_part = Part::SIZE_LINE;
+                break;
+            case Part::TRAILERS:
+                {
+                    // Trailer fields are read and dropped, up to the empty line that ends the
+                    // message.
+                    const std::size_t end = m_pending.find("\r\n");
+                    if (end == std::string::npos) {
+                        return m_pending.size() > 8'192 ? State::INVALID : State::NEED_MORE;
+                    }
+                    const bool last = end == 0;
+                    m_pending.erase(0, end + 2);
+                    if (last) {
+                        return State::DONE;
+                    }
+                    break;
+                }
+        }
+    }
 }
 
 std::string serialize_response(const http::Response& response)
@@ -213,7 +290,7 @@ void HttpServer::serve(int client)
             write_all(
                 client,
                 serialize_response(http::Response::text(
-                    head.error().get_message().starts_with("chunked") ? 501 : 400,
+                    head.error().get_message().starts_with("unsupported") ? 501 : 400,
                     head.error().get_message()
                 ))
             );
@@ -225,19 +302,47 @@ void HttpServer::serve(int client)
         return;
     }
     std::string body = buffer.substr(head->head_size);
-    // "Expect: 100-continue" is what curl and DAV clients send before a large PUT.
-    if (body.size() < head->content_length &&
-        util::equals_ignore_case(http::find_pair(head->headers, "Expect"), "100-continue")) {
-        write_all(client, "HTTP/1.1 100 Continue\r\n\r\n");
-    }
-    while (body.size() < head->content_length) {
-        const ssize_t got = ::recv(client, chunk, sizeof(chunk), 0);
-        if (got <= 0) {
+    const bool wants_continue =
+        util::equals_ignore_case(http::find_pair(head->headers, "Expect"), "100-continue");
+    if (head->chunked) {
+        // "Expect: 100-continue" is what curl and DAV clients send before a large upload.
+        if (wants_continue) {
+            write_all(client, "HTTP/1.1 100 Continue\r\n\r\n");
+        }
+        ChunkedDecoder decoder{m_max_body};
+        ChunkedDecoder::State state = decoder.feed(body);
+        while (state == ChunkedDecoder::State::NEED_MORE) {
+            const ssize_t got = ::recv(client, chunk, sizeof(chunk), 0);
+            if (got <= 0) {
+                return;
+            }
+            state = decoder.feed(std::string_view{chunk, static_cast<std::size_t>(got)});
+        }
+        if (state != ChunkedDecoder::State::DONE) {
+            write_all(
+                client,
+                serialize_response(
+                    state == ChunkedDecoder::State::TOO_LARGE
+                        ? http::Response::text(413, "Payload Too Large")
+                        : http::Response::text(400, "Bad chunked body")
+                )
+            );
             return;
         }
-        body.append(chunk, static_cast<std::size_t>(got));
+        body = std::move(decoder.body());
+    } else {
+        if (body.size() < head->content_length && wants_continue) {
+            write_all(client, "HTTP/1.1 100 Continue\r\n\r\n");
+        }
+        while (body.size() < head->content_length) {
+            const ssize_t got = ::recv(client, chunk, sizeof(chunk), 0);
+            if (got <= 0) {
+                return;
+            }
+            body.append(chunk, static_cast<std::size_t>(got));
+        }
+        body.resize(head->content_length);
     }
-    body.resize(head->content_length);
 
     http::Response response = m_kernel->handle(request_from_head(*head, std::move(body)));
     write_all(client, serialize_response(response));

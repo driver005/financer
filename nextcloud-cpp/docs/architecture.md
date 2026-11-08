@@ -54,25 +54,69 @@ Threading: the HTTP server runs one thread per connection, so route handlers and
 concurrently. Plugin state is guarded by the plugin (the stores use a mutex). Registrations happen while the
 kernel starts and stops, not while it serves.
 
+## Request pipeline
+
+`Kernel::handle` for every request: (1) the `user` field is cleared (it never comes from the wire);
+(2) with an `Authorization: Basic` header, authentication runs through *services*, so whichever plugins are
+loaded decide: `auth.token` (an app password, which also skips the second factor), else `auth.authenticate`
+(the account password), then `auth.second_factor` (a TOTP or backup code in `X-NC-OTP`); a refusal is a 401,
+with `X-NC-Two-Factor: required` when only the code is missing; (3) the router picks the handler, 404 / 405
+(with `Allow`) / `OPTIONS` / `HEAD` are answered here; (4) a throwing handler becomes a 500. Without an
+authentication service loaded, a request that carries credentials is refused, never treated as anonymous.
+
+Background jobs: plugins call `host.add_job(name, seconds, fn)`; `serve` runs the due jobs once a second,
+`occ background:run` runs them all once. A job that throws is logged and counted, the others still run.
+
 ## The plugins
 
+Every plugin is a separate shared object with its own `requires` list; the runner starts them in
+dependency order. Records live in SQLite behind the `db` plugin (`nextcloud/db.h`), bytes on disk behind
+`cloud`; plugins never open a database or a user's files themselves.
+
+```
+db  <- users  <- cloud  <- trashbin, versions
+    <- groups, tokens, twofactor (also need users)
+    <- activity, notifications, calendar, contacts, mail (mail needs nothing)
+```
+
+**db**: SQLite, one connection behind a mutex, WAL. Services `db.exec`, `db.query` (rows as form-encoded
+lines), `db.migrate` (a script applied once per plugin and version, in a transaction). Parameters are
+always bound, never pasted.
+
 **users** (`lib/private/User`, `apps/provisioning_api`): accounts in one text file, passwords as
-PBKDF2-HMAC-SHA-256 with a random salt. Offers `auth.authenticate`, which the kernel uses for HTTP basic
-authentication, so *any* plugin can be the identity provider. A successful login is remembered for five
-minutes by digest (the key derivation is slow on purpose). OCS provisioning API
+PBKDF2-HMAC-SHA-256 with a random salt. Offers `auth.authenticate`. A successful login is remembered for
+five minutes by digest (the key derivation is slow on purpose). OCS provisioning API
 (`/ocs/v2.php/cloud/users`) and `user:add|list|delete|resetpassword|enable|disable`.
+
+**groups**, **tokens**, **twofactor**: groups and membership (`groups.*` services, OCS group API);
+app passwords (125 random bits, only a digest stored, `auth.token`); TOTP with the RFC 6238 test vectors,
+the same code never accepted twice, 10 one-time backup codes (`auth.second_factor`).
 
 **cloud** (`apps/files`, `apps/dav`, `apps/files_sharing`, `lib/private/Share20`): per-user storage under
 `<data_dir>/<user>/files`, WebDAV at `/remote.php/dav/files/<user>/` (and the legacy `/remote.php/webdav/`)
 with GET, PUT, MKCOL, DELETE, MOVE, COPY and PROPFIND; shares by user and by public link
 (`/ocs/v2.php/apps/files_sharing/api/v1/shares`, `/s/<token>`). Paths are normalized (no `.`/`..`), symlinks
 are never followed, writes are atomic, downloads carry `nosniff` and a sandboxing CSP. Quotas, ETags,
-`X-OC-Mtime`. Keeps shares in step with files (`file.deleted`, `file.moved`) and accounts (`user.deleted`).
+`X-OC-Mtime`. Before a delete it asks `trashbin.before_delete`, before an overwrite
+`versions.before_write`; it offers `cloud.trash.*` and `cloud.version.*` so those plugins never touch the
+disk.
+
+**trashbin**, **versions**: the records (original path, time, size; version list) in the database, with
+restore, purge and expiry jobs; the bytes stay in `<user>/files_trashbin` and `<user>/files_versions`,
+moved and copied by `cloud`.
+
+**calendar**, **contacts** (`apps/dav/lib/CalDAV`, `CardDAV`): one shared collection server
+(`plugins/davobjects`) linked into both: collections and objects in two tables, validation of iCalendar
+and vCard, ETags with `If-Match` / `If-None-Match`, REPORT multiget / query (with time ranges) /
+sync-collection, discovery through `/.well-known/caldav|carddav`, `/remote.php/dav` and principals.
 
 **mail** (`lib/private/Mail`): builds RFC 5322 messages (RFC 2047 headers, `multipart/alternative`, base64
 bodies, header injection refused) and sends them through a transport: `spool` (files in a directory),
 `sendmail` (started without a shell), `smtp` (RFC 5321 to a relay), `null`. Offers `mail.send`; listens for
 `share.created` and `user.created` to notify people.
+
+**activity**, **notifications**: what happened to a user, and what a user should look at, built only from
+the events other plugins publish (`file.*`, `share.created`, `user.created`, ...).
 
 ## Toolchain
 
@@ -81,11 +125,11 @@ setup but not the modules:
 
 | congelado | here | why |
 | --- | --- | --- |
-| clang 22, `-std=gnu++26`, modules (`.cppm`, `cpp_modules` feature, patched `rules_cc`, dependency scanner wrapper) | clang >= 18, `-std=gnu++23`, headers | the machine this was written on has clang 18, which cannot do `import std` |
-| `std::expected` | `nc::util::expected` (is `std::expected` when the library has it) | clang 18 reports `__cpp_concepts` too low for libstdc++ 13 to enable `<expected>` |
+| clang 22, `-std=gnu++26`, modules (`.cppm`, `cpp_modules` feature, patched `rules_cc`, dependency scanner wrapper, `import std;` from GCC 16's `bits/std.cc`) | clang >= 18, `-std=gnu++23` by default and `-std=gnu++26` with `--define=std=26`, plain headers | the port was written where only clang 18 and GCC 13 are installed; the tree builds and passes its tests with clang 18/C++23 and with clang 22/C++26 (CI runs both), but is not converted to modules, which needs libstdc++ 16 for `import std;` |
+| `std::expected` | `nc::util::expected` (is `std::expected` when the library has it; with clang 22 it is) | clang 18 reports `__cpp_concepts` too low for libstdc++ 13 to enable `<expected>` |
 | `std::move_only_function` | `std::function` | handlers are copied by the event bus so it can publish without holding its lock; a move-only handler would need a `shared_ptr` there |
 | `.clang-format` for clang 22 | same file; `tools/format.sh` skips options an older clang-format does not know | |
-| hermetic third-party repos | none, the only dependencies are the standard library and POSIX | |
+| hermetic third-party repos (`third_party/*`) | `rules_cc` and SQLite from the Bazel registry; the system clang toolchain from `bazel/toolchain/system_cc` | no `import std` source and no other libraries to fetch |
 
 Everything else is taken over: Bazel 9.2 (`.bazelversion`), the hand-declared system clang toolchain
 (`bazel/toolchain/system_cc`, needed because rules_cc's auto-detected one is broken under Bazel 9),

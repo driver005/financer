@@ -28,7 +28,7 @@ style (`CODESTYLE.md`).
 | Bazel / style (from congelado) | `.bazelversion`, `.bazelrc`, `warnings.bazelrc`, `bazel/**`, `MODULE.bazel`, `third_party/extension.bzl`, `.clang-format`, `.clangd`, `.editorconfig`, `CODESTYLE.md` |
 | Kernel | `runner/**` |
 | SDK | `sdk/plugin/**`, `sdk/util/**`, `sdk/testing/**` |
-| Plugins | `plugins/users/**`, `plugins/cloud/**`, `plugins/mail/**` |
+| Plugins | `plugins/*/**` (db, users, groups, tokens, twofactor, cloud, trashbin, versions, calendar, contacts, davobjects, mail, activity, notifications) |
 | Reference | `docs/nextcloud-server` (submodule, read only) |
 | CI | `.github/workflows/nextcloud-cpp.yml` |
 
@@ -45,11 +45,18 @@ style (`CODESTYLE.md`).
 - [x] Plugin `cloud`: storage, WebDAV, shares, public links.
 - [x] Plugin `mail`: message building, spool/sendmail/SMTP, notifications.
 - [x] Docs: `README.md`, `docs/architecture.md`, `docs/porting-map.md`.
-- [x] CI workflow.
+- [x] CI workflow (plain, asan, ubsan, tsan; clang 22 / C++26 with -Werror).
+- [x] Second tranche, to close the gaps of the first porting map: background jobs in the ABI, the `db` plugin
+      (SQLite and migrations), groups, activity, notifications, app passwords, TOTP two-factor, trash bin,
+      versions, CalDAV, CardDAV, chunked request bodies.
+- [ ] Still not ported (see `docs/porting-map.md`): federation, LDAP/OAuth2/SAML, encryption, external
+      storage, previews, tags/comments, settings/theming, group and federated shares, a received share in
+      the recipient's tree, iTIP scheduling and calendar sharing, TLS in the server, C++26 modules.
 
 ## Acceptance criteria
 
-1. `bazelisk test //...` passes, also with `--config=asan`, `--config=ubsan` and `--config=tsan`.
+1. `bazelisk test //...` passes, also with `--config=asan`, `--config=ubsan` and `--config=tsan`, and with
+   clang 22 as `--define=std=26 --config=warnings`.
 2. A plugin is a shared object: the kernel starts with whichever `.so` files are in `plugin_dir`, in
    dependency order, and a plugin that fails or lacks a requirement is skipped without stopping the others.
 3. With `users`, `cloud` and `mail` loaded, a WebDAV client can sign in, upload, list, copy, move and delete
@@ -60,18 +67,19 @@ style (`CODESTYLE.md`).
 
 ## Verification
 
-* `bazelisk test //...` and the three sanitizer configs: done, all pass (clang 18).
-* `tools/smoke.sh`: done, the built binary with the three built plugins over curl.
-* Not done: building with clang 22 and C++26 modules; running the CI workflow on GitHub (see the pull
-  request for its result).
+* `bazelisk test //...` (13 targets) and the three sanitizer configs: done, all pass (clang 18).
+* clang 22, C++26, `--config=warnings` (-Werror): done, all pass.
+* `tools/smoke.sh`: done, the built binary with all plugins over curl.
+* Not done: C++26 *modules*. The Bazel module rules and `import std;` of congelado need GCC 16's libstdc++
+  (`bits/std.cc`); the headers-only tree is what builds today.
 
 ## Open questions for the owner
 
 * **Builder pattern** (CODESTYLE rule 11 says to ask before using it). `MailMessage` is the natural first
   candidate (`MailMessage::builder().from(..).to(..).subject(..).build()`), then `Request`/`Response`.
   Not used until you say so.
-* **Modules.** Should the headers become C++26 modules (`.cppm`, `import std;`) once the clang 22 toolchain
-  is available? The C ABI would not change.
-* **Next plugins.** Suggestions in order of how much they unlock: `database` (SQLite, then replace the flat
-  files), `calendar` and `contacts` (CalDAV/CardDAV from `apps/dav`), `trashbin`/`versions`, `activity`,
-  `notifications`, `ldap`.
+* **Modules.** The tree already builds with clang 22 and C++26. Converting the headers to modules
+  (`.cppm`, `import std;`) needs GCC 16's libstdc++ and congelado's patched `rules_cc`; say if you want it
+  and on which machine, the C ABI would not change.
+* **Next plugins.** Suggestions: move `users` and `shares` from flat files into the `db` plugin, a `ldap`
+  plugin, federation, previews, TLS in the HTTP server.

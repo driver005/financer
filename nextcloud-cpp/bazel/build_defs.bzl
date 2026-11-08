@@ -9,8 +9,14 @@ load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("//bazel:copts.bzl", "nc_copts", "nc_linkopts")
 
 def nc_cxx_copts():
-    """Default copts for all own targets, including the language standard."""
-    return nc_copts() + ["-std=gnu++23"]
+    """Default copts for all own targets, including the language standard.
+
+    C++23 by default; `--define=std=26` selects C++26 (congelado's standard), which CI uses with clang 22.
+    """
+    return nc_copts() + select({
+        "//bazel:std26": ["-std=gnu++26"],
+        "//conditions:default": ["-std=gnu++23"],
+    })
 
 def nc_cc_library(name, copts = nc_cxx_copts(), **kwargs):
     """Own cc_library. Passing copts replaces the defaults, merge nc_cxx_copts() yourself."""

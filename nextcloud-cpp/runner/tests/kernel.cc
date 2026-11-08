@@ -446,9 +446,17 @@ void test_http_wire()
     NC_CHECK(!nc::parse_request_head("GET / HTTP/1.1\r\nHost: h").has_value());
     NC_CHECK(!nc::parse_request_head("GARBAGE\r\n\r\n").has_value());
     NC_CHECK(
-        !nc::parse_request_head("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n").has_value()
+        nc::parse_request_head("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")->chunked
     );
     NC_CHECK(!nc::parse_request_head("POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n").has_value());
+    // Request smuggling shapes: two ways to say where the body ends, or an encoding we do not
+    // decode.
+    NC_CHECK(!nc::parse_request_head(
+                  "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nContent-Length: 5\r\n\r\n"
+    )
+                  .has_value());
+    NC_CHECK(!nc::parse_request_head("POST / HTTP/1.1\r\nTransfer-Encoding: gzip, chunked\r\n\r\n")
+                  .has_value());
 
     const std::string wire = nc::serialize_response(Response::json(200, "{}"));
     NC_CHECK(wire.starts_with("HTTP/1.1 200 OK\r\n"));
@@ -638,6 +646,42 @@ void test_concurrency()
     NC_CHECK_EQ(wrong.load(), 0);
 }
 
+void test_chunked()
+{
+    using State = nc::ChunkedDecoder::State;
+    // Whole message at once, with an extension, a trailer and bytes after the end.
+    nc::ChunkedDecoder whole{1'000};
+    NC_CHECK(
+        whole.feed("5;ext=1\r\nhello\r\n6\r\n world\r\n0\r\nX-Trailer: v\r\n\r\n") == State::DONE
+    );
+    NC_CHECK_EQ(whole.body(), "hello world");
+
+    // The same bytes one at a time: decoding must not depend on how the network cuts them.
+    const std::string wire = "3\r\nabc\r\nA\r\n0123456789\r\n0\r\n\r\n";
+    nc::ChunkedDecoder slow{1'000};
+    State state = State::NEED_MORE;
+    for (std::size_t index = 0; index < wire.size(); ++index) {
+        NC_CHECK(state == State::NEED_MORE);
+        state = slow.feed(std::string_view{wire}.substr(index, 1));
+    }
+    NC_CHECK(state == State::DONE);
+    NC_CHECK_EQ(slow.body(), "abc0123456789");
+
+    nc::ChunkedDecoder small{4};
+    NC_CHECK(small.feed("5\r\nhello\r\n0\r\n\r\n") == State::TOO_LARGE);
+    nc::ChunkedDecoder total{8};
+    NC_CHECK(total.feed("4\r\nabcd\r\n") == State::NEED_MORE);
+    NC_CHECK(total.feed("5\r\nefghi\r\n") == State::TOO_LARGE); // each chunk fits, the sum does not
+    nc::ChunkedDecoder bad_size{100};
+    NC_CHECK(bad_size.feed("xyz\r\n") == State::INVALID);
+    nc::ChunkedDecoder huge_size{100};
+    NC_CHECK(huge_size.feed("ffffffffffffffffff\r\n") == State::INVALID);
+    nc::ChunkedDecoder no_crlf{100};
+    NC_CHECK(no_crlf.feed("2\r\nabXX") == State::INVALID);
+    nc::ChunkedDecoder unfinished{100};
+    NC_CHECK(unfinished.feed("5\r\nhel") == State::NEED_MORE);
+}
+
 void test_http_server()
 {
     nc::Kernel kernel;
@@ -660,6 +704,21 @@ void test_http_server()
         }
         NC_CHECK(output.starts_with("HTTP/1.1 201 Created"));
         NC_CHECK(output.ends_with("abc"));
+
+        // A chunked upload (what `curl -T -` and streaming clients send) arrives whole.
+        std::string chunked;
+        const std::string streamed =
+            "curl -s -i --max-time 10 -X POST -H 'Transfer-Encoding: chunked' --data-binary @- " +
+            url + "/alpha/z";
+        if (FILE* pipe = popen(("printf 'streamed body' | " + streamed).c_str(), "r")) {
+            char buffer[512];
+            while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                chunked += buffer;
+            }
+            pclose(pipe);
+        }
+        NC_CHECK(chunked.starts_with("HTTP/1.1 201 Created"));
+        NC_CHECK(chunked.ends_with("streamed body"));
     }
     server.stop();
     kernel.stop();
@@ -677,6 +736,7 @@ int main()
     test_jobs();
     test_enabled_filter();
     test_concurrency();
+    test_chunked();
     test_http_server();
     return NC_TEST_RESULT();
 }

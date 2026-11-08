@@ -4,8 +4,6 @@
 
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 
 namespace {
 
@@ -25,14 +23,6 @@ Request req(std::string method, std::string path, std::string body = {})
     };
     request.add_header("Authorization", "Basic " + nc::util::base64_encode("alice:alice password"));
     return request;
-}
-
-std::string slurp(const fs::path& path)
-{
-    std::ifstream stream{path, std::ios::binary};
-    std::ostringstream text;
-    text << stream.rdbuf();
-    return text.str();
 }
 
 } // namespace

@@ -4,12 +4,16 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-bazelisk build //runner:nextcloud //plugins/users:libusers.so //plugins/cloud:libcloud.so //plugins/mail:libmail.so
+
+plugins=(db users tokens groups cloud trashbin versions mail activity notifications calendar contacts)
+targets=(//runner:nextcloud)
+for plugin in "${plugins[@]}"; do targets+=("//plugins/$plugin:lib$plugin.so"); done
+bazelisk build "${targets[@]}"
 
 work="$(mktemp -d)"
 trap 'kill "${server:-0}" 2>/dev/null || true; rm -rf "$work"' EXIT
 mkdir -p "$work/plugins"
-cp bazel-bin/plugins/users/libusers.so bazel-bin/plugins/cloud/libcloud.so bazel-bin/plugins/mail/libmail.so "$work/plugins/"
+cp bazel-bin/plugins/*/lib*.so "$work/plugins/"
 cat > "$work/config.conf" <<CONF
 data_dir = $work/data
 port = 0
@@ -37,6 +41,16 @@ echo "--- anonymous PROPFIND (expect 401)"; curl -s -o /dev/null -w '%{http_code
 echo "--- PUT (expect 201)"; curl -s -o /dev/null -w '%{http_code}\n' "${auth[@]}" -T README.md "$dav/readme.md"
 echo "--- PROPFIND";      curl -s "${auth[@]}" -X PROPFIND -H 'Depth: 1' "$dav/" | grep -E 'href|getcontentlength'
 echo "--- share link";    curl -s "${auth[@]}" -d 'path=/readme.md&shareType=3' "http://127.0.0.1:$port/ocs/v2.php/apps/files_sharing/api/v1/shares"; echo
+echo "--- DELETE goes to the trash, then restore"
+curl -s -o /dev/null -w '%{http_code}\n' "${auth[@]}" -X DELETE "$dav/readme.md"
+curl -s "${auth[@]}" "http://127.0.0.1:$port/ocs/v2.php/apps/files_trashbin/api/v1/trash"; echo
+curl -s -o /dev/null -w '%{http_code}\n' "${auth[@]}" -X POST "http://127.0.0.1:$port/ocs/v2.php/apps/files_trashbin/api/v1/trash/1/restore"
+echo "--- CalDAV: put an event, list the calendar"
+printf 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:smoke-1\r\nDTSTART:20300101T100000Z\r\nSUMMARY:Smoke\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n' |
+    curl -s -o /dev/null -w '%{http_code}\n' "${auth[@]}" -T - "http://127.0.0.1:$port/remote.php/dav/calendars/alice/personal/smoke.ics"
+curl -s "${auth[@]}" -X PROPFIND -H 'Depth: 1' "http://127.0.0.1:$port/remote.php/dav/calendars/alice/personal/" | grep -c 'smoke.ics'
+echo "--- activity"
+curl -s "${auth[@]}" "http://127.0.0.1:$port/ocs/v2.php/apps/activity/api/v2/activity"; echo
 echo "--- mail spool";    ls "$work/data/mail-spool" || true
 kill "$server"; wait "$server" 2>/dev/null || true
 echo "smoke test finished"
