@@ -10,6 +10,8 @@ nc_cc_library(
     deps = [
         "//sdk/util",
         "//third_party/stb",
+        "@libwebp",
+        "@lunasvg",
     ],
 )
 
@@ -32,5 +34,6 @@ nc_cc_test(
         ":lib",
         "//runner:kernel",
         "//sdk/testing",
+        "@libwebp",
     ],
 )

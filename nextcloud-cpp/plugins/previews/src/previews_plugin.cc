@@ -5,9 +5,10 @@
  * pictures, scaled to fit and returned as PNG. Results are cached on disk by file version (the
  * ETag), so a changed file gets a new preview.
  *
- * Pictures are the one place the server decodes data an attacker may have written, so: only four
- * formats are ever passed to the decoder (recognised by their first bytes), the size is read before
- * the pixels, files over 20 MiB and pictures over 8192 pixels a side or 40 megapixels are refused.
+ * Pictures are the one place the server decodes data an attacker may have written, so: only the
+ * formats listed in `image.h` are ever passed to a decoder (recognised by their first bytes), the
+ * size is read before the pixels, files over 20 MiB and pictures over 8192 pixels a side or 40
+ * megapixels are refused.
  */
 #include "image.h"
 #include "nextcloud/app.h"
@@ -76,7 +77,7 @@ public:
             {
                 return Response::json(
                     200,
-                    R"({"formats":["png","jpeg","gif","bmp","pnm"],"max_size":2048})"
+                    R"({"formats":["png","jpeg","gif","bmp","pnm","webp","svg"],"max_size":2048})"
                 );
             }
         );

@@ -5,6 +5,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <webp/encode.h>
 
 namespace {
 
@@ -122,9 +123,75 @@ void test_image()
 
 } // namespace
 
+void test_svg_and_webp()
+{
+    // SVG: drawn at its own size; the colours and the transparency come out right.
+    const std::string svg =
+        R"(<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">)"
+        R"(<rect x="0" y="0" width="50" height="50" fill="#ff0000"/></svg>)";
+    NC_CHECK(nc::previews::sniff(svg) == Format::SVG);
+    NC_CHECK(nc::previews::sniff("  <svg width=\"1\" height=\"1\"/>") == Format::SVG);
+    NC_CHECK(nc::previews::sniff("<!-- c --><svg/>") == Format::SVG);
+    NC_CHECK(nc::previews::sniff("<html><body>not a picture</body></html>") == Format::UNKNOWN);
+    NC_CHECK(nc::previews::sniff("<?xml version=\"1.0\"?><note/>") == Format::UNKNOWN);
+    const auto drawn = nc::previews::decode(svg);
+    NC_CHECK(drawn.has_value());
+    if (drawn) {
+        NC_CHECK_EQ(drawn->get_width(), 100);
+        NC_CHECK_EQ(drawn->get_height(), 50);
+        const auto& pixels = drawn->get_pixels();
+        NC_CHECK_EQ(pixels[(25 * 100 + 10) * 4 + 0], static_cast<unsigned char>(255)); // red
+        NC_CHECK_EQ(pixels[(25 * 100 + 10) * 4 + 3], static_cast<unsigned char>(255)); // opaque
+        NC_CHECK_EQ(pixels[(25 * 100 + 80) * 4 + 3], static_cast<unsigned char>(0));   // empty
+    }
+    // A huge drawing is scaled down to a sane size before it is rendered.
+    const auto huge = nc::previews::decode(
+        R"(<svg xmlns="http://www.w3.org/2000/svg" width="100000" height="50000"><rect width="9" height="9"/></svg>)"
+    );
+    NC_CHECK(huge.has_value());
+    if (huge) {
+        NC_CHECK(huge->get_width() <= 2'048 && huge->get_height() <= 2'048);
+        NC_CHECK_EQ(huge->get_width(), 2'048);
+    }
+    // Broken, empty or hostile SVG is refused or drawn harmlessly, never a crash; a reference to a
+    // file on this machine draws nothing of it.
+    NC_CHECK(!nc::previews::decode("<svg").has_value());
+    NC_CHECK(!nc::previews::decode(R"(<svg xmlns="http://www.w3.org/2000/svg"/>)").has_value());
+    (void)nc::previews::decode(
+        R"(<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" )"
+        R"(width="10" height="10"><image xlink:href="/etc/passwd" width="10" height="10"/>)"
+        R"(<script>alert(1)</script></svg>)"
+    );
+    NC_CHECK(!nc::previews::decode(std::string(6U * 1'024U * 1'024U, ' ') + "<svg/>").has_value());
+
+    // WebP: encode a small lossless picture with the library and read it back.
+    std::vector<unsigned char> rgba;
+    for (int pixel = 0; pixel < 8; ++pixel) {
+        rgba.insert(rgba.end(), {static_cast<unsigned char>(pixel * 30), 40, 200, 255});
+    }
+    std::uint8_t* encoded = nullptr;
+    const std::size_t size = WebPEncodeLosslessRGBA(rgba.data(), 4, 2, 16, &encoded);
+    NC_CHECK(size > 0);
+    if (size > 0) {
+        const std::string webp(reinterpret_cast<const char*>(encoded), size);
+        WebPFree(encoded);
+        NC_CHECK(nc::previews::sniff(webp) == Format::WEBP);
+        const auto read = nc::previews::decode(webp);
+        NC_CHECK(read.has_value());
+        if (read) {
+            NC_CHECK_EQ(read->get_width(), 4);
+            NC_CHECK_EQ(read->get_height(), 2);
+            NC_CHECK(read->get_pixels() == rgba);
+        }
+        NC_CHECK(!nc::previews::decode(webp.substr(0, webp.size() / 2)).has_value());
+    }
+    NC_CHECK(!nc::previews::decode("RIFF\x04\0\0\0WEBP").has_value());
+}
+
 int main()
 {
     test_image();
+    test_svg_and_webp();
 
     const std::string dir =
         (fs::temp_directory_path() / ("nc-previews-" + nc::util::random_hex(4))).string();
@@ -225,6 +292,22 @@ int main()
     NC_CHECK(size_of(changed) == std::make_pair(32, 64));
 
     // What is not a picture, not a file, or not yours.
+    // A vector picture is drawn and scaled like a raster one.
+    NC_CHECK_EQ(
+        kernel
+            .handle(req(
+                "PUT",
+                files + "/Photos/logo.svg",
+                R"(<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#08f"/></svg>)",
+                alice
+            ))
+            .get_status(),
+        201
+    );
+    NC_CHECK(
+        size_of(kernel.handle(req("GET", preview, "", alice, "file=/Photos/logo.svg&x=60&y=60"))) ==
+        std::make_pair(60, 30)
+    );
     NC_CHECK_EQ(kernel.handle(req("GET", preview, "", alice, "file=/notes.txt")).get_status(), 415);
     NC_CHECK_EQ(kernel.handle(req("GET", preview, "", alice, "file=/Photos")).get_status(), 404);
     NC_CHECK_EQ(

@@ -21,3 +21,7 @@ register_toolchains("//bazel/toolchain/system_cc:system_clang_toolchain")
 
 # SFTP for external storage (libssh2; the crypto backend is mbedTLS, set in .bazelrc).
 bazel_dep(name = "libssh2", version = "1.11.1.bcr.2")
+
+# More picture formats for previews: SVG, WebP.
+bazel_dep(name = "lunasvg", version = "2.4.1.bcr.1")
+bazel_dep(name = "libwebp", version = "1.6.0.bcr.1")

@@ -12,14 +12,18 @@
 #include "image.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdint>
 // The stb headers are third party code that is built with its own warning habits; ours do not apply
 // to it.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Weverything"
+#include <lunasvg.h>
 #include <stb_image.h>
 #include <stb_image_resize2.h>
 #include <stb_image_write.h>
+#include <webp/decode.h>
 #pragma clang diagnostic pop
 
 namespace nc::previews {
@@ -62,13 +66,88 @@ Format sniff(std::string_view bytes) noexcept
         (bytes[2] == '\n' || bytes[2] == '\r' || bytes[2] == ' ' || bytes[2] == '\t')) {
         return Format::PNM;
     }
+    // WebP: a RIFF container whose form type is "WEBP".
+    if (bytes.size() >= 12 && bytes.substr(0, 4) == "RIFF" && bytes.substr(8, 4) == "WEBP") {
+        return Format::WEBP;
+    }
+    // SVG: text that starts (after an optional BOM, XML declaration, comments or doctype) with an
+    // <svg> element.
+    if (bytes.size() >= 5) {
+        std::string_view head = bytes.substr(0, 2'048);
+        if (head.starts_with("\xEF\xBB\xBF")) {
+            head.remove_prefix(3);
+        }
+        while (!head.empty() && std::isspace(static_cast<unsigned char>(head.front())) != 0) {
+            head.remove_prefix(1);
+        }
+        const bool xml_start = head.starts_with("<?xml") || head.starts_with("<!--") ||
+                               head.starts_with("<!DOCTYPE") || head.starts_with("<svg");
+        if (xml_start && head.find("<svg") != std::string_view::npos) {
+            return Format::SVG;
+        }
+    }
     return Format::UNKNOWN;
 }
 
 Result<Image> decode(std::string_view bytes)
 {
-    if (sniff(bytes) == Format::UNKNOWN) {
-        return failure("not a PNG, JPEG, GIF, BMP or PNM picture");
+    const Format format = sniff(bytes);
+    if (format == Format::UNKNOWN) {
+        return failure("not a picture format that can be previewed");
+    }
+    if (format == Format::SVG) {
+        // A vector picture has no pixels of its own: it is drawn at its own size, at most 2048 on a
+        // side (a preview is never bigger). Scripts, external files and links are not followed.
+        if (bytes.size() > 5U * 1'024U * 1'024U) {
+            return failure("the picture is too large to preview");
+        }
+        const auto document = lunasvg::Document::loadFromData(std::string{bytes});
+        if (document == nullptr || document->width() <= 0 || document->height() <= 0) {
+            return failure("the picture is damaged");
+        }
+        constexpr double SVG_SIDE = 2'048;
+        const double scale =
+            std::min({1.0, SVG_SIDE / document->width(), SVG_SIDE / document->height()});
+        const auto width =
+            static_cast<std::uint32_t>(std::max(1.0, std::round(document->width() * scale)));
+        const auto height =
+            static_cast<std::uint32_t>(std::max(1.0, std::round(document->height() * scale)));
+        lunasvg::Bitmap bitmap = document->renderToBitmap(width, height);
+        if (!bitmap.valid()) {
+            return failure("the picture could not be drawn");
+        }
+        bitmap.convertToRGBA();
+        std::vector<unsigned char> pixels(static_cast<std::size_t>(width) * height * 4);
+        for (std::uint32_t row = 0; row < height; ++row) {
+            std::copy_n(
+                bitmap.data() + static_cast<std::size_t>(row) * bitmap.stride(),
+                static_cast<std::size_t>(width) * 4,
+                pixels.begin() + static_cast<std::ptrdiff_t>(row) * width * 4
+            );
+        }
+        return Image{static_cast<int>(width), static_cast<int>(height), std::move(pixels)};
+    }
+    if (format == Format::WEBP) {
+        int width = 0;
+        int height = 0;
+        const auto* data = reinterpret_cast<const std::uint8_t*>(bytes.data());
+        if (WebPGetInfo(data, bytes.size(), &width, &height) == 0) {
+            return failure("the picture is damaged");
+        }
+        if (width <= 0 || height <= 0 || width > MAX_SIDE || height > MAX_SIDE ||
+            static_cast<long>(width) * height > MAX_PIXELS) {
+            return failure("the picture is too large to preview");
+        }
+        std::uint8_t* pixels = WebPDecodeRGBA(data, bytes.size(), &width, &height);
+        if (pixels == nullptr) {
+            return failure("the picture is damaged");
+        }
+        std::vector<unsigned char> copy(
+            pixels,
+            pixels + static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4
+        );
+        WebPFree(pixels);
+        return Image{width, height, std::move(copy)};
     }
     int width = 0;
     int height = 0;

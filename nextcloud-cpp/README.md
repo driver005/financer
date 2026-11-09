@@ -49,7 +49,7 @@ tools/             format.sh, smoke.sh
 ## Build, test, run
 
 Bazel 9.2 (through bazelisk), clang and lld are needed. Dependencies come from the Bazel registry: `rules_cc`,
-SQLite (for the `db` plugin) and BoringSSL (for HTTPS); the stb image headers (for `previews`) are vendored in `third_party/stb`.
+SQLite (for the `db` plugin) and BoringSSL (for HTTPS); the stb image headers (for `previews`) are vendored in `third_party/stb`; `lunasvg` and `libwebp` (SVG and WebP previews) and `libssh2` with mbedTLS (SFTP storage) come from the Bazel registry. `docs/libraries.md` lists which Nextcloud PHP dependencies map to which C++ libraries.
 
 ```sh
 bazelisk test //...                 # 18 test targets

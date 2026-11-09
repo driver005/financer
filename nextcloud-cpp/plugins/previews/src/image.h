@@ -15,6 +15,8 @@ enum class Format
     GIF,
     BMP,
     PNM,
+    WEBP,
+    SVG,
     UNKNOWN
 };
 
@@ -74,7 +76,7 @@ private:
 
 template<typename Value> using Result = util::expected<Value, std::string>;
 
-/// @brief The format by the first bytes. Only these four are ever handed to the decoder.
+/// @brief The format by the first bytes. Only these are ever handed to a decoder.
 [[nodiscard]] Format sniff(std::string_view bytes) noexcept;
 
 /// @brief Largest side and pixel count a picture may have before it is refused (a decompression
