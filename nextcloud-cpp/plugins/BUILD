@@ -11,6 +11,7 @@ test_suite(
         "//plugins/mail:mail_test",
         "//plugins/notifications:notifications_test",
         "//plugins/oauth2:oauth2_test",
+        "//plugins/previews:previews_test",
         "//plugins/systemtags:systemtags_test",
         "//plugins/trashbin:trashbin_test",
         "//plugins/twofactor:twofactor_test",

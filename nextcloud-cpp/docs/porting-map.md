@@ -46,6 +46,7 @@ here and is tested; **Reduced** means a deliberate subset (stated); **Replaced**
 | `lib/public/Activity`, the `activity` app | Reduced | `activity`: stream of file, share and account events per user, API, retention job |
 | `lib/public/Notification`, `apps/notifications` | Reduced | `notifications`: push by service, event or command; list/get/dismiss API; retention job. No push to devices |
 | `apps/encryption` | Reduced | `cloud`: with `[cloud] encryption_key` (64 hex digits) or `encryption_key_file`, every file is stored as ChaCha20-Poly1305 with its own key (derived from the server key, the account and a random salt) and the account bound in as associated data; tampering and files moved between accounts are detected; plain files from before are still read, `occ encryption:encrypt-all <user>` converts them; sizes, ETags, shares, links and the trash and versions copies keep working. One server key only: no per-user keys, no key rotation, no recovery key, calendars and contacts (in the database) are not encrypted |
+| `lib/private/Preview` | Reduced | `previews`: `GET /index.php/core/preview.png?file=&x=&y=` for PNG, JPEG, GIF and BMP pictures (formats recognised by their first bytes, size read before decoding, 20 MiB / 8192 px / 40 MP limits), scaled to fit and returned as PNG, cached by file version; access follows shares (`cloud.can_access`). No video, PDF, SVG, office or HEIC previews, no cropping modes, no mimetype icons |
 | `apps/oauth2` | Reduced | `oauth2`: authorization server, authorization code flow with PKCE (S256), client secrets, one-time codes, rotating refresh tokens, Bearer tokens accepted by the kernel (`auth.bearer*`), clients registered with `occ oauth2:add`. Consent is implied by arriving signed in (no login or consent page), no scopes, no client credentials/implicit/password grants |
 | `apps/files_external` (local backend) | Reduced | `cloud`: folders of the host an administrator lists in `[cloud] external_mounts = Name=/path:ro|rw[:group]; ...` appear in every (or the group's) top folder, read-only or read-write. No SMB/SFTP/S3/WebDAV backends, no per-user credentials, no trash or versions on them |
 | `lib/public/SystemTag`, `apps/systemtags` | Reduced | `systemtags`: tags shared by everybody, put on a user's own files (by owner and path, no file ids), find by tag or by file, follow renames and deletes. No restricted/invisible tags, no tags on shared items |
@@ -56,7 +57,7 @@ here and is tested; **Reduced** means a deliberate subset (stated); **Replaced**
 
 ## Verified
 
-* `bazelisk test //...` (17 targets) passes with clang 18 (C++23), plain and under `--config=asan`,
+* `bazelisk test //...` (18 targets) passes with clang 18 (C++23), plain and under `--config=asan`,
   `--config=ubsan` and `--config=tsan`.
 * It also passes with clang 22 (C++26, `--define=std=26`) and with congelado's `-Werror` profile
   (`--config=warnings`).

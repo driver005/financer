@@ -287,10 +287,35 @@ private:
                     200,
                     nc::util::form_encode(
                         {{"path", node->get_path()},
+                         {"etag", node->get_etag()},
                          {"size", std::to_string(files.size_of(node->get_path()).value_or(0))},
                          {"dir", node->is_directory() ? "1" : "0"}}
                     )
                 );
+            }
+        );
+        // user, path: the content of a file (decrypted), at most 64 MiB. For plugins that derive
+        // something from a file, such as previews.
+        host.add_service(
+            "cloud.read",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string user = nc::util::form_value(form, "user");
+                if (!safe_user(user)) {
+                    return Response::text(400, "bad user");
+                }
+                const Storage files = storage_for(user);
+                const auto node = files.stat(nc::util::form_value(form, "path"));
+                if (!node || node->is_directory()) {
+                    return Response::text(404, "not a file");
+                }
+                if (node->get_size() > 64U * 1'024U * 1'024U) {
+                    return Response::text(413, "too large");
+                }
+                auto data = files.read(node->get_path());
+                return data ? Response{200, "application/octet-stream", std::move(*data), {}}
+                            : Response::text(500, data.error().get_message());
             }
         );
         // owner, path, user: may `user` see the item of `owner` (as owner, or through a share of it

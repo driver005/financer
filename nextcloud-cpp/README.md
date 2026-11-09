@@ -18,6 +18,7 @@ plugins/db/        SQLite and migrations, as services
 plugins/users/     accounts, sign-in, the provisioning API, user:* commands
 plugins/ldap/      sign in with an LDAP directory
 plugins/oauth2/    OAuth 2.0 authorization server
+plugins/previews/  thumbnails of pictures
 plugins/groups/    groups and membership
 plugins/tokens/    app passwords
 plugins/twofactor/ TOTP second factor with backup codes
@@ -39,10 +40,10 @@ tools/             format.sh, smoke.sh
 ## Build, test, run
 
 Bazel 9.2 (through bazelisk), clang and lld are needed. Dependencies come from the Bazel registry: `rules_cc`,
-SQLite (for the `db` plugin) and BoringSSL (for HTTPS).
+SQLite (for the `db` plugin) and BoringSSL (for HTTPS); the stb image headers (for `previews`) are vendored in `third_party/stb`.
 
 ```sh
-bazelisk test //...                 # 17 test targets
+bazelisk test //...                 # 18 test targets
 bazelisk test //... --config=asan   # also ubsan, tsan
 bazelisk test //... --define=std=26 --config=warnings   # C++26, warnings as errors (clang 22 in CI)
 tools/smoke.sh                      # starts the real binary with the built plugins and uses it through curl
