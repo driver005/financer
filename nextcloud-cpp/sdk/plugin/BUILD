@@ -1,4 +1,4 @@
-load("//bazel:build_defs.bzl", "nc_cc_library")
+load("//bazel:build_defs.bzl", "nc_cc_library", "nc_cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -21,6 +21,7 @@ nc_cc_library(
 nc_cc_library(
     name = "sdk",
     hdrs = [
+        "include/nextcloud/app.h",
         "include/nextcloud/db.h",
         "include/nextcloud/plugin.h",
     ],
@@ -29,5 +30,15 @@ nc_cc_library(
         ":abi",
         ":http",
         "//sdk/util",
+    ],
+)
+
+nc_cc_test(
+    name = "app",
+    srcs = ["tests/app.cc"],
+    deps = [
+        ":sdk",
+        "//runner:kernel",
+        "//sdk/testing",
     ],
 )

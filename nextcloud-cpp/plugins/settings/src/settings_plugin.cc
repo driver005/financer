@@ -9,11 +9,13 @@
  * Other plugins read through the services `settings.get_app` (form: app, key) and
  * `settings.get_user` (form: user, app, key), which answer 200 and the value or 404.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/text.h"
 
 #include <algorithm>
+#include <memory>
 
 namespace {
 
@@ -121,16 +123,18 @@ public:
 
         constexpr std::string_view APPS = "/ocs/v2.php/apps/provisioning_api/api/v1/config/apps";
         constexpr std::string_view USERS = "/ocs/v2.php/apps/provisioning_api/api/v1/config/users";
+        constexpr nc::app::RouteOptions ADMIN{nc::app::Access::ADMIN, nc::app::Format::OCS};
+        constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
+
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
 
         // ---- values per app: administrators ----------------------------------------------------
-        host.add_route(
-            "GET",
+        m_app->get(
             std::string{APPS} + "/{app}",
+            ADMIN,
             [this](const Request& request)
             {
-                if (const auto refusal = require_admin(request)) {
-                    return *refusal;
-                }
                 std::string data = "[";
                 bool first = true;
                 for (const nc::db::Row& row: nc::db::Client{m_host}.query(
@@ -144,40 +148,27 @@ public:
                 return nc::http::ocs(200, "OK", R"({"data":)" + data + "]}");
             }
         );
-        host.add_route(
-            "GET",
+        m_app->get(
             std::string{APPS} + "/{app}/{key}",
+            ADMIN,
             [this](const Request& request)
             {
-                if (const auto refusal = require_admin(request)) {
-                    return *refusal;
-                }
-                const Response value = read(
+                return found(read(
                     "SELECT value FROM nc_appconfig WHERE app = ? AND key = ?",
                     {std::string{request.param("app")}, std::string{request.param("key")}}
-                );
-                return value.get_status() == 200
-                           ? nc::http::ocs(
-                                 200,
-                                 "OK",
-                                 R"({"data":)" + json_string(value.get_body()) + "}"
-                             )
-                           : nc::http::ocs(404, "The key does not exist", "{}");
+                ));
             }
         );
-        host.add_route(
-            "POST",
+        m_app->post(
             std::string{APPS} + "/{app}/{key}",
+            ADMIN,
             [this](const Request& request)
             {
-                if (const auto refusal = require_admin(request)) {
-                    return *refusal;
-                }
                 const std::string app{request.param("app")};
                 const std::string key{request.param("key")};
                 const std::string value = body_value(request);
                 if (!name_ok(app) || !name_ok(key) || value.size() > MAX_VALUE) {
-                    return nc::http::ocs(400, "Invalid app, key or value", "{}");
+                    throw nc::app::HttpError{400, "Invalid app, key or value"};
                 }
                 store_app(app, key, value);
                 m_host->publish(
@@ -187,14 +178,11 @@ public:
                 return nc::http::ocs(200, "OK", "{}");
             }
         );
-        host.add_route(
-            "DELETE",
+        m_app->del(
             std::string{APPS} + "/{app}/{key}",
+            ADMIN,
             [this](const Request& request)
             {
-                if (const auto refusal = require_admin(request)) {
-                    return *refusal;
-                }
                 const std::string app{request.param("app")};
                 const std::string key{request.param("key")};
                 nc::db::Client{m_host}.exec(
@@ -210,42 +198,29 @@ public:
         );
 
         // ---- values per person: the signed-in user's own ---------------------------------------
-        host.add_route(
-            "GET",
+        m_app->get(
             std::string{USERS} + "/{app}/{key}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
-                const Response value = read(
+                return found(read(
                     "SELECT value FROM nc_preferences WHERE uid = ? AND app = ? AND key = ?",
                     {request.get_user(),
                      std::string{request.param("app")},
                      std::string{request.param("key")}}
-                );
-                return value.get_status() == 200
-                           ? nc::http::ocs(
-                                 200,
-                                 "OK",
-                                 R"({"data":)" + json_string(value.get_body()) + "}"
-                             )
-                           : nc::http::ocs(404, "The key does not exist", "{}");
+                ));
             }
         );
-        host.add_route(
-            "POST",
+        m_app->post(
             std::string{USERS} + "/{app}/{key}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const std::string app{request.param("app")};
                 const std::string key{request.param("key")};
                 const std::string value = body_value(request);
                 if (!name_ok(app) || !name_ok(key) || value.size() > MAX_VALUE) {
-                    return nc::http::ocs(400, "Invalid app, key or value", "{}");
+                    throw nc::app::HttpError{400, "Invalid app, key or value"};
                 }
                 nc::db::Client{m_host}.exec(
                     "INSERT INTO nc_preferences (uid, app, key, value) VALUES (?, ?, ?, ?) ON "
@@ -255,14 +230,11 @@ public:
                 return nc::http::ocs(200, "OK", "{}");
             }
         );
-        host.add_route(
-            "DELETE",
+        m_app->del(
             std::string{USERS} + "/{app}/{key}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 nc::db::Client{m_host}.exec(
                     "DELETE FROM nc_preferences WHERE uid = ? AND app = ? AND key = ?",
                     {request.get_user(),
@@ -292,15 +264,13 @@ private:
         return value.empty() ? request.query_value("value") : value;
     }
 
-    [[nodiscard]] std::optional<Response> require_admin(const Request& request) const
+    /// A stored value as the OCS answer, or the 404 for a key that was never set.
+    [[nodiscard]] static Response found(const Response& value)
     {
-        if (request.get_user().empty()) {
-            return nc::http::unauthorized();
+        if (value.get_status() != 200) {
+            throw nc::app::HttpError{404, "The key does not exist"};
         }
-        if (m_host->call_service("users.is_admin", request.get_user()).get_status() != 200) {
-            return nc::http::ocs(403, "Forbidden", "{}");
-        }
-        return std::nullopt;
+        return nc::http::ocs(200, "OK", R"({"data":)" + json_string(value.get_body()) + "}");
     }
 
     [[nodiscard]] Response read(std::string_view sql, const std::vector<std::string>& params) const
@@ -320,6 +290,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace
