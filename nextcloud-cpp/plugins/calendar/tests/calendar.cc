@@ -316,6 +316,81 @@ void test_scheduling()
     std::filesystem::remove_all(dir);
 }
 
+void test_system_address_book()
+{
+    const std::string dir =
+        (std::filesystem::temp_directory_path() / ("nc-sysbook-" + nc::util::random_hex(4)))
+            .string();
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"calendar", "contacts", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice", "--email=alice@example.org"}, out), 0);
+    ::setenv("OC_PASS", "bob password", 1);
+    NC_CHECK_EQ(
+        kernel.run_command(
+            "user:add",
+            {"bob", "--display-name=Bob; the Builder", "--email=bob@example.org"},
+            out
+        ),
+        0
+    );
+    ::unsetenv("OC_PASS");
+    const std::string bob = "bob:bob password";
+    const std::string alice_home = "/remote.php/dav/addressbooks/users/alice";
+
+    // Everybody finds everybody in a read-only book of the accounts.
+    const auto home = kernel.handle(with(req("PROPFIND", alice_home), "Depth", "1")).get_body();
+    NC_CHECK(
+        home.find("<d:href>" + alice_home + "/system_shared_by_nc-system/</d:href>") !=
+        std::string::npos
+    );
+    NC_CHECK(home.find("<d:displayname>Accounts</d:displayname>") != std::string::npos);
+    const std::string book = alice_home + "/system_shared_by_nc-system";
+    const auto card = kernel.handle(req("GET", book + "/bob.vcf")).get_body();
+    NC_CHECK(card.find("FN:Bob\\; the Builder") != std::string::npos);
+    NC_CHECK(card.find("EMAIL;TYPE=INTERNET:bob@example.org") != std::string::npos);
+    NC_CHECK(
+        kernel.handle(with(req("PROPFIND", book), "Depth", "1")).get_body().find("alice.vcf") !=
+        std::string::npos
+    );
+    NC_CHECK_EQ(kernel.handle(req("PUT", book + "/mallory.vcf", VCF)).get_status(), 403);
+    NC_CHECK_EQ(kernel.handle(req("DELETE", book + "/bob.vcf")).get_status(), 403);
+    // Bob sees it too; the book is not anybody's to write.
+    NC_CHECK_EQ(
+        kernel
+            .handle(
+                req("GET",
+                    "/remote.php/dav/addressbooks/users/bob/system_shared_by_nc-system/alice.vcf",
+                    "",
+                    bob)
+            )
+            .get_status(),
+        200
+    );
+
+    // A new account appears, a deleted one disappears, and leaving the book does not stick.
+    ::setenv("OC_PASS", "carol password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"carol"}, out), 0);
+    ::unsetenv("OC_PASS");
+    NC_CHECK_EQ(kernel.handle(req("GET", book + "/carol.vcf")).get_status(), 200);
+    NC_CHECK_EQ(kernel.handle(req("DELETE", book)).get_status(), 204);
+    kernel.get_events().publish("user.updated", "id=alice");
+    NC_CHECK_EQ(kernel.handle(req("GET", book + "/bob.vcf")).get_status(), 200);
+    NC_CHECK_EQ(kernel.run_command("user:delete", {"carol"}, out), 0);
+    NC_CHECK_EQ(kernel.handle(req("GET", book + "/carol.vcf")).get_status(), 404);
+    kernel.stop();
+    std::filesystem::remove_all(dir);
+}
+
 const std::string CAROL = "carol:carol password";
 
 void test_sharing()
@@ -546,6 +621,7 @@ int main()
     test_validation();
     test_itip_text();
     test_scheduling();
+    test_system_address_book();
     test_sharing();
 
     const std::string dir =
@@ -794,7 +870,7 @@ int main()
     NC_CHECK_EQ(kernel.run_command("user:delete", {"alice"}, out), 0);
     NC_CHECK_EQ(
         kernel.get_services()
-            .call("db.query", "sql=SELECT+COUNT%28*%29+AS+n+FROM+nc_dav_collections")
+            .call("db.query", "sql=SELECT+COUNT%28*%29+AS+n+FROM+nc_dav_collections+WHERE+uid+!%3D+%27nc-system%27")
             .get_body(),
         "n=0\n"
     );

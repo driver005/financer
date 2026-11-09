@@ -142,6 +142,21 @@ public:
                             : Response::text(404, "no such user");
             }
         );
+        // Every enabled account, one per line: "id<TAB>display name<TAB>e-mail address".
+        host.add_service(
+            "users.directory",
+            [&store](std::string_view)
+            {
+                std::string out;
+                for (const User& user: store.list()) {
+                    if (user.is_enabled()) {
+                        out += user.get_id() + "\t" + user.shown_name() + "\t" + user.get_email() +
+                               "\n";
+                    }
+                }
+                return Response::text(200, out);
+            }
+        );
         // Enabled accounts whose id or display name contains the text (without case): one per line,
         // "id<TAB>display name", at most 20, in id order.
         host.add_service(
