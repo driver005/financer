@@ -15,6 +15,7 @@ test_suite(
         "//plugins/notifications:notifications_test",
         "//plugins/oauth2:oauth2_test",
         "//plugins/previews:previews_test",
+        "//plugins/saml:saml_test",
         "//plugins/settings:settings_test",
         "//plugins/systemtags:systemtags_test",
         "//plugins/theming:theming_test",

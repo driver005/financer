@@ -19,6 +19,7 @@ plugins/users/     accounts, sign-in, the provisioning API, user:* commands
 plugins/ldap/      sign in with an LDAP directory
 plugins/oauth2/    OAuth 2.0 authorization server
 plugins/previews/  thumbnails of pictures
+plugins/saml/      single sign-on with SAML 2.0
 plugins/federation/ sharing with users on other servers (Open Cloud Mesh)
 plugins/user_status/ online status and status messages
 plugins/lookup/    find people on other servers
@@ -90,6 +91,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `tls_cert`, `tls_key` | PEM files: serve HTTPS (TLS 1.2 or newer) | plain HTTP |
 | `log_level` | debug, info, warning, error, fatal | `info` (`warning` for commands) |
 | `data_dir` | accounts, shares, files, mail spool | `data` |
+| `[saml] url`, `idp_entity_id`, `idp_sso_url`, `idp_certificate_file`, `sp_entity_id`, `uid_attribute`, `displayname_attribute`, `email_attribute` | SAML sign-in: this server's public address, the identity provider's entity id, sign-on URL and signing certificate (PEM), this server's entity id, which attributes name the account (empty `uid_attribute`: the NameID) | unset (plugin does nothing), - |
 | `upload_spool_kb` | `PUT` bodies of this size or more are written to `<data_dir>/.upload-spool` while they arrive instead of being held in memory | `1024` |
 | `[users] pbkdf2_iterations`, `min_password_length` | password hashing | `10000`, `8` |
 | `[cloud] quota_bytes`, `overwrite_url` | per-user quota, public URL for share links | unlimited, from `Host` |

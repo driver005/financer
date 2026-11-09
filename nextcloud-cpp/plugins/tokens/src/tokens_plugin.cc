@@ -125,6 +125,25 @@ public:
             }
         );
 
+        // Form: user, name. A new app password for that account (for a plugin that signed the
+        // person in some other way, such as single sign-on); 404 when there is no such account.
+        host.add_service(
+            "tokens.create",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string user = nc::util::form_value(form, "user");
+                std::string name = nc::util::form_value(form, "name");
+                if (user.empty() || m_host->call_service("users.get", user).get_status() != 200) {
+                    return Response::text(404, "no such user");
+                }
+                if (name.empty()) {
+                    name = "Unnamed client";
+                }
+                return Response::text(200, create(user, name.substr(0, 128)));
+            }
+        );
+
         m_app->route(
             "GET",
             "/ocs/v2.php/core/getapppassword",

@@ -32,7 +32,7 @@ have to be vendored by hand (see `third_party/`).
 |---|---|---|
 | `ext-gd`, previews | `lunasvg` (SVG, **in use**), `libwebp` (**in use**), `libtiff`, `libheif` (HEIC), `libpng`, `libjpeg_turbo`, `giflib`, `freetype`, `harfbuzz` | previews of more formats; `stb` stays for what it covers |
 | `ext-xml`, `ext-dom`, `ext-simplexml`, `ext-xmlreader`, `ext-xmlwriter` | `pugixml` or `libxml2` | WebDAV/CalDAV/CardDAV XML parsing; `libxml2` also has exclusive canonicalization, which SAML needs |
-| SAML (`apps/user_saml`, external app) | `libxml2` (c14n) + BoringSSL | XML signatures: no `xmlsec` in BCR, so the verification is written on top of these |
+| SAML (`apps/user_saml`, external app) | `libxml2` (c14n) + BoringSSL + `zlib` (**in use**, `plugins/saml`) | XML signatures: no `xmlsec` in BCR, so the verification is written on top of these and tested against `xmlsec1` |
 | `firebase/php-jwt` | `jwt-cpp` | OAuth2/OIDC tokens |
 | `predis/predis` | `hiredis` | Redis cache and locking |
 | `punic/punic`, `symfony/translation`, `symfony/string`, `symfony/polyfill-intl-*`, `ext-mbstring` | `icu`, `utf8proc`, `simdutf` | locale data, normalization, translations |
