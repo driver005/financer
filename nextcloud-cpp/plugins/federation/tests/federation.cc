@@ -2,10 +2,15 @@
 #include "nextcloud/runner/kernel.h"
 #include "nextcloud/test.h"
 #include "nextcloud/util/crypto.h"
+#include "nextcloud/util/text.h"
+#include "nextcloud/util/time.h"
 
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <openssl/curve25519.h>
 #include <string>
 
 namespace {
@@ -22,7 +27,7 @@ struct Server
     std::unique_ptr<nc::HttpServer> http{};
     std::uint16_t port{0};
 
-    explicit Server(const std::string& name)
+    explicit Server(const std::string& name, const std::string& extra = {})
     {
         dir = (fs::temp_directory_path() / ("nc-fed-" + name + "-" + nc::util::random_hex(4)))
                   .string();
@@ -32,7 +37,8 @@ struct Server
                 "data_dir = " + dir +
                 "\n[users]\npbkdf2_iterations = 3\n"
                 "[federation]\nallow_http = true\nallow_local = true\ntimeout_seconds = "
-                "10\nhandshake_timeout_seconds = 1\n"
+                "10\nhandshake_timeout_seconds = 1\n" +
+                extra
             )
                 .value()
         );
@@ -392,11 +398,135 @@ void test_incoming_protocol_is_strict()
     );
 }
 
+std::string base64_of(const unsigned char* data, std::size_t size)
+{
+    return nc::util::base64_encode(std::string_view{reinterpret_cast<const char*>(data), size});
+}
+
+void test_signatures_and_trust()
+{
+    Server a{"signer"};
+    Server b{"strict", "require_signatures = true\n"};
+    a.add_user("alice");
+    b.add_user("bob");
+    NC_CHECK_EQ(a.call("PUT", "/remote.php/dav/files/alice/f.txt", "alice", "x").get_status(), 201);
+
+    // Servers sign what they send, so a strict receiver takes it.
+    const Response sent =
+        a.call("POST", SHARES, "alice", "path=/f.txt&shareType=6&shareWith=bob@" + b.address());
+    NC_CHECK_EQ(sent.get_status(), 200);
+    NC_CHECK(contains(b.call("GET", REMOTE + "/pending", "bob"), "\"name\":\"/f.txt\""));
+    // The discovery document carries the key that is used.
+    NC_CHECK(contains(a.call("GET", "/ocm-provider/"), "\"publicKey\":\""));
+
+    // Unsigned, forged, stale and altered requests are refused by a server that asks for
+    // signatures.
+    const std::string good =
+        R"({"shareWith":"bob@)" + b.address() + R"(","name":"y","providerId":"9","owner":"alice@)" +
+        a.address() +
+        R"(","shareType":"user","resourceType":"file","protocol":{"name":"webdav","options":{"sharedSecret":"abcdefgh1234","permissions":["read"]}}})";
+    const auto post = [&](const std::string& body, const std::vector<nc::http::Header>& headers)
+    {
+        std::vector<nc::http::Header> all = headers;
+        all.emplace_back("Content-Type", "application/json");
+        all.emplace_back("Host", b.address());
+        return b.call("POST", "/ocm/shares", "", body, all);
+    };
+    NC_CHECK_EQ(post(good, {}).get_status(), 401);
+
+    // Build a signature with alice's server's own key, the way a client would.
+    const std::string private_hex = [&]
+    {
+        const Response row =
+            a.kernel->get_services().call("db.query", "sql=SELECT+private+FROM+nc_fed_keys");
+        const auto form = nc::util::parse_form(row.get_body());
+        return std::string{nc::util::trim(nc::util::form_value(form, "private"))};
+    }();
+    const auto private_key = nc::util::from_hex(private_hex);
+    NC_CHECK(private_key.has_value() && private_key->size() == ED25519_PRIVATE_KEY_LEN);
+    if (!private_key) {
+        return;
+    }
+    const auto signed_headers =
+        [&](const std::string& body, const std::string& date, const std::string& key_server)
+    {
+        const std::string digest = "SHA-256=" + nc::util::base64_encode(nc::util::sha256(body));
+        const std::string text = "(request-target): post /ocm/shares\nhost: " + b.address() +
+                                 "\ndate: " + date + "\ndigest: " + digest;
+        std::uint8_t signature[ED25519_SIGNATURE_LEN];
+        ED25519_sign(
+            signature,
+            reinterpret_cast<const std::uint8_t*>(text.data()),
+            text.size(),
+            reinterpret_cast<const std::uint8_t*>(private_key->data())
+        );
+        return std::vector<nc::http::Header>{
+            {"Date", date},
+            {"Digest", digest},
+            {"Signature",
+             "keyId=\"http://" + key_server +
+                 "#main-key\",algorithm=\"ed25519\",headers=\"(request-target) host date "
+                 "digest\",signature=\"" +
+                 base64_of(signature, sizeof(signature)) + "\""}
+        };
+    };
+    const std::string now = nc::util::http_date(std::chrono::system_clock::now());
+    NC_CHECK_EQ(
+        post(good, signed_headers(good, now, a.address())).get_status(),
+        201
+    ); // a valid one is taken
+    const std::string other = std::string{good}.replace(good.find("\"9\""), 3, "\"10\"");
+    // The signature belongs to another body.
+    auto wrong_body = signed_headers(good, now, a.address());
+    NC_CHECK_EQ(post(other, wrong_body).get_status(), 401);
+    // Too old.
+    const std::string old_date =
+        nc::util::http_date(std::chrono::system_clock::now() - std::chrono::minutes{20});
+    NC_CHECK_EQ(post(other, signed_headers(other, old_date, a.address())).get_status(), 401);
+    // Signed by a server that is not the one named as the owner.
+    NC_CHECK_EQ(post(other, signed_headers(other, now, "attacker.example")).get_status(), 401);
+    // A damaged signature.
+    auto damaged = signed_headers(other, now, a.address());
+    damaged.back().second.replace(damaged.back().second.find("signature=\"") + 11, 4, "AAAA");
+    NC_CHECK_EQ(post(other, damaged).get_status(), 401);
+    NC_CHECK_EQ(post(other, signed_headers(other, now, a.address())).get_status(), 201);
+
+    // A server only talks to the servers it trusts.
+    Server c{"careful"};
+    Server d{"stranger"};
+    Server e{"friend"};
+    Server f{"limited", "trusted_servers = " + e.address() + "\n"};
+    c.add_user("carol");
+    f.add_user("frank");
+    e.add_user("erin");
+    d.add_user("dave");
+    NC_CHECK_EQ(f.call("PUT", "/remote.php/dav/files/frank/t.txt", "frank", "x").get_status(), 201);
+    NC_CHECK_EQ(
+        f.call("POST", SHARES, "frank", "path=/t.txt&shareType=6&shareWith=dave@" + d.address())
+            .get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        f.call("POST", SHARES, "frank", "path=/t.txt&shareType=6&shareWith=erin@" + e.address())
+            .get_status(),
+        200
+    );
+    // Shares offered by a server that is not trusted are not taken.
+    NC_CHECK_EQ(d.call("PUT", "/remote.php/dav/files/dave/u.txt", "dave", "x").get_status(), 201);
+    NC_CHECK_EQ(
+        d.call("POST", SHARES, "dave", "path=/u.txt&shareType=6&shareWith=frank@" + f.address())
+            .get_status(),
+        400
+    );
+    NC_CHECK(!contains(f.call("GET", REMOTE + "/pending", "frank"), "u.txt"));
+}
+
 } // namespace
 
 int main()
 {
     test_sharing_between_servers();
     test_incoming_protocol_is_strict();
+    test_signatures_and_trust();
     return NC_TEST_RESULT();
 }

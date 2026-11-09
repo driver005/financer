@@ -23,10 +23,15 @@
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/json.h"
 #include "nextcloud/util/text.h"
+#include "nextcloud/util/time.h"
 
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <ctime>
+#include <map>
+#include <mutex>
+#include <openssl/curve25519.h>
 #include <optional>
 
 namespace {
@@ -194,6 +199,12 @@ public:
         }
         m_client.set_allow_http(host.config("allow_http", "false") == "true");
         m_client.set_allow_local(host.config("allow_local", "false") == "true");
+        m_require_signatures = host.config("require_signatures", "false") == "true";
+        for (const std::string& entry: nc::util::split(host.config("trusted_servers", ""), ',')) {
+            if (const std::string server{nc::util::trim(entry)}; !server.empty()) {
+                m_trusted.push_back(nc::util::to_lower(server));
+            }
+        }
         m_client.set_ca_file(host.config("ca_file", ""));
         m_client.set_max_response(
             static_cast<std::size_t>(
@@ -223,6 +234,14 @@ public:
             " remote_user TEXT NOT NULL, base TEXT NOT NULL, token TEXT NOT NULL);"
         );
 
+        nc::db::Client{&host}.migrate(
+            "federation",
+            2,
+            "CREATE TABLE nc_fed_keys (id INTEGER PRIMARY KEY CHECK (id = 1), public TEXT NOT "
+            "NULL, "
+            "private TEXT NOT NULL);"
+        );
+        load_or_create_key();
         add_services(host);
         add_protocol_routes(host);
         add_user_routes(host);
@@ -261,6 +280,7 @@ private:
     {
         std::string base{};
         std::string end_point{};
+        std::string public_key{}; // 32 raw bytes of the Ed25519 key it signs with, or empty
     };
 
     [[nodiscard]] nc::federation::ClientSettings discovery_settings() const
@@ -274,6 +294,9 @@ private:
     /// allows it. nullopt when it is not reachable or does not offer OCM.
     [[nodiscard]] std::optional<Provider> discover(const std::string& server) const
     {
+        if (!trusted(server)) {
+            return std::nullopt;
+        }
         std::vector<std::string> schemes{"https"};
         if (m_client.allow_http()) {
             schemes.emplace_back("http");
@@ -295,7 +318,11 @@ private:
                 ((*json)["enabled"].is_bool() && !(*json)["enabled"].boolean())) {
                 continue;
             }
-            Provider provider{base, base + "/ocm"};
+            Provider provider{base, base + "/ocm", {}};
+            if (const auto key = nc::util::base64_decode((*json)["publicKey"].string());
+                key && key->size() == ED25519_PUBLIC_KEY_LEN) {
+                provider.public_key = *key;
+            }
             // The server names its own endpoint; one on another host is not followed.
             if (const std::string& named = (*json)["endPoint"].string();
                 nc::util::starts_with(named, base + "/") && named.size() < 512) {
@@ -326,16 +353,14 @@ private:
         return std::string{scheme == std::string_view::npos ? base : base.substr(scheme + 3)};
     }
 
-    /// Empty when the other server took it, else why not.
+    /// Empty when the other server took it, else why not. When this server knows its own address
+    /// and has a key, the request is signed (see `sign`).
     [[nodiscard]] std::string post_json(const std::string& url, const std::string& body) const
     {
-        const auto answer = nc::federation::request(
-            discovery_settings(),
-            "POST",
-            url,
-            {{"Content-Type", "application/json"}},
-            body
-        );
+        std::vector<nc::http::Header> headers{{"Content-Type", "application/json"}};
+        sign("post", url, body, headers);
+        const auto answer =
+            nc::federation::request(discovery_settings(), "POST", url, headers, body);
         if (!answer) {
             return answer.error();
         }
@@ -343,6 +368,225 @@ private:
             return "answered " + std::to_string(answer->get_status());
         }
         return {};
+    }
+
+    void load_or_create_key()
+    {
+        const nc::db::Client db{m_host};
+        auto rows = db.query("SELECT public, private FROM nc_fed_keys WHERE id = 1");
+        if (rows.empty()) {
+            std::uint8_t pub[ED25519_PUBLIC_KEY_LEN];
+            std::uint8_t priv[ED25519_PRIVATE_KEY_LEN];
+            ED25519_keypair(pub, priv);
+            const std::string pub_text{reinterpret_cast<const char*>(pub), sizeof(pub)};
+            const std::string priv_text{reinterpret_cast<const char*>(priv), sizeof(priv)};
+            db.exec(
+                "INSERT OR IGNORE INTO nc_fed_keys (id, public, private) VALUES (1, ?, ?)",
+                {nc::util::to_hex(pub_text), nc::util::to_hex(priv_text)}
+            );
+            rows = db.query("SELECT public, private FROM nc_fed_keys WHERE id = 1");
+        }
+        if (!rows.empty()) {
+            m_public_key =
+                nc::util::from_hex(nc::db::value_of(rows.front(), "public")).value_or("");
+            m_private_key =
+                nc::util::from_hex(nc::db::value_of(rows.front(), "private")).value_or("");
+        }
+    }
+
+    // ---- who may talk to this server, and who is who ------------------------------------------
+
+    /// With `[federation] trusted_servers` set, only those servers are talked to or listened to.
+    [[nodiscard]] bool trusted(const std::string& server) const
+    {
+        if (m_trusted.empty()) {
+            return true;
+        }
+        return std::ranges::find(m_trusted, nc::util::to_lower(server)) != m_trusted.end();
+    }
+
+    void remember_base(const std::string& base) const
+    {
+        if (!base.empty()) {
+            const std::lock_guard lock{m_mutex};
+            m_known_base = base;
+        }
+    }
+
+    [[nodiscard]] std::string known_base() const
+    {
+        const std::lock_guard lock{m_mutex};
+        return m_known_base;
+    }
+
+    static std::string host_header_of(const nc::federation::Url& url)
+    {
+        const bool plain_port = url.port == (url.scheme == "https" ? "443" : "80");
+        return url.host + (plain_port ? "" : ":" + url.port);
+    }
+
+    static std::string signing_string(
+        std::string_view method,
+        std::string_view target,
+        std::string_view host,
+        std::string_view date,
+        std::string_view digest
+    )
+    {
+        return "(request-target): " + std::string{method} + " " + std::string{target} +
+               "\nhost: " + std::string{host} + "\ndate: " + std::string{date} +
+               "\ndigest: " + std::string{digest};
+    }
+
+    /// Adds `Date`, `Digest` and `Signature` (Ed25519 over request target, host, date and digest;
+    /// `keyId` is this server's address). Nothing is added while the own address is unknown.
+    void sign(
+        std::string_view method,
+        const std::string& url,
+        const std::string& body,
+        std::vector<nc::http::Header>& headers
+    ) const
+    {
+        const std::string base = known_base();
+        const auto parsed = nc::federation::parse_url(url);
+        if (base.empty() || m_private_key.size() != ED25519_PRIVATE_KEY_LEN || !parsed) {
+            return;
+        }
+        const std::string date = nc::util::http_date(std::chrono::system_clock::now());
+        const std::string digest = "SHA-256=" + nc::util::base64_encode(nc::util::sha256(body));
+        const std::string text =
+            signing_string(method, parsed->target, host_header_of(*parsed), date, digest);
+        std::uint8_t signature[ED25519_SIGNATURE_LEN];
+        ED25519_sign(
+            signature,
+            reinterpret_cast<const std::uint8_t*>(text.data()),
+            text.size(),
+            reinterpret_cast<const std::uint8_t*>(m_private_key.data())
+        );
+        headers.emplace_back("Date", date);
+        headers.emplace_back("Digest", digest);
+        headers.emplace_back(
+            "Signature",
+            "keyId=\"" + base +
+                "#main-key\",algorithm=\"ed25519\",headers=\"(request-target) "
+                "host date digest\",signature=\"" +
+                nc::util::base64_encode(
+                    std::string_view{reinterpret_cast<const char*>(signature), sizeof(signature)}
+                ) +
+                "\""
+        );
+    }
+
+    /// The parts of a `Signature` header: `key="value",key="value"`.
+    static std::map<std::string, std::string> signature_parts(std::string_view header)
+    {
+        std::map<std::string, std::string> parts;
+        std::size_t at = 0;
+        while (at < header.size()) {
+            const std::size_t equals = header.find('=', at);
+            if (equals == std::string_view::npos || equals + 1 >= header.size() ||
+                header[equals + 1] != '"') {
+                break;
+            }
+            const std::size_t close = header.find('"', equals + 2);
+            if (close == std::string_view::npos) {
+                break;
+            }
+            parts[nc::util::to_lower(std::string{nc::util::trim(header.substr(at, equals - at))})] =
+                std::string{header.substr(equals + 2, close - equals - 2)};
+            at = close + 1;
+            while (at < header.size() && (header[at] == ',' || header[at] == ' ')) {
+                ++at;
+            }
+        }
+        return parts;
+    }
+
+    /// nullopt when the request may be believed to come from `expected_server`: it carries a valid
+    /// signature of that server, or it is unsigned and unsigned requests are allowed. Else why not.
+    [[nodiscard]] std::optional<std::string>
+    check_signature(const Request& request, const std::string& expected_server) const
+    {
+        const std::string_view header = request.header("Signature");
+        if (header.empty()) {
+            return m_require_signatures ? std::optional<std::string>{"the request is not signed"}
+                                        : std::nullopt;
+        }
+        const auto parts = signature_parts(header);
+        const auto part = [&](const char* name) -> std::string
+        {
+            const auto found = parts.find(name);
+            return found == parts.end() ? std::string{} : found->second;
+        };
+        const std::string key_id = part("keyid");
+        const std::size_t hash = key_id.find('#');
+        const std::string key_server = server_of(key_id.substr(0, hash));
+        if (part("algorithm") != "ed25519" ||
+            part("headers") != "(request-target) host date digest" || hash == std::string::npos ||
+            nc::util::to_lower(key_server) != nc::util::to_lower(expected_server)) {
+            return "the signature is not one this server accepts";
+        }
+        // Fresh, and for exactly this body.
+        const std::string date{request.header("Date")};
+        std::tm moment{};
+        if (strptime(date.c_str(), "%a, %d %b %Y %H:%M:%S GMT", &moment) == nullptr) {
+            return "the request has no valid Date";
+        }
+        const std::int64_t sent = static_cast<std::int64_t>(timegm(&moment));
+        if (std::llabs(sent - now_seconds()) > 300) {
+            return "the request is too old or from the future";
+        }
+        const std::string digest =
+            "SHA-256=" + nc::util::base64_encode(nc::util::sha256(request.get_body()));
+        if (!nc::util::constant_time_equals(digest, request.header("Digest"))) {
+            return "the digest does not match the body";
+        }
+        const auto signature = nc::util::base64_decode(part("signature"));
+        if (!signature || signature->size() != ED25519_SIGNATURE_LEN) {
+            return "the signature is malformed";
+        }
+        const auto key = public_key_of(expected_server);
+        if (!key) {
+            return "the key of " + expected_server + " is not known";
+        }
+        const std::string text = signing_string(
+            nc::util::to_lower(request.get_method()),
+            request.get_path(),
+            request.header("Host"),
+            date,
+            digest
+        );
+        if (ED25519_verify(
+                reinterpret_cast<const std::uint8_t*>(text.data()),
+                text.size(),
+                reinterpret_cast<const std::uint8_t*>(signature->data()),
+                reinterpret_cast<const std::uint8_t*>(key->data())
+            ) != 1) {
+            return "the signature is wrong";
+        }
+        return std::nullopt;
+    }
+
+    /// The signing key a server publishes in its discovery document, kept ten minutes.
+    [[nodiscard]] std::optional<std::string> public_key_of(const std::string& server) const
+    {
+        {
+            const std::lock_guard lock{m_mutex};
+            const auto found = m_keys.find(server);
+            if (found != m_keys.end() && now_seconds() - found->second.first < 600) {
+                return found->second.second;
+            }
+        }
+        const auto provider = discover(server);
+        if (!provider || provider->public_key.empty()) {
+            return std::nullopt;
+        }
+        const std::lock_guard lock{m_mutex};
+        if (m_keys.size() > 200) {
+            m_keys.clear();
+        }
+        m_keys[server] = {now_seconds(), provider->public_key};
+        return provider->public_key;
     }
 
     // ---- sending ----------------------------------------------------------------------------
@@ -412,11 +656,13 @@ private:
                 "The address of this server is not known (set [federation] url)"
             );
         }
+        remember_base(base);
         const auto provider = discover(recipient->server);
         if (!provider) {
             return Response::text(
                 400,
-                recipient->server + " could not be reached or does not accept shares"
+                recipient->server +
+                    " could not be reached, is not trusted or does not accept shares"
             );
         }
         const std::string owner_address = field("owner") + "@" + server_of(base);
@@ -605,10 +851,12 @@ private:
                 [this](const Request& request)
                 {
                     const std::string base = own_base(request);
+                    remember_base(base);
                     return Response::json(
                         200,
                         R"({"enabled":true,"apiVersion":"1.0-proposal1","endPoint":)" +
-                            json_string(base + "/ocm") +
+                            json_string(base + "/ocm") + R"(,"signatureAlgorithm":"ed25519",)" +
+                            R"("publicKey":)" + json_string(nc::util::base64_encode(m_public_key)) +
                             R"(,"resourceTypes":[{"name":"file","shareTypes":["user"],)"
                             R"("protocols":{"webdav":"/public.php/webdav/"}}]})"
                     );
@@ -677,6 +925,13 @@ private:
         if (!provider) {
             return refuse();
         }
+        if (const auto bad = check_signature(request, owner->server)) {
+            m_host->log(
+                nc::LogLevel::WARNING,
+                "refused a share from " + owner->server + ": " + *bad
+            );
+            return Response::json(401, R"({"message":"invalid signature"})");
+        }
         const bool directory = (*json)["resourceType"].string() == "folder";
         const std::string name = clean_name((*json)["name"].string());
         try {
@@ -729,11 +984,15 @@ private:
         if (type == "SHARE_UNSHARED") {
             // The owner withdrew a share this server received.
             const auto rows = db.query(
-                "SELECT id, token FROM nc_fed_incoming WHERE remote_id = ?",
+                "SELECT id, token, base FROM nc_fed_incoming WHERE remote_id = ?",
                 {provider_id}
             );
             for (const nc::db::Row& row: rows) {
                 if (nc::util::constant_time_equals(nc::db::value_of(row, "token"), secret)) {
+                    if (const auto bad =
+                            check_signature(request, server_of(nc::db::value_of(row, "base")))) {
+                        return Response::json(401, R"({"message":"invalid signature"})");
+                    }
                     db.exec(
                         "DELETE FROM nc_fed_incoming WHERE id = ?",
                         {nc::db::value_of(row, "id")}
@@ -745,12 +1004,18 @@ private:
         if (type == "SHARE_ACCEPTED" || type == "SHARE_DECLINED") {
             // The recipient answered a share this server sent.
             const auto rows = db.query(
-                "SELECT owner, name, remote_user, token FROM nc_fed_outgoing WHERE share_id = ?",
+                "SELECT owner, name, remote_user, token, base FROM nc_fed_outgoing WHERE share_id "
+                "= ?",
                 {provider_id}
             );
             if (rows.empty() ||
                 !nc::util::constant_time_equals(nc::db::value_of(rows.front(), "token"), secret)) {
                 return Response::json(400, R"({"message":"invalid notification"})");
+            }
+            if (const auto bad =
+                    check_signature(request, server_of(nc::db::value_of(rows.front(), "base")))) {
+                m_host->log(nc::LogLevel::WARNING, "refused a notification: " + *bad);
+                return Response::json(401, R"({"message":"invalid signature"})");
             }
             const std::string owner = nc::db::value_of(rows.front(), "owner");
             const bool accepted = type == "SHARE_ACCEPTED";
@@ -903,6 +1168,13 @@ private:
 
     nc::federation::ClientSettings m_client{};
     std::string m_public_url{};
+    std::string m_public_key{};
+    std::string m_private_key{};
+    bool m_require_signatures{false};
+    std::vector<std::string> m_trusted{};
+    mutable std::mutex m_mutex{};
+    mutable std::string m_known_base{};
+    mutable std::map<std::string, std::pair<std::int64_t, std::string>> m_keys{};
     std::size_t m_max_pending{100};
     nc::Host* m_host{nullptr};
 };

@@ -48,9 +48,9 @@ style (`CODESTYLE.md`).
 - [x] CI workflow (plain, asan, ubsan, tsan; clang 22 / C++26 with -Werror).
 - [x] Second tranche, to close the gaps of the first porting map: background jobs in the ABI, the `db` plugin
       (SQLite and migrations), groups, activity, notifications, app passwords, TOTP two-factor, trash bin,
-      versions, CalDAV, CardDAV, tags, comments, the capabilities endpoint, external storage (local folders), encryption at rest, LDAP sign-in, HTTPS (BoringSSL), OAuth2 provider, previews, federation (OCM, read-only mounts), Range/304 downloads, chunked uploads, password and drop links, chunked request bodies, group shares and received shares in the recipient's tree.
+      versions, CalDAV, CardDAV, tags, comments, the capabilities endpoint, external storage (local folders), encryption at rest, LDAP sign-in, HTTPS (BoringSSL), OAuth2 provider, previews, federation (OCM, mounts with read and write, signed requests, trusted servers), Range/304 downloads, chunked uploads, password and drop links, chunked request bodies, group shares and received shares in the recipient's tree.
 - [ ] Still not ported (see `docs/porting-map.md`): SAML, other external storage backends,
-      settings/theming, write access and trusted-server lists for federated shares, iTIP scheduling and calendar sharing, the web front end, C++26 modules.
+      SAML, the lookup server, iTIP scheduling and calendar sharing, the web front end, C++26 modules.
 
 ## Acceptance criteria
 
@@ -80,4 +80,4 @@ style (`CODESTYLE.md`).
   (`.cppm`, `import std;`) needs GCC 16's libstdc++ and congelado's patched `rules_cc`; say if you want it
   and on which machine, the C ABI would not change.
 * **Next plugins.** Suggestions: SAML, calendar
-  scheduling (iTIP), write access for federated shares, signed OCM requests.
+  scheduling (iTIP), the lookup server, interoperable (RSA) OCM signatures.
