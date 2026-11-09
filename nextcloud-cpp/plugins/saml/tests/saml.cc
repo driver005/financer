@@ -85,12 +85,26 @@ struct Idp
         }
         const std::string ns = local_name == "Response" ? "urn:oasis:names:tc:SAML:2.0:protocol"
                                                         : "urn:oasis:names:tc:SAML:2.0:assertion";
-        const int status =
-            std::system(("xmlsec1 --sign --privkey-pem " + (key.empty() ? dir + "/key.pem" : key) +
-                         " --id-attr:ID " + ns + ":" + local_name + " --output " + dir +
-                         "/out.xml " + dir + "/in.xml >/dev/null")
-                            .c_str());
+        // xmlsec1 1.3 does not fall back to the one loaded key for a template without a KeyInfo
+        // unless asked to (--lax-key-search); 1.2 does not know that option and always falls back.
+        const auto run = [&](const std::string& extra)
+        {
+            return std::system(("xmlsec1 --sign " + extra + "--privkey-pem " +
+                                (key.empty() ? dir + "/key.pem" : key) + " --id-attr:ID " + ns +
+                                ":" + local_name + " --output " + dir + "/out.xml " + dir +
+                                "/in.xml >/dev/null 2>&1")
+                                   .c_str());
+        };
+        int status = run("");
         if (status != 0) {
+            status = run("--lax-key-search ");
+        }
+        if (status != 0) {
+            // Show why (the attempts above are silent).
+            std::system(("xmlsec1 --sign --lax-key-search --privkey-pem " +
+                         (key.empty() ? dir + "/key.pem" : key) + " --id-attr:ID " + ns + ":" +
+                         local_name + " --output " + dir + "/out.xml " + dir + "/in.xml >&2")
+                            .c_str());
             std::fprintf(
                 stderr,
                 "xmlsec1 could not sign (exit %d); is the OpenSSL backend installed?\n",
@@ -254,7 +268,10 @@ void test_validation()
         evil.name_id = "admin";
         evil.assertion_id = "_evil";
         const std::string evil_assertion = assertion_xml(evil, false);
-        std::string stripped = signed_assertion.substr(signed_assertion.find("<saml:Assertion"));
+        const std::size_t start = signed_assertion.find("<saml:Assertion");
+        NC_CHECK(start != std::string::npos);
+        std::string stripped =
+            start == std::string::npos ? std::string{} : signed_assertion.substr(start);
         // 1. an unsigned assertion in front of the signed one
         NC_CHECK(!check(response_xml(plain, evil_assertion + stripped)).has_value());
         // 2. the signed one hidden in Extensions, the unsigned one where it is read
