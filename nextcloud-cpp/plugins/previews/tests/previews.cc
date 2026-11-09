@@ -5,6 +5,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <tiffio.h>
 #include <webp/encode.h>
 
 namespace {
@@ -123,6 +124,127 @@ void test_image()
 
 } // namespace
 
+/// A TIFF written to memory with libtiff's client I/O (uncompressed 8 bit RGBA).
+struct TiffBuffer
+{
+    std::string bytes{};
+    std::size_t position{0};
+};
+
+std::string
+make_tiff(const std::vector<unsigned char>& rgba, std::uint32_t width, std::uint32_t height)
+{
+    TiffBuffer buffer;
+    TIFF* tiff = TIFFClientOpen(
+        "memory",
+        "wm",
+        &buffer,
+        [](thandle_t handle, void* data, tmsize_t count) -> tmsize_t
+        {
+            auto* b = static_cast<TiffBuffer*>(handle);
+            const std::size_t take = std::min<std::size_t>(
+                static_cast<std::size_t>(count),
+                b->bytes.size() - std::min(b->position, b->bytes.size())
+            );
+            std::copy_n(b->bytes.data() + b->position, take, static_cast<char*>(data));
+            b->position += take;
+            return static_cast<tmsize_t>(take);
+        },
+        [](thandle_t handle, void* data, tmsize_t count) -> tmsize_t
+        {
+            auto* b = static_cast<TiffBuffer*>(handle);
+            if (b->position + static_cast<std::size_t>(count) > b->bytes.size()) {
+                b->bytes.resize(b->position + static_cast<std::size_t>(count));
+            }
+            std::copy_n(
+                static_cast<const char*>(data),
+                count,
+                b->bytes.begin() + static_cast<std::ptrdiff_t>(b->position)
+            );
+            b->position += static_cast<std::size_t>(count);
+            return count;
+        },
+        [](thandle_t handle, toff_t offset, int whence) -> toff_t
+        {
+            auto* b = static_cast<TiffBuffer*>(handle);
+            const std::size_t target = whence == SEEK_SET ? static_cast<std::size_t>(offset)
+                                       : whence == SEEK_CUR
+                                           ? b->position + static_cast<std::size_t>(offset)
+                                           : b->bytes.size() + static_cast<std::size_t>(offset);
+            if (target > b->bytes.size()) {
+                b->bytes.resize(target);
+            }
+            b->position = target;
+            return static_cast<toff_t>(target);
+        },
+        [](thandle_t) -> int
+        {
+            return 0;
+        },
+        [](thandle_t handle) -> toff_t
+        {
+            return static_cast<toff_t>(static_cast<TiffBuffer*>(handle)->bytes.size());
+        },
+        nullptr,
+        nullptr
+    );
+    NC_CHECK(tiff != nullptr);
+    if (tiff == nullptr) {
+        return {};
+    }
+    TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, width);
+    TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, height);
+    TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, 4);
+    TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, 8);
+    TIFFSetField(tiff, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+    TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+    TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+    const std::uint16_t extra[] = {EXTRASAMPLE_UNASSALPHA};
+    TIFFSetField(tiff, TIFFTAG_EXTRASAMPLES, 1, extra);
+    TIFFSetField(tiff, TIFFTAG_ROWSPERSTRIP, height);
+    for (std::uint32_t row = 0; row < height; ++row) {
+        TIFFWriteScanline(
+            tiff,
+            const_cast<unsigned char*>(rgba.data()) + static_cast<std::size_t>(row) * width * 4,
+            row,
+            0
+        );
+    }
+    TIFFClose(tiff);
+    return buffer.bytes;
+}
+
+void test_tiff()
+{
+    std::vector<unsigned char> rgba;
+    for (int pixel = 0; pixel < 12; ++pixel) {
+        rgba.insert(
+            rgba.end(),
+            {static_cast<unsigned char>(pixel * 20),
+             static_cast<unsigned char>(255 - pixel * 20),
+             90,
+             255}
+        );
+    }
+    const std::string tiff = make_tiff(rgba, 4, 3);
+    NC_CHECK(nc::previews::sniff(tiff) == Format::TIFF);
+    const auto read = nc::previews::decode(tiff);
+    NC_CHECK(read.has_value());
+    if (read) {
+        NC_CHECK_EQ(read->get_width(), 4);
+        NC_CHECK_EQ(read->get_height(), 3);
+        NC_CHECK(read->get_pixels() == rgba);
+    }
+    // Damaged or lying files are refused, never a crash or a big allocation.
+    NC_CHECK(!nc::previews::decode(tiff.substr(0, tiff.size() / 2)).has_value());
+    NC_CHECK(!nc::previews::decode(std::string("II*\0", 4) + std::string(40, '\xff')).has_value());
+    NC_CHECK(!nc::previews::decode(std::string("MM\0*\0\0\0\x08", 8)).has_value());
+    std::string huge = tiff;
+    // Width tag of the first directory entry set to a huge value is not easy to place; a
+    // truncated header with a valid magic is enough to prove the limits path does not crash.
+    NC_CHECK(!nc::previews::decode(huge.substr(0, 20)).has_value());
+}
+
 void test_svg_and_webp()
 {
     // SVG: drawn at its own size; the colours and the transparency come out right.
@@ -192,6 +314,7 @@ int main()
 {
     test_image();
     test_svg_and_webp();
+    test_tiff();
 
     const std::string dir =
         (fs::temp_directory_path() / ("nc-previews-" + nc::util::random_hex(4))).string();

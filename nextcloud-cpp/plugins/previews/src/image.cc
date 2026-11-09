@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdarg>
 #include <cstdint>
 // The stb headers are third party code that is built with its own warning habits; ours do not apply
 // to it.
@@ -23,6 +24,7 @@
 #include <stb_image.h>
 #include <stb_image_resize2.h>
 #include <stb_image_write.h>
+#include <tiffio.h>
 #include <webp/decode.h>
 #pragma clang diagnostic pop
 
@@ -66,6 +68,13 @@ Format sniff(std::string_view bytes) noexcept
         (bytes[2] == '\n' || bytes[2] == '\r' || bytes[2] == ' ' || bytes[2] == '\t')) {
         return Format::PNM;
     }
+    // TIFF: "II*\0" / "MM\0*" (classic) or "II+\0" / "MM\0+" (BigTIFF).
+    if (bytes.size() >= 8 &&
+        ((bytes.substr(0, 2) == "II" && (bytes[2] == '*' || bytes[2] == '+') && bytes[3] == '\0') ||
+         (bytes.substr(0, 2) == "MM" && bytes[2] == '\0' && (bytes[3] == '*' || bytes[3] == '+'))
+        )) {
+        return Format::TIFF;
+    }
     // WebP: a RIFF container whose form type is "WEBP".
     if (bytes.size() >= 12 && bytes.substr(0, 4) == "RIFF" && bytes.substr(8, 4) == "WEBP") {
         return Format::WEBP;
@@ -87,6 +96,127 @@ Format sniff(std::string_view bytes) noexcept
         }
     }
     return Format::UNKNOWN;
+}
+
+namespace {
+
+    /// A TIFF held in memory, read through libtiff's client I/O (no file is ever opened).
+    struct MemoryFile
+    {
+        const char* data;
+        std::size_t size;
+        std::size_t position;
+    };
+
+    tmsize_t memory_read(thandle_t handle, void* buffer, tmsize_t count)
+    {
+        auto* file = static_cast<MemoryFile*>(handle);
+        const std::size_t left = file->size - std::min(file->position, file->size);
+        const std::size_t take = std::min<std::size_t>(static_cast<std::size_t>(count), left);
+        std::copy_n(file->data + file->position, take, static_cast<char*>(buffer));
+        file->position += take;
+        return static_cast<tmsize_t>(take);
+    }
+
+    tmsize_t memory_write(thandle_t, void*, tmsize_t)
+    {
+        return -1; // read only
+    }
+
+    toff_t memory_seek(thandle_t handle, toff_t offset, int whence)
+    {
+        auto* file = static_cast<MemoryFile*>(handle);
+        std::uint64_t target = 0;
+        if (whence == SEEK_SET) {
+            target = offset;
+        } else if (whence == SEEK_CUR) {
+            target = file->position + offset;
+        } else {
+            target = file->size + offset;
+        }
+        if (target > file->size) {
+            return static_cast<toff_t>(-1);
+        }
+        file->position = static_cast<std::size_t>(target);
+        return static_cast<toff_t>(target);
+    }
+
+    int memory_close(thandle_t)
+    {
+        return 0;
+    }
+
+    toff_t memory_size(thandle_t handle)
+    {
+        return static_cast<toff_t>(static_cast<MemoryFile*>(handle)->size);
+    }
+
+    int memory_map(thandle_t, void**, toff_t*)
+    {
+        return 0;
+    }
+
+    void memory_unmap(thandle_t, void*, toff_t) {}
+
+    void quiet(const char*, const char*, va_list) {}
+
+} // namespace
+
+Result<Image> decode_tiff(std::string_view bytes)
+{
+    // libtiff reports damage through handlers that print by default; the caller gets a message.
+    TIFFSetErrorHandler(quiet);
+    TIFFSetWarningHandler(quiet);
+    MemoryFile file{bytes.data(), bytes.size(), 0};
+    TIFFOpenOptions* options = TIFFOpenOptionsAlloc();
+    if (options == nullptr) {
+        return failure("cannot read the picture");
+    }
+    // A small file must not be able to ask for gigabytes.
+    TIFFOpenOptionsSetMaxSingleMemAlloc(options, 256 * 1'024 * 1'024);
+    TIFF* tiff = TIFFClientOpenExt(
+        "memory",
+        "rm",
+        &file,
+        memory_read,
+        memory_write,
+        memory_seek,
+        memory_close,
+        memory_size,
+        memory_map,
+        memory_unmap,
+        options
+    );
+    TIFFOpenOptionsFree(options);
+    if (tiff == nullptr) {
+        return failure("the picture is damaged");
+    }
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    if (TIFFGetField(tiff, TIFFTAG_IMAGEWIDTH, &width) != 1 ||
+        TIFFGetField(tiff, TIFFTAG_IMAGELENGTH, &height) != 1 || width == 0 || height == 0 ||
+        width > static_cast<std::uint32_t>(MAX_SIDE) ||
+        height > static_cast<std::uint32_t>(MAX_SIDE) ||
+        static_cast<long>(width) * static_cast<long>(height) > MAX_PIXELS) {
+        TIFFClose(tiff);
+        return failure("the picture is too large to preview");
+    }
+    std::vector<std::uint32_t> raster(static_cast<std::size_t>(width) * height);
+    const int ok =
+        TIFFReadRGBAImageOriented(tiff, width, height, raster.data(), ORIENTATION_TOPLEFT, 0);
+    TIFFClose(tiff);
+    if (ok == 0) {
+        return failure("the picture is damaged or in an unsupported variant");
+    }
+    std::vector<unsigned char> pixels;
+    pixels.reserve(raster.size() * 4);
+    for (const std::uint32_t pixel: raster) {
+        pixels.push_back(static_cast<unsigned char>(TIFFGetR(pixel)));
+        pixels.push_back(static_cast<unsigned char>(TIFFGetG(pixel)));
+        pixels.push_back(static_cast<unsigned char>(TIFFGetB(pixel)));
+        pixels.push_back(static_cast<unsigned char>(TIFFGetA(pixel)));
+    }
+    return Image{static_cast<int>(width), static_cast<int>(height), std::move(pixels)};
 }
 
 Result<Image> decode(std::string_view bytes)
@@ -126,6 +256,9 @@ Result<Image> decode(std::string_view bytes)
             );
         }
         return Image{static_cast<int>(width), static_cast<int>(height), std::move(pixels)};
+    }
+    if (format == Format::TIFF) {
+        return decode_tiff(bytes);
     }
     if (format == Format::WEBP) {
         int width = 0;

@@ -30,7 +30,7 @@ have to be vendored by hand (see `third_party/`).
 
 | Nextcloud uses | C++ library (BCR) | For |
 |---|---|---|
-| `ext-gd`, previews | `lunasvg` (SVG, **in use**), `libwebp` (**in use**), `libtiff`, `libheif` (HEIC), `libpng`, `libjpeg_turbo`, `giflib`, `freetype`, `harfbuzz` | previews of more formats; `stb` stays for what it covers |
+| `ext-gd`, previews | `lunasvg` (SVG, **in use**), `libwebp` (**in use**), `libtiff` (**in use**), `libheif` (HEIC, not used: no test files), `libpng`, `libjpeg_turbo`, `giflib`, `freetype`, `harfbuzz` | previews of more formats; `stb` stays for what it covers |
 | `ext-xml`, `ext-dom`, `ext-simplexml`, `ext-xmlreader`, `ext-xmlwriter` | `pugixml` or `libxml2` | WebDAV/CalDAV/CardDAV XML parsing; `libxml2` also has exclusive canonicalization, which SAML needs |
 | SAML (`apps/user_saml`, external app) | `libxml2` (c14n) + BoringSSL + `zlib` (**in use**, `plugins/saml`) | XML signatures: no `xmlsec` in BCR, so the verification is written on top of these and tested against `xmlsec1` |
 | `firebase/php-jwt` | `jwt-cpp` | OAuth2/OIDC tokens |

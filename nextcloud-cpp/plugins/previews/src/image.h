@@ -17,6 +17,7 @@ enum class Format
     PNM,
     WEBP,
     SVG,
+    TIFF,
     UNKNOWN
 };
 
@@ -85,6 +86,8 @@ inline constexpr int MAX_SIDE = 8'192;
 inline constexpr long MAX_PIXELS = 40L * 1'000 * 1'000;
 
 [[nodiscard]] Result<Image> decode(std::string_view bytes);
+/// @brief The TIFF decoder alone (`decode` calls it for pictures that sniff as TIFF).
+[[nodiscard]] Result<Image> decode_tiff(std::string_view bytes);
 
 /// @brief The picture scaled to fit inside `max_width` x `max_height`, keeping its shape; never
 /// enlarged.

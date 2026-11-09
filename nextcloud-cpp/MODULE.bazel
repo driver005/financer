@@ -25,6 +25,7 @@ bazel_dep(name = "libssh2", version = "1.11.1.bcr.2")
 # More picture formats for previews: SVG, WebP.
 bazel_dep(name = "lunasvg", version = "2.4.1.bcr.1")
 bazel_dep(name = "libwebp", version = "1.6.0.bcr.1")
+bazel_dep(name = "libtiff", version = "4.7.2.bcr.2")
 
 # XML for SAML single sign-on (parsing and exclusive canonicalization for XML signatures).
 bazel_dep(name = "libxml2", version = "2.15.4")

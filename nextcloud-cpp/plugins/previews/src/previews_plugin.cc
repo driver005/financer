@@ -77,7 +77,7 @@ public:
             {
                 return Response::json(
                     200,
-                    R"({"formats":["png","jpeg","gif","bmp","pnm","webp","svg"],"max_size":2048})"
+                    R"({"formats":["png","jpeg","gif","bmp","pnm","webp","svg","tiff"],"max_size":2048})"
                 );
             }
         );

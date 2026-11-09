@@ -10,6 +10,7 @@ nc_cc_library(
     deps = [
         "//sdk/util",
         "//third_party/stb",
+        "@libtiff//:tiff",
         "@libwebp",
         "@lunasvg",
     ],
@@ -34,6 +35,7 @@ nc_cc_test(
         ":lib",
         "//runner:kernel",
         "//sdk/testing",
+        "@libtiff//:tiff",
         "@libwebp",
     ],
 )
