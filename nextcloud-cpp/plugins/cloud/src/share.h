@@ -10,6 +10,8 @@ namespace nc::cloud {
 inline constexpr int SHARE_TYPE_USER = 0;
 inline constexpr int SHARE_TYPE_GROUP = 1;
 inline constexpr int SHARE_TYPE_LINK = 3;
+/// A link that is mailed to one address; it works like a link share.
+inline constexpr int SHARE_TYPE_EMAIL = 4;
 /// A share with a user on another server (federation); the token is the secret that server
 /// presents.
 inline constexpr int SHARE_TYPE_REMOTE = 6;

@@ -1449,7 +1449,8 @@ private:
     [[nodiscard]] std::string share_json(const Share& share, const Request& request) const
     {
         const auto node = storage_for(share.get_owner()).stat(share.get_path());
-        const bool link = share.get_type() == nc::cloud::SHARE_TYPE_LINK;
+        const bool link = share.get_type() == nc::cloud::SHARE_TYPE_LINK ||
+                          share.get_type() == nc::cloud::SHARE_TYPE_EMAIL;
         std::string json = R"({"id":")" + std::to_string(share.get_id()) + R"(","share_type":)" +
                            std::to_string(share.get_type());
         json += R"(,"uid_owner":)" + json_string(share.get_owner()) + R"(,"path":)" +
@@ -1532,7 +1533,21 @@ private:
                         return failure(400, "Invalid permissions");
                     }
                     share.set_permissions(mask);
-                } else if (type == nc::cloud::SHARE_TYPE_LINK) {
+                } else if (type == nc::cloud::SHARE_TYPE_LINK ||
+                           type == nc::cloud::SHARE_TYPE_EMAIL) {
+                    if (type == nc::cloud::SHARE_TYPE_EMAIL) {
+                        // The link goes to this address only; it is mailed once the share exists.
+                        const std::string address = field("shareWith");
+                        const int valid =
+                            m_host->call_service("mail.validate", address).get_status();
+                        if (valid == 404) {
+                            return failure(501, "Sharing by mail is not enabled");
+                        }
+                        if (valid != 200) {
+                            return failure(400, "Use a valid email address to share by mail");
+                        }
+                        share.set_share_with(std::string{address});
+                    }
                     // 1 read only (default), 4 upload only ("file drop"), 5 read and upload; the
                     // last two need a folder.
                     const std::string permissions = field("permissions");
@@ -1586,6 +1601,31 @@ private:
                 if (!added) {
                     return failure(500, added.error());
                 }
+                if (type == nc::cloud::SHARE_TYPE_EMAIL) {
+                    const Response mailed = m_host->call_service(
+                        "mail.send",
+                        nc::util::form_encode(
+                            {{"to", added->get_share_with()},
+                             {"subject", owner + " shared \"" + added->get_path() + "\" with you"},
+                             {"body",
+                              owner + " shared \"" + added->get_path() + "\" with you.\n\n" +
+                                  base_url(request) + "/s/" + added->get_token() + "\n" +
+                                  (added->get_password().empty()
+                                       ? ""
+                                       : "\nThe link is protected by a password; ask " + owner +
+                                             " for it.\n")}}
+                        )
+                    );
+                    if (mailed.get_status() != 200) {
+                        (void)m_shares->remove(added->get_id());
+                        return failure(
+                            mailed.get_status() == 404 ? 501 : 400,
+                            mailed.get_status() == 404
+                                ? "Sharing by mail is not enabled"
+                                : "The mail could not be sent: " + mailed.get_body()
+                        );
+                    }
+                }
                 if (type == nc::cloud::SHARE_TYPE_REMOTE) {
                     const auto node = storage_for(owner).stat(added->get_path());
                     const Response sent = m_host->call_service(
@@ -1620,8 +1660,10 @@ private:
                          {"share_with", added->get_share_with()},
                          {"path", added->get_path()},
                          {"token",
-                          added->get_type() == nc::cloud::SHARE_TYPE_LINK ? added->get_token()
-                                                                          : std::string{}}}
+                          added->get_type() == nc::cloud::SHARE_TYPE_LINK ||
+                                  added->get_type() == nc::cloud::SHARE_TYPE_EMAIL
+                              ? added->get_token()
+                              : std::string{}}}
                     )
                 );
                 return ok(share_json(*added, request));

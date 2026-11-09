@@ -464,6 +464,56 @@ void test_plugins()
         }
     }
     NC_CHECK(notified);
+    // A share by mail: a link that is mailed to the address and works like a link share.
+    const Response mailed_share = kernel.handle(
+        as(req("POST", shares, "", "path=%2Fhello.txt&shareType=4&shareWith=friend%40example.com"),
+           ALICE)
+    );
+    NC_CHECK_EQ(mailed_share.get_status(), 200);
+    const std::string mailed_body = mailed_share.get_body();
+    const std::size_t mailed_at = mailed_body.find("\"token\":\"");
+    NC_CHECK(mailed_at != std::string::npos);
+    const std::string mailed_token = mailed_body.substr(mailed_at + 9, 20);
+    bool link_mailed = false;
+    for (const auto& entry: fs::directory_iterator{spool}) {
+        if (entry.path().extension() != ".eml") {
+            continue;
+        }
+        const std::string text = slurp(entry.path());
+        if (text.find("To: friend@example.com") == std::string::npos) {
+            continue;
+        }
+        // The body is base64; read the link out of it.
+        std::string encoded = text.substr(text.find("\r\n\r\n") + 4);
+        std::erase(encoded, '\r');
+        std::erase(encoded, '\n');
+        const auto decoded = nc::util::base64_decode(encoded);
+        link_mailed = decoded && decoded->find("/s/" + mailed_token) != std::string::npos;
+    }
+    NC_CHECK(link_mailed);
+    NC_CHECK_EQ(kernel.handle(Request{"GET", "/s/" + mailed_token}).get_status(), 200);
+    NC_CHECK_EQ(
+        kernel
+            .handle(as(
+                req("POST", shares, "", "path=%2Fhello.txt&shareType=4&shareWith=not-an-address"),
+                ALICE
+            ))
+            .get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        kernel
+            .handle(
+                as(req("POST",
+                       shares,
+                       "",
+                       "path=%2Fhello.txt&shareType=4&shareWith=a%40b.org%0D%0ABcc%3Aevil%40x.org"),
+                   ALICE)
+            )
+            .get_status(),
+        400
+    );
+
     NC_CHECK_EQ(
         kernel
             .handle(
@@ -1036,6 +1086,11 @@ void test_public_webdav()
     NC_CHECK_EQ(dav("DELETE", "/public.php/webdav/a.txt", good).get_status(), 403);
     NC_CHECK_EQ(dav("POST", "/public.php/webdav/a.txt", good).get_status() >= 400, true);
 
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=/Docs&shareType=4&shareWith=a%40b.org", alice))
+            .get_status(),
+        501
+    );
     // Sharing with another server needs the federation plugin; without it nothing is left behind.
     const Response remote = kernel.handle(
         user_req("POST", shares, "path=/Docs&shareType=6&shareWith=bob@cloud.example", alice)
