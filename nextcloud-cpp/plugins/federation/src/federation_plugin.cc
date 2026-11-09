@@ -18,6 +18,7 @@
  * addresses refused unless the administrator allows them).
  */
 #include "http_client.h"
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
@@ -30,6 +31,7 @@
 #include <chrono>
 #include <ctime>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <openssl/curve25519.h>
 #include <optional>
@@ -193,6 +195,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         m_public_url = host.config("url", "");
         while (!m_public_url.empty() && m_public_url.back() == '/') {
             m_public_url.pop_back();
@@ -249,7 +253,7 @@ public:
         load_or_create_key();
         add_services(host);
         add_protocol_routes(host);
-        add_user_routes(host);
+        add_user_routes();
 
         host.subscribe(
             "share.deleted",
@@ -1142,35 +1146,34 @@ private:
         );
     }
 
-    void add_user_routes(nc::Host& host)
+    void add_user_routes()
     {
+        constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
         constexpr std::string_view BASE = "/ocs/v2.php/apps/files_sharing/api/v1/remote_shares";
-        host.add_route(
+        m_app->route(
             "GET",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                return request.get_user().empty() ? nc::http::unauthorized()
-                                                  : list_incoming(request, 1);
+                return list_incoming(request, 1);
             }
         );
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/pending",
+            USER,
             [this](const Request& request)
             {
-                return request.get_user().empty() ? nc::http::unauthorized()
-                                                  : list_incoming(request, 0);
+                return list_incoming(request, 0);
             }
         );
-        host.add_route(
+        m_app->route(
             "POST",
             std::string{BASE} + "/pending/{id}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const nc::db::Client db{m_host};
                 const auto rows = db.query(
                     "SELECT id, base, remote_id, token FROM nc_fed_incoming WHERE id = ? AND uid = "
@@ -1191,14 +1194,12 @@ private:
         // Declining a pending share, or leaving an accepted one.
         for (const std::string& path:
              {std::string{BASE} + "/pending/{id}", std::string{BASE} + "/{id}"}) {
-            host.add_route(
+            m_app->route(
                 "DELETE",
                 path,
+                USER,
                 [this](const Request& request)
                 {
-                    if (request.get_user().empty()) {
-                        return nc::http::unauthorized();
-                    }
                     const nc::db::Client db{m_host};
                     const auto rows = db.query(
                         "SELECT id, base, remote_id, token, state FROM nc_fed_incoming WHERE id = "
@@ -1219,6 +1220,7 @@ private:
         }
     }
 
+    std::unique_ptr<nc::app::App> m_app{};
     nc::federation::ClientSettings m_client{};
     std::string m_public_url{};
     std::string m_public_key{};
