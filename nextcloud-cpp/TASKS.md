@@ -74,9 +74,8 @@ style (`CODESTYLE.md`).
 
 ## Open questions for the owner
 
-* **Builder pattern** (CODESTYLE rule 11 says to ask before using it). `MailMessage` is the natural first
-  candidate (`MailMessage::builder().from(..).to(..).subject(..).build()`), then `Request`/`Response`.
-  Not used until you say so.
+* **Builder pattern.** Approved for `MailMessage` (`MailMessageBuilder{}.from(..).to(..).subject(..).build()`, used by
+  the mail plugin). Still to ask before using it on `Request`/`Response` or other classes.
 * **Modules.** The tree already builds with clang 22 and C++26. Converting the headers to modules
   (`.cppm`, `import std;`) needs GCC 16's libstdc++ and congelado's patched `rules_cc`; say if you want it
   and on which machine, the C ABI would not change.
