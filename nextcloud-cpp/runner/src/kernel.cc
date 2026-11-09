@@ -771,6 +771,15 @@ NcView Kernel::host_config_get(void* ctx, NcView plugin, NcView key)
 
 void Kernel::install_builtins()
 {
+    // The version the runner reports, for plugins that compare it with another (update checks).
+    (void)m_services.add(
+        "core.version",
+        "kernel",
+        [](std::string_view)
+        {
+            return http::Response::text(200, std::string{VERSION});
+        }
+    );
     (void)m_router.add(
         "GET",
         "/status.php",

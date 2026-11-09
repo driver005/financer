@@ -21,6 +21,10 @@ plugins/oauth2/    OAuth 2.0 authorization server
 plugins/previews/  thumbnails of pictures
 plugins/federation/ sharing with users on other servers (Open Cloud Mesh)
 plugins/user_status/ online status and status messages
+plugins/settings/   values per app and per person, changed while the server runs
+plugins/theming/    name, colour and links of the server
+plugins/updatenotification/ tells administrators about new versions
+plugins/weather_status/ the weather where people are
 plugins/webhook_listeners/ signed webhooks for events
 plugins/workflowengine/ flows: when an event matches, notify or tag
 plugins/groups/    groups and membership
@@ -94,6 +98,8 @@ reads `[its-name] key` first and the top level `key` second.
 | `[ldap] host`, `port`, `base_dn`, `bind_dn`, `bind_password`, `user_attribute`, `object_class`, `display_attribute`, `mail_attribute` | directory sign-in | none (plugin stays off) |
 | `[federation] url`, `allow_http`, `allow_local`, `ca_file`, `timeout_seconds`, `handshake_timeout_seconds`, `max_pending_per_user` | sharing with other servers: this server's public address (else the `Host` header), plain http and local addresses (both off; for tests and private networks), trusted certificates (else the system's), limits | from `Host`, `false`, `false`, system, 15, 5, 100 |
 | `[webhook_listeners] allow_http`, `allow_local`, `timeout_seconds` | outgoing webhook requests | `false`, `false`, 10 |
+| `[updatenotification] url`, `allow_http`, `allow_local` | where to ask for the newest version | none (plugin idle) |
+| `[weather_status] url`, `allow_http`, `allow_local` | the weather service | Open-Meteo |
 | `[db] file` | SQLite file | `<data_dir>/nextcloud.db` |
 | `[twofactor] issuer` | name shown in authenticator apps | `Nextcloud` |
 | `[trashbin] retention_days`, `[versions] max_versions`, `retention_days`, `[activity] retention_days` | how long things are kept | 30; 10, 365; 365 |

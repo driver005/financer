@@ -142,6 +142,20 @@ public:
                             : Response::text(404, "no such user");
             }
         );
+        // The ids of the enabled administrators, one per line.
+        host.add_service(
+            "users.list_admins",
+            [&store](std::string_view)
+            {
+                std::string out;
+                for (const User& user: store.list()) {
+                    if (user.is_admin() && user.is_enabled()) {
+                        out += user.get_id() + "\n";
+                    }
+                }
+                return Response::text(200, out);
+            }
+        );
         // 200 when the account exists and is an administrator, 404 otherwise.
         host.add_service(
             "users.is_admin",

@@ -56,7 +56,11 @@ here and is tested; **Reduced** means a deliberate subset (stated); **Replaced**
 | `apps/user_status` | Reduced | `user_status`: status (online, away, dnd, invisible, offline), a message with an icon and an end time, `statuses` for others (invisible reads as offline, its message hidden). No predefined statuses, no "busy from calendar" |
 | `apps/webhook_listeners` | Reduced | `webhook_listeners`: administrators register `event` (exact or `prefix*`) and `uri`; events are queued and posted by a job as JSON, signed with HMAC-SHA256 (`X-Nextcloud-Signature`), five attempts with growing pauses. Same outgoing client as federation (certificates, no local addresses unless allowed). No event filters on payload fields, no user-bound tokens |
 | `apps/workflowengine` | Reduced | `workflowengine`: administrators define flows (event pattern, `path` and `user` globs) with the actions `notify` and `tag`. Reacts after the fact; there is no "block access" action and no operators other than glob |
-| other `files_external` backends, `settings`, `theming`, `viewer`, `updatenotification`, `weather_status`, ... | Not ported | |
+| `lib/public/IAppConfig`, `IConfig` user values, config part of `apps/provisioning_api` | Reduced | `settings`: values per app (administrators) and per person, services `settings.get_app|get_user|set_app`, OCS under `provisioning_api/api/v1/config`. No typed values, no lazy/sensitive flags |
+| `apps/theming` | Reduced | `theming`: name, slogan, url, primary colour, imprint/privacy links (checked), in the capabilities and as a CSS file with variables (default, light, dark; a dark colour is lifted on the dark theme). No logos, backgrounds or per-user themes |
+| `apps/updatenotification` | Reduced | `updatenotification`: daily and on `update:check`, asks `[updatenotification] url` for `{"version","url"}` and tells each administrator once per version. It never installs anything |
+| `apps/weather_status` | Reduced | `weather_status`: a location per person and the next hours from a weather service (default Open-Meteo, `[weather_status] url`), cached one hour per place |
+| other `files_external` backends, `viewer`, ... | Not ported | |
 
 ## Verified
 
