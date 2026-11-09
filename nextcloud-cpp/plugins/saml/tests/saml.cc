@@ -88,7 +88,7 @@ struct Idp
         const int status =
             std::system(("xmlsec1 --sign --privkey-pem " + (key.empty() ? dir + "/key.pem" : key) +
                          " --id-attr:ID " + ns + ":" + local_name + " --output " + dir +
-                         "/out.xml " + dir + "/in.xml >/dev/null 2>&1")
+                         "/out.xml " + dir + "/in.xml >/dev/null")
                             .c_str());
         if (status != 0) {
             std::fprintf(
