@@ -21,6 +21,7 @@ plugins/oauth2/    OAuth 2.0 authorization server
 plugins/previews/  thumbnails of pictures
 plugins/federation/ sharing with users on other servers (Open Cloud Mesh)
 plugins/user_status/ online status and status messages
+plugins/lookup/    find people on other servers
 plugins/settings/   values per app and per person, changed while the server runs
 plugins/theming/    name, colour and links of the server
 plugins/updatenotification/ tells administrators about new versions
@@ -102,6 +103,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `[webhook_listeners] allow_http`, `allow_local`, `timeout_seconds` | outgoing webhook requests | `false`, `false`, 10 |
 | `[updatenotification] url`, `allow_http`, `allow_local` | where to ask for the newest version | none (plugin idle) |
 | `[weather_status] url`, `allow_http`, `allow_local` | the weather service | Open-Meteo |
+| `[lookup] server`, `url`, `allow_http`, `allow_local`, `timeout_seconds` | the directory to ask for people on other servers, this server's own address for published entries | none, from `Host`, `false`, `false`, 10 |
 | `[db] file` | SQLite file | `<data_dir>/nextcloud.db` |
 | `[twofactor] issuer` | name shown in authenticator apps | `Nextcloud` |
 | `[trashbin] retention_days`, `[versions] max_versions`, `retention_days`, `[activity] retention_days` | how long things are kept | 30; 10, 365; 365 |

@@ -241,6 +241,11 @@ public:
             "NULL, "
             "private TEXT NOT NULL);"
         );
+        nc::db::Client{&host}.migrate(
+            "federation",
+            3,
+            "ALTER TABLE nc_fed_outgoing ADD COLUMN is_group INTEGER NOT NULL DEFAULT 0;"
+        );
         load_or_create_key();
         add_services(host);
         add_protocol_routes(host);
@@ -251,7 +256,8 @@ public:
             [this](std::string_view, std::string_view payload)
             {
                 const auto form = nc::util::parse_form(payload);
-                if (nc::util::form_value(form, "type") == "6") {
+                if ((nc::util::form_value(form, "type") == "6" ||
+                     nc::util::form_value(form, "type") == "9")) {
                     withdraw(nc::util::form_value(form, "id"));
                 }
             }
@@ -683,6 +689,7 @@ private:
                     " could not be reached, is not trusted or does not accept shares"
             );
         }
+        const bool is_group = field("kind") == "group";
         const std::string owner_address = field("owner") + "@" + server_of(base);
         const int permissions = std::atoi(field("permissions").c_str());
         const std::string body =
@@ -691,8 +698,8 @@ private:
             json_string(field("id")) + R"(,"owner":)" + json_string(owner_address) +
             R"(,"ownerDisplayName":)" + json_string(field("owner")) + R"(,"sender":)" +
             json_string(owner_address) + R"(,"senderDisplayName":)" + json_string(field("owner")) +
-            R"(,"shareType":"user","resourceType":")" +
-            std::string{field("directory") == "1" ? "folder" : "file"} +
+            R"(,"shareType":")" + std::string{is_group ? "group" : "user"} +
+            R"(","resourceType":")" + std::string{field("directory") == "1" ? "folder" : "file"} +
             R"(","protocol":{"name":"webdav","options":{"sharedSecret":)" +
             json_string(field("token")) + R"(,"permissions":)" + permissions_json(permissions) +
             "}}}";
@@ -702,13 +709,14 @@ private:
         }
         nc::db::Client{m_host}.exec(
             "INSERT OR REPLACE INTO nc_fed_outgoing (share_id, owner, name, remote_user, base, "
-            "token) VALUES (?, ?, ?, ?, ?, ?)",
+            "token, is_group) VALUES (?, ?, ?, ?, ?, ?, ?)",
             {field("id"),
              field("owner"),
              field("name"),
              recipient->user + "@" + recipient->server,
              provider->base,
-             field("token")}
+             field("token"),
+             is_group ? "1" : "0"}
         );
         return Response::text(200, "sent");
     }
@@ -875,7 +883,7 @@ private:
                         R"({"enabled":true,"apiVersion":"1.0-proposal1","endPoint":)" +
                             json_string(base + "/ocm") + R"(,"signatureAlgorithm":"ed25519",)" +
                             R"("publicKey":)" + json_string(nc::util::base64_encode(m_public_key)) +
-                            R"(,"resourceTypes":[{"name":"file","shareTypes":["user"],)"
+                            R"(,"resourceTypes":[{"name":"file","shareTypes":["user","group"],)"
                             R"("protocols":{"webdav":"/public.php/webdav/"}}]})"
                     );
                 }
@@ -919,25 +927,31 @@ private:
                 ? std::to_string(static_cast<long long>((*json)["providerId"].number()))
                 : (*json)["providerId"].string();
         if (!recipient || !owner || protocol["name"].string() != "webdav" || !secret_ok(secret) ||
-            !id_ok(provider_id) || (*json)["shareType"].string() != "user" ||
+            !id_ok(provider_id) ||
+            ((*json)["shareType"].string() != "user" && (*json)["shareType"].string() != "group") ||
             (*json)["name"].string().empty()) {
             return refuse();
         }
-        const std::string& user = recipient->user;
-        if (m_host->call_service("users.get", user).get_status() != 200) {
+        const bool group = (*json)["shareType"].string() == "group";
+        // Who it is for: the person, or every member of the group.
+        std::vector<std::string> users;
+        if (group) {
+            // (`groups.members` answers an empty list for a group that does not exist.)
+            if (m_host->call_service("groups.exists", recipient->user).get_status() == 200) {
+                const Response members = m_host->call_service("groups.members", recipient->user);
+                for (const std::string& line: nc::util::split(members.get_body(), '\n')) {
+                    if (!line.empty() && users.size() < 1'000) {
+                        users.push_back(line);
+                    }
+                }
+            }
+        } else if (m_host->call_service("users.get", recipient->user).get_status() == 200) {
+            users.push_back(recipient->user);
+        }
+        if (users.empty()) {
             return refuse();
         }
         const nc::db::Client db{m_host};
-        const auto pending = db.query(
-            "SELECT COUNT(*) AS n FROM nc_fed_incoming WHERE uid = ? AND state = 0",
-            {user}
-        );
-        if (!pending.empty() &&
-            static_cast<std::size_t>(
-                std::strtoull(nc::db::value_of(pending.front(), "n").c_str(), nullptr, 10)
-            ) >= m_max_pending) {
-            return Response::json(429, R"({"message":"too many pending shares"})");
-        }
         // The sender must be a server that speaks OCM: that is also how the scheme is learned.
         const auto provider = discover(owner->server);
         if (!provider) {
@@ -952,33 +966,53 @@ private:
         }
         const bool directory = (*json)["resourceType"].string() == "folder";
         const std::string name = clean_name((*json)["name"].string());
-        try {
-            db.exec(
-                "INSERT INTO nc_fed_incoming (uid, owner, base, name, directory, permissions, "
-                "token, remote_id, state, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
-                {user,
-                 owner->user + "@" + owner->server,
-                 provider->base,
-                 name,
-                 directory ? "1" : "0",
-                 std::to_string(permissions_of(protocol["options"]["permissions"])),
-                 secret,
-                 provider_id,
-                 std::to_string(now_seconds())}
+        std::size_t stored = 0;
+        for (const std::string& user: users) {
+            const auto pending = db.query(
+                "SELECT COUNT(*) AS n FROM nc_fed_incoming WHERE uid = ? AND state = 0",
+                {user}
             );
-        } catch (const std::exception&) {
-            return refuse(); // the same share twice
+            if (!pending.empty() &&
+                static_cast<std::size_t>(
+                    std::strtoull(nc::db::value_of(pending.front(), "n").c_str(), nullptr, 10)
+                ) >= m_max_pending) {
+                continue; // that person has too many waiting already
+            }
+            try {
+                db.exec(
+                    "INSERT INTO nc_fed_incoming (uid, owner, base, name, directory, permissions, "
+                    "token, remote_id, state, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+                    {user,
+                     owner->user + "@" + owner->server,
+                     provider->base,
+                     name,
+                     directory ? "1" : "0",
+                     std::to_string(permissions_of(protocol["options"]["permissions"])),
+                     secret,
+                     provider_id,
+                     std::to_string(now_seconds())}
+                );
+            } catch (const std::exception&) {
+                continue; // the same share twice
+            }
+            ++stored;
+            (void)m_host->call_service(
+                "notifications.push",
+                nc::util::form_encode(
+                    {{"user", user},
+                     {"subject",
+                      owner->user + "@" + owner->server + " wants to share \"" + name +
+                          "\" with you"},
+                     {"message", ""},
+                     {"link", ""}}
+                )
+            );
         }
-        (void)m_host->call_service(
-            "notifications.push",
-            nc::util::form_encode(
-                {{"user", user},
-                 {"subject",
-                  owner->user + "@" + owner->server + " wants to share \"" + name + "\" with you"},
-                 {"message", ""},
-                 {"link", ""}}
-            )
-        );
+        if (stored == 0) {
+            return group || users.size() > 1
+                       ? Response::json(429, R"({"message":"nobody could take the share"})")
+                       : refuse();
+        }
         return Response::json(201, "{}");
     }
 
@@ -1022,8 +1056,8 @@ private:
         if (type == "SHARE_ACCEPTED" || type == "SHARE_DECLINED") {
             // The recipient answered a share this server sent.
             const auto rows = db.query(
-                "SELECT owner, name, remote_user, token, base FROM nc_fed_outgoing WHERE share_id "
-                "= ?",
+                "SELECT owner, name, remote_user, token, base, is_group FROM nc_fed_outgoing WHERE "
+                "share_id = ?",
                 {provider_id}
             );
             if (rows.empty() ||
@@ -1049,7 +1083,8 @@ private:
                      {"link", ""}}
                 )
             );
-            if (!accepted) {
+            // One member of a group declining does not take the share from the others.
+            if (!accepted && nc::db::value_of(rows.front(), "is_group") != "1") {
                 (void)m_host->call_service(
                     "cloud.remove_remote_share",
                     nc::util::form_encode({{"id", provider_id}, {"token", secret}})

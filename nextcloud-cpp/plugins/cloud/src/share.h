@@ -15,6 +15,8 @@ inline constexpr int SHARE_TYPE_EMAIL = 4;
 /// A share with a user on another server (federation); the token is the secret that server
 /// presents.
 inline constexpr int SHARE_TYPE_REMOTE = 6;
+/// A group on another server (federation): every member there is offered the share.
+inline constexpr int SHARE_TYPE_REMOTE_GROUP = 9;
 
 /// @brief One share: a path of the owner offered to a user or through a public link.
 class Share

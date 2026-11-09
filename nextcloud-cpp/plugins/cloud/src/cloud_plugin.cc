@@ -457,7 +457,9 @@ private:
                 const auto share = m_shares->find(
                     std::strtoull(nc::util::form_value(form, "id").c_str(), nullptr, 10)
                 );
-                if (!share || share->get_type() != nc::cloud::SHARE_TYPE_REMOTE ||
+                if (!share ||
+                    (share->get_type() != nc::cloud::SHARE_TYPE_REMOTE &&
+                     share->get_type() != nc::cloud::SHARE_TYPE_REMOTE_GROUP) ||
                     !nc::util::constant_time_equals(
                         share->get_token(),
                         nc::util::form_value(form, "token")
@@ -2366,6 +2368,23 @@ private:
                     add(exact ? exact_remotes : remotes,
                         entry(nc::cloud::SHARE_TYPE_REMOTE, address, address));
                 }
+                // People other servers' directories know (if a lookup directory is configured).
+                for (const std::string& line: nc::util::split(
+                         m_host->call_service("lookup.search", search).get_body(),
+                         '\n'
+                     )) {
+                    const std::size_t tab = line.find('\t');
+                    if (line.empty()) {
+                        continue;
+                    }
+                    const std::string address = line.substr(0, tab);
+                    const std::string label = tab == std::string::npos || line.size() == tab + 1
+                                                  ? address
+                                                  : line.substr(tab + 1) + " (" + address + ")";
+                    typed_is_known = typed_is_known || nc::util::to_lower(address) == lowered;
+                    add(nc::util::to_lower(address) == lowered ? exact_remotes : remotes,
+                        entry(nc::cloud::SHARE_TYPE_REMOTE, label, address));
+                }
                 // Something that looks like name@server can be shared with even if never seen
                 // before.
                 const std::size_t at = search.rfind('@');
@@ -2502,9 +2521,11 @@ private:
                             nc::util::to_hex(nc::util::pbkdf2_sha256(password, salt, 10'000))
                         );
                     }
-                } else if (type == nc::cloud::SHARE_TYPE_REMOTE) {
-                    // A user on another server: "name@host[:port]". The federation plugin tells
-                    // that server; this share is what it will present the token for.
+                } else if (type == nc::cloud::SHARE_TYPE_REMOTE ||
+                           type == nc::cloud::SHARE_TYPE_REMOTE_GROUP) {
+                    // A user (or a group, for type 9) on another server: "name@host[:port]". The
+                    // federation plugin tells that server; this share is what it will present the
+                    // token for.
                     const std::string recipient = field("shareWith");
                     const std::size_t at = recipient.rfind('@');
                     if (at == std::string::npos || at == 0 || at + 1 >= recipient.size() ||
@@ -2523,7 +2544,8 @@ private:
                     return failure(400, "Unknown share type");
                 }
                 if (reshare) {
-                    if (type == nc::cloud::SHARE_TYPE_REMOTE) {
+                    if (type == nc::cloud::SHARE_TYPE_REMOTE ||
+                        type == nc::cloud::SHARE_TYPE_REMOTE_GROUP) {
                         return failure(
                             403,
                             "A share from another person cannot go to another server"
@@ -2575,7 +2597,8 @@ private:
                         );
                     }
                 }
-                if (type == nc::cloud::SHARE_TYPE_REMOTE) {
+                if (type == nc::cloud::SHARE_TYPE_REMOTE ||
+                    type == nc::cloud::SHARE_TYPE_REMOTE_GROUP) {
                     const auto node = storage_for(owner).stat(added->get_path());
                     const Response sent = m_host->call_service(
                         "federation.send",
@@ -2587,6 +2610,8 @@ private:
                              {"directory", node && node->is_directory() ? "1" : "0"},
                              {"token", added->get_token()},
                              {"share_with", added->get_share_with()},
+                             {"kind", type == nc::cloud::SHARE_TYPE_REMOTE_GROUP ? "group" : "user"
+                             },
                              {"permissions", std::to_string(added->get_permissions())},
                              {"base_url", base_url(request)}}
                         )

@@ -10,6 +10,7 @@ test_suite(
         "//plugins/federation:http_client_test",
         "//plugins/groups:groups_test",
         "//plugins/ldap:ldap_test",
+        "//plugins/lookup:lookup_test",
         "//plugins/mail:mail_test",
         "//plugins/notifications:notifications_test",
         "//plugins/oauth2:oauth2_test",

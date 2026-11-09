@@ -43,7 +43,8 @@ struct Server
                 .value()
         );
         kernel->get_logger().set_sink({});
-        for (const char* plugin: {"cloud", "users", "db", "federation", "notifications"}) {
+        for (const char* plugin:
+             {"cloud", "users", "db", "groups", "federation", "notifications"}) {
             NC_CHECK(
                 kernel
                     ->add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
@@ -549,6 +550,76 @@ void test_signatures_and_trust()
     NC_CHECK(!contains(f.call("GET", REMOTE + "/pending", "frank"), "u.txt"));
 }
 
+void test_group_shares()
+{
+    Server a{"owner"};
+    Server b{"members"};
+    a.add_user("alice");
+    b.add_user("bob");
+    b.add_user("bobby");
+    b.add_user("outsider");
+    std::string out;
+    NC_CHECK_EQ(b.kernel->run_command("group:add", {"team"}, out), 0);
+    NC_CHECK_EQ(b.kernel->run_command("group:adduser", {"team", "bob"}, out), 0);
+    NC_CHECK_EQ(b.kernel->run_command("group:adduser", {"team", "bobby"}, out), 0);
+    NC_CHECK_EQ(a.call("MKCOL", "/remote.php/dav/files/alice/Team", "alice").get_status(), 201);
+    NC_CHECK_EQ(
+        a.call("PUT", "/remote.php/dav/files/alice/Team/plan.txt", "alice", "for the team")
+            .get_status(),
+        201
+    );
+
+    // A group that does not exist there gets nothing.
+    NC_CHECK_EQ(
+        a.call("POST", SHARES, "alice", "path=/Team&shareType=9&shareWith=nogroup@" + b.address())
+            .get_status(),
+        400
+    );
+    NC_CHECK(!contains(a.call("GET", SHARES, "alice"), "\"share_type\":9"));
+
+    const Response made =
+        a.call("POST", SHARES, "alice", "path=/Team&shareType=9&shareWith=team@" + b.address());
+    NC_CHECK_EQ(made.get_status(), 200);
+    NC_CHECK(contains(made, "\"share_type\":9"));
+    // Every member is asked, nobody else.
+    NC_CHECK(contains(b.call("GET", REMOTE + "/pending", "bob"), "\"name\":\"/Team\""));
+    NC_CHECK(contains(b.call("GET", REMOTE + "/pending", "bobby"), "\"name\":\"/Team\""));
+    NC_CHECK(!contains(b.call("GET", REMOTE + "/pending", "outsider"), "Team"));
+    // One accepts and reads; the other declines, which leaves the share to the rest.
+    NC_CHECK_EQ(
+        b.call(
+             "POST",
+             REMOTE + "/pending/" + data_id(b.call("GET", REMOTE + "/pending", "bob")),
+             "bob"
+        )
+            .get_status(),
+        200
+    );
+    NC_CHECK_EQ(
+        b.call("GET", "/remote.php/dav/files/bob/Team/plan.txt", "bob").get_body(),
+        "for the team"
+    );
+    NC_CHECK_EQ(
+        b.call(
+             "DELETE",
+             REMOTE + "/pending/" + data_id(b.call("GET", REMOTE + "/pending", "bobby")),
+             "bobby"
+        )
+            .get_status(),
+        200
+    );
+    NC_CHECK(contains(a.call("GET", SHARES, "alice"), "\"share_type\":9")); // still there
+    NC_CHECK_EQ(b.call("GET", "/remote.php/dav/files/bob/Team/plan.txt", "bob").get_status(), 200);
+    NC_CHECK(contains(
+        a.call("GET", "/ocs/v2.php/apps/notifications/api/v2/notifications", "alice"),
+        "declined"
+    ));
+    // Withdrawing ends it for everybody.
+    NC_CHECK_EQ(a.call("DELETE", SHARES + "/" + first_id(made), "alice").get_status(), 200);
+    NC_CHECK_EQ(b.call("GET", "/remote.php/dav/files/bob/Team/plan.txt", "bob").get_status(), 404);
+    NC_CHECK(!contains(b.call("GET", REMOTE, "bob"), "Team"));
+}
+
 } // namespace
 
 int main()
@@ -556,5 +627,6 @@ int main()
     test_sharing_between_servers();
     test_incoming_protocol_is_strict();
     test_signatures_and_trust();
+    test_group_shares();
     return NC_TEST_RESULT();
 }

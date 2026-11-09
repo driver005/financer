@@ -38,6 +38,7 @@ nc_cc_test(
         ":libfederation.so",
         "//plugins/cloud:libcloud.so",
         "//plugins/db:libdb.so",
+        "//plugins/groups:libgroups.so",
         "//plugins/notifications:libnotifications.so",
         "//plugins/users:libusers.so",
     ],
