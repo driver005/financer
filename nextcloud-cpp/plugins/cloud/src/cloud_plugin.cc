@@ -268,6 +268,27 @@ private:
     /// the bytes, so all file system access stays behind `Storage`.
     void add_storage_services(nc::Host& host)
     {
+        // id, token: the other server declined or withdrew a share made with it. The token must
+        // fit, so only the server that holds it can remove the share.
+        host.add_service(
+            "cloud.remove_remote_share",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const auto share = m_shares->find(
+                    std::strtoull(nc::util::form_value(form, "id").c_str(), nullptr, 10)
+                );
+                if (!share || share->get_type() != nc::cloud::SHARE_TYPE_REMOTE ||
+                    !nc::util::constant_time_equals(
+                        share->get_token(),
+                        nc::util::form_value(form, "token")
+                    )) {
+                    return Response::text(404, "no such share");
+                }
+                (void)m_shares->remove(share->get_id());
+                return Response::text(200, "ok");
+            }
+        );
         // user, path: does it exist? Answers size and dir.
         host.add_service(
             "cloud.stat",
@@ -1267,6 +1288,23 @@ private:
                             nc::util::to_hex(nc::util::pbkdf2_sha256(password, salt, 10'000))
                         );
                     }
+                } else if (type == nc::cloud::SHARE_TYPE_REMOTE) {
+                    // A user on another server: "name@host[:port]". The federation plugin tells
+                    // that server; this share is what it will present the token for.
+                    const std::string recipient = field("shareWith");
+                    const std::size_t at = recipient.rfind('@');
+                    if (at == std::string::npos || at == 0 || at + 1 >= recipient.size() ||
+                        recipient.size() > 320 ||
+                        recipient.find_first_of(" \t\r\n/\\") != std::string::npos) {
+                        return failure(400, "Use name@server to share with another server");
+                    }
+                    share.set_share_with(std::string{recipient});
+                    const std::string permissions = field("permissions");
+                    const int mask = permissions.empty() ? 1 : std::atoi(permissions.c_str());
+                    if (mask < 1 || mask > 31) {
+                        return failure(400, "Invalid permissions");
+                    }
+                    share.set_permissions(mask);
                 } else {
                     return failure(400, "Unknown share type");
                 }
@@ -1281,6 +1319,30 @@ private:
                 auto added = m_shares->add(std::move(share));
                 if (!added) {
                     return failure(500, added.error());
+                }
+                if (type == nc::cloud::SHARE_TYPE_REMOTE) {
+                    const auto node = storage_for(owner).stat(added->get_path());
+                    const Response sent = m_host->call_service(
+                        "federation.send",
+                        nc::util::form_encode(
+                            {{"id", std::to_string(added->get_id())},
+                             {"owner", owner},
+                             {"path", added->get_path()},
+                             {"name", node ? node->name() : std::string{"share"}},
+                             {"directory", node && node->is_directory() ? "1" : "0"},
+                             {"token", added->get_token()},
+                             {"share_with", added->get_share_with()},
+                             {"permissions", std::to_string(added->get_permissions())}}
+                        )
+                    );
+                    if (sent.get_status() != 200) {
+                        (void)m_shares->remove(added->get_id());
+                        return failure(
+                            sent.get_status() == 404 ? 501 : 400,
+                            sent.get_status() == 404 ? "Sharing with other servers is not enabled"
+                                                     : sent.get_body()
+                        );
+                    }
                 }
                 m_host->publish(
                     "share.created",
@@ -1363,7 +1425,11 @@ private:
                 m_host->publish(
                     "share.deleted",
                     nc::util::form_encode(
-                        {{"id", std::to_string(id)}, {"owner", share->get_owner()}}
+                        {{"id", std::to_string(id)},
+                         {"owner", share->get_owner()},
+                         {"type", std::to_string(share->get_type())},
+                         {"share_with", share->get_share_with()},
+                         {"token", share->get_token()}}
                     )
                 );
                 return ok();
@@ -1399,6 +1465,65 @@ private:
                 return public_upload(request);
             }
         );
+        // The same shares as WebDAV, the way another server (federation) and the sync clients reach
+        // them: the user name is the token, the password is the share's password if it has one.
+        static constexpr std::string_view METHODS[] = {"GET", "PUT", "MKCOL", "DELETE", "PROPFIND"};
+        for (const std::string_view method: METHODS) {
+            host.add_route(
+                method,
+                "/public.php/webdav/{*path}",
+                [this](const Request& request)
+                {
+                    return serve_public_dav(request);
+                }
+            );
+        }
+    }
+
+    [[nodiscard]] Response serve_public_dav(const Request& request) const
+    {
+        const auto challenge = [](Response response)
+        {
+            response.add_header("WWW-Authenticate", R"(Basic realm="share", charset="UTF-8")");
+            return response;
+        };
+        const std::string_view header = request.header("Authorization");
+        std::string token;
+        std::string password;
+        if (header.size() > 6 && nc::util::equals_ignore_case(header.substr(0, 6), "Basic ")) {
+            if (const auto decoded = nc::util::base64_decode(nc::util::trim(header.substr(6)))) {
+                const std::size_t colon = decoded->find(':');
+                token = decoded->substr(0, colon);
+                password = colon == std::string::npos ? std::string{} : decoded->substr(colon + 1);
+            }
+        }
+        if (token.empty()) {
+            return challenge(Response::text(401, "Unauthorized"));
+        }
+        Response refusal;
+        const auto share = open_token(token, password, refusal);
+        if (!share) {
+            return refusal.get_status() == 401 ? challenge(std::move(refusal)) : refusal;
+        }
+        const std::string& method = request.get_method();
+        if ((method == "GET" || method == "PROPFIND") && !(share->get_permissions() & 1)) {
+            return Response::text(403, "This share only accepts uploads");
+        }
+        const auto root = storage_for(share->get_owner()).stat(share->get_path());
+        const auto normalized = Storage::normalize("/" + std::string{request.param("path")});
+        if (!root || !normalized) {
+            return Response::text(404, "Not Found");
+        }
+        Mount mount;
+        mount.share = *share;
+        mount.name = "webdav";
+        mount.directory = root->is_directory();
+        return serve_mount(
+            request,
+            mount,
+            *normalized == "/" ? std::string{} : *normalized,
+            "/public.php"
+        );
     }
 
     /// The share behind a link, if the link is valid and the password (header
@@ -1407,16 +1532,22 @@ private:
     /// (401).
     [[nodiscard]] std::optional<Share> open_link(const Request& request, Response& refusal) const
     {
-        auto share = m_shares->find_by_token(request.param("token"));
+        std::string given{request.header("X-NC-Share-Password")};
+        if (given.empty()) {
+            given = request.query_value("password");
+        }
+        return open_token(request.param("token"), given, refusal);
+    }
+
+    [[nodiscard]] std::optional<Share>
+    open_token(std::string_view token, const std::string& given, Response& refusal) const
+    {
+        auto share = m_shares->find_by_token(token);
         if (!share || share->expired(now_seconds()) || !safe_user(share->get_owner())) {
             refusal = Response::text(404, "Not Found");
             return std::nullopt;
         }
         if (!share->get_password().empty()) {
-            std::string given{request.header("X-NC-Share-Password")};
-            if (given.empty()) {
-                given = request.query_value("password");
-            }
             const std::vector<std::string> parts = nc::util::split(share->get_password(), '$');
             const bool good =
                 parts.size() == 3 && !given.empty() &&

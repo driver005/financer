@@ -223,8 +223,8 @@ std::optional<Share> ShareStore::find_by_token(std::string_view token) const
 {
     const std::lock_guard lock{m_mutex};
     for (const Share& share: m_shares) {
-        // Only link shares are reachable by token.
-        if (share.get_type() == SHARE_TYPE_LINK &&
+        // Only link shares and shares with another server are reachable by token.
+        if ((share.get_type() == SHARE_TYPE_LINK || share.get_type() == SHARE_TYPE_REMOTE) &&
             util::constant_time_equals(share.get_token(), token)) {
             return share;
         }

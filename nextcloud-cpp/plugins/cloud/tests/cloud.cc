@@ -942,6 +942,111 @@ void test_link_options()
     fs::remove_all(dir);
 }
 
+void test_public_webdav()
+{
+    const std::string dir = temp_dir("publicdav");
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string files = "/remote.php/dav/files/alice";
+    const std::string shares = "/ocs/v2.php/apps/files_sharing/api/v1/shares";
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", files + "/Docs", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", files + "/Docs/a.txt", "inside", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", files + "/private.txt", "mine", alice)).get_status(),
+        201
+    );
+    const auto token_of = [](const Response& created)
+    {
+        const std::string body = created.get_body();
+        return body.substr(body.find("\"token\":\"") + 9, 20);
+    };
+    const std::string token = token_of(kernel.handle(
+        user_req("POST", shares, "path=/Docs&shareType=3&permissions=5&password=open+sesame", alice)
+    ));
+    const auto dav = [&](const std::string& method,
+                         const std::string& path,
+                         const std::string& credentials,
+                         const std::string& body = {})
+    {
+        Request request{std::string{method}, std::string{path}, "", std::string{body}, "", {}, {}};
+        if (!credentials.empty()) {
+            request.add_header("Authorization", "Basic " + nc::util::base64_encode(credentials));
+        }
+        return kernel.handle(std::move(request));
+    };
+
+    // The user name is the token; no account is involved.
+    const Response none = dav("GET", "/public.php/webdav/a.txt", "");
+    NC_CHECK_EQ(none.get_status(), 401);
+    NC_CHECK(!none.header("WWW-Authenticate").empty());
+    NC_CHECK_EQ(dav("GET", "/public.php/webdav/a.txt", token + ":wrong").get_status(), 401);
+    NC_CHECK_EQ(dav("GET", "/public.php/webdav/a.txt", token + ":").get_status(), 401);
+    NC_CHECK_EQ(
+        dav("GET", "/public.php/webdav/a.txt", std::string(20, '0') + ":open sesame").get_status(),
+        404
+    );
+    NC_CHECK_EQ(
+        dav("GET", "/public.php/webdav/a.txt", "alice:alice password").get_status(),
+        404
+    ); // an account is not a token
+    const std::string good = token + ":open sesame";
+    NC_CHECK_EQ(dav("GET", "/public.php/webdav/a.txt", good).get_body(), "inside");
+    const Response listing = dav("PROPFIND", "/public.php/webdav", good);
+    NC_CHECK_EQ(listing.get_status(), 207);
+    NC_CHECK(listing.get_body().find("/public.php/webdav/a.txt") != std::string::npos);
+    NC_CHECK(
+        listing.get_body().find("/Docs") == std::string::npos
+    ); // the owner's layout stays hidden
+    // Not outside the shared folder.
+    NC_CHECK_EQ(dav("GET", "/public.php/webdav/../private.txt", good).get_status() >= 400, true);
+    NC_CHECK_EQ(
+        dav("GET", "/public.php/webdav/%2e%2e/private.txt", good).get_status() >= 400,
+        true
+    );
+    // Permission 5: read and create, no update, no delete.
+    NC_CHECK_EQ(dav("PUT", "/public.php/webdav/new.txt", good, "fresh").get_status(), 201);
+    NC_CHECK_EQ(dav("GET", files + "/Docs/new.txt", "").get_status(), 401);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", files + "/Docs/new.txt", "", alice)).get_body(),
+        "fresh"
+    );
+    NC_CHECK_EQ(dav("PUT", "/public.php/webdav/a.txt", good, "changed").get_status(), 403);
+    NC_CHECK_EQ(dav("DELETE", "/public.php/webdav/a.txt", good).get_status(), 403);
+    NC_CHECK_EQ(dav("POST", "/public.php/webdav/a.txt", good).get_status() >= 400, true);
+
+    // Sharing with another server needs the federation plugin; without it nothing is left behind.
+    const Response remote = kernel.handle(
+        user_req("POST", shares, "path=/Docs&shareType=6&shareWith=bob@cloud.example", alice)
+    );
+    NC_CHECK_EQ(remote.get_status(), 501);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=/Docs&shareType=6&shareWith=nobody", alice))
+            .get_status(),
+        400
+    );
+    const Response mine = kernel.handle(user_req("GET", shares, "", alice));
+    NC_CHECK(mine.get_body().find("\"share_type\":6") == std::string::npos);
+
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 void test_received_shares()
 {
     const std::string dir = temp_dir("mounts");
@@ -1435,6 +1540,7 @@ int main()
     test_plugins();
     test_ranges();
     test_link_options();
+    test_public_webdav();
     test_chunked_uploads();
     test_received_shares();
     test_external_storage();

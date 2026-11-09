@@ -467,6 +467,11 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
 {
     rejected = false;
     second_factor = false;
+    // Under /public.php/ the Authorization header names a share (user name = token), not an
+    // account; the plugin that serves it reads the header itself.
+    if (util::starts_with(request.get_path(), "/public.php/")) {
+        return {};
+    }
     const std::string_view header = request.header("Authorization");
     if (header.size() >= 7 && util::equals_ignore_case(header.substr(0, 7), "Bearer ")) {
         // An access token (OAuth2): whoever offers `auth.bearer*` knows it. Like an app password it
