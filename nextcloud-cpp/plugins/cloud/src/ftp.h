@@ -3,12 +3,18 @@
 #include "nextcloud/util/expected.h"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
+struct ssl_st;
+struct ssl_ctx_st;
+
 /// A small FTP client (RFC 959 with passive mode, MLSD from RFC 3659) for an external storage.
-/// Plain FTP: the password travels unprotected, so it is for networks the administrator trusts. One
+/// Plain FTP sends the password unprotected, so it is for networks the administrator trusts; with
+/// `Settings::secure` the session is FTPS (RFC 4217, explicit TLS: AUTH TLS, then PROT P so the
+/// listings and the files are encrypted as well; the certificate and host name are checked). One
 /// session per request, closed when it goes out of scope.
 namespace nc::cloud::ftp {
 
@@ -37,6 +43,10 @@ public:
         int timeout_seconds{30};
         bool allow_local{false};
         std::size_t max_bytes{256U * 1'024U * 1'024U};
+        /// FTPS: upgrade the connection with `AUTH TLS` before the password is sent.
+        bool secure{false};
+        /// Trusted certificates for FTPS (a PEM file); empty: the system's.
+        std::string ca_file{};
     };
 
     Session() noexcept = default;
@@ -74,14 +84,20 @@ private:
         std::string text{};
     };
 
+    struct Link;
+
     [[nodiscard]] Result<Reply> read_reply();
     [[nodiscard]] Result<Reply> command(const std::string& line);
-    [[nodiscard]] Result<int> open_data_connection();
+    [[nodiscard]] Result<std::unique_ptr<Link>> open_data_connection();
+    /// FTPS: starts TLS on a data connection (after the transfer command was accepted).
+    [[nodiscard]] Result<void> secure_link(Link& link);
     [[nodiscard]] Result<std::string>
-    read_data(int data, std::size_t limit, std::uint64_t stop_after);
+    read_data(Link& data, std::size_t limit, std::uint64_t stop_after);
     void close();
 
     int m_control{-1};
+    ssl_ctx_st* m_context{nullptr}; // FTPS: the TLS settings, shared by the control and data links
+    ssl_st* m_tls{nullptr};         // FTPS: the control link's TLS session
     std::string m_peer{}; // the numeric address of the server: data connections go there only
     std::string m_buffer{};
     Settings m_settings{};

@@ -20,12 +20,14 @@
 #include <memory>
 #include <mutex>
 #include <netinet/in.h>
+#include <openssl/ssl.h>
 #include <set>
 #include <sstream>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <thread>
 #include <unistd.h>
+#include <utility>
 
 namespace {
 
@@ -2150,6 +2152,69 @@ void test_external_s3()
 
 // ---- a server that speaks just enough FTP ------------------------------------------------------
 
+/// One connection of the fake FTP server: a socket and, once TLS was agreed, its session.
+struct FtpIo
+{
+    int fd{-1};
+    SSL* ssl{nullptr};
+
+    explicit FtpIo(int descriptor) :
+        fd{descriptor}
+    {
+    }
+
+    FtpIo(const FtpIo&) = delete;
+    FtpIo& operator=(const FtpIo&) = delete;
+
+    FtpIo(FtpIo&& other) noexcept :
+        fd{std::exchange(other.fd, -1)},
+        ssl{std::exchange(other.ssl, nullptr)}
+    {
+    }
+
+    FtpIo& operator=(FtpIo&&) = delete;
+
+    ~FtpIo()
+    {
+        if (ssl != nullptr) {
+            SSL_free(ssl);
+        }
+    }
+
+    ssize_t recv_some(void* buffer, std::size_t size)
+    {
+        if (ssl == nullptr) {
+            return ::recv(fd, buffer, size, 0);
+        }
+        const int got = SSL_read(ssl, buffer, static_cast<int>(size));
+        return got > 0 ? got : 0;
+    }
+
+    void send_all(std::string_view data)
+    {
+        while (!data.empty()) {
+            const ssize_t sent = ssl == nullptr
+                                     ? ::send(fd, data.data(), data.size(), MSG_NOSIGNAL)
+                                     : SSL_write(ssl, data.data(), static_cast<int>(data.size()));
+            if (sent <= 0) {
+                return;
+            }
+            data.remove_prefix(static_cast<std::size_t>(sent));
+        }
+    }
+
+    void close_io()
+    {
+        if (ssl != nullptr) {
+            SSL_shutdown(ssl);
+        }
+        if (fd >= 0) {
+            ::close(fd);
+            fd = -1;
+        }
+    }
+};
+
 struct FakeFtp
 {
     std::mutex mutex{};
@@ -2162,6 +2227,7 @@ struct FakeFtp
     std::thread worker{};
     std::atomic<int> logins{0};
     std::atomic<int> bad_logins{0};
+    std::atomic<int> bad_handshakes{0};
 
     static std::string parent_of(const std::string& path)
     {
@@ -2169,17 +2235,18 @@ struct FakeFtp
         return slash == 0 ? std::string{"/"} : path.substr(0, slash);
     }
 
-    static void send_line(int fd, const std::string& line)
+    SSL_CTX* tls_context{nullptr}; // set: the server offers AUTH TLS
+
+    static void send_line(FtpIo& io, const std::string& line)
     {
-        const std::string wire = line + "\r\n";
-        (void)::send(fd, wire.data(), wire.size(), MSG_NOSIGNAL);
+        io.send_all(line + "\r\n");
     }
 
-    static bool read_line(int fd, std::string& buffer, std::string& line)
+    static bool read_line(FtpIo& io, std::string& buffer, std::string& line)
     {
         while (buffer.find("\r\n") == std::string::npos) {
             char chunk[1'024];
-            const ssize_t got = ::recv(fd, chunk, sizeof(chunk), 0);
+            const ssize_t got = io.recv_some(chunk, sizeof(chunk));
             if (got <= 0) {
                 return false;
             }
@@ -2243,9 +2310,11 @@ struct FakeFtp
         return fd;
     }
 
-    void session(int control)
+    void session(int control_fd)
     {
-        send_line(control, "220 fake ftp");
+        FtpIo io{control_fd};
+        bool protect_data = false;
+        send_line(io, "220 fake ftp");
         std::string buffer;
         std::string line;
         int data_listener = -1;
@@ -2254,51 +2323,71 @@ struct FakeFtp
         bool signed_in = false;
         const auto data_connection = [&]()
         {
-            const int connection = ::accept(data_listener, nullptr, nullptr);
+            FtpIo connection{::accept(data_listener, nullptr, nullptr)};
             ::close(data_listener);
             data_listener = -1;
+            if (protect_data && io.ssl != nullptr) {
+                connection.ssl = SSL_new(tls_context);
+                SSL_set_fd(connection.ssl, connection.fd);
+                if (SSL_accept(connection.ssl) != 1) {
+                    ++bad_handshakes;
+                }
+            }
             return connection;
         };
-        while (read_line(control, buffer, line)) {
+        while (read_line(io, buffer, line)) {
             const std::size_t space = line.find(' ');
             const std::string verb = line.substr(0, space);
             const std::string argument =
                 space == std::string::npos ? std::string{} : line.substr(space + 1);
             const std::lock_guard lock{mutex};
-            if (verb == "USER") {
-                send_line(control, "331 password please");
+            if (verb == "AUTH" && tls_context != nullptr && argument == "TLS") {
+                send_line(io, "234 go ahead");
+                io.ssl = SSL_new(tls_context);
+                SSL_set_fd(io.ssl, io.fd);
+                if (SSL_accept(io.ssl) != 1) {
+                    ++bad_handshakes;
+                    return;
+                }
+            } else if (verb == "PBSZ") {
+                send_line(io, "200 ok");
+            } else if (verb == "PROT") {
+                protect_data = argument == "P";
+                send_line(io, "200 ok");
+            } else if (verb == "USER") {
+                send_line(io, "331 password please");
             } else if (verb == "PASS") {
                 signed_in = argument == "ftp-secret";
                 ++(signed_in ? logins : bad_logins);
-                send_line(control, signed_in ? "230 welcome" : "530 no");
+                send_line(io, signed_in ? "230 welcome" : "530 no");
                 if (!signed_in) {
                     return;
                 }
             } else if (verb == "TYPE") {
-                send_line(control, "200 binary");
+                send_line(io, "200 binary");
             } else if (verb == "EPSV") {
                 std::uint16_t data_port = 0;
                 data_listener = passive_listener(data_port);
                 send_line(
-                    control,
+                    io,
                     "229 Entering Extended Passive Mode (|||" + std::to_string(data_port) + "|)"
                 );
             } else if (verb == "REST") {
                 restart = std::strtoull(argument.c_str(), nullptr, 10);
-                send_line(control, "350 ok");
+                send_line(io, "350 ok");
             } else if (verb == "MLSD" || verb == "LIST") {
                 if (verb == "MLSD" && !mlsd) {
                     ::close(data_listener);
                     data_listener = -1;
-                    send_line(control, "500 unknown");
+                    send_line(io, "500 unknown");
                     continue;
                 }
                 if (!dirs.contains(argument)) {
-                    send_line(control, "550 no such folder");
+                    send_line(io, "550 no such folder");
                     continue;
                 }
-                send_line(control, "150 here it comes");
-                const int data = data_connection();
+                send_line(io, "150 here it comes");
+                FtpIo data = data_connection();
                 std::string out;
                 const auto child_name = [&](const std::string& full)
                 {
@@ -2322,51 +2411,51 @@ struct FakeFtp
                 if (!mlsd) {
                     out = "total 8\r\n" + out;
                 }
-                (void)::send(data, out.data(), out.size(), MSG_NOSIGNAL);
-                ::close(data);
-                send_line(control, "226 done");
+                data.send_all(out);
+                data.close_io();
+                send_line(io, "226 done");
             } else if (verb == "RETR") {
                 const auto found = files.find(argument);
                 if (found == files.end()) {
                     ::close(data_listener);
                     data_listener = -1;
-                    send_line(control, "550 no such file");
+                    send_line(io, "550 no such file");
                     continue;
                 }
-                send_line(control, "150 sending");
-                const int data = data_connection();
+                send_line(io, "150 sending");
+                FtpIo data = data_connection();
                 const std::string part =
                     found->second.substr(std::min<std::size_t>(restart, found->second.size()));
                 restart = 0;
-                (void)::send(data, part.data(), part.size(), MSG_NOSIGNAL);
-                ::close(data);
-                send_line(control, "226 done");
+                data.send_all(part);
+                data.close_io();
+                send_line(io, "226 done");
             } else if (verb == "STOR") {
                 if (!dirs.contains(parent_of(argument))) {
                     ::close(data_listener);
                     data_listener = -1;
-                    send_line(control, "550 no such folder");
+                    send_line(io, "550 no such folder");
                     continue;
                 }
-                send_line(control, "150 send it");
-                const int data = data_connection();
+                send_line(io, "150 send it");
+                FtpIo data = data_connection();
                 std::string body;
                 char chunk[4'096];
                 ssize_t got;
-                while ((got = ::recv(data, chunk, sizeof(chunk), 0)) > 0) {
+                while ((got = data.recv_some(chunk, sizeof(chunk))) > 0) {
                     body.append(chunk, static_cast<std::size_t>(got));
                 }
-                ::close(data);
+                data.close_io();
                 files[argument] = body;
-                send_line(control, "226 stored");
+                send_line(io, "226 stored");
             } else if (verb == "DELE") {
-                send_line(control, files.erase(argument) != 0 ? "250 deleted" : "550 no such file");
+                send_line(io, files.erase(argument) != 0 ? "250 deleted" : "550 no such file");
             } else if (verb == "MKD") {
                 if (dirs.contains(argument) || !dirs.contains(parent_of(argument))) {
-                    send_line(control, "550 cannot");
+                    send_line(io, "550 cannot");
                 } else {
                     dirs.insert(argument);
-                    send_line(control, "257 made");
+                    send_line(io, "257 made");
                 }
             } else if (verb == "RMD") {
                 const bool empty = std::ranges::none_of(
@@ -2385,14 +2474,14 @@ struct FakeFtp
                                    );
                 if (dirs.contains(argument) && empty) {
                     dirs.erase(argument);
-                    send_line(control, "250 removed");
+                    send_line(io, "250 removed");
                 } else {
-                    send_line(control, "550 cannot");
+                    send_line(io, "550 cannot");
                 }
             } else if (verb == "RNFR") {
                 renaming = argument;
                 send_line(
-                    control,
+                    io,
                     files.contains(argument) || dirs.contains(argument) ? "350 ready" : "550 no"
                 );
             } else if (verb == "RNTO") {
@@ -2422,12 +2511,12 @@ struct FakeFtp
                     }
                     dirs.insert(moved_dirs.begin(), moved_dirs.end());
                 }
-                send_line(control, "250 renamed");
+                send_line(io, "250 renamed");
             } else if (verb == "QUIT") {
-                send_line(control, "221 bye");
+                send_line(io, "221 bye");
                 return;
             } else {
-                send_line(control, "502 not implemented");
+                send_line(io, "502 not implemented");
             }
         }
     }
@@ -3236,6 +3325,123 @@ void test_missing_requirement()
 
 } // namespace
 
+void test_external_ftps()
+{
+    const std::string dir = temp_dir("ftps");
+    const std::string cert = dir + "/cert.pem";
+    const std::string key = dir + "/key.pem";
+    const std::string other_cert = dir + "/other.pem";
+    const std::string other_key = dir + "/other-key.pem";
+    const auto make = [&](const std::string& certificate, const std::string& private_key)
+    {
+        return std::system(("openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=localhost "
+                            "-addext subjectAltName=DNS:localhost,IP:127.0.0.1 -keyout " +
+                            private_key + " -out " + certificate + " >/dev/null 2>&1")
+                               .c_str());
+    };
+    NC_CHECK_EQ(make(cert, key), 0);
+    NC_CHECK_EQ(make(other_cert, other_key), 0);
+    SSL_CTX* context = SSL_CTX_new(TLS_server_method());
+    NC_CHECK_EQ(SSL_CTX_use_certificate_chain_file(context, cert.c_str()), 1);
+    NC_CHECK_EQ(SSL_CTX_use_PrivateKey_file(context, key.c_str(), SSL_FILETYPE_PEM), 1);
+
+    FakeFtp ftp;
+    ftp.tls_context = context;
+    ftp.files = {{"/pub/a.txt", "0123456789"}};
+    ftp.dirs = {"/", "/pub"};
+    ftp.start();
+    {
+        std::ofstream secret{dir + "/ftp.secret"};
+        secret << "ftp-secret\n";
+    }
+    const std::string where =
+        "ftps://localhost:" + std::to_string(ftp.port) + "/pub|ftpuser|" + dir + "/ftp.secret|rw";
+    const auto serve_with = [&](const std::string& trusted)
+    {
+        return nc::Config::parse(
+                   "data_dir = " + dir +
+                   "\n[users]\npbkdf2_iterations = 3\n[cloud]\nexternal_ftp = Safe=" + where +
+                   "\nexternal_ftp_allow_local = true\nexternal_ftp_ca_file = " + trusted + "\n"
+        )
+            .value();
+    };
+    const std::string alice = "alice:alice password";
+    const std::string a = "/remote.php/dav/files/alice";
+    {
+        nc::Kernel kernel{serve_with(cert)};
+        kernel.get_logger().set_sink({});
+        for (const char* plugin: {"cloud", "users", "db"}) {
+            NC_CHECK(
+                kernel
+                    .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                    .has_value()
+            );
+        }
+        NC_CHECK(kernel.start().has_value());
+        std::string out;
+        ::setenv("OC_PASS", "alice password", 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+        ::unsetenv("OC_PASS");
+        NC_CHECK(
+            kernel.handle(with_depth(user_req("PROPFIND", a + "/Safe", "", alice), "1"))
+                .get_body()
+                .find(a + "/Safe/a.txt") != std::string::npos
+        );
+        NC_CHECK_EQ(
+            kernel.handle(user_req("GET", a + "/Safe/a.txt", "", alice)).get_body(),
+            "0123456789"
+        );
+        Request ranged = user_req("GET", a + "/Safe/a.txt", "", alice);
+        ranged.add_header("Range", "bytes=2-5");
+        NC_CHECK_EQ(kernel.handle(std::move(ranged)).get_body(), "2345");
+        NC_CHECK_EQ(
+            kernel.handle(user_req("PUT", a + "/Safe/new.txt", "over tls", alice)).get_status(),
+            201
+        );
+        {
+            const std::lock_guard lock{ftp.mutex};
+            NC_CHECK_EQ(ftp.files["/pub/new.txt"], "over tls");
+        }
+        NC_CHECK(ftp.logins > 0);
+        NC_CHECK_EQ(ftp.bad_handshakes.load(), 0);
+        kernel.stop();
+    }
+    // A server whose certificate is not trusted gets neither the user name nor the password.
+    {
+        const int logins_before = ftp.logins + ftp.bad_logins;
+        nc::Kernel kernel{serve_with(other_cert)};
+        kernel.get_logger().set_sink({});
+        for (const char* plugin: {"cloud", "users", "db"}) {
+            NC_CHECK(
+                kernel
+                    .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                    .has_value()
+            );
+        }
+        NC_CHECK(kernel.start().has_value());
+        std::string out;
+        ::setenv("OC_PASS", "alice password", 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {"bob"}, out), 0);
+        ::unsetenv("OC_PASS");
+        NC_CHECK_EQ(
+            kernel
+                .handle(user_req(
+                    "GET",
+                    "/remote.php/dav/files/bob/Safe/a.txt",
+                    "",
+                    "bob:alice password"
+                ))
+                .get_status(),
+            502
+        );
+        NC_CHECK_EQ(ftp.logins + ftp.bad_logins, logins_before);
+        kernel.stop();
+    }
+    ftp.stop();
+    SSL_CTX_free(context);
+    fs::remove_all(dir);
+}
+
 // ---- external storage on an SFTP server (a real sshd) ------------------------------------------
 
 std::string command_output(const std::string& command)
@@ -3432,6 +3638,7 @@ int main()
     test_external_s3();
     test_ftp_parsers();
     test_external_ftp();
+    test_external_ftps();
     test_external_sftp();
     test_external_storage();
     test_encryption();

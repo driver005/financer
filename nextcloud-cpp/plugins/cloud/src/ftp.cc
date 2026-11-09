@@ -9,6 +9,8 @@
 #include <ctime>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <openssl/ssl.h>
+#include <openssl/x509v3.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -107,6 +109,33 @@ namespace {
         return fd;
     }
 
+    /// Reads from a socket, through TLS when there is a session. Blocking; the socket has a
+    /// timeout.
+    ssize_t read_from(int fd, ssl_st* tls, void* buffer, std::size_t size)
+    {
+        if (tls == nullptr) {
+            return ::recv(fd, buffer, size, 0);
+        }
+        const int got = SSL_read(tls, buffer, static_cast<int>(size));
+        return got > 0 ? got : 0;
+    }
+
+    /// Writes all of `data` to a socket, through TLS when there is a session.
+    bool write_to(int fd, ssl_st* tls, std::string_view data)
+    {
+        while (!data.empty()) {
+            const std::size_t piece = std::min<std::size_t>(data.size(), 1U << 16U);
+            const ssize_t sent = tls == nullptr
+                                     ? ::send(fd, data.data(), piece, MSG_NOSIGNAL)
+                                     : SSL_write(tls, data.data(), static_cast<int>(piece));
+            if (sent <= 0) {
+                return false;
+            }
+            data.remove_prefix(static_cast<std::size_t>(sent));
+        }
+        return true;
+    }
+
 } // namespace
 
 Result<Entry> parse_list_line(std::string_view line)
@@ -181,6 +210,42 @@ Result<Entry> parse_mlsd_line(std::string_view line)
     return entry;
 }
 
+/// One data connection: the socket and, for FTPS, its TLS session (of the control link's session,
+/// so servers that insist on session reuse accept it).
+struct Session::Link
+{
+    int fd{-1};
+    ssl_st* tls{nullptr};
+
+    Link() = default;
+    Link(const Link&) = delete;
+    Link& operator=(const Link&) = delete;
+
+    ~Link()
+    {
+        finish();
+    }
+
+    /// Ends the transfer: a clean TLS shutdown, then the socket.
+    void finish() noexcept
+    {
+        if (tls != nullptr) {
+            SSL_shutdown(tls);
+            SSL_free(tls);
+            tls = nullptr;
+        }
+        if (fd >= 0) {
+            ::close(fd);
+            fd = -1;
+        }
+    }
+
+    ssize_t read(void* buffer, std::size_t size) const
+    {
+        return read_from(fd, tls, buffer, size);
+    }
+};
+
 Session::~Session()
 {
     close();
@@ -188,12 +253,16 @@ Session::~Session()
 
 Session::Session(Session&& other) noexcept :
     m_control{other.m_control},
+    m_context{other.m_context},
+    m_tls{other.m_tls},
     m_peer{std::move(other.m_peer)},
     m_buffer{std::move(other.m_buffer)},
     m_settings{other.m_settings},
     m_mlsd{other.m_mlsd}
 {
     other.m_control = -1;
+    other.m_context = nullptr;
+    other.m_tls = nullptr;
 }
 
 Session& Session::operator=(Session&& other) noexcept
@@ -201,6 +270,8 @@ Session& Session::operator=(Session&& other) noexcept
     if (this != &other) {
         close();
         m_control = other.m_control;
+        m_context = std::exchange(other.m_context, nullptr);
+        m_tls = std::exchange(other.m_tls, nullptr);
         m_peer = std::move(other.m_peer);
         m_buffer = std::move(other.m_buffer);
         m_settings = other.m_settings;
@@ -213,10 +284,18 @@ Session& Session::operator=(Session&& other) noexcept
 void Session::close()
 {
     if (m_control >= 0) {
-        const char quit[] = "QUIT\r\n";
-        (void)::send(m_control, quit, sizeof(quit) - 1, MSG_NOSIGNAL);
+        (void)write_to(m_control, m_tls, "QUIT\r\n");
+        if (m_tls != nullptr) {
+            SSL_shutdown(m_tls);
+            SSL_free(m_tls);
+            m_tls = nullptr;
+        }
         ::close(m_control);
         m_control = -1;
+    }
+    if (m_context != nullptr) {
+        SSL_CTX_free(m_context);
+        m_context = nullptr;
     }
 }
 
@@ -243,6 +322,58 @@ Result<Session> Session::open(
     if (!greeting || greeting->code != 220) {
         return failure("the server did not greet");
     }
+    if (settings.secure) {
+        // RFC 4217: ask for TLS before any credential is sent, check the server's certificate
+        // against the name it was reached by, then protect the data links too.
+        auto upgrade = session.command("AUTH TLS");
+        if (!upgrade || upgrade->code != 234) {
+            return failure("the server does not offer FTPS");
+        }
+        session.m_context = SSL_CTX_new(TLS_client_method());
+        if (session.m_context == nullptr) {
+            return failure("cannot create the TLS context");
+        }
+        SSL_CTX_set_min_proto_version(session.m_context, TLS1_2_VERSION);
+        SSL_CTX_set_verify(session.m_context, SSL_VERIFY_PEER, nullptr);
+        const bool loaded = settings.ca_file.empty()
+                                ? SSL_CTX_set_default_verify_paths(session.m_context) == 1
+                                : SSL_CTX_load_verify_locations(
+                                      session.m_context,
+                                      settings.ca_file.c_str(),
+                                      nullptr
+                                  ) == 1;
+        if (!loaded) {
+            return failure("cannot load the trusted certificates");
+        }
+        session.m_tls = SSL_new(session.m_context);
+        if (session.m_tls == nullptr || SSL_set_fd(session.m_tls, session.m_control) != 1) {
+            return failure("cannot start TLS");
+        }
+        SSL_set_tlsext_host_name(session.m_tls, host.c_str());
+        X509_VERIFY_PARAM* params = SSL_get0_param(session.m_tls);
+        in_addr v4{};
+        in6_addr v6{};
+        const bool is_ip = ::inet_pton(AF_INET, host.c_str(), &v4) == 1 ||
+                           ::inet_pton(AF_INET6, host.c_str(), &v6) == 1;
+        if ((is_ip ? X509_VERIFY_PARAM_set1_ip_asc(params, host.c_str())
+                   : X509_VERIFY_PARAM_set1_host(params, host.data(), host.size())) != 1) {
+            return failure("cannot check the certificate against " + host);
+        }
+        if (SSL_connect(session.m_tls) != 1) {
+            const long verify = SSL_get_verify_result(session.m_tls);
+            return failure(
+                verify != X509_V_OK
+                    ? std::string("the certificate of ") + host +
+                          " is not trusted: " + X509_verify_cert_error_string(verify)
+                    : "the TLS handshake with " + host + " failed"
+            );
+        }
+        auto buffer_size = session.command("PBSZ 0");
+        auto protect = session.command("PROT P");
+        if (!buffer_size || buffer_size->code != 200 || !protect || protect->code != 200) {
+            return failure("the server would not protect the data connections");
+        }
+    }
     auto name = session.command("USER " + user);
     if (!name) {
         return failure(name.error());
@@ -268,11 +399,12 @@ Result<Session::Reply> Session::read_reply()
     while (true) {
         std::size_t eol;
         while ((eol = m_buffer.find("\r\n")) == std::string::npos) {
-            if (!wait(m_control, POLLIN, m_settings.timeout_seconds)) {
+            // (A TLS session may hold bytes already; the socket's timeout covers a silent server.)
+            if (m_tls == nullptr && !wait(m_control, POLLIN, m_settings.timeout_seconds)) {
                 return failure("the server did not answer in time");
             }
             char chunk[2'048];
-            const ssize_t got = ::recv(m_control, chunk, sizeof(chunk), 0);
+            const ssize_t got = read_from(m_control, m_tls, chunk, sizeof(chunk));
             if (got <= 0) {
                 return failure("the server closed the connection");
             }
@@ -310,14 +442,13 @@ Result<Session::Reply> Session::command(const std::string& line)
         return failure("a name contains a line break");
     }
     const std::string wire = line + "\r\n";
-    if (::send(m_control, wire.data(), wire.size(), MSG_NOSIGNAL) !=
-        static_cast<ssize_t>(wire.size())) {
+    if (!write_to(m_control, m_tls, wire)) {
         return failure("the connection was lost");
     }
     return read_reply();
 }
 
-Result<int> Session::open_data_connection()
+Result<std::unique_ptr<Session::Link>> Session::open_data_connection()
 {
     // The server says where to connect, but only the port is used: the address is the one the
     // control connection already goes to (a server cannot send this client elsewhere).
@@ -357,18 +488,38 @@ Result<int> Session::open_data_connection()
     if (data < 0) {
         return failure("cannot open the data connection");
     }
-    return data;
+    auto link = std::make_unique<Link>();
+    link->fd = data;
+    return link;
 }
 
-Result<std::string> Session::read_data(int data, std::size_t limit, std::uint64_t stop_after)
+Result<void> Session::secure_link(Link& link)
+{
+    if (m_tls == nullptr) {
+        return {};
+    }
+    // Done after the transfer command, which is what makes the server accept the connection. The
+    // session of the control link is resumed, as servers that require it insist.
+    link.tls = SSL_new(m_context);
+    if (link.tls == nullptr || SSL_set_fd(link.tls, link.fd) != 1) {
+        return failure("cannot start TLS on the data connection");
+    }
+    SSL_set_session(link.tls, SSL_get_session(m_tls));
+    if (SSL_connect(link.tls) != 1) {
+        return failure("the TLS handshake of the data connection failed");
+    }
+    return {};
+}
+
+Result<std::string> Session::read_data(Link& data, std::size_t limit, std::uint64_t stop_after)
 {
     std::string out;
     char chunk[16'384];
     while (true) {
-        if (!wait(data, POLLIN, m_settings.timeout_seconds)) {
+        if (data.tls == nullptr && !wait(data.fd, POLLIN, m_settings.timeout_seconds)) {
             return failure("the transfer timed out");
         }
-        const ssize_t got = ::recv(data, chunk, sizeof(chunk), 0);
+        const ssize_t got = data.read(chunk, sizeof(chunk));
         if (got < 0) {
             return failure("the transfer failed");
         }
@@ -398,15 +549,6 @@ Result<std::vector<Entry>> Session::list(const std::string& path)
             return failure(data.error());
         }
 
-        struct Close
-        {
-            int fd;
-
-            ~Close()
-            {
-                ::close(fd);
-            }
-        } closer{*data};
 
         auto started = command((mlsd ? "MLSD " : "LIST ") + path);
         if (!started) {
@@ -422,7 +564,11 @@ Result<std::vector<Entry>> Session::list(const std::string& path)
         if (started->code != 150 && started->code != 125) {
             return failure("the folder " + path + " cannot be listed");
         }
-        auto text = read_data(*data, 16U * 1'024U * 1'024U, 0);
+        if (auto secured = secure_link(**data); !secured) {
+            return failure(secured.error());
+        }
+        auto text = read_data(**data, 16U * 1'024U * 1'024U, 0);
+        (*data)->finish();
         auto done = read_reply();
         if (!text) {
             return failure(text.error());
@@ -453,15 +599,6 @@ Session::retrieve(const std::string& path, std::uint64_t offset, std::uint64_t l
         return failure(data.error());
     }
 
-    struct Close
-    {
-        int fd;
-
-        ~Close()
-        {
-            ::close(fd);
-        }
-    } closer{*data};
 
     if (offset != 0) {
         auto restart = command("REST " + std::to_string(offset));
@@ -479,12 +616,13 @@ Session::retrieve(const std::string& path, std::uint64_t offset, std::uint64_t l
     if (started->code != 150 && started->code != 125) {
         return failure("the file cannot be read");
     }
-    auto text = read_data(*data, m_settings.max_bytes, limit);
-    if (limit != 0 && text) {
-        // The rest of the file is not wanted: closing the data connection ends the transfer.
-        ::close(closer.fd);
-        closer.fd = -1;
+    if (auto secured = secure_link(**data); !secured) {
+        return failure(secured.error());
     }
+    auto text = read_data(**data, m_settings.max_bytes, limit);
+    // The data connection ends here; with a limit the rest of the file is not wanted, and closing
+    // ends the transfer.
+    (*data)->finish();
     auto done = read_reply();
     if (!text) {
         return failure(text.error());
@@ -505,35 +643,19 @@ Result<void> Session::store(const std::string& path, std::string_view body)
         return failure(data.error());
     }
 
-    struct Close
-    {
-        int fd;
-
-        ~Close()
-        {
-            ::close(fd);
-        }
-    } closer{*data};
 
     auto started = command("STOR " + path);
     if (!started || (started->code != 150 && started->code != 125)) {
         return failure("the file cannot be written");
     }
-    std::string_view rest = body;
-    while (!rest.empty()) {
-        if (!wait(*data, POLLOUT, m_settings.timeout_seconds)) {
-            return failure("the transfer timed out");
-        }
-        const ssize_t sent =
-            ::send(*data, rest.data(), std::min<std::size_t>(rest.size(), 1U << 16U), MSG_NOSIGNAL);
-        if (sent <= 0) {
-            return failure("the transfer failed");
-        }
-        rest.remove_prefix(static_cast<std::size_t>(sent));
+    if (auto secured = secure_link(**data); !secured) {
+        return failure(secured.error());
     }
-    ::shutdown(*data, SHUT_WR);
-    ::close(closer.fd);
-    closer.fd = -1;
+    Link& link = **data;
+    if (!write_to(link.fd, link.tls, body)) {
+        return failure("the transfer failed");
+    }
+    link.finish();
     auto done = read_reply();
     if (!done || done->code != 226) {
         return failure("the file was not stored");

@@ -281,6 +281,7 @@ public:
         );
         parse_external_s3(host.config("external_s3", ""));
         m_ftp_settings.allow_local = host.config("external_ftp_allow_local", "false") == "true";
+        m_ftp_settings.ca_file = host.config("external_ftp_ca_file", "");
         m_ftp_settings.timeout_seconds =
             std::max(1, std::atoi(host.config("external_ftp_timeout_seconds", "30").c_str()));
         m_ftp_settings.max_bytes =
@@ -1556,10 +1557,12 @@ private:
             std::string address{parts.empty() ? std::string_view{} : nc::util::trim(parts[0])};
             ExternalFtp server;
             server.secure_shell = nc::util::starts_with(address, "sftp://");
-            bool good = server.secure_shell || nc::util::starts_with(address, "ftp://");
+            server.tls = nc::util::starts_with(address, "ftps://");
+            bool good =
+                server.secure_shell || server.tls || nc::util::starts_with(address, "ftp://");
             if (good) {
                 server.port = server.secure_shell ? "22" : "21";
-                address.erase(0, server.secure_shell ? 7 : 6);
+                address.erase(0, server.secure_shell ? 7 : (server.tls ? 7 : 6));
                 const std::size_t slash = address.find('/');
                 const std::string folder =
                     slash == std::string::npos ? std::string{} : address.substr(slash);
@@ -1642,12 +1645,14 @@ private:
                 )
             };
         }
+        nc::cloud::ftp::Session::Settings ftp_settings = m_ftp_settings;
+        ftp_settings.secure = server.tls;
         auto opened = nc::cloud::ftp::Session::open(
             server.host,
             server.port,
             server.user,
             server.password,
-            m_ftp_settings
+            ftp_settings
         );
         if (!opened) {
             return nc::util::unexpected<std::string>{opened.error()};
@@ -3520,6 +3525,7 @@ private:
         bool writable{false};
         std::string group{};
         bool secure_shell{false}; // sftp:// instead of ftp://
+        bool tls{false};          // ftps://: FTP over explicit TLS
         std::string host_key{};   // SHA-256 of the server's host key (base64), required for sftp
     };
 
