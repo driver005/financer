@@ -8,12 +8,14 @@ nc_cc_library(
     srcs = [
         "src/dav.cc",
         "src/file_cipher.cc",
+        "src/s3.cc",
         "src/share_store.cc",
         "src/storage.cc",
     ],
     hdrs = [
         "src/dav.h",
         "src/file_cipher.h",
+        "src/s3.h",
         "src/share.h",
         "src/share_store.h",
         "src/storage.h",

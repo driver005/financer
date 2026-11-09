@@ -357,6 +357,9 @@ Result<nc::http::Response> request(
         }
     }
     std::string content = raw.substr(head_end + 4);
+    if (method == "HEAD") {
+        return response; // the headers describe a body that is not sent
+    }
     if (util::equals_ignore_case(response.header("Transfer-Encoding"), "chunked")) {
         std::string decoded;
         std::size_t at = 0;

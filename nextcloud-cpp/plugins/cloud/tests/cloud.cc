@@ -3,13 +3,17 @@
 #include "nextcloud/runner/kernel.h"
 #include "nextcloud/test.h"
 #include "nextcloud/util/crypto.h"
+#include "s3.h"
 #include "share_store.h"
 #include "storage.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <unistd.h>
 
@@ -1612,6 +1616,430 @@ void test_external_webdav()
     fs::remove_all(remote_dir);
 }
 
+// ---- a bucket that speaks just enough S3 -------------------------------------------------------
+
+std::mutex g_s3_mutex;
+std::map<std::string, std::string> g_s3_objects;
+int g_s3_bad_requests = 0;
+int g_s3_requests = 0;
+
+class FakeS3Plugin final : public nc::Plugin
+{
+public:
+    std::string_view get_name() const noexcept override
+    {
+        return "fakes3";
+    }
+
+    std::string_view get_version() const noexcept override
+    {
+        return "1.0";
+    }
+
+    void on_load(nc::Host& host) override
+    {
+        host.add_route(
+            "GET",
+            "/{bucket}",
+            [](const Request& request)
+            {
+                return list(request);
+            }
+        );
+        host.add_route(
+            "GET",
+            "/{bucket}/{*key}",
+            [](const Request& request)
+            {
+                const std::lock_guard lock{g_s3_mutex};
+                if (!authorized(request)) {
+                    return Response::text(403, "SignatureDoesNotMatch");
+                }
+                const auto found = g_s3_objects.find(std::string{request.param("key")});
+                if (found == g_s3_objects.end()) {
+                    return Response::text(404, "NoSuchKey");
+                }
+                std::string data = found->second;
+                int status = 200;
+                Response response;
+                if (const std::string_view range = request.header("Range");
+                    range.starts_with("bytes=")) {
+                    const std::size_t dash = range.find('-');
+                    const std::size_t from =
+                        std::strtoull(std::string{range.substr(6, dash - 6)}.c_str(), nullptr, 10);
+                    const std::size_t to =
+                        std::strtoull(std::string{range.substr(dash + 1)}.c_str(), nullptr, 10);
+                    data = data.substr(from, to - from + 1);
+                    status = 206;
+                }
+                response = Response{status, "application/octet-stream", std::move(data), {}};
+                response.add_header(
+                    "ETag",
+                    "\"etag-" + std::to_string(found->second.size()) + "\""
+                );
+                return response;
+            }
+        );
+        host.add_route(
+            "PUT",
+            "/{bucket}/{*key}",
+            [](const Request& request)
+            {
+                const std::lock_guard lock{g_s3_mutex};
+                if (!authorized(request)) {
+                    return Response::text(403, "SignatureDoesNotMatch");
+                }
+                // The raw path: a key that ends in "/" (a folder marker) keeps it there.
+                const std::string raw{request.get_path()};
+                const std::string key = nc::util::url_decode(raw.substr(raw.find('/', 1) + 1));
+                if (const std::string_view source = request.header("x-amz-copy-source");
+                    !source.empty()) {
+                    // "/bucket/<encoded key>"
+                    const std::string from =
+                        nc::util::url_decode(source.substr(source.find('/', 1) + 1));
+                    const auto found = g_s3_objects.find(from);
+                    if (found == g_s3_objects.end()) {
+                        return Response::text(404, "NoSuchKey");
+                    }
+                    g_s3_objects[key] = found->second;
+                    return Response::xml(200, "<CopyObjectResult/>");
+                }
+                g_s3_objects[key] = request.get_body();
+                return Response::text(200, "");
+            }
+        );
+        host.add_route(
+            "DELETE",
+            "/{bucket}/{*key}",
+            [](const Request& request)
+            {
+                const std::lock_guard lock{g_s3_mutex};
+                if (!authorized(request)) {
+                    return Response::text(403, "SignatureDoesNotMatch");
+                }
+                g_s3_objects.erase(std::string{request.param("key")});
+                return Response{204};
+            }
+        );
+    }
+
+private:
+    /// Signed like S3 wants: the scheme, our access key and a payload hash that is the body's.
+    static bool authorized(const Request& request)
+    {
+        ++g_s3_requests;
+        const std::string_view authorization = request.header("Authorization");
+        const bool good = authorization.starts_with("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/") &&
+                          authorization.find("SignedHeaders=host;") != std::string_view::npos &&
+                          authorization.find("x-amz-content-sha256") != std::string_view::npos &&
+                          authorization.find("x-amz-date") != std::string_view::npos &&
+                          request.header("x-amz-content-sha256") ==
+                              nc::util::to_hex(nc::util::sha256(request.get_body())) &&
+                          request.header("x-amz-date").size() == 16;
+        if (!good) {
+            ++g_s3_bad_requests;
+        }
+        return good;
+    }
+
+    static Response list(const Request& request)
+    {
+        const std::lock_guard lock{g_s3_mutex};
+        if (!authorized(request)) {
+            return Response::text(403, "SignatureDoesNotMatch");
+        }
+        const std::string prefix = request.query_value("prefix");
+        const bool delimiter = request.query_value("delimiter") == "/";
+        const std::size_t start =
+            std::strtoull(request.query_value("continuation-token").c_str(), nullptr, 10);
+        std::vector<std::pair<char, std::string>> items; // 'f' file, 'd' folder
+        for (const auto& [key, data]: g_s3_objects) {
+            if (!key.starts_with(prefix)) {
+                continue;
+            }
+            const std::size_t slash = delimiter ? key.find('/', prefix.size()) : std::string::npos;
+            if (slash == std::string::npos) {
+                items.emplace_back('f', key);
+            } else if (items.empty() || items.back().second != key.substr(0, slash + 1)) {
+                items.emplace_back('d', key.substr(0, slash + 1));
+            }
+        }
+        constexpr std::size_t PAGE = 3;
+        std::string xml = "<?xml version=\"1.0\"?><ListBucketResult "
+                          "xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">";
+        for (std::size_t index = start; index < std::min(items.size(), start + PAGE); ++index) {
+            if (items[index].first == 'f') {
+                xml += "<Contents><Key>" + items[index].second +
+                       "</Key><LastModified>2024-01-02T03:04:05.000Z</"
+                       "LastModified><ETag>&quot;e&quot;</ETag><Size>" +
+                       std::to_string(g_s3_objects[items[index].second].size()) +
+                       "</Size></Contents>";
+            } else {
+                xml +=
+                    "<CommonPrefixes><Prefix>" + items[index].second + "</Prefix></CommonPrefixes>";
+            }
+        }
+        const bool more = start + PAGE < items.size();
+        xml += std::string{"<IsTruncated>"} + (more ? "true" : "false") + "</IsTruncated>";
+        if (more) {
+            xml += "<NextContinuationToken>" + std::to_string(start + PAGE) +
+                   "</NextContinuationToken>";
+        }
+        return Response::xml(200, xml + "</ListBucketResult>");
+    }
+};
+
+void test_s3_signing()
+{
+    namespace s3 = nc::cloud::s3;
+    // The examples of the AWS documentation ("Signature Calculations for the Authorization
+    // Header").
+    const s3::Credentials aws{
+        "AKIAIOSFODNN7EXAMPLE",
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        "us-east-1"
+    };
+    const auto get = s3::sign(
+        aws,
+        "GET",
+        "examplebucket.s3.amazonaws.com",
+        "/test.txt",
+        "",
+        {{"range", "bytes=0-9"}},
+        "",
+        "20130524T000000Z"
+    );
+    std::string authorization;
+    for (const auto& [name, value]: get) {
+        if (name == "Authorization") {
+            authorization = value;
+        }
+    }
+    NC_CHECK_EQ(
+        authorization,
+        "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, "
+        "SignedHeaders=host;range;x-amz-content-sha256;x-amz-date, "
+        "Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41"
+    );
+    const auto list = s3::sign(
+        aws,
+        "GET",
+        "examplebucket.s3.amazonaws.com",
+        "/",
+        "max-keys=2&prefix=J",
+        {},
+        "",
+        "20130524T000000Z"
+    );
+    for (const auto& [name, value]: list) {
+        if (name == "Authorization") {
+            NC_CHECK(
+                value.find(
+                    "Signature=34b48302e7b5fa45bde8084f4b7868a86f0a534bc59db6670ed5711ef69dc6f7"
+                ) != std::string::npos
+            );
+        }
+    }
+    NC_CHECK_EQ(s3::encode("a b/c+d~e", true), "a%20b/c%2Bd~e");
+    NC_CHECK_EQ(s3::encode("a b/c", false), "a%20b%2Fc");
+    NC_CHECK_EQ(s3::amz_date(1'369'353'600), "20130524T000000Z");
+
+    const auto listing = s3::parse_listing(
+        "<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>tok&amp;1</"
+        "NextContinuationToken>"
+        "<Contents><Key>a &amp; "
+        "b.txt</Key><LastModified>2024-01-02T03:04:05.000Z</LastModified><ETag>&quot;x&quot;</"
+        "ETag><Size>12</Size></Contents>"
+        "<CommonPrefixes><Prefix>dir/</Prefix></CommonPrefixes></ListBucketResult>"
+    );
+    NC_CHECK(listing.valid);
+    NC_CHECK_EQ(listing.files.size(), std::size_t{1});
+    NC_CHECK_EQ(listing.files[0].key, "a & b.txt");
+    NC_CHECK_EQ(listing.files[0].size, std::uint64_t{12});
+    NC_CHECK_EQ(listing.files[0].etag, "\"x\"");
+    NC_CHECK(listing.files[0].modified > 1'700'000'000);
+    NC_CHECK_EQ(listing.folders.size(), std::size_t{1});
+    NC_CHECK(listing.truncated);
+    NC_CHECK_EQ(listing.next_token, "tok&1");
+    NC_CHECK(!s3::parse_listing("<html>not s3</html>").valid);
+}
+
+void test_external_s3()
+{
+    NC_CHECK(true);
+    nc::Kernel storage;
+    storage.get_logger().set_sink({});
+    NC_CHECK(storage.add_plugin_api(nc::detail::api_for<FakeS3Plugin>()).has_value());
+    NC_CHECK(storage.start().has_value());
+    nc::HttpServer server{storage};
+    const auto port = server.start("127.0.0.1", 0);
+    NC_CHECK(port.has_value());
+    if (!port) {
+        return;
+    }
+    {
+        const std::lock_guard lock{g_s3_mutex};
+        g_s3_objects = {
+            {"data/a.txt", "AAA"},
+            {"data/dir/b.txt", "BBBBB"},
+            {"data/c.txt", "c"},
+            {"data/d.txt", "d"},
+            {"data/e.txt", "e"},
+            {"other/secret.txt", "no"}
+        };
+    }
+    const std::string dir = temp_dir("s3");
+    {
+        std::ofstream secret{dir + "/s3.secret"};
+        secret << "not-a-real-secret\n";
+    }
+    const std::string endpoint = "http://127.0.0.1:" + std::to_string(*port);
+    nc::Kernel kernel{nc::Config::parse(
+                          "data_dir = " + dir +
+                          "\n[users]\npbkdf2_iterations = 3\n[cloud]\nexternal_s3 = Bucket=" +
+                          endpoint + "|files|AKIDEXAMPLE|" + dir +
+                          "/s3.secret|rw|prefix=data;Ro=" + endpoint + "|files|AKIDEXAMPLE|" + dir +
+                          "/s3.secret|ro|prefix=data/\nexternal_s3_allow_http = "
+                          "true\nexternal_s3_allow_local = true\n"
+    )
+                          .value()};
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const auto has = [](const Response& response, const std::string& text)
+    {
+        return response.get_body().find(text) != std::string::npos;
+    };
+    const auto stored = [](const std::string& key)
+    {
+        const std::lock_guard lock{g_s3_mutex};
+        const auto found = g_s3_objects.find(key);
+        return found == g_s3_objects.end() ? std::string{"<none>"} : found->second;
+    };
+
+    // Folders and files of the bucket, several pages of the listing.
+    const Response top = kernel.handle(with_depth(user_req("PROPFIND", a + "/", "", alice), "1"));
+    NC_CHECK(has(top, "<d:href>" + a + "/Bucket/</d:href>"));
+    const Response root =
+        kernel.handle(with_depth(user_req("PROPFIND", a + "/Bucket", "", alice), "1"));
+    NC_CHECK_EQ(root.get_status(), 207);
+    for (const char* name: {"a.txt", "c.txt", "d.txt", "e.txt"}) {
+        NC_CHECK(has(root, a + "/Bucket/" + name));
+    }
+    NC_CHECK(has(root, "<d:href>" + a + "/Bucket/dir/</d:href>"));
+    NC_CHECK(!has(root, "secret.txt")); // outside the prefix
+    NC_CHECK(!has(root, "data/"));
+    const Response inside =
+        kernel.handle(with_depth(user_req("PROPFIND", a + "/Bucket/dir", "", alice), "1"));
+    NC_CHECK(has(inside, a + "/Bucket/dir/b.txt"));
+    NC_CHECK(has(inside, "<oc:size>") || has(inside, "5"));
+    const Response one =
+        kernel.handle(with_depth(user_req("PROPFIND", a + "/Bucket/dir/b.txt", "", alice), "0"));
+    NC_CHECK_EQ(one.get_status(), 207);
+    NC_CHECK(has(one, "<d:getcontentlength>5</d:getcontentlength>"));
+    NC_CHECK_EQ(
+        kernel.handle(with_depth(user_req("PROPFIND", a + "/Bucket/nothing", "", alice), "0"))
+            .get_status(),
+        404
+    );
+
+    // Reading.
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/Bucket/a.txt", "", alice)).get_body(), "AAA");
+    Request ranged = user_req("GET", a + "/Bucket/dir/b.txt", "", alice);
+    ranged.add_header("Range", "bytes=1-3");
+    const Response part = kernel.handle(std::move(ranged));
+    NC_CHECK_EQ(part.get_status(), 206);
+    NC_CHECK_EQ(part.get_body(), "BBB");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Bucket/none.txt", "", alice)).get_status(),
+        404
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/Bucket/dir", "", alice)).get_status(), 404);
+    NC_CHECK(
+        std::string{kernel.handle(user_req("GET", a + "/Bucket/a.txt", "", alice))
+                        .header("X-Content-Type-Options")} == "nosniff"
+    );
+
+    // Writing: new file, replacement, folder, copy, move of a folder, delete of a folder.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Bucket/new file.txt", "fresh", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(stored("data/new file.txt"), "fresh");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Bucket/new file.txt", "second", alice)).get_status(),
+        204
+    );
+    NC_CHECK_EQ(stored("data/new file.txt"), "second");
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Bucket/empty", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(stored("data/empty/"), "");
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Bucket/empty", "", alice)).get_status(), 405);
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Bucket/dir", "", alice)).get_status(), 405);
+    NC_CHECK(
+        has(kernel.handle(with_depth(user_req("PROPFIND", a + "/Bucket", "", alice), "1")),
+            a + "/Bucket/empty/")
+    );
+    Request copy = user_req("COPY", a + "/Bucket/a.txt", "", alice);
+    copy.add_header("Destination", a + "/Bucket/copy of a.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(copy)).get_status(), 201);
+    NC_CHECK_EQ(stored("data/copy of a.txt"), "AAA");
+    Request move = user_req("MOVE", a + "/Bucket/dir", "", alice);
+    move.add_header("Destination", a + "/Bucket/dir2");
+    NC_CHECK_EQ(kernel.handle(std::move(move)).get_status(), 201);
+    NC_CHECK_EQ(stored("data/dir2/b.txt"), "BBBBB");
+    NC_CHECK_EQ(stored("data/dir/b.txt"), "<none>");
+    Request into_itself = user_req("MOVE", a + "/Bucket/dir2", "", alice);
+    into_itself.add_header("Destination", a + "/Bucket/dir2/inner");
+    NC_CHECK_EQ(kernel.handle(std::move(into_itself)).get_status(), 400);
+    Request out_of = user_req("MOVE", a + "/Bucket/a.txt", "", alice);
+    out_of.add_header("Destination", a + "/escaped.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(out_of)).get_status(), 502);
+    NC_CHECK_EQ(kernel.handle(user_req("DELETE", a + "/Bucket/dir2", "", alice)).get_status(), 204);
+    NC_CHECK_EQ(stored("data/dir2/b.txt"), "<none>");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", a + "/Bucket/c.txt", "", alice)).get_status(),
+        204
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", a + "/Bucket/c.txt", "", alice)).get_status(),
+        404
+    );
+    NC_CHECK_EQ(stored("other/secret.txt"), "no"); // nothing outside the prefix is touched
+
+    // A read-only bucket changes nothing; the whole mount cannot be deleted or replaced.
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", a + "/Ro/x.txt", "no", alice)).get_status(), 403);
+    NC_CHECK_EQ(kernel.handle(user_req("DELETE", a + "/Ro/a.txt", "", alice)).get_status(), 403);
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/Ro/a.txt", "", alice)).get_body(), "AAA");
+    NC_CHECK_EQ(kernel.handle(user_req("DELETE", a + "/Bucket", "", alice)).get_status(), 403);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Bucket/../../x", "no", alice)).get_status() >= 400,
+        true
+    );
+    NC_CHECK_EQ(stored("x"), "<none>");
+
+    // Every request was signed the way S3 wants.
+    {
+        const std::lock_guard lock{g_s3_mutex};
+        NC_CHECK(g_s3_requests > 30);
+        NC_CHECK_EQ(g_s3_bad_requests, 0);
+    }
+    server.stop();
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/Bucket/a.txt", "", alice)).get_status(), 502);
+    kernel.stop();
+    storage.stop();
+    fs::remove_all(dir);
+}
+
 void test_received_shares()
 {
     const std::string dir = temp_dir("mounts");
@@ -2113,6 +2541,8 @@ int main()
     test_received_shares();
     test_resharing();
     test_external_webdav();
+    test_s3_signing();
+    test_external_s3();
     test_external_storage();
     test_encryption();
     test_quota_through_dav();

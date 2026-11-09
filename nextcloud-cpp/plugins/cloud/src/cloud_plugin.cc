@@ -11,6 +11,7 @@
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
+#include "s3.h"
 #include "share_store.h"
 #include "storage.h"
 
@@ -257,6 +258,19 @@ public:
             1'024U * 1'024U
         );
         parse_external_webdav(host.config("external_webdav", ""));
+        m_s3_client.set_allow_http(host.config("external_s3_allow_http", "false") == "true");
+        m_s3_client.set_allow_local(host.config("external_s3_allow_local", "false") == "true");
+        m_s3_client.set_ca_file(host.config("external_s3_ca_file", ""));
+        m_s3_client.set_timeout_seconds(
+            std::atoi(host.config("external_s3_timeout_seconds", "30").c_str())
+        );
+        m_s3_client.set_max_response(
+            static_cast<std::size_t>(
+                std::max(1, std::atoi(host.config("external_s3_max_mb", "256").c_str()))
+            ) *
+            1'024U * 1'024U
+        );
+        parse_external_s3(host.config("external_s3", ""));
         m_max_upload =
             std::strtoull(host.config("max_upload_bytes", "2147483648").c_str(), nullptr, 10);
         // Encryption at rest: a 64 hex digit key in the config, or in a file the administrator
@@ -1140,6 +1154,28 @@ private:
         }
     }
 
+    struct ExternalDav
+    {
+        std::string name{};
+        std::string url{}; // without trailing slash
+        std::string user{};
+        std::string password{};
+        bool writable{false};
+        std::string group{};
+    };
+
+    struct ExternalS3
+    {
+        std::string name{};
+        std::string endpoint{}; // without trailing slash
+        std::string host{};     // as it goes into the Host header
+        std::string bucket{};
+        std::string prefix{}; // "" or "dir/", where the storage starts inside the bucket
+        nc::cloud::s3::Credentials credentials{};
+        bool writable{false};
+        std::string group{};
+    };
+
     /// One received share as the recipient sees it: a name in the top folder, and where it really
     /// is.
     struct Mount
@@ -1157,6 +1193,8 @@ private:
         /// Set (to the index in `m_dav`) for an external storage that is a WebDAV server.
         int dav_index{-1};
         int dav_permissions{1};
+        /// Set (to the index in `m_s3`) for an external storage that is an S3 bucket.
+        int s3_index{-1};
     };
 
     [[nodiscard]] std::vector<Mount> mounts_for(const std::string& user) const
@@ -1193,7 +1231,7 @@ private:
                            : base_name.substr(0, dot) + " (" + std::to_string(attempt) + ")" +
                                  base_name.substr(dot);
             }
-            mounts.push_back(Mount{share, name, node->is_directory(), {}, 1, 0, -1, 1});
+            mounts.push_back(Mount{share, name, node->is_directory(), {}, 1, 0, -1, 1, -1});
         }
         for (const External& external: m_external) {
             if (!external.group.empty() &&
@@ -1219,7 +1257,7 @@ private:
                 name = external.name + " (" + std::to_string(attempt) + ")";
             }
             mounts.push_back(
-                Mount{Share{}, name, true, external.path, external.permissions, 0, -1, 1}
+                Mount{Share{}, name, true, external.path, external.permissions, 0, -1, 1, -1}
             );
         }
         // External storages that are WebDAV servers.
@@ -1247,9 +1285,44 @@ private:
                 }
                 name = dav.name + " (" + std::to_string(attempt) + ")";
             }
-            mounts.push_back(
-                Mount{Share{}, name, true, {}, 1, 0, static_cast<int>(index), dav.writable ? 31 : 1}
-            );
+            mounts.push_back(Mount{
+                Share{},
+                name,
+                true,
+                {},
+                1,
+                0,
+                static_cast<int>(index),
+                dav.writable ? 31 : 1,
+                -1
+            });
+        }
+        // External storages that are S3 buckets.
+        for (std::size_t index = 0; index < m_s3.size(); ++index) {
+            const ExternalS3& bucket = m_s3[index];
+            if (!bucket.group.empty() &&
+                m_host->call_service(
+                          "groups.is_member",
+                          nc::util::form_encode({{"group", bucket.group}, {"user", user}})
+                ).get_status() != 200) {
+                continue;
+            }
+            std::string name = bucket.name;
+            for (int attempt = 2; attempt < 1'000; ++attempt) {
+                const bool taken =
+                    own.stat("/" + name).has_value() || std::ranges::any_of(
+                                                            mounts,
+                                                            [&](const Mount& other)
+                                                            {
+                                                                return other.name == name;
+                                                            }
+                                                        );
+                if (!taken) {
+                    break;
+                }
+                name = bucket.name + " (" + std::to_string(attempt) + ")";
+            }
+            mounts.push_back(Mount{Share{}, name, true, {}, 1, 0, -1, 1, static_cast<int>(index)});
         }
         // Shares from other servers the user accepted.
         const Response remote =
@@ -1283,7 +1356,7 @@ private:
                                : base_name.substr(0, dot) + " (" + std::to_string(attempt) + ")" +
                                      base_name.substr(dot);
                 }
-                mounts.push_back(Mount{Share{}, name, directory, {}, 1, id, -1, 1});
+                mounts.push_back(Mount{Share{}, name, directory, {}, 1, id, -1, 1, -1});
             }
         }
         return mounts;
@@ -1300,7 +1373,7 @@ private:
         for (const Mount& mount: mounts) {
             // A share from another server has no file here; its entry is made up.
             std::optional<nc::cloud::Node> node;
-            if (mount.remote_id != 0 || mount.dav_index >= 0) {
+            if (mount.remote_id != 0 || mount.dav_index >= 0 || mount.s3_index >= 0) {
                 node = nc::cloud::Node{"/" + mount.name, mount.directory};
             } else if (auto found =
                            mount.external_root.empty()
@@ -1312,7 +1385,8 @@ private:
                 continue;
             }
             node->set_path("/" + mount.name);
-            if (node->is_directory() && mount.remote_id == 0 && mount.dav_index < 0) {
+            if (node->is_directory() && mount.remote_id == 0 && mount.dav_index < 0 &&
+                mount.s3_index < 0) {
                 // The size of what is inside, so the top-level listing shows it.
                 node->set_size(
                     mount.external_root.empty()
@@ -1401,6 +1475,409 @@ private:
             },
             publish
         );
+    }
+
+    /// `Name=https://s3.host|bucket|ACCESSKEY|/path/to/secret-file[|rw][|prefix=dir/][|region=eu-1][|group]`,
+    /// several separated by `;`. Path-style addressing (`endpoint/bucket/key`), so it works with
+    /// MinIO, Ceph and other S3-compatible servers as well as AWS.
+    void parse_external_s3(const std::string& text)
+    {
+        for (const std::string& entry: nc::util::split(text, ';')) {
+            if (nc::util::trim(entry).empty()) {
+                continue;
+            }
+            const std::size_t equals = entry.find('=');
+            const std::vector<std::string> parts = nc::util::split(
+                equals == std::string::npos ? std::string{} : entry.substr(equals + 1),
+                '|'
+            );
+            const std::string name{nc::util::trim(entry.substr(0, equals))};
+            std::string secret;
+            if (equals != std::string::npos && parts.size() >= 4) {
+                std::ifstream file{std::string{nc::util::trim(parts[3])}};
+                std::getline(file, secret);
+            }
+            const auto url =
+                parts.empty()
+                    ? nc::federation::Result<nc::federation::Url>{nc::util::unexpected<std::string>{
+                          "no url"
+                      }}
+                    : nc::federation::parse_url(nc::util::trim(parts[0]));
+            const std::string bucket_name{
+                parts.size() > 1 ? nc::util::trim(parts[1]) : std::string_view{}
+            };
+            if (equals == std::string::npos || parts.size() < 4 || !url || secret.empty() ||
+                name.empty() || name.find('/') != std::string::npos ||
+                !Storage::normalize("/" + name) || name == "." || name == ".." ||
+                bucket_name.empty() || bucket_name.find_first_of("/ ?#") != std::string::npos ||
+                nc::util::trim(parts[2]).empty()) {
+                m_host->log(nc::LogLevel::WARNING, "ignoring external S3 storage: " + name);
+                continue;
+            }
+            std::string endpoint{nc::util::trim(parts[0])};
+            while (!endpoint.empty() && endpoint.back() == '/') {
+                endpoint.pop_back();
+            }
+            ExternalS3 bucket{
+                name,
+                endpoint,
+                url->host +
+                    (url->port == (url->scheme == "https" ? "443" : "80") ? "" : ":" + url->port),
+                bucket_name,
+                {},
+                nc::cloud::s3::Credentials{
+                    std::string{nc::util::trim(parts[2])},
+                    secret,
+                    "us-east-1"
+                },
+                false,
+                {}
+            };
+            for (std::size_t index = 4; index < parts.size(); ++index) {
+                const std::string_view option = nc::util::trim(parts[index]);
+                if (option == "rw") {
+                    bucket.writable = true;
+                } else if (option == "ro") {
+                    bucket.writable = false;
+                } else if (nc::util::starts_with(option, "prefix=")) {
+                    bucket.prefix = std::string{option.substr(7)};
+                    while (!bucket.prefix.empty() && bucket.prefix.front() == '/') {
+                        bucket.prefix.erase(bucket.prefix.begin());
+                    }
+                    if (!bucket.prefix.empty() && bucket.prefix.back() != '/') {
+                        bucket.prefix += '/';
+                    }
+                } else if (nc::util::starts_with(option, "region=")) {
+                    bucket.credentials.region = std::string{option.substr(7)};
+                } else {
+                    bucket.group = std::string{option};
+                }
+            }
+            m_s3.push_back(std::move(bucket));
+        }
+    }
+
+    /// One signed request to the bucket. `key` is the object (empty for the bucket itself), `query`
+    /// the parameters (any order).
+    [[nodiscard]] nc::federation::Result<nc::http::Response> s3_call(
+        const ExternalS3& bucket,
+        std::string_view method,
+        const std::string& key,
+        std::vector<std::pair<std::string, std::string>> query,
+        const std::vector<nc::http::Header>& extra,
+        const std::string& body
+    ) const
+    {
+        std::ranges::sort(query);
+        std::string canonical_query;
+        for (const auto& [name, value]: query) {
+            canonical_query += (canonical_query.empty() ? "" : "&") +
+                               nc::cloud::s3::encode(name, false) + "=" +
+                               nc::cloud::s3::encode(value, false);
+        }
+        const std::string uri =
+            "/" + bucket.bucket + (key.empty() ? "" : "/" + nc::cloud::s3::encode(key, true));
+        std::vector<nc::http::Header> headers = nc::cloud::s3::sign(
+            bucket.credentials,
+            method,
+            bucket.host,
+            uri,
+            canonical_query,
+            extra,
+            body,
+            nc::cloud::s3::amz_date(now_seconds())
+        );
+        for (const nc::http::Header& header: extra) {
+            headers.push_back(header);
+        }
+        return nc::federation::request(
+            m_s3_client,
+            method,
+            bucket.endpoint + uri + (canonical_query.empty() ? "" : "?" + canonical_query),
+            headers,
+            body
+        );
+    }
+
+    /// Everything under a prefix (one level with `delimiter`), following the continuation tokens.
+    [[nodiscard]] std::optional<nc::cloud::s3::Listing>
+    s3_list(const ExternalS3& bucket, const std::string& prefix, bool delimiter, std::size_t limit)
+        const
+    {
+        nc::cloud::s3::Listing all;
+        all.valid = true;
+        std::string token;
+        for (int page = 0; page < 50; ++page) {
+            std::vector<std::pair<std::string, std::string>> query{
+                {"list-type", "2"},
+                {"prefix", prefix}
+            };
+            if (delimiter) {
+                query.emplace_back("delimiter", "/");
+            }
+            if (!token.empty()) {
+                query.emplace_back("continuation-token", token);
+            }
+            const auto answer = s3_call(bucket, "GET", {}, query, {}, {});
+            if (!answer || answer->get_status() != 200) {
+                return std::nullopt;
+            }
+            auto listing = nc::cloud::s3::parse_listing(answer->get_body());
+            if (!listing.valid) {
+                return std::nullopt;
+            }
+            for (auto& file: listing.files) {
+                all.files.push_back(std::move(file));
+            }
+            for (auto& folder: listing.folders) {
+                all.folders.push_back(std::move(folder));
+            }
+            if (all.files.size() + all.folders.size() > limit) {
+                return std::nullopt;
+            }
+            if (!listing.truncated || listing.next_token.empty()) {
+                return all;
+            }
+            token = listing.next_token;
+        }
+        return std::nullopt;
+    }
+
+    /// A folder (or the root) of an S3 bucket shown as a WebDAV collection tree.
+    [[nodiscard]] Response serve_external_s3(
+        const Request& request,
+        const Mount& mount,
+        const std::string& rest,
+        const std::string& base
+    ) const
+    {
+        const ExternalS3& bucket = m_s3[static_cast<std::size_t>(mount.s3_index)];
+        const std::string& method = request.get_method();
+        const bool writes = method == "PUT" || method == "MKCOL" || method == "DELETE" ||
+                            method == "MOVE" || method == "COPY";
+        if (!writes && method != "GET" && method != "PROPFIND") {
+            return Response::text(405, "Method Not Allowed");
+        }
+        if (writes && (!bucket.writable || rest.empty())) {
+            return Response::text(403, "This storage is read-only");
+        }
+        if (method == "PUT" && request.get_body().size() > m_max_upload) {
+            return Response::text(413, "The file is larger than this server accepts");
+        }
+        const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
+        const std::string path = rest == "/" ? std::string{} : rest; // "" or "/a/b"
+        const std::string key = bucket.prefix + (path.empty() ? "" : path.substr(1));
+        const auto unreachable = [](const std::string& why)
+        {
+            return Response::text(502, "The storage could not be reached: " + why);
+        };
+        // Is there a file with this key? Its size and version.
+        const auto head = [&](const std::string& object) -> std::optional<nc::http::Response>
+        {
+            const auto answer = s3_call(bucket, "HEAD", object, {}, {}, {});
+            if (answer && answer->get_status() == 200) {
+                return *answer;
+            }
+            return std::nullopt;
+        };
+
+        if (method == "GET") {
+            if (path.empty() || key.back() == '/') {
+                return Response::text(405, "A folder cannot be downloaded");
+            }
+            std::vector<nc::http::Header> extra;
+            if (const std::string_view range = request.header("Range"); !range.empty()) {
+                extra.emplace_back("range", std::string{range});
+            }
+            const auto answer = s3_call(bucket, "GET", key, {}, extra, {});
+            if (!answer) {
+                return unreachable(answer.error());
+            }
+            if (answer->get_status() == 404) {
+                return Response::text(404, "Not Found");
+            }
+            if (answer->get_status() != 200 && answer->get_status() != 206) {
+                return Response::text(502, "The storage refused the request");
+            }
+            const std::string name = path.substr(path.rfind('/') + 1);
+            std::string safe_name = name;
+            std::ranges::replace(safe_name, '"', '_');
+            Response out{
+                answer->get_status(),
+                std::string{nc::util::mime_type_for(name)},
+                std::string{answer->get_body()},
+                {{"Content-Disposition", "attachment; filename=\"" + safe_name + "\""},
+                 {"X-Content-Type-Options", "nosniff"}}
+            };
+            for (const std::string_view header:
+                 {"Content-Range", "Accept-Ranges", "ETag", "Last-Modified"}) {
+                if (const std::string_view value = answer->header(header); !value.empty()) {
+                    out.add_header(std::string{header}, std::string{value});
+                }
+            }
+            return out;
+        }
+
+        if (method == "PROPFIND") {
+            const bool deep = request.header("Depth") != "0";
+            std::vector<nc::cloud::Node> nodes;
+            if (!path.empty()) {
+                if (const auto file = head(key)) {
+                    nodes.emplace_back(
+                        std::string{path},
+                        false,
+                        std::strtoull(
+                            std::string{file->header("Content-Length")}.c_str(),
+                            nullptr,
+                            10
+                        ),
+                        0,
+                        std::string{file->header("ETag")}
+                    );
+                    return Response::xml(
+                        207,
+                        nc::cloud::multistatus(
+                            nodes,
+                            mount_base,
+                            "",
+                            Storage{std::filesystem::path{"/nonexistent"}}
+                        )
+                    );
+                }
+            }
+            // The prefix of what is in this folder: the storage's own prefix for its root.
+            const std::string folder_prefix = path.empty() ? bucket.prefix : key + "/";
+            const auto listing = s3_list(bucket, folder_prefix, true, 10'000);
+            if (!listing) {
+                return unreachable("the listing failed");
+            }
+            const std::string& here = folder_prefix;
+            if (!path.empty() && listing->files.empty() && listing->folders.empty()) {
+                return Response::text(404, "Not Found");
+            }
+            nodes.emplace_back(path.empty() ? std::string{"/"} : std::string{path}, true);
+            if (deep) {
+                for (const std::string& folder: listing->folders) {
+                    std::string name = folder.substr(here.size());
+                    name.pop_back();
+                    nodes.emplace_back(path + "/" + name, true);
+                }
+                for (const nc::cloud::s3::Entry& entry: listing->files) {
+                    if (entry.key == here) {
+                        continue; // the marker object that makes an empty folder exist
+                    }
+                    nodes.emplace_back(
+                        path + "/" + entry.key.substr(here.size()),
+                        false,
+                        entry.size,
+                        entry.modified,
+                        std::string{entry.etag}
+                    );
+                }
+            }
+            return Response::xml(
+                207,
+                nc::cloud::multistatus(
+                    nodes,
+                    mount_base,
+                    "",
+                    Storage{std::filesystem::path{"/nonexistent"}}
+                )
+            );
+        }
+
+        if (method == "PUT") {
+            if (key.back() == '/') {
+                return Response::text(405, "Method Not Allowed");
+            }
+            const bool existed = head(key).has_value();
+            std::vector<nc::http::Header> extra;
+            if (const std::string_view type = request.header("Content-Type"); !type.empty()) {
+                extra.emplace_back("content-type", std::string{type});
+            }
+            const auto answer = s3_call(bucket, "PUT", key, {}, extra, request.get_body());
+            if (!answer) {
+                return unreachable(answer.error());
+            }
+            return answer->get_status() == 200
+                       ? Response{existed ? 204 : 201}
+                       : Response::text(502, "The storage refused the file");
+        }
+        if (method == "MKCOL") {
+            const auto existing = s3_list(bucket, key + "/", true, 1);
+            if (head(key) ||
+                (existing && (!existing->files.empty() || !existing->folders.empty()))) {
+                return Response::text(405, "The folder already exists");
+            }
+            const auto answer = s3_call(bucket, "PUT", key + "/", {}, {}, {});
+            if (!answer) {
+                return unreachable(answer.error());
+            }
+            return answer->get_status() == 200
+                       ? Response{201}
+                       : Response::text(502, "The storage refused the folder");
+        }
+
+        // DELETE, COPY and MOVE work on a file or on everything under a folder.
+        std::vector<std::string> keys;
+        bool is_folder = false;
+        if (head(key)) {
+            keys.push_back(key);
+        } else {
+            const auto listing = s3_list(bucket, key + "/", false, 10'000);
+            if (!listing || (listing->files.empty())) {
+                return Response::text(404, "Not Found");
+            }
+            is_folder = true;
+            for (const nc::cloud::s3::Entry& entry: listing->files) {
+                keys.push_back(entry.key);
+            }
+        }
+        if (method == "DELETE") {
+            for (const std::string& object: keys) {
+                const auto answer = s3_call(bucket, "DELETE", object, {}, {}, {});
+                if (!answer) {
+                    return unreachable(answer.error());
+                }
+            }
+            return Response{204};
+        }
+        // COPY / MOVE
+        const std::string inner =
+            nc::cloud::destination_of(request.header("Destination"), mount_base);
+        const auto target = Storage::normalize("/" + inner);
+        if (inner.empty() || !target || *target == "/") {
+            return Response::text(502, "A file cannot be moved out of its storage");
+        }
+        const std::string target_key = bucket.prefix + target->substr(1);
+        if (is_folder && (target_key + "/").rfind(key + "/", 0) == 0) {
+            return Response::text(400, "A folder cannot go into itself");
+        }
+        for (const std::string& object: keys) {
+            const std::string destination =
+                is_folder ? target_key + object.substr(key.size()) : target_key;
+            const auto copied = s3_call(
+                bucket,
+                "PUT",
+                destination,
+                {},
+                {{"x-amz-copy-source",
+                  "/" + bucket.bucket + "/" + nc::cloud::s3::encode(object, true)}},
+                {}
+            );
+            if (!copied) {
+                return unreachable(copied.error());
+            }
+            if (copied->get_status() != 200) {
+                return Response::text(502, "The storage refused the copy");
+            }
+        }
+        if (method == "MOVE") {
+            for (const std::string& object: keys) {
+                (void)s3_call(bucket, "DELETE", object, {}, {}, {});
+            }
+        }
+        return Response{201};
     }
 
     /// `Name=https://host/remote.php/webdav|user|/path/to/password-file[|rw][|group]`, several
@@ -1667,6 +2144,9 @@ private:
         }
         if (mount.dav_index >= 0) {
             return serve_external_dav(request, mount, rest, base);
+        }
+        if (mount.s3_index >= 0) {
+            return serve_external_s3(request, mount, rest, base);
         }
         const Share& share = mount.share;
         const std::string& method = request.get_method();
@@ -2455,16 +2935,6 @@ private:
     std::size_t m_max_chunk{512U * 1'024U * 1'024U};
     std::size_t m_max_upload{2'048U * 1'024U * 1'024U};
 
-    struct ExternalDav
-    {
-        std::string name{};
-        std::string url{}; // without trailing slash
-        std::string user{};
-        std::string password{};
-        bool writable{false};
-        std::string group{};
-    };
-
     struct External
     {
         std::string name{};
@@ -2475,6 +2945,8 @@ private:
 
     std::vector<External> m_external{};
     std::vector<ExternalDav> m_dav{};
+    std::vector<ExternalS3> m_s3{};
+    nc::federation::ClientSettings m_s3_client{};
     nc::federation::ClientSettings m_dav_client{};
     std::unique_ptr<nc::cloud::ShareStore> m_shares{};
     nc::Host* m_host{nullptr};
