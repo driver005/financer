@@ -2297,6 +2297,91 @@ private:
     {
         constexpr std::string_view BASE = "/ocs/v2.php/apps/files_sharing/api/v1/shares";
 
+        // Who a share can go to: people and groups of this server that match the text, and people
+        // on other servers this one knows (or the address that was typed, when it looks like one).
+        host.add_route(
+            "GET",
+            "/ocs/v2.php/apps/files_sharing/api/v1/sharees",
+            [this](const Request& request)
+            {
+                if (request.get_user().empty()) {
+                    return nc::http::unauthorized();
+                }
+                const std::string search = request.query_value("search");
+                if (search.size() > 100) {
+                    return failure(400, "The search text is too long");
+                }
+                std::string users = "[";
+                std::string groups = "[";
+                std::string remotes = "[";
+                std::string exact_users = "[";
+                std::string exact_groups = "[";
+                std::string exact_remotes = "[";
+                const auto entry = [](int type, const std::string& label, const std::string& with)
+                {
+                    return R"({"label":)" + json_string(label) + R"(,"value":{"shareType":)" +
+                           std::to_string(type) + R"(,"shareWith":)" + json_string(with) + "}}";
+                };
+                const auto add = [](std::string& list, const std::string& item)
+                {
+                    list += (list.size() > 1 ? "," : "") + item;
+                };
+                const std::string lowered = nc::util::to_lower(search);
+                for (const std::string& line: nc::util::split(
+                         m_host->call_service("users.search", search).get_body(),
+                         '\n'
+                     )) {
+                    const std::size_t tab = line.find('\t');
+                    if (line.empty() || line.substr(0, tab) == request.get_user()) {
+                        continue;
+                    }
+                    const std::string id = line.substr(0, tab);
+                    const std::string label = tab == std::string::npos || line.size() == tab + 1
+                                                  ? id
+                                                  : line.substr(tab + 1);
+                    const bool exact =
+                        nc::util::to_lower(id) == lowered || nc::util::to_lower(label) == lowered;
+                    add(exact ? exact_users : users, entry(nc::cloud::SHARE_TYPE_USER, label, id));
+                }
+                for (const std::string& group: nc::util::split(
+                         m_host->call_service("groups.search", search).get_body(),
+                         '\n'
+                     )) {
+                    if (!group.empty()) {
+                        add(nc::util::to_lower(group) == lowered ? exact_groups : groups,
+                            entry(nc::cloud::SHARE_TYPE_GROUP, group, group));
+                    }
+                }
+                bool typed_is_known = false;
+                for (const std::string& address: nc::util::split(
+                         m_host->call_service("federation.remotes", "").get_body(),
+                         '\n'
+                     )) {
+                    if (address.empty() ||
+                        nc::util::to_lower(address).find(lowered) == std::string::npos) {
+                        continue;
+                    }
+                    const bool exact = nc::util::to_lower(address) == lowered;
+                    typed_is_known = typed_is_known || exact;
+                    add(exact ? exact_remotes : remotes,
+                        entry(nc::cloud::SHARE_TYPE_REMOTE, address, address));
+                }
+                // Something that looks like name@server can be shared with even if never seen
+                // before.
+                const std::size_t at = search.rfind('@');
+                if (!typed_is_known && at != std::string::npos && at > 0 &&
+                    at + 1 < search.size() && search.find_first_of(" \t/\\") == std::string::npos &&
+                    m_host->call_service("federation.remotes", "").get_status() == 200) {
+                    add(exact_remotes, entry(nc::cloud::SHARE_TYPE_REMOTE, search, search));
+                }
+                return ok(
+                    R"({"exact":{"users":)" + exact_users + R"(],"groups":)" + exact_groups +
+                    R"(],"remotes":)" + exact_remotes + R"(]},"users":)" + users +
+                    R"(],"groups":)" + groups + R"(],"remotes":)" + remotes + "]}"
+                );
+            }
+        );
+
         host.add_route(
             "POST",
             BASE,
@@ -2895,6 +2980,47 @@ private:
                     return 1;
                 }
                 out = "encrypted " + std::to_string(*changed) + " file(s)\n";
+                return 0;
+            }
+        );
+        host.add_command(
+            "encryption:rotate-key",
+            "Switches a user's files to the key in the config: encryption:rotate-key <user> "
+            "<file with the old key (64 hex digits)>. Run it for every user, then remove the old "
+            "key.",
+            [this](const std::vector<std::string>& args, std::string& out)
+            {
+                if (args.size() != 2 || !safe_user(args[0]) || m_encryption_key.empty()) {
+                    out =
+                        "usage: encryption:rotate-key <user> <old-key-file> (needs the new key in "
+                        "the config)\n";
+                    return 1;
+                }
+                std::ifstream file{args[1]};
+                std::string line;
+                std::getline(file, line);
+                const auto old_key = nc::cloud::FileCipher::key_from_hex(nc::util::trim(line));
+                if (!old_key) {
+                    out = "the old key file must hold 64 hexadecimal digits\n";
+                    return 1;
+                }
+                if (*old_key == m_encryption_key) {
+                    out = "the old key is the key in the config; nothing to do\n";
+                    return 1;
+                }
+                const nc::cloud::FileCipher old_cipher{std::string{*old_key}, std::string{args[0]}};
+                std::size_t changed = 0;
+                // Files, the trash and the versions all hold encrypted copies.
+                for (const Storage& storage:
+                     {storage_for(args[0]), trash_for(args[0]), versions_for(args[0])}) {
+                    const auto rotated = storage.rotate_key(old_cipher);
+                    if (!rotated) {
+                        out = rotated.error().get_message() + "\n";
+                        return 1;
+                    }
+                    changed += *rotated;
+                }
+                out = "re-encrypted " + std::to_string(changed) + " file(s)\n";
                 return 0;
             }
         );

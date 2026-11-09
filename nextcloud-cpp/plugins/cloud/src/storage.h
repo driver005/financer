@@ -208,6 +208,12 @@ public:
     /// returns how many it changed. Does nothing without a cipher.
     [[nodiscard]] Result<std::size_t> encrypt_existing() const;
 
+    /// @brief Key rotation: every file that `old_cipher` decrypts is written again with this
+    /// storage's cipher (plain files are encrypted too). Stops at the first file that does not
+    /// verify, leaving everything before it converted; running it again finishes the job (files
+    /// that already use the new key are left alone). Returns how many files changed.
+    [[nodiscard]] Result<std::size_t> rotate_key(const class FileCipher& old_cipher) const;
+
     [[nodiscard]] static Result<std::string> normalize(std::string_view path);
 
     /// @brief Creates the root folder if it is missing.

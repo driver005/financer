@@ -82,6 +82,23 @@ public:
             "CREATE INDEX nc_group_members_uid ON nc_group_members (uid);"
         );
 
+        // Group ids that contain the text (without case), one per line, at most 20.
+        host.add_service(
+            "groups.search",
+            [this](std::string_view args)
+            {
+                std::string out;
+                for (const nc::db::Row& row: nc::db::Client{m_host}.query(
+                         "SELECT id FROM nc_groups WHERE instr(lower(id), lower(?)) > 0 ORDER BY "
+                         "id "
+                         "LIMIT 20",
+                         {std::string{args}}
+                     )) {
+                    out += nc::db::value_of(row, "id") + "\n";
+                }
+                return Response::text(200, out);
+            }
+        );
         host.add_service(
             "groups.exists",
             [this](std::string_view args)

@@ -603,6 +603,24 @@ private:
             }
         );
 
+        // The addresses ("name@server") of people on other servers this server has dealt with, one
+        // per line, for suggestions when someone shares: recipients of shares made here and senders
+        // of shares received here.
+        host.add_service(
+            "federation.remotes",
+            [this](std::string_view)
+            {
+                std::string out;
+                for (const nc::db::Row& row:
+                     nc::db::Client{m_host}.query("SELECT remote_user AS address FROM "
+                                                  "nc_fed_outgoing UNION SELECT owner FROM "
+                                                  "nc_fed_incoming ORDER BY 1 LIMIT 200")) {
+                    out += nc::db::value_of(row, "address") + "\n";
+                }
+                return Response::text(200, out);
+            }
+        );
+
         // Form: user. One line per accepted share: id, name, directory, permissions.
         host.add_service(
             "federation.mounts",

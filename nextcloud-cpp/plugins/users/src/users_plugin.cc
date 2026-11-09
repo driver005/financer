@@ -142,6 +142,27 @@ public:
                             : Response::text(404, "no such user");
             }
         );
+        // Enabled accounts whose id or display name contains the text (without case): one per line,
+        // "id<TAB>display name", at most 20, in id order.
+        host.add_service(
+            "users.search",
+            [&store](std::string_view args)
+            {
+                const std::string needle = nc::util::to_lower(args);
+                std::string out;
+                std::size_t count = 0;
+                for (const User& user: store.list()) {
+                    if (count < 20 && user.is_enabled() &&
+                        (nc::util::to_lower(user.get_id()).find(needle) != std::string::npos ||
+                         nc::util::to_lower(user.get_display_name()).find(needle) !=
+                             std::string::npos)) {
+                        out += user.get_id() + "\t" + user.get_display_name() + "\n";
+                        ++count;
+                    }
+                }
+                return Response::text(200, out);
+            }
+        );
         // The id of the enabled account with this e-mail address (compared without case), or 404.
         host.add_service(
             "users.by_email",

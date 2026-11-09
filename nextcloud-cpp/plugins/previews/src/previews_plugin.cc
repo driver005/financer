@@ -1,9 +1,9 @@
 /**
  * @file previews_plugin.cc
  * @brief Thumbnails of pictures: `GET /index.php/core/preview.png?file=/Photos/a.jpg&x=64&y=64`.
- * Counterpart of Nextcloud's `lib/private/Preview`, reduced to PNG, JPEG, GIF and BMP pictures,
- * scaled to fit and returned as PNG. Results are cached on disk by file version (the ETag), so a
- * changed file gets a new preview.
+ * Counterpart of Nextcloud's `lib/private/Preview`, reduced to PNG, JPEG, GIF, BMP and PNM
+ * pictures, scaled to fit and returned as PNG. Results are cached on disk by file version (the
+ * ETag), so a changed file gets a new preview.
  *
  * Pictures are the one place the server decodes data an attacker may have written, so: only four
  * formats are ever passed to the decoder (recognised by their first bytes), the size is read before
@@ -70,7 +70,7 @@ public:
             {
                 return Response::json(
                     200,
-                    R"({"formats":["png","jpeg","gif","bmp"],"max_size":2048})"
+                    R"({"formats":["png","jpeg","gif","bmp","pnm"],"max_size":2048})"
                 );
             }
         );

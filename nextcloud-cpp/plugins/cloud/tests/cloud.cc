@@ -2479,6 +2479,101 @@ void test_encryption()
     fs::remove_all(dir);
 }
 
+void test_key_rotation()
+{
+    const std::string dir = temp_dir("rotation");
+    const std::string old_key(64, 'a');
+    const std::string new_key(64, 'b');
+    const auto boot = [&](const std::string& key)
+    {
+        auto kernel = std::make_unique<nc::Kernel>(
+            nc::Config::parse(
+                "data_dir = " + dir +
+                "\n[users]\npbkdf2_iterations = 3\n[cloud]\nencryption_key = " + key + "\n"
+            )
+                .value()
+        );
+        kernel->get_logger().set_sink({});
+        for (const char* plugin: {"cloud", "users", "db"}) {
+            NC_CHECK(
+                kernel
+                    ->add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                    .has_value()
+            );
+        }
+        NC_CHECK(kernel->start().has_value());
+        return kernel;
+    };
+    const std::string alice = "alice:alice password";
+    const std::string a = "/remote.php/dav/files/alice";
+    std::string out;
+    {
+        auto kernel = boot(old_key);
+        ::setenv("OC_PASS", "alice password", 1);
+        NC_CHECK_EQ(kernel->run_command("user:add", {"alice"}, out), 0);
+        ::unsetenv("OC_PASS");
+        NC_CHECK_EQ(
+            kernel->handle(user_req("PUT", a + "/one.txt", "first secret", alice)).get_status(),
+            201
+        );
+        NC_CHECK_EQ(kernel->handle(user_req("MKCOL", a + "/dir", "", alice)).get_status(), 201);
+        NC_CHECK_EQ(
+            kernel->handle(user_req("PUT", a + "/dir/two.txt", "second secret", alice))
+                .get_status(),
+            201
+        );
+        // An older copy, and one in the trash.
+        NC_CHECK_EQ(
+            kernel->handle(user_req("PUT", a + "/dir/two.txt", "second secret, changed", alice))
+                .get_status(),
+            204
+        );
+        kernel->stop();
+    }
+    {
+        std::ofstream{dir + "/old.key"} << old_key << "\n";
+        std::ofstream{dir + "/wrong.key"} << std::string(64, 'c') << "\n";
+        std::ofstream{dir + "/bad.key"} << "not hex\n";
+    }
+    auto kernel = boot(new_key);
+    // With the new key alone the files no longer verify.
+    NC_CHECK(kernel->handle(user_req("GET", a + "/one.txt", "", alice)).get_status() >= 400);
+    // Bad arguments change nothing.
+    NC_CHECK_EQ(kernel->run_command("encryption:rotate-key", {"alice", dir + "/bad.key"}, out), 1);
+    NC_CHECK_EQ(
+        kernel->run_command("encryption:rotate-key", {"alice", dir + "/missing.key"}, out),
+        1
+    );
+    NC_CHECK_EQ(
+        kernel->run_command("encryption:rotate-key", {"alice", dir + "/wrong.key"}, out),
+        1
+    );
+    NC_CHECK(out.find("does not decrypt") != std::string::npos);
+    NC_CHECK_EQ(kernel->run_command("encryption:rotate-key", {"alice"}, out), 1);
+    // The right old key converts everything, and a second run has nothing left to do.
+    const std::string before = slurp(dir + "/alice/files/one.txt");
+    NC_CHECK_EQ(kernel->run_command("encryption:rotate-key", {"alice", dir + "/old.key"}, out), 0);
+    NC_CHECK(
+        out.find("re-encrypted 2 file(s)") != std::string::npos ||
+        out.find("re-encrypted 3 file(s)") != std::string::npos ||
+        out.find("re-encrypted 4 file(s)") != std::string::npos
+    );
+    NC_CHECK(slurp(dir + "/alice/files/one.txt") != before);
+    NC_CHECK(slurp(dir + "/alice/files/one.txt").starts_with("NCENC1"));
+    NC_CHECK_EQ(
+        kernel->handle(user_req("GET", a + "/one.txt", "", alice)).get_body(),
+        "first secret"
+    );
+    NC_CHECK_EQ(
+        kernel->handle(user_req("GET", a + "/dir/two.txt", "", alice)).get_body(),
+        "second secret, changed"
+    );
+    NC_CHECK_EQ(kernel->run_command("encryption:rotate-key", {"alice", dir + "/old.key"}, out), 0);
+    NC_CHECK(out.find("re-encrypted 0 file(s)") != std::string::npos);
+    kernel->stop();
+    fs::remove_all(dir);
+}
+
 void test_quota_through_dav()
 {
     const std::string dir = temp_dir("quota");
@@ -2545,6 +2640,7 @@ int main()
     test_external_s3();
     test_external_storage();
     test_encryption();
+    test_key_rotation();
     test_quota_through_dav();
     test_missing_requirement();
     return NC_TEST_RESULT();

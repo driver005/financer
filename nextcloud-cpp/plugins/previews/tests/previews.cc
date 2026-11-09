@@ -57,6 +57,25 @@ void test_image()
     NC_CHECK(nc::previews::sniff(jpeg) == Format::JPEG);
     NC_CHECK(nc::previews::sniff("GIF89a....") == Format::GIF);
     NC_CHECK(nc::previews::sniff("BM......") == Format::BMP);
+    NC_CHECK(nc::previews::sniff("P6\n2 1\n255\n......") == Format::PNM);
+    NC_CHECK(nc::previews::sniff("P7\n") == Format::UNKNOWN); // PAM is not read
+    NC_CHECK(nc::previews::sniff("P6") == Format::UNKNOWN);
+    {
+        const std::string ppm =
+            std::string{"P6\n2 1\n255\n"} + std::string("\xff\x00\x00\x00\x00\xff", 6);
+        const auto pixels = nc::previews::decode(ppm);
+        NC_CHECK(pixels.has_value());
+        if (pixels) {
+            NC_CHECK_EQ(pixels->get_width(), 2);
+            NC_CHECK_EQ(pixels->get_height(), 1);
+            NC_CHECK_EQ(pixels->get_pixels()[0], static_cast<unsigned char>(255)); // red
+            NC_CHECK_EQ(pixels->get_pixels()[6], static_cast<unsigned char>(255)); // blue
+        }
+        // A header that promises more than the file has, or a huge size, is refused before any big
+        // allocation.
+        NC_CHECK(!nc::previews::decode("P6\n2 1\n255\n\xff").has_value());
+        NC_CHECK(!nc::previews::decode("P6\n99999 99999\n255\n").has_value());
+    }
     NC_CHECK(nc::previews::sniff("%PDF-1.7") == Format::UNKNOWN);
     NC_CHECK(nc::previews::sniff("") == Format::UNKNOWN);
 

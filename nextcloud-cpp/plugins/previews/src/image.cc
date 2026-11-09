@@ -4,6 +4,7 @@
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_GIF
 #define STBI_ONLY_BMP
+#define STBI_ONLY_PNM
 #define STBI_NO_STDIO
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
@@ -56,13 +57,18 @@ Format sniff(std::string_view bytes) noexcept
     if (bytes.size() >= 2 && bytes.substr(0, 2) == "BM") {
         return Format::BMP;
     }
+    // Netpbm: "P1".."P6" followed by white space (the plain and the binary kinds).
+    if (bytes.size() >= 3 && bytes[0] == 'P' && bytes[1] >= '1' && bytes[1] <= '6' &&
+        (bytes[2] == '\n' || bytes[2] == '\r' || bytes[2] == ' ' || bytes[2] == '\t')) {
+        return Format::PNM;
+    }
     return Format::UNKNOWN;
 }
 
 Result<Image> decode(std::string_view bytes)
 {
     if (sniff(bytes) == Format::UNKNOWN) {
-        return failure("not a PNG, JPEG, GIF or BMP picture");
+        return failure("not a PNG, JPEG, GIF, BMP or PNM picture");
     }
     int width = 0;
     int height = 0;

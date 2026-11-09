@@ -14,6 +14,7 @@ enum class Format
     JPEG,
     GIF,
     BMP,
+    PNM,
     UNKNOWN
 };
 

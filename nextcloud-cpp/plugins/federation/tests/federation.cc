@@ -85,7 +85,16 @@ struct Server
         const std::vector<nc::http::Header>& headers = {}
     ) const
     {
-        Request request{std::string{method}, std::string{path}, "", std::string{body}, "", {}, {}};
+        const std::size_t question = path.find('?');
+        Request request{
+            std::string{method},
+            path.substr(0, question),
+            question == std::string::npos ? std::string{} : path.substr(question + 1),
+            std::string{body},
+            "",
+            {},
+            {}
+        };
         request.add_header("Host", address());
         if (!user.empty()) {
             request.add_header(
@@ -304,6 +313,25 @@ void test_sharing_between_servers()
 
     NC_CHECK_EQ(a.call("DELETE", SHARES + "/" + first_id(shared_made), "alice").get_status(), 200);
     NC_CHECK_EQ(b.call("GET", mine + "/one.txt", "bob").get_status(), 404);
+
+    // Suggestions when sharing: people here, and people elsewhere (known ones and a typed address).
+    b.add_user("bobby");
+    const std::string sharees = "/ocs/v2.php/apps/files_sharing/api/v1/sharees";
+    const Response found = b.call("GET", sharees + "?search=bo", "bob");
+    NC_CHECK_EQ(found.get_status(), 200);
+    NC_CHECK(contains(found, "\"shareWith\":\"bobby\""));
+    NC_CHECK(!contains(found, "\"shareWith\":\"bob\"")); // not oneself
+    NC_CHECK(contains(b.call("GET", sharees + "?search=bobby", "bob"), "\"exact\":{\"users\":[{"));
+    NC_CHECK(contains(
+        b.call("GET", sharees + "?search=carol%40cloud.example", "bob"),
+        "\"remotes\":[{\"label\":\"carol@cloud.example\""
+    ));
+    NC_CHECK(!contains(b.call("GET", sharees + "?search=has%20space%40x", "bob"), "has space"));
+    NC_CHECK_EQ(
+        b.call("GET", sharees + "?search=" + std::string(101, 'x'), "bob").get_status(),
+        400
+    );
+    NC_CHECK_EQ(b.call("GET", sharees + "?search=bo", "").get_status(), 401);
 
     // A server that is not there, or is not a cloud, gets nothing and nothing is left behind.
     NC_CHECK_EQ(

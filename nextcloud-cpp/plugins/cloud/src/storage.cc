@@ -553,6 +553,58 @@ Result<std::size_t> Storage::encrypt_existing() const
     return changed;
 }
 
+Result<std::size_t> Storage::rotate_key(const FileCipher& old_cipher) const
+{
+    if (!m_cipher) {
+        return fail(StorageCode::INVALID_PATH, "there is no new key");
+    }
+    std::error_code error;
+    std::size_t changed = 0;
+    for (const auto& entry: fs::recursive_directory_iterator{m_root, error}) {
+        if (!entry.is_regular_file(error) || hidden_name(entry.path().filename().string()) ||
+            entry.is_symlink(error)) {
+            continue;
+        }
+        std::ostringstream raw;
+        {
+            std::ifstream stream{entry.path(), std::ios::binary};
+            raw << stream.rdbuf();
+        }
+        // Already on the new key: nothing to do (this is what makes a second run harmless).
+        if (FileCipher::is_encrypted(raw.str()) && m_cipher->decrypt(raw.str())) {
+            continue;
+        }
+        const auto plain = old_cipher.decrypt(raw.str());
+        if (!plain) {
+            return fail(
+                StorageCode::IO,
+                entry.path().string() + " does not decrypt with the old key"
+            );
+        }
+        const fs::path temporary =
+            entry.path().parent_path() / (std::string(TEMP_PREFIX) + util::random_hex(6));
+        {
+            std::ofstream out{temporary, std::ios::binary | std::ios::trunc};
+            const std::string stored = m_cipher->encrypt(*plain);
+            out.write(stored.data(), static_cast<std::streamsize>(stored.size()));
+            out.flush();
+            if (!out) {
+                fs::remove(temporary, error);
+                return fail(StorageCode::IO, "cannot write " + entry.path().string());
+            }
+        }
+        fs::rename(temporary, entry.path(), error);
+        if (error) {
+            fs::remove(temporary, error);
+            return util::unexpected<StorageError>{
+                from_error(error, "cannot replace " + entry.path().string())
+            };
+        }
+        ++changed;
+    }
+    return changed;
+}
+
 std::uint64_t Storage::used_bytes() const
 {
     if (!m_quota_root.empty()) {
