@@ -18,3 +18,6 @@ third_party_deps = use_extension("//third_party:extension.bzl", "third_party_dep
 use_repo(third_party_deps, "system_cc")
 
 register_toolchains("//bazel/toolchain/system_cc:system_clang_toolchain")
+
+# SFTP for external storage (libssh2; the crypto backend is mbedTLS, set in .bazelrc).
+bazel_dep(name = "libssh2", version = "1.11.1.bcr.2")

@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <arpa/inet.h>
 #include <atomic>
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -21,6 +23,7 @@
 #include <set>
 #include <sstream>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <thread>
 #include <unistd.h>
 
@@ -3233,6 +3236,182 @@ void test_missing_requirement()
 
 } // namespace
 
+// ---- external storage on an SFTP server (a real sshd) ------------------------------------------
+
+std::string command_output(const std::string& command)
+{
+    std::string text;
+    if (FILE* pipe = popen(command.c_str(), "r")) {
+        char buffer[512];
+        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+            text += buffer;
+        }
+        pclose(pipe);
+    }
+    return text;
+}
+
+void test_external_sftp()
+{
+    const std::string sshd = fs::exists("/usr/sbin/sshd") ? "/usr/sbin/sshd" : "";
+    if (sshd.empty() || command_output("command -v ssh-keygen").empty()) {
+        std::fprintf(stderr, "skipping the SFTP test: no sshd or ssh-keygen here\n");
+        return;
+    }
+    // sshd checks a real account's password, so the test makes a throwaway account; that takes root
+    // (or passwordless sudo).
+    std::string privileged;
+    if (::geteuid() != 0) {
+        if (std::system("sudo -n true >/dev/null 2>&1") != 0) {
+            std::fprintf(stderr, "skipping the SFTP test: it needs root or passwordless sudo\n");
+            return;
+        }
+        privileged = "sudo -n ";
+    }
+    const std::string dir = temp_dir("sftp");
+    const std::string served = dir + "/served";
+    fs::create_directories(served + "/pub/sub");
+    {
+        std::ofstream{served + "/pub/a.txt"} << "0123456789";
+        std::ofstream{served + "/pub/sub/b.txt"} << "bee";
+        std::ofstream{served + "/outside.txt"} << "no";
+    }
+    const auto run = [](const std::string& command)
+    {
+        return std::system((command + " >/dev/null 2>&1").c_str());
+    };
+    NC_CHECK_EQ(run("ssh-keygen -q -t ecdsa -b 256 -N '' -f " + dir + "/host"), 0);
+    NC_CHECK_EQ(run("ssh-keygen -q -t ecdsa -b 256 -N '' -f " + dir + "/other"), 0);
+    const std::string fingerprint_line = command_output("ssh-keygen -lf " + dir + "/host.pub");
+    const std::size_t sha = fingerprint_line.find("SHA256:");
+    NC_CHECK(sha != std::string::npos);
+    if (sha == std::string::npos) {
+        return;
+    }
+    const std::string fingerprint =
+        fingerprint_line.substr(sha + 7, fingerprint_line.find(' ', sha) - sha - 7);
+    const std::string other_line = command_output("ssh-keygen -lf " + dir + "/other.pub");
+    const std::size_t other_sha = other_line.find("SHA256:");
+    const std::string other_fingerprint =
+        other_line.substr(other_sha + 7, other_line.find(' ', other_sha) - other_sha - 7);
+    const std::string account = "nctest" + nc::util::random_hex(3);
+    {
+        std::ofstream secret{dir + "/sftp.secret"};
+        secret << "sftp-secret\n";
+    }
+    NC_CHECK_EQ(run(privileged + "/usr/sbin/useradd -M -s /bin/sh " + account), 0);
+    NC_CHECK_EQ(
+        run("echo '" + account + ":sftp-secret' | " + privileged + "/usr/sbin/chpasswd"),
+        0
+    );
+    // The account owns what the server shows, and can walk down to it.
+    NC_CHECK_EQ(run(privileged + "chown -R " + account + " " + served), 0);
+    run("chmod 755 " + dir);
+    // A free port.
+    int probe = ::socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ::bind(probe, reinterpret_cast<sockaddr*>(&address), sizeof(address));
+    socklen_t length = sizeof(address);
+    ::getsockname(probe, reinterpret_cast<sockaddr*>(&address), &length);
+    const int port = ntohs(address.sin_port);
+    ::close(probe);
+    {
+        std::ofstream config{dir + "/sshd_config"};
+        config << "Port " << port << "\nListenAddress 127.0.0.1\nHostKey " << dir
+               << "/host\nPidFile " << dir
+               << "/sshd.pid\nUsePAM no\nPasswordAuthentication yes\nPubkeyAuthentication no\n"
+                  "StrictModes no\nSubsystem sftp internal-sftp\n";
+    }
+    ::chmod((dir + "/host").c_str(), 0600);
+    run(privileged + "mkdir -p /run/sshd");
+    NC_CHECK_EQ(run(privileged + sshd + " -f " + dir + "/sshd_config"), 0);
+    for (int wait = 0; wait < 50 && !fs::exists(dir + "/sshd.pid"); ++wait) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{100});
+    }
+    const std::string where = "sftp://127.0.0.1:" + std::to_string(port) + served;
+    nc::Kernel kernel{
+        nc::Config::parse(
+            "data_dir = " + dir +
+            "\n[users]\npbkdf2_iterations = 3\n[cloud]\nexternal_ftp = Files=" + where + "/pub|" +
+            account + "|" + dir + "/sftp.secret|rw|hostkey=" + fingerprint + ";Locked=" + where +
+            "/pub|" + account + "|" + dir + "/sftp.secret|ro|hostkey=" + fingerprint +
+            ";Forged=" + where + "/pub|" + account + "|" + dir +
+            "/sftp.secret|rw|hostkey=" + other_fingerprint + ";NoKey=" + where + "/pub|" + account +
+            "|" + dir + "/sftp.secret|rw\nexternal_ftp_allow_local = true\n"
+        )
+            .value()
+    };
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const auto has = [](const Response& response, const std::string& text)
+    {
+        return response.get_body().find(text) != std::string::npos;
+    };
+
+    // The storage with a pinned key shows up; one without a pinned key is ignored.
+    const Response top = kernel.handle(with_depth(user_req("PROPFIND", a + "/", "", alice), "1"));
+    NC_CHECK(has(top, "<d:href>" + a + "/Files/</d:href>"));
+    NC_CHECK(!has(top, "NoKey"));
+    const Response root =
+        kernel.handle(with_depth(user_req("PROPFIND", a + "/Files", "", alice), "1"));
+    NC_CHECK_EQ(root.get_status(), 207);
+    NC_CHECK(has(root, a + "/Files/a.txt"));
+    NC_CHECK(has(root, "<d:href>" + a + "/Files/sub/</d:href>"));
+    NC_CHECK(!has(root, "outside.txt"));
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Files/a.txt", "", alice)).get_body(),
+        "0123456789"
+    );
+    Request ranged = user_req("GET", a + "/Files/a.txt", "", alice);
+    ranged.add_header("Range", "bytes=2-5");
+    const Response part = kernel.handle(std::move(ranged));
+    NC_CHECK_EQ(part.get_status(), 206);
+    NC_CHECK_EQ(part.get_body(), "2345");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Files/new.txt", "fresh", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(slurp(served + "/pub/new.txt"), "fresh");
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Files/made", "", alice)).get_status(), 201);
+    NC_CHECK(fs::is_directory(served + "/pub/made"));
+    Request move = user_req("MOVE", a + "/Files/new.txt", "", alice);
+    move.add_header("Destination", a + "/Files/made/moved.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(move)).get_status(), 201);
+    NC_CHECK_EQ(slurp(served + "/pub/made/moved.txt"), "fresh");
+    NC_CHECK_EQ(kernel.handle(user_req("DELETE", a + "/Files/made", "", alice)).get_status(), 204);
+    NC_CHECK(!fs::exists(served + "/pub/made"));
+    NC_CHECK_EQ(slurp(served + "/outside.txt"), "no");
+
+    // Read-only, and a server whose key is not the pinned one is refused before any password or
+    // file crosses the wire.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Locked/no.txt", "no", alice)).get_status(),
+        403
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/Forged/a.txt", "", alice)).get_status(), 502);
+
+    kernel.stop();
+    const std::string pid = slurp(dir + "/sshd.pid");
+    if (!pid.empty()) {
+        run(privileged + "kill " + pid.substr(0, pid.find('\n')));
+    }
+    run(privileged + "/usr/sbin/userdel " + account);
+    run(privileged + "rm -rf " + dir);
+}
+
 int main()
 {
     test_normalize();
@@ -3253,6 +3432,7 @@ int main()
     test_external_s3();
     test_ftp_parsers();
     test_external_ftp();
+    test_external_sftp();
     test_external_storage();
     test_encryption();
     test_key_rotation();

@@ -10,6 +10,7 @@ nc_cc_library(
         "src/file_cipher.cc",
         "src/ftp.cc",
         "src/s3.cc",
+        "src/sftp.cc",
         "src/share_store.cc",
         "src/storage.cc",
     ],
@@ -17,7 +18,9 @@ nc_cc_library(
         "src/dav.h",
         "src/file_cipher.h",
         "src/ftp.h",
+        "src/remote_files.h",
         "src/s3.h",
+        "src/sftp.h",
         "src/share.h",
         "src/share_store.h",
         "src/storage.h",
@@ -27,6 +30,7 @@ nc_cc_library(
         "//plugins/federation:lib",
         "//sdk/plugin:http",
         "//sdk/util",
+        "@libssh2",
     ],
 )
 

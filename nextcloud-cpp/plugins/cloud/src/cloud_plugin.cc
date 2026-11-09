@@ -13,7 +13,9 @@
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
+#include "remote_files.h"
 #include "s3.h"
+#include "sftp.h"
 #include "share_store.h"
 #include "storage.h"
 
@@ -1553,9 +1555,11 @@ private:
             }
             std::string address{parts.empty() ? std::string_view{} : nc::util::trim(parts[0])};
             ExternalFtp server;
-            bool good = nc::util::starts_with(address, "ftp://");
+            server.secure_shell = nc::util::starts_with(address, "sftp://");
+            bool good = server.secure_shell || nc::util::starts_with(address, "ftp://");
             if (good) {
-                address.erase(0, 6);
+                server.port = server.secure_shell ? "22" : "21";
+                address.erase(0, server.secure_shell ? 7 : 6);
                 const std::size_t slash = address.find('/');
                 const std::string folder =
                     slash == std::string::npos ? std::string{} : address.substr(slash);
@@ -1590,15 +1594,71 @@ private:
                 const std::string_view option = nc::util::trim(parts[index]);
                 if (option == "rw") {
                     server.writable = true;
+                } else if (nc::util::starts_with(option, "hostkey=")) {
+                    server.host_key = std::string{option.substr(8)};
+                    if (server.host_key.rfind("SHA256:", 0) == 0) {
+                        server.host_key.erase(0, 7);
+                    }
                 } else if (option != "ro") {
                     server.group = std::string{option};
                 }
+            }
+            if (server.secure_shell && server.host_key.empty()) {
+                m_host->log(
+                    nc::LogLevel::WARNING,
+                    "ignoring external SFTP storage without hostkey=: " + name
+                );
+                continue;
             }
             m_ftp.push_back(std::move(server));
         }
     }
 
-    /// A folder of an FTP server shown as a WebDAV collection tree. One FTP session per request.
+    struct ExternalFtp;
+
+    /// Opens a session on an external FTP or SFTP server.
+    [[nodiscard]] nc::cloud::RemoteResult<std::unique_ptr<nc::cloud::RemoteFiles>>
+    open_remote(const ExternalFtp& server) const
+    {
+        if (server.secure_shell) {
+            nc::cloud::sftp::Session::Settings settings;
+            settings.allow_local = m_ftp_settings.allow_local;
+            settings.timeout_seconds = m_ftp_settings.timeout_seconds;
+            settings.max_bytes = m_ftp_settings.max_bytes;
+            auto opened = nc::cloud::sftp::Session::open(
+                server.host,
+                server.port,
+                server.user,
+                server.password,
+                server.host_key,
+                settings
+            );
+            if (!opened) {
+                return nc::util::unexpected<std::string>{opened.error()};
+            }
+            return std::unique_ptr<nc::cloud::RemoteFiles>{
+                std::make_unique<nc::cloud::RemoteSession<nc::cloud::sftp::Session>>(
+                    std::move(*opened)
+                )
+            };
+        }
+        auto opened = nc::cloud::ftp::Session::open(
+            server.host,
+            server.port,
+            server.user,
+            server.password,
+            m_ftp_settings
+        );
+        if (!opened) {
+            return nc::util::unexpected<std::string>{opened.error()};
+        }
+        return std::unique_ptr<nc::cloud::RemoteFiles>{
+            std::make_unique<nc::cloud::RemoteSession<nc::cloud::ftp::Session>>(std::move(*opened))
+        };
+    }
+
+    /// A folder of an FTP or SFTP server shown as a WebDAV collection tree. One session per
+    /// request.
     [[nodiscard]] Response serve_external_ftp(
         const Request& request,
         const Mount& mount,
@@ -1620,16 +1680,14 @@ private:
             return Response::text(413, "The file is larger than this server accepts");
         }
         const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
-        auto session = nc::cloud::ftp::Session::open(
-            server.host,
-            server.port,
-            server.user,
-            server.password,
-            m_ftp_settings
-        );
-        if (!session) {
-            return Response::text(502, "The storage could not be reached: " + session.error());
+        auto opened_session = open_remote(server);
+        if (!opened_session) {
+            return Response::text(
+                502,
+                "The storage could not be reached: " + opened_session.error()
+            );
         }
+        const auto& session = *opened_session;
         const std::string path = rest == "/" ? std::string{} : rest;
         // The path on the server for one inside the storage; "/" for the storage's own root.
         const auto remote = [&](const std::string& inner)
@@ -3461,6 +3519,8 @@ private:
         std::string password{};
         bool writable{false};
         std::string group{};
+        bool secure_shell{false}; // sftp:// instead of ftp://
+        std::string host_key{};   // SHA-256 of the server's host key (base64), required for sftp
     };
 
     struct External
