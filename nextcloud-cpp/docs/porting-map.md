@@ -65,7 +65,7 @@ here and is tested; **Reduced** means a deliberate subset (stated); **Replaced**
 
 ## Verified
 
-* `bazelisk test //...` (28 targets) passes with clang 18 (C++23), plain and under `--config=asan`,
+* `bazelisk test //...` (30 targets) passes with clang 18 (C++23), plain and under `--config=asan`,
   `--config=ubsan` and `--config=tsan`.
 * It also passes with clang 22 (C++26, `--define=std=26`) and with congelado's `-Werror` profile
   (`--config=warnings`).
