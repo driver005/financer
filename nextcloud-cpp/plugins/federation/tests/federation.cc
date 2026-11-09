@@ -250,6 +250,55 @@ void test_sharing_between_servers()
         "declined"
     ));
 
+    // A share that allows changes: bob reads parts, writes, overwrites, makes folders, deletes.
+    NC_CHECK_EQ(a.call("MKCOL", "/remote.php/dav/files/alice/Shared", "alice").get_status(), 201);
+    NC_CHECK_EQ(
+        a.call("PUT", "/remote.php/dav/files/alice/Shared/one.txt", "alice", "0123456789")
+            .get_status(),
+        201
+    );
+    const Response shared_made = a.call(
+        "POST",
+        SHARES,
+        "alice",
+        "path=/Shared&shareType=6&permissions=31&shareWith=bob@" + b.address()
+    );
+    NC_CHECK_EQ(shared_made.get_status(), 200);
+    const std::string shared_id = data_id(b.call("GET", REMOTE + "/pending", "bob"));
+    NC_CHECK(!shared_id.empty());
+    NC_CHECK_EQ(b.call("POST", REMOTE + "/pending/" + shared_id, "bob").get_status(), 200);
+    const std::string mine = "/remote.php/dav/files/bob/Shared";
+    const Response part = b.call("GET", mine + "/one.txt", "bob", "", {{"Range", "bytes=2-5"}});
+    NC_CHECK_EQ(part.get_status(), 206);
+    NC_CHECK_EQ(part.get_body(), "2345");
+    NC_CHECK_EQ(part.header("Content-Range"), "bytes 2-5/10");
+    NC_CHECK_EQ(b.call("PUT", mine + "/new.txt", "bob", "from bob").get_status(), 201);
+    NC_CHECK_EQ(
+        a.call("GET", "/remote.php/dav/files/alice/Shared/new.txt", "alice").get_body(),
+        "from bob"
+    );
+    NC_CHECK_EQ(b.call("PUT", mine + "/one.txt", "bob", "replaced").get_status(), 204);
+    NC_CHECK_EQ(
+        a.call("GET", "/remote.php/dav/files/alice/Shared/one.txt", "alice").get_body(),
+        "replaced"
+    );
+    NC_CHECK_EQ(b.call("MKCOL", mine + "/sub", "bob").get_status(), 201);
+    NC_CHECK_EQ(b.call("PUT", mine + "/sub/deep.txt", "bob", "deep").get_status(), 201);
+    NC_CHECK_EQ(b.call("DELETE", mine + "/new.txt", "bob").get_status(), 204);
+    NC_CHECK_EQ(
+        a.call("GET", "/remote.php/dav/files/alice/Shared/new.txt", "alice").get_status(),
+        404
+    );
+    NC_CHECK(contains(b.call("PROPFIND", mine, "bob", "", {{"Depth", "1"}}), mine + "/sub/"));
+    // The mount itself cannot be written over or deleted; other verbs are refused.
+    NC_CHECK_EQ(b.call("DELETE", mine, "bob").get_status(), 403);
+    NC_CHECK_EQ(b.call("MOVE", mine + "/one.txt", "bob").get_status(), 403);
+    NC_CHECK_EQ(b.call("PUT", mine + "/../escape.txt", "bob", "x").get_status() >= 400, true);
+    NC_CHECK_EQ(a.call("GET", "/remote.php/dav/files/alice/escape.txt", "alice").get_status(), 404);
+
+    NC_CHECK_EQ(a.call("DELETE", SHARES + "/" + first_id(shared_made), "alice").get_status(), 200);
+    NC_CHECK_EQ(b.call("GET", mine + "/one.txt", "bob").get_status(), 404);
+
     // A server that is not there, or is not a cloud, gets nothing and nothing is left behind.
     NC_CHECK_EQ(
         a.call("POST", SHARES, "alice", "path=/Docs&shareType=6&shareWith=bob@127.0.0.1:1")

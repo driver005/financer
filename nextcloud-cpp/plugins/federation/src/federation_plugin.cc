@@ -195,6 +195,12 @@ public:
         m_client.set_allow_http(host.config("allow_http", "false") == "true");
         m_client.set_allow_local(host.config("allow_local", "false") == "true");
         m_client.set_ca_file(host.config("ca_file", ""));
+        m_client.set_max_response(
+            static_cast<std::size_t>(
+                std::max(1, std::atoi(host.config("max_remote_file_mb", "64").c_str()))
+            ) *
+            1'024U * 1'024U
+        );
         m_client.set_timeout_seconds(std::atoi(host.config("timeout_seconds", "15").c_str()));
         m_client.set_handshake_timeout_seconds(
             std::atoi(host.config("handshake_timeout_seconds", "5").c_str())
@@ -477,12 +483,14 @@ private:
             return nc::util::form_value(form, name);
         };
         const std::string method = field("method");
-        if (method != "GET" && method != "PROPFIND") {
-            return Response::text(405, "Remote shares are read-only here");
+        if (method != "GET" && method != "PROPFIND" && method != "PUT" && method != "MKCOL" &&
+            method != "DELETE") {
+            return Response::text(405, "Method Not Allowed");
         }
         const auto rows = nc::db::Client{m_host}.query(
-            "SELECT base, token, directory FROM nc_fed_incoming WHERE id = ? AND uid = ? AND "
-            "state = 1",
+            "SELECT base, token, directory, permissions FROM nc_fed_incoming WHERE id = ? AND uid "
+            "= "
+            "? AND state = 1",
             {field("id"), field("user")}
         );
         if (rows.empty()) {
@@ -494,10 +502,29 @@ private:
         if (nc::db::value_of(rows.front(), "directory") != "1" && !path.empty()) {
             return Response::text(404, "not found");
         }
+        // What the owner allowed. The owner's server decides again; this saves the trip.
+        const int permissions = std::atoi(nc::db::value_of(rows.front(), "permissions").c_str());
+        const bool is_directory = nc::db::value_of(rows.front(), "directory") == "1";
+        if ((method == "PUT" && !(permissions & (2 | 4))) ||
+            (method == "MKCOL" && (!(permissions & 4) || !is_directory)) ||
+            (method == "DELETE" && (!(permissions & 8) || !is_directory)) ||
+            ((method == "PUT" || method == "MKCOL" || method == "DELETE") && path.empty() &&
+             is_directory)) {
+            return Response::text(403, "The owner's share does not allow this");
+        }
         std::vector<nc::http::Header> headers{
             {"Authorization", "Basic " + nc::util::base64_encode(token + ":")}
         };
         std::string body;
+        if (method == "GET" && !field("range").empty()) {
+            headers.emplace_back("Range", field("range"));
+        }
+        if (method == "PUT") {
+            body = field("body");
+            if (!field("content_type").empty()) {
+                headers.emplace_back("Content-Type", field("content_type"));
+            }
+        }
         if (method == "PROPFIND") {
             headers.emplace_back("Depth", field("depth") == "0" ? "0" : "1");
             headers.emplace_back("Content-Type", "application/xml");
@@ -514,14 +541,29 @@ private:
             return Response::text(502, answer.error());
         }
         const int status = answer->get_status();
-        if (status == 401 || status == 403) {
+        if (status == 401) {
             return Response::text(502, "the owner's server no longer accepts this share");
         }
         std::string content = answer->get_body();
         if (status == 207) {
             content = rewrite_links(content, field("href_base"));
         }
-        return Response::text(status, std::move(content));
+        // What the caller needs of the owner's answer: type, range, version.
+        Response out{
+            status,
+            answer->get_content_type().empty() ? std::string{"application/octet-stream"}
+                                               : std::string{answer->get_content_type()},
+            std::move(content),
+            {}
+        };
+        for (const std::string_view name:
+             {"Content-Range", "Accept-Ranges", "ETag", "Last-Modified", "Content-Length"}) {
+            if (const std::string_view value = answer->header(name);
+                !value.empty() && name != "Content-Length") {
+                out.add_header(std::string{name}, std::string{value});
+            }
+        }
+        return out;
     }
 
     /// Every `<..href>` of a multistatus answer that points into `/public.php/webdav` points into

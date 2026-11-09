@@ -1270,14 +1270,15 @@ private:
     ) const
     {
         const std::string& method = request.get_method();
-        if (method != "GET" && method != "PROPFIND") {
+        if (method != "GET" && method != "PROPFIND" && method != "PUT" && method != "MKCOL" &&
+            method != "DELETE") {
             return Response::text(
-                method == "PUT" || method == "MKCOL" || method == "DELETE" || method == "MOVE" ||
-                        method == "COPY"
-                    ? 403
-                    : 405,
-                "A share from another server is read-only here"
+                method == "MOVE" || method == "COPY" ? 403 : 405,
+                "This is not possible in a share from another server"
             );
+        }
+        if (method == "PUT" && request.get_body().size() > m_max_upload) {
+            return Response::text(413, "The file is larger than this server accepts");
         }
         const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
         Response answer = m_host->call_service(
@@ -1288,14 +1289,14 @@ private:
                  {"method", method},
                  {"path", rest},
                  {"depth", std::string{request.header("Depth")}},
+                 {"range", std::string{request.header("Range")}},
+                 {"content_type", std::string{request.header("Content-Type")}},
+                 {"body", method == "PUT" ? request.get_body() : std::string{}},
                  {"href_base", mount.directory ? mount_base : base}}
             )
         );
         const int status = answer.get_status();
-        if (status != 200 && status != 207) {
-            return Response::text(status >= 400 ? status : 502, answer.get_body());
-        }
-        if (method == "PROPFIND") {
+        if (method == "PROPFIND" && status == 207) {
             return Response{
                 207,
                 "application/xml; charset=utf-8",
@@ -1303,16 +1304,30 @@ private:
                 {}
             };
         }
+        if (method != "GET") {
+            // Writes: the owner's status says how it went.
+            return Response::text(status, std::string{answer.get_body()});
+        }
+        if (status != 200 && status != 206) {
+            return Response::text(status >= 400 ? status : 502, answer.get_body());
+        }
         const std::string name = rest.empty() ? mount.name : rest.substr(rest.rfind('/') + 1);
         std::string safe_name = name;
         std::ranges::replace(safe_name, '"', '_');
-        return Response{
-            200,
+        Response out{
+            status,
             std::string{nc::util::mime_type_for(name)},
             std::string{answer.get_body()},
             {{"Content-Disposition", "attachment; filename=\"" + safe_name + "\""},
              {"X-Content-Type-Options", "nosniff"}}
         };
+        for (const std::string_view header:
+             {"Content-Range", "Accept-Ranges", "ETag", "Last-Modified"}) {
+            if (const std::string_view value = answer.header(header); !value.empty()) {
+                out.add_header(std::string{header}, std::string{value});
+            }
+        }
+        return out;
     }
 
     /// Serves a request inside a mounted share: the owner's folder is the root, and the share's
