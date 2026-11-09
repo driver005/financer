@@ -33,7 +33,12 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <openssl/bio.h>
+#include <openssl/bn.h>
 #include <openssl/curve25519.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/rsa.h>
 #include <optional>
 
 namespace {
@@ -170,6 +175,131 @@ int permissions_of(const Json& value)
     return mask == 0 ? 1 : mask;
 }
 
+/// RSA-SHA256 as Nextcloud signs its server-to-server requests (PKCS#1 v1.5 over SHA-256).
+namespace rsa {
+
+    struct KeyDeleter
+    {
+        void operator()(EVP_PKEY* key) const noexcept
+        {
+            EVP_PKEY_free(key);
+        }
+    };
+
+    using Key = std::unique_ptr<EVP_PKEY, KeyDeleter>;
+
+    struct BioDeleter
+    {
+        void operator()(BIO* bio) const noexcept
+        {
+            BIO_free(bio);
+        }
+    };
+
+    using Bio = std::unique_ptr<BIO, BioDeleter>;
+
+    struct ContextDeleter
+    {
+        void operator()(EVP_MD_CTX* context) const noexcept
+        {
+            EVP_MD_CTX_free(context);
+        }
+    };
+
+    using Context = std::unique_ptr<EVP_MD_CTX, ContextDeleter>;
+
+    std::string text_of(BIO* bio)
+    {
+        char* data = nullptr;
+        const long size = BIO_get_mem_data(bio, &data);
+        return size > 0 ? std::string{data, static_cast<std::size_t>(size)} : std::string{};
+    }
+
+    /// A new 2048 bit key as PEM (public: "BEGIN PUBLIC KEY", private: "BEGIN PRIVATE KEY").
+    bool generate(std::string& public_pem, std::string& private_pem)
+    {
+        std::unique_ptr<RSA, decltype(&RSA_free)> rsa{RSA_new(), &RSA_free};
+        std::unique_ptr<BIGNUM, decltype(&BN_free)> exponent{BN_new(), &BN_free};
+        if (rsa == nullptr || exponent == nullptr || BN_set_word(exponent.get(), RSA_F4) != 1 ||
+            RSA_generate_key_ex(rsa.get(), 2'048, exponent.get(), nullptr) != 1) {
+            return false;
+        }
+        Key key{EVP_PKEY_new()};
+        if (key == nullptr || EVP_PKEY_assign_RSA(key.get(), rsa.get()) != 1) {
+            return false;
+        }
+        rsa.release(); // owned by the key now
+        Bio pub{BIO_new(BIO_s_mem())};
+        Bio priv{BIO_new(BIO_s_mem())};
+        if (pub == nullptr || priv == nullptr || PEM_write_bio_PUBKEY(pub.get(), key.get()) != 1 ||
+            PEM_write_bio_PrivateKey(
+                priv.get(),
+                key.get(),
+                nullptr,
+                nullptr,
+                0,
+                nullptr,
+                nullptr
+            ) != 1) {
+            return false;
+        }
+        public_pem = text_of(pub.get());
+        private_pem = text_of(priv.get());
+        return !public_pem.empty() && !private_pem.empty();
+    }
+
+    /// The raw signature of `text`, empty when the key cannot sign.
+    std::string sign(const std::string& private_pem, std::string_view text)
+    {
+        Bio bio{BIO_new_mem_buf(private_pem.data(), static_cast<int>(private_pem.size()))};
+        Key key{bio ? PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr) : nullptr};
+        Context context{EVP_MD_CTX_new()};
+        if (key == nullptr || context == nullptr ||
+            EVP_DigestSignInit(context.get(), nullptr, EVP_sha256(), nullptr, key.get()) != 1) {
+            return {};
+        }
+        std::size_t size = 0;
+        const auto* data = reinterpret_cast<const std::uint8_t*>(text.data());
+        if (EVP_DigestSign(context.get(), nullptr, &size, data, text.size()) != 1) {
+            return {};
+        }
+        std::string out(size, '\0');
+        if (EVP_DigestSign(
+                context.get(),
+                reinterpret_cast<std::uint8_t*>(out.data()),
+                &size,
+                data,
+                text.size()
+            ) != 1) {
+            return {};
+        }
+        out.resize(size);
+        return out;
+    }
+
+    /// Whether `signature` is a valid signature of `text` by the PEM public key; keys under 2048
+    /// bits are not accepted.
+    bool verify(const std::string& public_pem, std::string_view text, std::string_view signature)
+    {
+        Bio bio{BIO_new_mem_buf(public_pem.data(), static_cast<int>(public_pem.size()))};
+        Key key{bio ? PEM_read_bio_PUBKEY(bio.get(), nullptr, nullptr, nullptr) : nullptr};
+        Context context{EVP_MD_CTX_new()};
+        if (key == nullptr || context == nullptr || EVP_PKEY_id(key.get()) != EVP_PKEY_RSA ||
+            EVP_PKEY_bits(key.get()) < 2'048 ||
+            EVP_DigestVerifyInit(context.get(), nullptr, EVP_sha256(), nullptr, key.get()) != 1) {
+            return false;
+        }
+        return EVP_DigestVerify(
+                   context.get(),
+                   reinterpret_cast<const std::uint8_t*>(signature.data()),
+                   signature.size(),
+                   reinterpret_cast<const std::uint8_t*>(text.data()),
+                   text.size()
+               ) == 1;
+    }
+
+} // namespace rsa
+
 class FederationPlugin final : public nc::Plugin
 {
 public:
@@ -252,7 +382,19 @@ public:
             3,
             "ALTER TABLE nc_fed_outgoing ADD COLUMN is_group INTEGER NOT NULL DEFAULT 0;"
         );
+        nc::db::Client{&host}.migrate(
+            "federation",
+            4,
+            "CREATE TABLE nc_fed_rsa (id INTEGER PRIMARY KEY CHECK (id = 1), public TEXT NOT NULL, "
+            "private TEXT NOT NULL);"
+        );
         load_or_create_key();
+        // [federation] signature_algorithm = rsa-sha256 signs with an RSA key the way Nextcloud
+        // does (and publishes it as `publicKey: {keyId, publicKeyPem}`); the default is Ed25519.
+        // Requests signed either way are accepted.
+        if (host.config("signature_algorithm", "ed25519") == "rsa-sha256") {
+            load_or_create_rsa_key();
+        }
         add_services(host);
         add_protocol_routes(host);
         add_user_routes();
@@ -331,8 +473,14 @@ private:
                 continue;
             }
             Provider provider{base, base + "/ocm", {}};
-            if (const auto key = nc::util::base64_decode((*json)["publicKey"].string());
-                key && key->size() == ED25519_PUBLIC_KEY_LEN) {
+            if ((*json)["publicKey"].is_object()) {
+                // Nextcloud: {"keyId": ..., "publicKeyPem": "-----BEGIN PUBLIC KEY-----..."}
+                const std::string& pem = (*json)["publicKey"]["publicKeyPem"].string();
+                if (pem.rfind("-----BEGIN", 0) == 0 && pem.size() < 4'096) {
+                    provider.public_key = pem;
+                }
+            } else if (const auto key = nc::util::base64_decode((*json)["publicKey"].string());
+                       key && key->size() == ED25519_PUBLIC_KEY_LEN) {
                 provider.public_key = *key;
             }
             // The server names its own endpoint; one on another host is not followed.
@@ -380,6 +528,42 @@ private:
             return "answered " + std::to_string(answer->get_status());
         }
         return {};
+    }
+
+    /// The signing key as the discovery document publishes it: Nextcloud's `publicKey` object when
+    /// this server signs with RSA, else the raw Ed25519 key.
+    [[nodiscard]] std::string key_fields(const std::string& base) const
+    {
+        if (!m_rsa_public.empty() && !m_rsa_private.empty()) {
+            return R"(,"signatureAlgorithm":"rsa-sha256","publicKey":{"keyId":)" +
+                   json_string(base + "#signature") + R"(,"publicKeyPem":)" +
+                   json_string(m_rsa_public) + "}";
+        }
+        return R"(,"signatureAlgorithm":"ed25519","publicKey":)" +
+               json_string(nc::util::base64_encode(m_public_key));
+    }
+
+    void load_or_create_rsa_key()
+    {
+        const nc::db::Client db{m_host};
+        auto rows = db.query("SELECT public, private FROM nc_fed_rsa WHERE id = 1");
+        if (rows.empty()) {
+            std::string pub;
+            std::string priv;
+            if (!rsa::generate(pub, priv)) {
+                m_host->log(nc::LogLevel::ERROR, "cannot generate an RSA key; staying on Ed25519");
+                return;
+            }
+            db.exec(
+                "INSERT OR IGNORE INTO nc_fed_rsa (id, public, private) VALUES (1, ?, ?)",
+                {pub, priv}
+            );
+            rows = db.query("SELECT public, private FROM nc_fed_rsa WHERE id = 1");
+        }
+        if (!rows.empty()) {
+            m_rsa_public = nc::db::value_of(rows.front(), "public");
+            m_rsa_private = nc::db::value_of(rows.front(), "private");
+        }
     }
 
     void load_or_create_key()
@@ -466,6 +650,26 @@ private:
         }
         const std::string date = nc::util::http_date(std::chrono::system_clock::now());
         const std::string digest = "SHA-256=" + nc::util::base64_encode(nc::util::sha256(body));
+        if (!m_rsa_private.empty() && !body.empty()) {
+            // Nextcloud's scheme: "(request-target)" first, then content-length date digest host.
+            const std::string rsa_text =
+                "(request-target): " + nc::util::to_lower(std::string{method}) + " " +
+                parsed->target + "\ncontent-length: " + std::to_string(body.size()) +
+                "\ndate: " + date + "\ndigest: " + digest + "\nhost: " + host_header_of(*parsed);
+            const std::string raw = rsa::sign(m_rsa_private, rsa_text);
+            if (!raw.empty()) {
+                headers.emplace_back("Date", date);
+                headers.emplace_back("Digest", digest);
+                headers.emplace_back(
+                    "Signature",
+                    "keyId=\"" + base +
+                        "#signature\",algorithm=\"sha256\",headers=\"content-length date digest "
+                        "host\",signature=\"" +
+                        nc::util::base64_encode(raw) + "\""
+                );
+                return;
+            }
+        }
         const std::string text =
             signing_string(method, parsed->target, host_header_of(*parsed), date, digest);
         std::uint8_t signature[ED25519_SIGNATURE_LEN];
@@ -533,10 +737,27 @@ private:
         const std::string key_id = part("keyid");
         const std::size_t hash = key_id.find('#');
         const std::string key_server = server_of(key_id.substr(0, hash));
-        if (part("algorithm") != "ed25519" ||
-            part("headers") != "(request-target) host date digest" || hash == std::string::npos ||
+        const std::string algorithm = nc::util::to_lower(part("algorithm"));
+        const bool is_rsa = algorithm == "sha256" || algorithm == "rsa-sha256";
+        const bool is_ed25519 =
+            algorithm == "ed25519" && part("headers") == "(request-target) host date digest";
+        if ((!is_rsa && !is_ed25519) || hash == std::string::npos ||
             nc::util::to_lower(key_server) != nc::util::to_lower(expected_server)) {
             return "the signature is not one this server accepts";
+        }
+        // Which headers were signed (RSA, as Nextcloud sends them): at least these.
+        std::vector<std::string> signed_names;
+        if (is_rsa) {
+            for (const std::string& name: nc::util::split(part("headers"), ' ')) {
+                if (!name.empty() && name.size() < 64) {
+                    signed_names.push_back(nc::util::to_lower(name));
+                }
+            }
+            for (const char* required: {"date", "host", "content-length", "digest"}) {
+                if (std::ranges::find(signed_names, std::string{required}) == signed_names.end()) {
+                    return "the signature does not cover " + std::string{required};
+                }
+            }
         }
         // Fresh, and for exactly this body.
         const std::string date{request.header("Date")};
@@ -554,12 +775,35 @@ private:
             return "the digest does not match the body";
         }
         const auto signature = nc::util::base64_decode(part("signature"));
-        if (!signature || signature->size() != ED25519_SIGNATURE_LEN) {
+        if (!signature || signature->empty() ||
+            (is_ed25519 && signature->size() != ED25519_SIGNATURE_LEN)) {
             return "the signature is malformed";
         }
         const auto key = public_key_of(expected_server);
         if (!key) {
             return "the key of " + expected_server + " is not known";
+        }
+        if (is_rsa) {
+            if (request.header("Content-Length") != std::to_string(request.get_body().size())) {
+                return "the content length does not match the body";
+            }
+            std::string text = "(request-target): " + nc::util::to_lower(request.get_method()) +
+                               " " + request.get_path() +
+                               (request.get_query().empty() ? "" : "?" + request.get_query());
+            for (const std::string& name: signed_names) {
+                if (name == "(request-target)") {
+                    continue;
+                }
+                const std::string_view value = request.header(name);
+                if (value.empty()) {
+                    return "the signed header " + name + " is missing";
+                }
+                text += "\n" + name + ": " + std::string{value};
+            }
+            if (key->rfind("-----BEGIN", 0) != 0 || !rsa::verify(*key, text, *signature)) {
+                return "the signature is wrong";
+            }
+            return std::nullopt;
         }
         const std::string text = signing_string(
             nc::util::to_lower(request.get_method()),
@@ -568,7 +812,8 @@ private:
             date,
             digest
         );
-        if (ED25519_verify(
+        if (key->size() != ED25519_PUBLIC_KEY_LEN ||
+            ED25519_verify(
                 reinterpret_cast<const std::uint8_t*>(text.data()),
                 text.size(),
                 reinterpret_cast<const std::uint8_t*>(signature->data()),
@@ -898,8 +1143,7 @@ private:
                     return Response::json(
                         200,
                         R"({"enabled":true,"apiVersion":"1.0-proposal1","endPoint":)" +
-                            json_string(base + "/ocm") + R"(,"signatureAlgorithm":"ed25519",)" +
-                            R"("publicKey":)" + json_string(nc::util::base64_encode(m_public_key)) +
+                            json_string(base + "/ocm") + key_fields(base) +
                             R"(,"resourceTypes":[{"name":"file","shareTypes":["user","group"],)"
                             R"("protocols":{"webdav":"/public.php/webdav/"}}]})"
                     );
@@ -1239,6 +1483,8 @@ private:
     std::string m_public_key{};
     std::string m_private_key{};
     bool m_require_signatures{false};
+    std::string m_rsa_public{};  // PEM, when signing with RSA
+    std::string m_rsa_private{}; // PEM
     std::vector<std::string> m_trusted{};
     mutable std::mutex m_mutex{};
     mutable std::string m_known_base{};

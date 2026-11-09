@@ -9,8 +9,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <openssl/curve25519.h>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -579,6 +581,133 @@ void test_signatures_and_trust()
     NC_CHECK(!contains(f.call("GET", REMOTE + "/pending", "frank"), "u.txt"));
 }
 
+void test_rsa_signatures()
+{
+    // `a` signs the way Nextcloud does (RSA-SHA256, draft-cavage); `b` insists on signatures.
+    Server a{"rsa-signer", "signature_algorithm = rsa-sha256\n"};
+    Server b{"rsa-strict", "require_signatures = true\n"};
+    a.add_user("alice");
+    b.add_user("bob");
+    NC_CHECK_EQ(a.call("PUT", "/remote.php/dav/files/alice/f.txt", "alice", "x").get_status(), 201);
+
+    // The discovery document carries Nextcloud's publicKey object.
+    const Response discovery = a.call("GET", "/ocm-provider/");
+    NC_CHECK(contains(discovery, "\"signatureAlgorithm\":\"rsa-sha256\""));
+    NC_CHECK(contains(discovery, "\"publicKeyPem\":\"-----BEGIN PUBLIC KEY-----"));
+
+    // Our own servers talk to each other with it.
+    NC_CHECK_EQ(
+        a.call("POST", SHARES, "alice", "path=/f.txt&shareType=6&shareWith=bob@" + b.address())
+            .get_status(),
+        200
+    );
+    NC_CHECK(contains(b.call("GET", REMOTE + "/pending", "bob"), "\"name\":\"/f.txt\""));
+
+    // A request signed by a different implementation (the system's openssl) with a's private key is
+    // taken: the format is the standard one, not just something our two ends agree on.
+    const std::string private_pem = [&]
+    {
+        const Response row =
+            a.kernel->get_services().call("db.query", "sql=SELECT+private+FROM+nc_fed_rsa");
+        const auto form = nc::util::parse_form(row.get_body());
+        return nc::util::form_value(form, "private");
+    }();
+    NC_CHECK(private_pem.rfind("-----BEGIN", 0) == 0);
+    const std::string work = a.dir + "/openssl";
+    fs::create_directories(work);
+    {
+        std::ofstream{work + "/key.pem"} << private_pem;
+    }
+    const auto sign_with_openssl = [&](const std::string& text)
+    {
+        {
+            std::ofstream{work + "/text.txt", std::ios::binary} << text;
+        }
+        NC_CHECK_EQ(
+            std::system(("openssl dgst -sha256 -sign " + work + "/key.pem -out " + work +
+                         "/sig.bin " + work + "/text.txt >/dev/null 2>&1")
+                            .c_str()),
+            0
+        );
+        std::ifstream in{work + "/sig.bin", std::ios::binary};
+        std::ostringstream raw;
+        raw << in.rdbuf();
+        return nc::util::base64_encode(raw.str());
+    };
+    const std::string body =
+        R"({"shareWith":"bob@)" + b.address() +
+        R"(","name":"z","providerId":"21","owner":"alice@)" + a.address() +
+        R"(","shareType":"user","resourceType":"file","protocol":{"name":"webdav","options":{"sharedSecret":"abcdefgh1234","permissions":["read"]}}})";
+    const auto signed_post = [&](const std::string& payload,
+                                 const std::string& date,
+                                 const std::string& covered,
+                                 const std::string& key_server,
+                                 bool damage)
+    {
+        const std::string digest = "SHA-256=" + nc::util::base64_encode(nc::util::sha256(payload));
+        std::string text = "(request-target): post /ocm/shares";
+        for (const std::string& name: nc::util::split(covered, ' ')) {
+            text += "\n" + name + ": " +
+                    (name == "content-length" ? std::to_string(payload.size())
+                     : name == "date"         ? date
+                     : name == "digest"       ? digest
+                                              : b.address());
+        }
+        std::string signature = sign_with_openssl(text);
+        if (damage) {
+            signature.replace(4, 4, "AAAA");
+        }
+        std::vector<nc::http::Header> headers{
+            {"Content-Type", "application/json"},
+            {"Host", b.address()},
+            {"Content-Length", std::to_string(payload.size())},
+            {"Date", date},
+            {"Digest", digest},
+            {"Signature",
+             "keyId=\"http://" + key_server + "#signature\",algorithm=\"sha256\",headers=\"" +
+                 covered + "\",signature=\"" + signature + "\""}
+        };
+        return b.call("POST", "/ocm/shares", "", payload, headers);
+    };
+    const std::string now = nc::util::http_date(std::chrono::system_clock::now());
+    NC_CHECK_EQ(
+        signed_post(body, now, "content-length date digest host", a.address(), false).get_status(),
+        201
+    );
+    // The header order is the signer's choice, as long as the signature follows it.
+    const std::string second = std::string{body}.replace(body.find("\"21\""), 4, "\"22\"");
+    NC_CHECK_EQ(
+        signed_post(second, now, "host date digest content-length", a.address(), false)
+            .get_status(),
+        201
+    );
+    // Refused: a damaged signature, a signature that leaves out a mandatory header, a stale
+    // date, a body that is not the signed one, and a key of another server.
+    const std::string third = std::string{body}.replace(body.find("\"21\""), 4, "\"23\"");
+    NC_CHECK_EQ(
+        signed_post(third, now, "content-length date digest host", a.address(), true).get_status(),
+        401
+    );
+    NC_CHECK_EQ(signed_post(third, now, "date digest host", a.address(), false).get_status(), 401);
+    const std::string old_date =
+        nc::util::http_date(std::chrono::system_clock::now() - std::chrono::minutes{20});
+    NC_CHECK_EQ(
+        signed_post(third, old_date, "content-length date digest host", a.address(), false)
+            .get_status(),
+        401
+    );
+    NC_CHECK_EQ(
+        signed_post(third, now, "content-length date digest host", "attacker.example", false)
+            .get_status(),
+        401
+    );
+    NC_CHECK_EQ(
+        signed_post(third, now, "content-length date digest host", a.address(), false).get_status(),
+        201
+    );
+    fs::remove_all(work);
+}
+
 void test_group_shares()
 {
     Server a{"owner"};
@@ -656,6 +785,7 @@ int main()
     test_sharing_between_servers();
     test_incoming_protocol_is_strict();
     test_signatures_and_trust();
+    test_rsa_signatures();
     test_group_shares();
     return NC_TEST_RESULT();
 }
