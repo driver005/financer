@@ -51,6 +51,23 @@ public:
     {
     }
 
+    /// The person who made the share when that is not the owner: someone the item was shared with
+    /// who shared it on (resharing). Empty for the owner's own shares.
+    void set_initiator(std::string&& initiator) noexcept
+    {
+        m_initiator = std::move(initiator);
+    }
+
+    [[nodiscard]] std::string& get_initiator() noexcept
+    {
+        return m_initiator;
+    }
+
+    [[nodiscard]] const std::string& get_initiator() const noexcept
+    {
+        return m_initiator;
+    }
+
     void set_id(std::uint64_t id) noexcept
     {
         m_id = id;
@@ -188,6 +205,7 @@ private:
     std::string m_token{};
     int m_type{SHARE_TYPE_LINK};
     std::string m_owner{};
+    std::string m_initiator{};
     std::string m_share_with{};
     std::string m_path{};
     int m_permissions{1};

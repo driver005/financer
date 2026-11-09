@@ -196,7 +196,7 @@ std::size_t ShareStore::remove_user(std::string_view user)
     return erase_matching(
         [&](const Share& share)
         {
-            return share.get_owner() == user ||
+            return share.get_owner() == user || share.get_initiator() == user ||
                    (share.get_type() == SHARE_TYPE_USER && share.get_share_with() == user);
         }
     );
@@ -260,7 +260,7 @@ std::vector<Share> ShareStore::owned_by(std::string_view owner) const
         std::back_inserter(out),
         [owner](const Share& share)
         {
-            return share.get_owner() == owner;
+            return share.get_owner() == owner || share.get_initiator() == owner;
         }
     );
     return out;

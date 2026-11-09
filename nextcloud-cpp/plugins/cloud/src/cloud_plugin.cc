@@ -96,6 +96,11 @@ public:
             "CREATE INDEX nc_shares_token ON nc_shares (token);"
             "CREATE INDEX nc_shares_with ON nc_shares (share_with);"
         );
+        m_db.migrate(
+            "cloud",
+            2,
+            "ALTER TABLE nc_shares ADD COLUMN initiator TEXT NOT NULL DEFAULT '';"
+        );
     }
 
     Result<std::vector<Share>> load() override
@@ -104,7 +109,7 @@ public:
             std::vector<Share> shares;
             for (const nc::db::Row& row: m_db.query(
                      "SELECT id, token, type, owner, share_with, path, permissions, expires, "
-                     "created, password FROM nc_shares ORDER BY id"
+                     "created, password, initiator FROM nc_shares ORDER BY id"
                  )) {
                 const auto number = [&](std::string_view column)
                 {
@@ -122,6 +127,7 @@ public:
                     number("created")
                 };
                 share.set_password(nc::db::value_of(row, "password"));
+                share.set_initiator(nc::db::value_of(row, "initiator"));
                 shares.push_back(std::move(share));
             }
             return shares;
@@ -139,9 +145,10 @@ public:
             m_db.exec(
                 wanted.empty()
                     ? "INSERT INTO nc_shares (token, type, owner, share_with, path, permissions, "
-                      "expires, created, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                      "expires, created, password, initiator) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                     : "INSERT INTO nc_shares (token, type, owner, share_with, path, permissions, "
-                      "expires, created, password, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      "expires, created, password, initiator, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "
+                      "?, ?, ?)",
                 columns(share, wanted),
                 &id
             );
@@ -186,7 +193,8 @@ private:
             std::to_string(share.get_permissions()),
             std::to_string(share.get_expires()),
             std::to_string(share.get_created()),
-            share.get_password()
+            share.get_password(),
+            share.get_initiator()
         };
         if (!id.empty()) {
             out.push_back(id);
@@ -716,6 +724,15 @@ private:
             );
         }
         host.add_job(
+            "reshares",
+            60,
+            [this]()
+            {
+                (void)m_shares->prune_expired(now_seconds());
+                remove_orphaned_reshares();
+            }
+        );
+        host.add_job(
             "expire-uploads",
             3'600,
             [this]()
@@ -984,6 +1001,85 @@ private:
                          "groups.is_member",
                          nc::util::form_encode({{"group", share.get_share_with()}, {"user", user}})
                ).get_status() == 200;
+    }
+
+    struct MountedTarget
+    {
+        std::string owner{};
+        std::string path{};
+        int permissions{1};
+    };
+
+    /// A path inside a share the user received ("/Documents/sub") as the owner's path and the
+    /// permissions the share gives. Nothing for an external storage or a share from another server.
+    [[nodiscard]] std::optional<MountedTarget>
+    resolve_mounted(const std::string& user, const std::string& normalized) const
+    {
+        const std::size_t slash = normalized.find('/', 1);
+        const std::string first =
+            normalized.substr(1, slash == std::string::npos ? std::string::npos : slash - 1);
+        const std::string rest =
+            slash == std::string::npos ? std::string{} : normalized.substr(slash);
+        for (const Mount& mount: mounts_for(user)) {
+            if (mount.name != first || mount.remote_id != 0 || !mount.external_root.empty()) {
+                continue;
+            }
+            if (!mount.directory && !rest.empty()) {
+                return std::nullopt;
+            }
+            const auto joined = Storage::normalize(mount.share.get_path() + rest);
+            if (!joined) {
+                return std::nullopt;
+            }
+            return MountedTarget{mount.share.get_owner(), *joined, mount.share.get_permissions()};
+        }
+        return std::nullopt;
+    }
+
+    /// A reshare lives as long as a share to its initiator that allows resharing: when the owner or
+    /// the recipient removes (or lets expire) that one, the reshares below it go too.
+    void remove_orphaned_reshares() const
+    {
+        for (bool changed = true; changed;) {
+            changed = false;
+            const std::vector<Share> all = m_shares->all();
+            for (const Share& share: all) {
+                if (share.get_initiator().empty()) {
+                    continue;
+                }
+                const bool has_parent = std::ranges::any_of(
+                    all,
+                    [&](const Share& parent)
+                    {
+                        const auto covers = [](const std::string& base, const std::string& path)
+                        {
+                            return path == base || (path.size() > base.size() &&
+                                                    path.compare(0, base.size(), base) == 0 &&
+                                                    path[base.size()] == '/');
+                        };
+                        return parent.get_id() != share.get_id() &&
+                               parent.get_owner() == share.get_owner() &&
+                               !parent.expired(now_seconds()) && (parent.get_permissions() & 16) &&
+                               covers(parent.get_path(), share.get_path()) &&
+                               is_recipient(parent, share.get_initiator());
+                    }
+                );
+                if (!has_parent) {
+                    (void)m_shares->remove(share.get_id());
+                    m_host->publish(
+                        "share.deleted",
+                        nc::util::form_encode(
+                            {{"id", std::to_string(share.get_id())},
+                             {"owner", share.get_owner()},
+                             {"type", std::to_string(share.get_type())},
+                             {"share_with", share.get_share_with()},
+                             {"token", share.get_token()}}
+                        )
+                    );
+                    changed = true;
+                }
+            }
+        }
     }
 
     [[nodiscard]] std::vector<Share> received_shares(const std::string& user) const
@@ -1468,8 +1564,10 @@ private:
                           share.get_type() == nc::cloud::SHARE_TYPE_EMAIL;
         std::string json = R"({"id":")" + std::to_string(share.get_id()) + R"(","share_type":)" +
                            std::to_string(share.get_type());
-        json += R"(,"uid_owner":)" + json_string(share.get_owner()) + R"(,"path":)" +
-                json_string(share.get_path());
+        json +=
+            R"(,"uid_owner":)" + json_string(share.get_owner()) + R"(,"uid_initiator":)" +
+            json_string(share.get_initiator().empty() ? share.get_owner() : share.get_initiator()) +
+            R"(,"path":)" + json_string(share.get_path());
         json += R"(,"item_type":")" +
                 std::string{node && node->is_directory() ? "folder" : "file"} +
                 R"(","permissions":)" + std::to_string(share.get_permissions());
@@ -1506,22 +1604,48 @@ private:
                     std::string value = nc::util::form_value(form, name);
                     return value.empty() ? request.query_value(name) : value;
                 };
-                const std::string owner = request.get_user();
-                const auto path = Storage::normalize(field("path"));
+                const std::string actor = request.get_user();
+                std::string owner = actor;
+                auto path = Storage::normalize(field("path"));
                 if (!path || *path == "/") {
                     return failure(404, "Wrong path, file/folder does not exist");
+                }
+                // What the person may hand on: everything of their own, and of what was shared with
+                // them only what the share's own permissions allow (resharing needs the "share"
+                // bit).
+                int cap = 31;
+                bool reshare = false;
+                if (!safe_user(actor)) {
+                    return failure(404, "Wrong path, file/folder does not exist");
+                }
+                if (!storage_for(actor).stat(*path)) {
+                    const auto mounted = resolve_mounted(actor, *path);
+                    if (!mounted) {
+                        return failure(404, "Wrong path, file/folder does not exist");
+                    }
+                    if (!(mounted->permissions & 16)) {
+                        return failure(403, "Resharing is not allowed");
+                    }
+                    owner = mounted->owner;
+                    path = mounted->path;
+                    cap = mounted->permissions;
+                    reshare = true;
                 }
                 if (!safe_user(owner) || !storage_for(owner).stat(*path)) {
                     return failure(404, "Wrong path, file/folder does not exist");
                 }
+                const int default_mask = reshare ? cap : 31;
                 const std::string type_text = field("shareType");
                 const int type =
                     type_text.empty() ? nc::cloud::SHARE_TYPE_USER : std::atoi(type_text.c_str());
                 Share share{std::string{owner}, std::string{*path}};
                 share.set_type(type);
+                if (reshare) {
+                    share.set_initiator(std::string{actor});
+                }
                 if (type == nc::cloud::SHARE_TYPE_USER) {
                     const std::string recipient = field("shareWith");
-                    if (recipient == owner) {
+                    if (recipient == owner || recipient == actor) {
                         return failure(400, "Cannot share with yourself");
                     }
                     if (recipient.empty() ||
@@ -1530,7 +1654,8 @@ private:
                     }
                     share.set_share_with(std::string{recipient});
                     const std::string permissions = field("permissions");
-                    const int mask = permissions.empty() ? 31 : std::atoi(permissions.c_str());
+                    const int mask =
+                        permissions.empty() ? default_mask : std::atoi(permissions.c_str());
                     if (mask < 1 || mask > 31) {
                         return failure(400, "Invalid permissions");
                     }
@@ -1543,7 +1668,8 @@ private:
                     }
                     share.set_share_with(std::string{group});
                     const std::string permissions = field("permissions");
-                    const int mask = permissions.empty() ? 31 : std::atoi(permissions.c_str());
+                    const int mask =
+                        permissions.empty() ? default_mask : std::atoi(permissions.c_str());
                     if (mask < 1 || mask > 31) {
                         return failure(400, "Invalid permissions");
                     }
@@ -1603,6 +1729,22 @@ private:
                     share.set_permissions(mask);
                 } else {
                     return failure(400, "Unknown share type");
+                }
+                if (reshare) {
+                    if (type == nc::cloud::SHARE_TYPE_REMOTE) {
+                        return failure(
+                            403,
+                            "A share from another person cannot go to another server"
+                        );
+                    }
+                    // A link that takes uploads needs the right to create.
+                    const bool link_like =
+                        type == nc::cloud::SHARE_TYPE_LINK || type == nc::cloud::SHARE_TYPE_EMAIL;
+                    const int wanted = link_like ? (share.get_permissions() == 1 ? 1 : (1 | 4))
+                                                 : share.get_permissions();
+                    if ((wanted & ~cap) != 0) {
+                        return failure(403, "You cannot give more permissions than you have");
+                    }
                 }
                 const std::string expire = field("expireDate");
                 if (!expire.empty()) {
@@ -1671,7 +1813,9 @@ private:
                     nc::util::form_encode(
                         {{"id", std::to_string(added->get_id())},
                          {"type", std::to_string(added->get_type())},
-                         {"owner", added->get_owner()},
+                         {"owner",
+                          added->get_initiator().empty() ? added->get_owner()
+                                                         : added->get_initiator()},
                          {"share_with", added->get_share_with()},
                          {"path", added->get_path()},
                          {"token",
@@ -1742,10 +1886,12 @@ private:
                 const std::uint64_t id =
                     std::strtoull(std::string{request.param("id")}.c_str(), nullptr, 10);
                 const auto share = m_shares->find(id);
-                if (!share || share->get_owner() != request.get_user()) {
+                if (!share || (share->get_owner() != request.get_user() &&
+                               share->get_initiator() != request.get_user())) {
                     return failure(404, "Wrong share ID, share does not exist");
                 }
                 (void)m_shares->remove(id);
+                remove_orphaned_reshares();
                 m_host->publish(
                     "share.deleted",
                     nc::util::form_encode(
@@ -2069,6 +2215,7 @@ private:
             {
                 out = "removed " + std::to_string(m_shares->prune_expired(now_seconds())) +
                       " expired share(s)\n";
+                remove_orphaned_reshares();
                 return 0;
             }
         );

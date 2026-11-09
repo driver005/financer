@@ -50,7 +50,7 @@ style (`CODESTYLE.md`).
       (SQLite and migrations), groups, activity, notifications, app passwords, TOTP two-factor, trash bin,
       versions, CalDAV, CardDAV, tags, comments, the capabilities endpoint, external storage (local folders), encryption at rest, LDAP sign-in, HTTPS (BoringSSL), OAuth2 provider, previews, federation (OCM, mounts with read and write, signed requests, trusted servers), Range/304 downloads, chunked uploads, password and drop links, chunked request bodies, group shares and received shares in the recipient's tree.
 - [ ] Still not ported (see `docs/porting-map.md`): SAML, other external storage backends, the lookup server,
-      resharing, the web front end, C++26 modules.
+      the web front end, C++26 modules.
 
 ## Acceptance criteria
 

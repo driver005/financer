@@ -1248,6 +1248,186 @@ void test_shared_folder_quota_and_size()
     fs::remove_all(dir);
 }
 
+void test_resharing()
+{
+    const std::string dir = temp_dir("reshare");
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "groups", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    for (const char* name: {"alice", "bob", "carol", "dave"}) {
+        ::setenv("OC_PASS", (std::string{name} + " password").c_str(), 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {name}, out), 0);
+    }
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string bob = "bob:bob password";
+    const std::string carol = "carol:carol password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const std::string b = "/remote.php/dav/files/bob";
+    const std::string c = "/remote.php/dav/files/carol";
+    const std::string shares = "/ocs/v2.php/apps/files_sharing/api/v1/shares";
+    const auto id_of = [](const Response& response)
+    {
+        const std::string body = response.get_body();
+        const std::size_t at = body.find("\"id\":\"");
+        return body.substr(at + 6, body.find('"', at + 6) - at - 6);
+    };
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Docs", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Docs/sub", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Docs/sub/x.txt", "deep", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Docs/top.txt", "top", alice)).get_status(),
+        201
+    );
+
+    // Without the "share" right, bob cannot hand it on.
+    const Response read_only = kernel.handle(
+        user_req("POST", shares, "path=/Docs&shareType=0&shareWith=bob&permissions=15", alice)
+    );
+    NC_CHECK_EQ(read_only.get_status(), 200);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=/Docs&shareType=0&shareWith=carol", bob))
+            .get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", shares + "/" + id_of(read_only), "", alice)).get_status(),
+        200
+    );
+
+    // With it, bob shares the folder, or a part of it, with carol.
+    const Response given = kernel.handle(
+        user_req("POST", shares, "path=/Docs&shareType=0&shareWith=bob&permissions=17", alice)
+    );
+    NC_CHECK_EQ(given.get_status(), 200);
+    const Response reshared = kernel.handle(
+        user_req("POST", shares, "path=/Docs/sub&shareType=0&shareWith=carol&permissions=1", bob)
+    );
+    NC_CHECK_EQ(reshared.get_status(), 200);
+    NC_CHECK(reshared.get_body().find("\"uid_owner\":\"alice\"") != std::string::npos);
+    NC_CHECK(reshared.get_body().find("\"uid_initiator\":\"bob\"") != std::string::npos);
+    NC_CHECK_EQ(kernel.handle(user_req("GET", c + "/sub/x.txt", "", carol)).get_body(), "deep");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", c + "/sub/new.txt", "no", carol)).get_status(),
+        403
+    ); // read only
+    // Not more than bob has: he has read and share, not update.
+    NC_CHECK_EQ(
+        kernel
+            .handle(
+                user_req("POST", shares, "path=/Docs&shareType=0&shareWith=dave&permissions=3", bob)
+            )
+            .get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=/Docs&shareType=3&permissions=5", bob))
+            .get_status(),
+        403
+    );
+    // Not to himself, not to the owner, not outside what he received, not on to another server.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=/Docs&shareType=0&shareWith=bob", bob))
+            .get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=/Docs&shareType=0&shareWith=alice", bob))
+            .get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=/Nothing&shareType=0&shareWith=dave", bob))
+            .get_status(),
+        404
+    );
+    NC_CHECK_EQ(
+        kernel
+            .handle(
+                user_req("POST", shares, "path=/Docs/..%2F..%2Fx&shareType=0&shareWith=dave", bob)
+            )
+            .get_status(),
+        404
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=/Docs&shareType=6&shareWith=x%40y.org", bob))
+            .get_status(),
+        403
+    );
+    // A link to what he may share works like any link.
+    const Response link =
+        kernel.handle(user_req("POST", shares, "path=/Docs/top.txt&shareType=3", bob));
+    NC_CHECK_EQ(link.get_status(), 200);
+    const std::string token = link.get_body().substr(link.get_body().find("\"token\":\"") + 9, 20);
+    NC_CHECK_EQ(kernel.handle(Request{"GET", "/s/" + token}).get_body(), "top");
+
+    // Bob sees what he made, alice sees all of it, carol only what she received.
+    NC_CHECK(
+        kernel.handle(user_req("GET", shares, "", bob))
+            .get_body()
+            .find("\"share_with\":\"carol\"") != std::string::npos
+    );
+    NC_CHECK(
+        kernel.handle(user_req("GET", shares, "", alice))
+            .get_body()
+            .find("\"share_with\":\"carol\"") != std::string::npos
+    );
+    {
+        Request received{"GET", std::string{shares}};
+        received.set_query("shared_with_me=true");
+        received.add_header("Authorization", "Basic " + nc::util::base64_encode(carol));
+        NC_CHECK(
+            kernel.handle(std::move(received)).get_body().find("\"uid_owner\":\"alice\"") !=
+            std::string::npos
+        );
+    }
+    // Only the owner and the one who made a share remove it.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", shares + "/" + id_of(reshared), "", carol)).get_status(),
+        404
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", shares + "/" + id_of(reshared), "", bob)).get_status(),
+        200
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", c + "/sub/x.txt", "", carol)).get_status() >= 400,
+        true
+    );
+
+    // When alice takes her share back, everything bob made from it goes too.
+    const Response again =
+        kernel.handle(user_req("POST", shares, "path=/Docs/sub&shareType=0&shareWith=carol", bob));
+    NC_CHECK_EQ(again.get_status(), 200);
+    NC_CHECK_EQ(kernel.handle(user_req("GET", c + "/sub/x.txt", "", carol)).get_body(), "deep");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", shares + "/" + id_of(given), "", alice)).get_status(),
+        200
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", c + "/sub/x.txt", "", carol)).get_status() >= 400,
+        true
+    );
+    NC_CHECK_EQ(kernel.handle(Request{"GET", "/s/" + token}).get_status(), 404);
+    NC_CHECK(
+        kernel.handle(user_req("GET", shares, "", bob)).get_body().find("\"share_with\"") ==
+        std::string::npos
+    );
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 void test_received_shares()
 {
     const std::string dir = temp_dir("mounts");
@@ -1747,6 +1927,7 @@ int main()
     test_shared_folder_quota_and_size();
     test_chunked_uploads();
     test_received_shares();
+    test_resharing();
     test_external_storage();
     test_encryption();
     test_quota_through_dav();
