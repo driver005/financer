@@ -90,3 +90,8 @@ common:linux --copt="-Werror=switch"
 import %workspace%/warnings.bazelrc
 
 import %workspace%/bazel/ci.bazelrc
+
+# nextcloud-cpp: BoringSSL builds its C files with -Werror; glibc 2.43's const-generic memchr() makes its own
+# `OPENSSL_memchr` helper fail with -Wincompatible-pointer-types-discards-qualifiers. A dependency's own warnings
+# are not ours to enforce, so its sources are built without -Werror.
+build --per_file_copt=.*boringssl.*\.c@-Wno-error
