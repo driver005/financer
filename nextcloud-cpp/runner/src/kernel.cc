@@ -468,6 +468,19 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
     rejected = false;
     second_factor = false;
     const std::string_view header = request.header("Authorization");
+    if (header.size() >= 7 && util::equals_ignore_case(header.substr(0, 7), "Bearer ")) {
+        // An access token (OAuth2): whoever offers `auth.bearer*` knows it. Like an app password it
+        // stands for the whole sign-in and is not asked for a second factor.
+        const std::string token{util::trim(header.substr(7))};
+        for (const std::string& provider: m_services.names("auth.bearer")) {
+            const http::Response answer = m_services.call(provider, token);
+            if (answer.get_status() == 200 && !answer.get_body().empty()) {
+                return answer.get_body();
+            }
+        }
+        rejected = true;
+        return {};
+    }
     if (header.size() < 6 || !util::equals_ignore_case(header.substr(0, 6), "Basic ")) {
         return {};
     }

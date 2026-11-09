@@ -17,6 +17,7 @@ sdk/testing/       the test harness (a test is a plain `int main`)
 plugins/db/        SQLite and migrations, as services
 plugins/users/     accounts, sign-in, the provisioning API, user:* commands
 plugins/ldap/      sign in with an LDAP directory
+plugins/oauth2/    OAuth 2.0 authorization server
 plugins/groups/    groups and membership
 plugins/tokens/    app passwords
 plugins/twofactor/ TOTP second factor with backup codes
@@ -41,7 +42,7 @@ Bazel 9.2 (through bazelisk), clang and lld are needed. Dependencies come from t
 SQLite (for the `db` plugin) and BoringSSL (for HTTPS).
 
 ```sh
-bazelisk test //...                 # 16 test targets
+bazelisk test //...                 # 17 test targets
 bazelisk test //... --config=asan   # also ubsan, tsan
 bazelisk test //... --define=std=26 --config=warnings   # C++26, warnings as errors (clang 22 in CI)
 tools/smoke.sh                      # starts the real binary with the built plugins and uses it through curl

@@ -10,6 +10,7 @@ test_suite(
         "//plugins/ldap:ldap_test",
         "//plugins/mail:mail_test",
         "//plugins/notifications:notifications_test",
+        "//plugins/oauth2:oauth2_test",
         "//plugins/systemtags:systemtags_test",
         "//plugins/trashbin:trashbin_test",
         "//plugins/twofactor:twofactor_test",

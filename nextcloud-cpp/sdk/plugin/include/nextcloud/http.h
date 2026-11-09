@@ -378,6 +378,8 @@ private:
             return "Range Not Satisfiable";
         case 301:
             return "Moved Permanently";
+        case 302:
+            return "Found";
         case 400:
             return "Bad Request";
         case 415:
