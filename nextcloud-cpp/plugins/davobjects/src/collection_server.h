@@ -199,6 +199,29 @@ private:
     serve(const nc::http::Request& request, int depth_of_path) const;
     [[nodiscard]] std::string home_href(std::string_view user) const;
 
+    // ---- scheduling (calendars only)
+    // -------------------------------------------------------------
+    /// After `actor` stored `data` (replacing `previous`, empty when new): invitations to the
+    /// attendees when the actor organizes the event, a reply to the organizer when the actor is an
+    /// attendee who changed their answer.
+    void schedule_after_put(
+        const std::string& actor,
+        const std::string& previous,
+        const std::string& data
+    ) const;
+    /// After `actor` deleted the event `previous`: cancellations, or a decline.
+    void schedule_after_delete(const std::string& actor, const std::string& previous) const;
+    /// Puts an iTIP message in the inbox of the account with this address, or mails it to an
+    /// address that is not an account here. True when it reached an account.
+    bool deliver(
+        const std::string& email,
+        const std::string& method,
+        const std::string& summary,
+        const std::string& uid,
+        const std::string& message,
+        const std::string& tag
+    ) const;
+
     Kind m_kind{};
     nc::Host* m_host{nullptr};
     std::size_t m_max_size{1'048'576};

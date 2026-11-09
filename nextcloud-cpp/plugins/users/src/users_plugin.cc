@@ -142,6 +142,21 @@ public:
                             : Response::text(404, "no such user");
             }
         );
+        // The id of the enabled account with this e-mail address (compared without case), or 404.
+        host.add_service(
+            "users.by_email",
+            [&store](std::string_view args)
+            {
+                const std::string wanted = nc::util::to_lower(args);
+                for (const User& user: store.list()) {
+                    if (user.is_enabled() && !user.get_email().empty() &&
+                        nc::util::to_lower(user.get_email()) == wanted) {
+                        return Response::text(200, user.get_id());
+                    }
+                }
+                return Response::text(404, "no such address");
+            }
+        );
         // The ids of the enabled administrators, one per line.
         host.add_service(
             "users.list_admins",

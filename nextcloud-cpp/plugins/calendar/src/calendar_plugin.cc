@@ -126,6 +126,14 @@ public:
                     user + "</d:displayname>\n";
                 props += "    <cal:calendar-home-set><d:href>/remote.php/dav/calendars/" + user +
                          "/</d:href></cal:calendar-home-set>\n";
+                props += "    <cal:schedule-inbox-URL><d:href>/remote.php/dav/calendars/" + user +
+                         "/inbox/</d:href></cal:schedule-inbox-URL>\n";
+                if (const Response email = host.call_service("users.email", request.get_user());
+                    email.get_status() == 200 && !email.get_body().empty()) {
+                    props += "    <cal:calendar-user-address-set><d:href>mailto:" +
+                             nc::util::xml_escape(email.get_body()) +
+                             "</d:href></cal:calendar-user-address-set>\n";
+                }
                 if (host.call_service("contacts.home", "").get_status() == 200) {
                     props +=
                         "    "

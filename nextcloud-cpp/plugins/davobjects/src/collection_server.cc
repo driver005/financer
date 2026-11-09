@@ -1,5 +1,6 @@
 #include "collection_server.h"
 
+#include "itip.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 #include "nextcloud/util/time.h"
@@ -15,6 +16,7 @@ namespace {
     using nc::http::Response;
 
     constexpr std::size_t MAX_COLLECTIONS = 100;
+    constexpr std::string_view SHARED_MARK = "_shared_by_";
     constexpr std::size_t MAX_OBJECTS = 10'000;
 
     constexpr std::string_view HEAD =
@@ -75,6 +77,41 @@ namespace {
             values.emplace_back(util::trim(xml.substr(at, end - at)));
         }
         return values;
+    }
+
+    /// The inner text of every element whose local name is `name`, nested tags included:
+    /// `<cs:set><d:href>a</d:href><cs:read/></cs:set>` gives `<d:href>a</d:href><cs:read/>`.
+    std::vector<std::string> xml_blocks(std::string_view xml, std::string_view name)
+    {
+        std::vector<std::string> blocks;
+        std::size_t at = 0;
+        while ((at = xml.find('<', at)) != std::string_view::npos) {
+            const std::size_t close = xml.find('>', at);
+            if (close == std::string_view::npos) {
+                break;
+            }
+            std::string_view tag = xml.substr(at + 1, close - at - 1);
+            const std::size_t content = close + 1;
+            at = content;
+            if (tag.empty() || tag.front() == '/' || tag.front() == '?' || tag.back() == '/') {
+                continue;
+            }
+            tag = tag.substr(0, tag.find_first_of(" \t\r\n"));
+            const std::size_t colon = tag.find(':');
+            const std::string_view local =
+                colon == std::string_view::npos ? tag : tag.substr(colon + 1);
+            if (local != name) {
+                continue;
+            }
+            const std::string closing = "</" + std::string{tag} + ">";
+            const std::size_t end = xml.find(closing, content);
+            if (end == std::string_view::npos) {
+                break;
+            }
+            blocks.emplace_back(xml.substr(content, end - content));
+            at = end + closing.size();
+        }
+        return blocks;
     }
 
     /// Value of an attribute of the first element with local name `element`: `<c:time-range
@@ -243,8 +280,17 @@ void CollectionServer::install(nc::Host& host)
         " uri TEXT NOT NULL, etag TEXT NOT NULL, data TEXT NOT NULL, lastmod INTEGER NOT NULL,"
         " UNIQUE (collection_id, uri));"
     );
+    // Collections shared with other accounts: "read" or "write" (read and change the objects).
+    nc::db::Client{&host}.migrate(
+        "davobjects",
+        2,
+        "CREATE TABLE nc_dav_shares ("
+        " collection_id INTEGER NOT NULL REFERENCES nc_dav_collections(id) ON DELETE CASCADE,"
+        " sharee TEXT NOT NULL, access TEXT NOT NULL, PRIMARY KEY (collection_id, sharee));"
+        "CREATE INDEX nc_dav_shares_sharee ON nc_dav_shares (sharee);"
+    );
     std::vector<std::string_view>
-        methods{"PROPFIND", "REPORT", "MKCOL", "PROPPATCH", "DELETE", "GET", "PUT"};
+        methods{"PROPFIND", "REPORT", "MKCOL", "PROPPATCH", "DELETE", "GET", "PUT", "POST"};
     if (m_kind.is_calendar()) {
         methods.push_back("MKCALENDAR");
     }
@@ -265,9 +311,11 @@ void CollectionServer::install(nc::Host& host)
         "user.deleted",
         [this](std::string_view, std::string_view payload)
         {
+            const std::string user = nc::util::form_value(nc::util::parse_form(payload), "id");
+            nc::db::Client{m_host}.exec("DELETE FROM nc_dav_shares WHERE sharee = ?", {user});
             nc::db::Client{m_host}.exec(
                 "DELETE FROM nc_dav_collections WHERE uid = ? AND kind = ?",
-                {nc::util::form_value(nc::util::parse_form(payload), "id"), m_kind.get_name()}
+                {user, m_kind.get_name()}
             );
         }
     );
@@ -303,12 +351,25 @@ Response CollectionServer::serve(const Request& request, int) const
          util::random_hex(8)}
     );
 
+    // A collection of the user, or one shared with the user (listed as `<uri>_shared_by_<owner>`).
+    // The row says who owns it and what the user may do: "owner", "write" or "read".
     const auto find_collection = [&](const std::string& uri)
     {
-        return db.query(
-            "SELECT id, displayname, ctag FROM nc_dav_collections WHERE uid = ? AND kind = ? AND "
-            "uri = ?",
+        auto own = db.query(
+            "SELECT id, uri, displayname, ctag, uid AS owner, 'owner' AS access FROM "
+            "nc_dav_collections "
+            "WHERE uid = ? AND kind = ? AND uri = ?",
             {user, m_kind.get_name(), uri}
+        );
+        const std::size_t mark = uri.rfind(SHARED_MARK);
+        if (!own.empty() || mark == std::string::npos) {
+            return own;
+        }
+        return db.query(
+            "SELECT c.id AS id, c.displayname AS displayname, c.ctag AS ctag, c.uid AS owner, "
+            "s.access AS access FROM nc_dav_collections c JOIN nc_dav_shares s ON s.collection_id "
+            "= c.id WHERE c.uid = ? AND c.kind = ? AND c.uri = ? AND s.sharee = ?",
+            {uri.substr(mark + SHARED_MARK.size()), m_kind.get_name(), uri.substr(0, mark), user}
         );
     };
     const auto touch = [&](const std::string& id)
@@ -320,9 +381,22 @@ Response CollectionServer::serve(const Request& request, int) const
         std::string props = "    <d:displayname>" +
                             util::xml_escape(nc::db::value_of(row, "displayname")) +
                             "</d:displayname>\n";
-        props += m_kind.is_calendar()
-                     ? "    <d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>\n"
-                     : "    <d:resourcetype><d:collection/><card:addressbook/></d:resourcetype>\n";
+        if (m_kind.is_calendar() && nc::db::value_of(row, "uri") == "inbox") {
+            props += "    <d:resourcetype><d:collection/><cal:schedule-inbox/></d:resourcetype>\n";
+        } else {
+            props +=
+                m_kind.is_calendar()
+                    ? "    <d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>\n"
+                    : "    <d:resourcetype><d:collection/><card:addressbook/></d:resourcetype>\n";
+        }
+        const std::string access = nc::db::value_of(row, "access", "owner");
+        props += "    <d:current-user-privilege-set><d:privilege><d:read/></d:privilege>" +
+                 std::string{access == "read" ? "" : "<d:privilege><d:write/></d:privilege>"} +
+                 "</d:current-user-privilege-set>\n";
+        if (access != "owner") {
+            props += "    <d:owner><d:href>/remote.php/dav/principals/users/" +
+                     util::xml_escape(nc::db::value_of(row, "owner")) + "/</d:href></d:owner>\n";
+        }
         props += "    <cs:getctag>" + nc::db::value_of(row, "ctag") + "</cs:getctag>\n";
         props += "    <d:sync-token>" + nc::db::value_of(row, "ctag") + "</d:sync-token>\n";
         if (m_kind.is_calendar()) {
@@ -370,12 +444,27 @@ Response CollectionServer::serve(const Request& request, int) const
                 body +=
                     response_xml(base + nc::db::value_of(row, "uri") + "/", collection_props(row));
             }
+            for (const nc::db::Row& row: db.query(
+                     "SELECT c.uri AS uri, c.displayname AS displayname, c.ctag AS ctag, c.uid AS "
+                     "owner, s.access AS access FROM nc_dav_shares s JOIN nc_dav_collections c ON "
+                     "c.id = s.collection_id WHERE s.sharee = ? AND c.kind = ? ORDER BY c.id",
+                     {user, m_kind.get_name()}
+                 )) {
+                body += response_xml(
+                    base + nc::db::value_of(row, "uri") + std::string{SHARED_MARK} +
+                        nc::db::value_of(row, "owner") + "/",
+                    collection_props(row)
+                );
+            }
         }
         return multistatus(body);
     }
 
     // ---- creating a collection ------------------------------------------------------------------
     if (object.empty() && (method == "MKCOL" || method == "MKCALENDAR")) {
+        if (collection.find(SHARED_MARK) != std::string::npos) {
+            return Response::text(400, "That name is reserved for shared collections");
+        }
         if (!find_collection(collection).empty()) {
             return Response::text(405, "The collection already exists");
         }
@@ -406,6 +495,56 @@ Response CollectionServer::serve(const Request& request, int) const
     }
     const std::string id = nc::db::value_of(found.front(), "id");
     const std::string href = base + collection + "/";
+    const std::string access = nc::db::value_of(found.front(), "access", "owner");
+    const std::string owner = nc::db::value_of(found.front(), "owner", user);
+    const bool may_change_objects = access != "read";
+
+    // ---- sharing: POST <cs:share> by the owner (draft-pot-webdav-resource-sharing) --------------
+    if (object.empty() && method == "POST") {
+        if (access != "owner") {
+            return Response::text(403, "Only the owner shares a collection");
+        }
+        const std::string& xml = request.get_body();
+        for (const std::string& block: xml_blocks(xml, "set")) {
+            for (const std::string& ref: xml_values(block, "href")) {
+                std::string who = util::url_decode(ref);
+                while (!who.empty() && who.back() == '/') {
+                    who.pop_back();
+                }
+                who = who.substr(who.rfind('/') + 1);
+                if (const std::size_t colon = who.rfind(':'); colon != std::string::npos) {
+                    who = who.substr(colon + 1);
+                }
+                if (!valid_uri(who) || who == user ||
+                    m_host->call_service("users.get", who).get_status() != 200) {
+                    return Response::text(400, "No such person to share with");
+                }
+                db.exec(
+                    "INSERT INTO nc_dav_shares (collection_id, sharee, access) VALUES (?, ?, ?) ON "
+                    "CONFLICT (collection_id, sharee) DO UPDATE SET access = excluded.access",
+                    {id, who, block.find("read-write") != std::string::npos ? "write" : "read"}
+                );
+            }
+        }
+        for (const std::string& block: xml_blocks(xml, "remove")) {
+            for (const std::string& ref: xml_values(block, "href")) {
+                std::string who = util::url_decode(ref);
+                while (!who.empty() && who.back() == '/') {
+                    who.pop_back();
+                }
+                who = who.substr(who.rfind('/') + 1);
+                if (const std::size_t colon = who.rfind(':'); colon != std::string::npos) {
+                    who = who.substr(colon + 1);
+                }
+                db.exec(
+                    "DELETE FROM nc_dav_shares WHERE collection_id = ? AND sharee = ?",
+                    {id, who}
+                );
+            }
+        }
+        touch(id);
+        return Response{200};
+    }
 
     // ---- the collection
     // ---------------------------------------------------------------------------
@@ -427,10 +566,21 @@ Response CollectionServer::serve(const Request& request, int) const
             return multistatus(body);
         }
         if (method == "DELETE") {
-            db.exec("DELETE FROM nc_dav_collections WHERE id = ?", {id});
+            if (access != "owner") {
+                // A person a collection is shared with removes it from their own list only.
+                db.exec(
+                    "DELETE FROM nc_dav_shares WHERE collection_id = ? AND sharee = ?",
+                    {id, user}
+                );
+            } else {
+                db.exec("DELETE FROM nc_dav_collections WHERE id = ?", {id});
+            }
             return Response{204};
         }
         if (method == "PROPPATCH") {
+            if (access != "owner") {
+                return Response::text(403, "Only the owner renames a collection");
+            }
             const auto names = xml_values(request.get_body(), "displayname");
             if (!names.empty()) {
                 db.exec(
@@ -526,6 +676,7 @@ Response CollectionServer::serve(const Request& request, int) const
             nc::util::form_encode(
                 {{"kind", m_kind.get_name()},
                  {"user", user},
+                 {"owner", owner},
                  {"collection", collection},
                  {"uri", object},
                  {"action", std::string{action}}}
@@ -554,6 +705,9 @@ Response CollectionServer::serve(const Request& request, int) const
         return multistatus(
             response_xml(href + util::url_encode_path(object), object_props(row, false))
         );
+    }
+    if ((method == "PUT" || method == "DELETE") && !may_change_objects) {
+        return Response::text(403, "This collection is shared read-only");
     }
     if (method == "PUT") {
         const std::string_view if_none_match = request.header("If-None-Match");
@@ -585,6 +739,13 @@ Response CollectionServer::serve(const Request& request, int) const
         );
         touch(id);
         publish(existing.empty() ? "created" : "updated");
+        if (m_kind.is_calendar() && collection != "inbox") {
+            schedule_after_put(
+                user,
+                existing.empty() ? std::string{} : nc::db::value_of(existing.front(), "data"),
+                request.get_body()
+            );
+        }
         Response response{existing.empty() ? 201 : 204};
         response.add_header("ETag", std::string{etag});
         return response;
@@ -600,9 +761,205 @@ Response CollectionServer::serve(const Request& request, int) const
         db.exec("DELETE FROM nc_dav_objects WHERE collection_id = ? AND uri = ?", {id, object});
         touch(id);
         publish("deleted");
+        if (m_kind.is_calendar() && collection != "inbox") {
+            schedule_after_delete(user, nc::db::value_of(existing.front(), "data"));
+        }
         return Response{204};
     }
     return Response::text(405, "Method Not Allowed");
+}
+
+// ---- scheduling ---------------------------------------------------------------------------------
+
+bool CollectionServer::deliver(
+    const std::string& email,
+    const std::string& method,
+    const std::string& summary,
+    const std::string& uid,
+    const std::string& message,
+    const std::string& tag
+) const
+{
+    const nc::db::Client db{m_host};
+    const nc::http::Response account = m_host->call_service("users.by_email", email);
+    if (account.get_status() != 200) {
+        // Not an account here: a mail says what it is about (the message itself stays out of it).
+        const std::string subject = method == "REQUEST"  ? "Invitation: " + summary
+                                    : method == "CANCEL" ? "Cancelled: " + summary
+                                                         : "Reply: " + summary;
+        (void)m_host->call_service(
+            "mail.send",
+            nc::util::form_encode(
+                {{"to", email},
+                 {"subject", subject},
+                 {"body", subject + "\n\n(" + method + " for " + uid + ")\n"}}
+            )
+        );
+        return false;
+    }
+    const std::string target = account.get_body();
+    db.exec(
+        "INSERT OR IGNORE INTO nc_dav_collections (uid, kind, uri, displayname, ctag) VALUES (?, "
+        "'calendar', 'inbox', 'Inbox', ?)",
+        {target, util::random_hex(8)}
+    );
+    const auto inbox = db.query(
+        "SELECT id FROM nc_dav_collections WHERE uid = ? AND kind = 'calendar' AND uri = 'inbox'",
+        {target}
+    );
+    if (inbox.empty()) {
+        return false;
+    }
+    const std::string id = nc::db::value_of(inbox.front(), "id");
+    db.exec(
+        "INSERT INTO nc_dav_objects (collection_id, uri, etag, data, lastmod) VALUES (?, ?, ?, ?, "
+        "?) ON CONFLICT(collection_id, uri) DO UPDATE SET etag = excluded.etag, data = "
+        "excluded.data, lastmod = excluded.lastmod",
+        {id,
+         itip::uri_for(uid) + "-" + tag + ".ics",
+         etag_of(message),
+         message,
+         std::to_string(now_seconds())}
+    );
+    db.exec("UPDATE nc_dav_collections SET ctag = ? WHERE id = ?", {util::random_hex(8), id});
+    return true;
+}
+
+void CollectionServer::schedule_after_put(
+    const std::string& actor,
+    const std::string& previous,
+    const std::string& data
+) const
+{
+    const itip::Event event = itip::parse(data);
+    if (!event.valid || event.uid.empty() || event.organizer.empty()) {
+        return;
+    }
+    const nc::http::Response own_address = m_host->call_service("users.email", actor);
+    const std::string actor_email =
+        own_address.get_status() == 200 ? util::to_lower(own_address.get_body()) : std::string{};
+    if (actor_email.empty()) {
+        return;
+    }
+    const itip::Event before = previous.empty() ? itip::Event{} : itip::parse(previous);
+    if (event.organizer == actor_email) {
+        // The organizer invites everyone, and cancels for the ones who were dropped.
+        const std::string request = itip::with_method(data, "REQUEST");
+        for (const itip::Attendee& attendee: event.attendees) {
+            if (attendee.email != actor_email) {
+                (void
+                )deliver(attendee.email, "REQUEST", event.summary, event.uid, request, "request");
+            }
+        }
+        const std::string cancel = itip::with_method(previous, "CANCEL");
+        for (const itip::Attendee& old: before.attendees) {
+            const bool still = std::ranges::any_of(
+                event.attendees,
+                [&](const itip::Attendee& attendee)
+                {
+                    return attendee.email == old.email;
+                }
+            );
+            if (!still && old.email != actor_email) {
+                (void)deliver(old.email, "CANCEL", event.summary, event.uid, cancel, "cancel");
+            }
+        }
+        return;
+    }
+    // An attendee who answered tells the organizer.
+    const auto mine = std::ranges::find_if(
+        event.attendees,
+        [&](const itip::Attendee& attendee)
+        {
+            return attendee.email == actor_email;
+        }
+    );
+    if (mine == event.attendees.end()) {
+        return;
+    }
+    std::string earlier = "NEEDS-ACTION";
+    for (const itip::Attendee& attendee: before.attendees) {
+        if (attendee.email == actor_email) {
+            earlier = attendee.partstat;
+        }
+    }
+    if (mine->partstat == earlier || mine->partstat == "NEEDS-ACTION") {
+        return;
+    }
+    const std::string reply = itip::reply_for(data, actor_email, mine->partstat);
+    (void)deliver(
+        event.organizer,
+        "REPLY",
+        event.summary,
+        event.uid,
+        reply,
+        "reply-" + itip::uri_for(actor_email)
+    );
+    // The organizer's own copy shows the answer.
+    const nc::http::Response organizer = m_host->call_service("users.by_email", event.organizer);
+    if (organizer.get_status() != 200) {
+        return;
+    }
+    const nc::db::Client db{m_host};
+    for (const nc::db::Row& row: db.query(
+             "SELECT o.id AS id, o.collection_id AS collection, o.data AS data FROM nc_dav_objects "
+             "o "
+             "JOIN nc_dav_collections c ON c.id = o.collection_id WHERE c.uid = ? AND c.kind = "
+             "'calendar' AND c.uri != 'inbox' AND instr(o.data, ?) > 0",
+             {organizer.get_body(), "UID:" + event.uid}
+         )) {
+        const std::string updated =
+            itip::set_partstat(nc::db::value_of(row, "data"), actor_email, mine->partstat);
+        db.exec(
+            "UPDATE nc_dav_objects SET data = ?, etag = ?, lastmod = ? WHERE id = ?",
+            {updated, etag_of(updated), std::to_string(now_seconds()), nc::db::value_of(row, "id")}
+        );
+        db.exec(
+            "UPDATE nc_dav_collections SET ctag = ? WHERE id = ?",
+            {util::random_hex(8), nc::db::value_of(row, "collection")}
+        );
+    }
+}
+
+void CollectionServer::schedule_after_delete(const std::string& actor, const std::string& previous)
+    const
+{
+    const itip::Event event = itip::parse(previous);
+    if (!event.valid || event.uid.empty() || event.organizer.empty()) {
+        return;
+    }
+    const nc::http::Response own_address = m_host->call_service("users.email", actor);
+    const std::string actor_email =
+        own_address.get_status() == 200 ? util::to_lower(own_address.get_body()) : std::string{};
+    if (actor_email.empty()) {
+        return;
+    }
+    if (event.organizer == actor_email) {
+        const std::string cancel = itip::with_method(previous, "CANCEL");
+        for (const itip::Attendee& attendee: event.attendees) {
+            if (attendee.email != actor_email) {
+                (void)deliver(attendee.email, "CANCEL", event.summary, event.uid, cancel, "cancel");
+            }
+        }
+        return;
+    }
+    const bool attends = std::ranges::any_of(
+        event.attendees,
+        [&](const itip::Attendee& attendee)
+        {
+            return attendee.email == actor_email;
+        }
+    );
+    if (attends) {
+        (void)deliver(
+            event.organizer,
+            "REPLY",
+            event.summary,
+            event.uid,
+            itip::reply_for(previous, actor_email, "DECLINED"),
+            "reply-" + itip::uri_for(actor_email)
+        );
+    }
 }
 
 } // namespace nc::davobjects
