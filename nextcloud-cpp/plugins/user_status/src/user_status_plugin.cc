@@ -1,8 +1,9 @@
 /**
  * @file user_status_plugin.cc
- * @brief What people say about themselves: an online status (online, away, do not disturb, invisible,
- * offline) and a short message with an emoji, optionally cleared at a time. Counterpart of Nextcloud's
- * `apps/user_status`. Statuses come back as plain "offline" for invisible users when others look.
+ * @brief What people say about themselves: an online status (online, away, do not disturb,
+ * invisible, offline) and a short message with an emoji, optionally cleared at a time. Counterpart
+ * of Nextcloud's `apps/user_status`. Statuses come back as plain "offline" for invisible users when
+ * others look.
  */
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
@@ -36,15 +37,14 @@ std::string json_string(std::string_view text)
 /// No control characters, bounded length (counted in bytes).
 bool plain_text(std::string_view text, std::size_t limit)
 {
-    return text.size() <= limit &&
-           std::ranges::none_of(
-               text,
-               [](char letter)
-               {
-                   const auto byte = static_cast<unsigned char>(letter);
-                   return byte < 0x20 || byte == 0x7F;
-               }
-           );
+    return text.size() <= limit && std::ranges::none_of(
+                                       text,
+                                       [](char letter)
+                                       {
+                                           const auto byte = static_cast<unsigned char>(letter);
+                                           return byte < 0x20 || byte == 0x7F;
+                                       }
+                                   );
 }
 
 class UserStatusPlugin final : public nc::Plugin
@@ -228,8 +228,7 @@ public:
             "user.deleted",
             [this](std::string_view, std::string_view payload)
             {
-                const std::string user =
-                    nc::util::form_value(nc::util::parse_form(payload), "id");
+                const std::string user = nc::util::form_value(nc::util::parse_form(payload), "id");
                 nc::db::Client{m_host}.exec("DELETE FROM nc_user_status WHERE uid = ?", {user});
             }
         );
@@ -287,9 +286,9 @@ private:
         const std::string clear = nc::db::value_of(row, "clear_at", "0");
         return R"({"userId":)" + json_string(nc::db::value_of(row, "uid")) + R"(,"status":)" +
                json_string(nc::db::value_of(row, "status", "online")) + R"(,"message":)" +
-               (hidden ? "null" : json_string(nc::db::value_of(row, "message"))) +
-               R"(,"icon":)" + (hidden ? "null" : json_string(nc::db::value_of(row, "icon"))) +
-               R"(,"clearAt":)" + (clear == "0" ? std::string{"null"} : clear) + "}";
+               (hidden ? "null" : json_string(nc::db::value_of(row, "message"))) + R"(,"icon":)" +
+               (hidden ? "null" : json_string(nc::db::value_of(row, "icon"))) + R"(,"clearAt":)" +
+               (clear == "0" ? std::string{"null"} : clear) + "}";
     }
 
     nc::Host* m_host{nullptr};

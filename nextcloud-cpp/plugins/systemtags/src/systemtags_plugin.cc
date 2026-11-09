@@ -83,6 +83,31 @@ public:
             }
         );
 
+        // Form: name, owner, path. Puts the tag on the file, creating the tag when it is new (for
+        // other plugins, such as the workflow engine).
+        host.add_service(
+            "systemtags.assign",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string name = nc::util::form_value(form, "name");
+                if (name.empty() || name.size() > 64 ||
+                    nc::util::form_value(form, "owner").empty() ||
+                    nc::util::form_value(form, "path").empty()) {
+                    return Response::text(400, "name, owner and path are required");
+                }
+                const nc::db::Client db{m_host};
+                db.exec("INSERT OR IGNORE INTO nc_tags (name) VALUES (?)", {name});
+                db.exec(
+                    "INSERT OR IGNORE INTO nc_tag_objects (tag_id, owner, path) SELECT id, ?, ? "
+                    "FROM "
+                    "nc_tags WHERE name = ?",
+                    {nc::util::form_value(form, "owner"), nc::util::form_value(form, "path"), name}
+                );
+                return Response::text(200, "ok");
+            }
+        );
+
         constexpr std::string_view BASE = "/ocs/v2.php/apps/systemtags/api/v1";
         host.add_route(
             "GET",

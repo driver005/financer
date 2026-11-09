@@ -11,7 +11,8 @@ int main()
     using nc::http::Request;
     using nc::http::Response;
     const std::string dir =
-        (std::filesystem::temp_directory_path() / ("nc-status-" + nc::util::random_hex(4))).string();
+        (std::filesystem::temp_directory_path() / ("nc-status-" + nc::util::random_hex(4)))
+            .string();
     nc::Kernel kernel{
         nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
     };
@@ -35,7 +36,10 @@ int main()
     {
         Request request{std::string{method}, std::string{path}, "", std::string{body}, "", {}, {}};
         if (!user.empty()) {
-            request.add_header("Authorization", "Basic " + nc::util::base64_encode(user + ":" + user + " password"));
+            request.add_header(
+                "Authorization",
+                "Basic " + nc::util::base64_encode(user + ":" + user + " password")
+            );
         }
         return kernel.handle(std::move(request));
     };
@@ -47,16 +51,50 @@ int main()
 
     NC_CHECK_EQ(call("GET", base + "/user_status", "").get_status(), 401);
     NC_CHECK_EQ(call("GET", base + "/user_status", "alice").get_status(), 404); // nothing said yet
-    NC_CHECK_EQ(call("PUT", base + "/user_status/status", "alice", "statusType=bogus").get_status(), 400);
-    NC_CHECK_EQ(call("PUT", base + "/user_status/status", "alice", "statusType=dnd").get_status(), 200);
+    NC_CHECK_EQ(
+        call("PUT", base + "/user_status/status", "alice", "statusType=bogus").get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        call("PUT", base + "/user_status/status", "alice", "statusType=dnd").get_status(),
+        200
+    );
     NC_CHECK(contains(call("GET", base + "/user_status", "alice"), "\"status\":\"dnd\""));
 
     // A message with an icon; bad input is refused.
-    NC_CHECK_EQ(call("PUT", base + "/user_status/message/custom", "alice", "message=In+a+meeting&statusIcon=%F0%9F%93%85").get_status(), 200);
-    NC_CHECK_EQ(call("PUT", base + "/user_status/message/custom", "alice", "message=").get_status(), 400);
-    NC_CHECK_EQ(call("PUT", base + "/user_status/message/custom", "alice", "message=" + std::string(81, 'x')).get_status(), 400);
-    NC_CHECK_EQ(call("PUT", base + "/user_status/message/custom", "alice", "message=a%0Ab").get_status(), 400);
-    NC_CHECK_EQ(call("PUT", base + "/user_status/message/custom", "alice", "message=x&clearAt=1").get_status(), 400);
+    NC_CHECK_EQ(
+        call(
+            "PUT",
+            base + "/user_status/message/custom",
+            "alice",
+            "message=In+a+meeting&statusIcon=%F0%9F%93%85"
+        )
+            .get_status(),
+        200
+    );
+    NC_CHECK_EQ(
+        call("PUT", base + "/user_status/message/custom", "alice", "message=").get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        call(
+            "PUT",
+            base + "/user_status/message/custom",
+            "alice",
+            "message=" + std::string(81, 'x')
+        )
+            .get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        call("PUT", base + "/user_status/message/custom", "alice", "message=a%0Ab").get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        call("PUT", base + "/user_status/message/custom", "alice", "message=x&clearAt=1")
+            .get_status(),
+        400
+    );
     const auto seen = call("GET", base + "/statuses/alice", "bob");
     NC_CHECK(contains(seen, "\"message\":\"In a meeting\""));
     NC_CHECK(contains(seen, "\"status\":\"dnd\""));
@@ -64,15 +102,35 @@ int main()
     // A message with an end time disappears after it.
     const auto soon = std::chrono::duration_cast<std::chrono::seconds>(
                           std::chrono::system_clock::now().time_since_epoch()
-                      ).count() + 2;
-    NC_CHECK_EQ(call("PUT", base + "/user_status/message/custom", "alice", "message=Back+soon&clearAt=" + std::to_string(soon)).get_status(), 200);
+                      )
+                          .count() +
+                      2;
+    NC_CHECK_EQ(
+        call(
+            "PUT",
+            base + "/user_status/message/custom",
+            "alice",
+            "message=Back+soon&clearAt=" + std::to_string(soon)
+        )
+            .get_status(),
+        200
+    );
     NC_CHECK(contains(call("GET", base + "/user_status", "alice"), "Back soon"));
-    (void)kernel.get_services().call("db.exec", "sql=UPDATE+nc_user_status+SET+clear_at+%3D+1+WHERE+uid+%3D+%27alice%27");
+    (void)kernel.get_services().call(
+        "db.exec",
+        "sql=UPDATE+nc_user_status+SET+clear_at+%3D+1+WHERE+uid+%3D+%27alice%27"
+    );
     NC_CHECK(!contains(call("GET", base + "/user_status", "alice"), "Back soon"));
 
     // Invisible reads as offline to others, and says nothing else.
-    NC_CHECK_EQ(call("PUT", base + "/user_status/status", "alice", "statusType=invisible").get_status(), 200);
-    NC_CHECK_EQ(call("PUT", base + "/user_status/message/custom", "alice", "message=Secret").get_status(), 200);
+    NC_CHECK_EQ(
+        call("PUT", base + "/user_status/status", "alice", "statusType=invisible").get_status(),
+        200
+    );
+    NC_CHECK_EQ(
+        call("PUT", base + "/user_status/message/custom", "alice", "message=Secret").get_status(),
+        200
+    );
     const auto hidden = call("GET", base + "/statuses/alice", "bob");
     NC_CHECK(contains(hidden, "\"status\":\"offline\""));
     NC_CHECK(!contains(hidden, "Secret"));

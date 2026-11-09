@@ -4,10 +4,10 @@
  * (`share.created`, `file.created`, ...) and the plugin POSTs a JSON document there, signed with
  * HMAC-SHA256 in `X-Nextcloud-Signature`. Counterpart of Nextcloud's `apps/webhook_listeners`.
  *
- * Events are queued in the database and delivered by a job, so a slow receiver never slows the request
- * that caused the event. A delivery that fails is tried again after a growing pause, up to five times.
- * Outgoing requests use the same client as federation: certificates are checked and local addresses
- * are refused unless `[webhook_listeners] allow_local` is set.
+ * Events are queued in the database and delivered by a job, so a slow receiver never slows the
+ * request that caused the event. A delivery that fails is tried again after a growing pause, up to
+ * five times. Outgoing requests use the same client as federation: certificates are checked and
+ * local addresses are refused unless `[webhook_listeners] allow_local` is set.
  */
 #include "http_client.h"
 #include "nextcloud/db.h"
@@ -131,7 +131,8 @@ public:
                 if (!event_pattern_ok(event)) {
                     return nc::http::ocs(400, "Invalid event", "{}");
                 }
-                if (const auto parsed = nc::federation::parse_url(url); !parsed || url.size() > 2000) {
+                if (const auto parsed = nc::federation::parse_url(url);
+                    !parsed || url.size() > 2'000) {
                     return nc::http::ocs(400, "Invalid uri", "{}");
                 }
                 if (secret.empty()) {
@@ -236,7 +237,8 @@ private:
     {
         const nc::db::Client db{m_host};
         for (const nc::db::Row& item: db.query(
-                 "SELECT q.id AS id, q.body AS body, q.attempts AS attempts, w.url AS url, w.secret "
+                 "SELECT q.id AS id, q.body AS body, q.attempts AS attempts, w.url AS url, "
+                 "w.secret "
                  "AS secret FROM nc_webhook_queue q JOIN nc_webhooks w ON w.id = q.webhook WHERE "
                  "q.due <= ? ORDER BY q.id LIMIT 50",
                  {std::to_string(now_seconds())}
@@ -248,21 +250,26 @@ private:
                 nc::db::value_of(item, "url"),
                 {{"Content-Type", "application/json"},
                  {"X-Nextcloud-Signature",
-                  "sha256=" + nc::util::to_hex(nc::util::hmac_sha256(
-                                  nc::db::value_of(item, "secret"),
-                                  body
-                              ))}},
+                  "sha256=" +
+                      nc::util::to_hex(nc::util::hmac_sha256(nc::db::value_of(item, "secret"), body)
+                      )}},
                 body
             );
             const int attempts = std::atoi(nc::db::value_of(item, "attempts").c_str()) + 1;
             if (answer && answer->get_status() >= 200 && answer->get_status() < 300) {
-                db.exec("DELETE FROM nc_webhook_queue WHERE id = ?", {nc::db::value_of(item, "id")});
+                db.exec(
+                    "DELETE FROM nc_webhook_queue WHERE id = ?",
+                    {nc::db::value_of(item, "id")}
+                );
             } else if (attempts >= MAX_ATTEMPTS) {
                 m_host->log(
                     nc::LogLevel::WARNING,
                     "giving up on a webhook delivery to " + nc::db::value_of(item, "url")
                 );
-                db.exec("DELETE FROM nc_webhook_queue WHERE id = ?", {nc::db::value_of(item, "id")});
+                db.exec(
+                    "DELETE FROM nc_webhook_queue WHERE id = ?",
+                    {nc::db::value_of(item, "id")}
+                );
             } else {
                 // 30 s, 2 min, 8 min, 32 min.
                 const std::int64_t pause = 30LL << (2 * (attempts - 1));

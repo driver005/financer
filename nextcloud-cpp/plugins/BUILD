@@ -21,5 +21,6 @@ test_suite(
         "//plugins/users:users_test",
         "//plugins/versions:versions_test",
         "//plugins/webhook_listeners:webhook_listeners_test",
+        "//plugins/workflowengine:workflowengine_test",
     ],
 )
