@@ -31,12 +31,13 @@ jobs:
       - name: Test
         run: bazelisk test //... ${{ matrix.config != '' && format('--config={0}', matrix.config) || '' }} --config=ci --test_output=errors
       - name: Show the SAML test output and the signer
-        if: failure() && matrix.config == ''
+        if: failure()
         working-directory: nextcloud-cpp
         run: |
           xmlsec1 --version || true
           dpkg -l | grep -i xmlsec || true
           cat bazel-testlogs/plugins/saml/saml_test/test.log || true
+          (cd bazel-bin/plugins/saml && ./saml_test 2>&1 | tail -n 40) || true
       # The style is checked with clang-format 18, the version the files were formatted with; other
       # versions format a few constructs differently.
       - name: Format check
@@ -70,3 +71,9 @@ jobs:
       - uses: bazelbuild/setup-bazelisk@v3
       - name: Test (C++26, warnings as errors)
         run: bazelisk test //... --define=std=26 --config=warnings --config=ci --test_output=errors
+      - name: Show the SAML test output and the signer
+        if: failure()
+        run: |
+          xmlsec1 --version || true
+          cat bazel-testlogs/plugins/saml/saml_test/test.log || true
+          (cd bazel-bin/plugins/saml && ./saml_test 2>&1 | tail -n 40) || true
