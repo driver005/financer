@@ -6,6 +6,7 @@
  * `apps/files_sharing`.
  */
 #include "dav.h"
+#include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
@@ -76,6 +77,126 @@ std::string format_time(std::int64_t seconds)
     return std::string(buffer, written);
 }
 
+/// Shares in the `db` plugin's database (table `nc_shares`).
+class DbShareBackend final : public nc::cloud::ShareBackend
+{
+public:
+    explicit DbShareBackend(const nc::Host* host) :
+        m_db{host}
+    {
+        m_db.migrate(
+            "cloud",
+            1,
+            "CREATE TABLE nc_shares ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT NOT NULL, type INTEGER NOT NULL,"
+            " owner TEXT NOT NULL, share_with TEXT NOT NULL DEFAULT '', path TEXT NOT NULL,"
+            " permissions INTEGER NOT NULL, expires INTEGER NOT NULL DEFAULT 0,"
+            " created INTEGER NOT NULL, password TEXT NOT NULL DEFAULT '');"
+            "CREATE INDEX nc_shares_owner ON nc_shares (owner);"
+            "CREATE INDEX nc_shares_token ON nc_shares (token);"
+            "CREATE INDEX nc_shares_with ON nc_shares (share_with);"
+        );
+    }
+
+    Result<std::vector<Share>> load() override
+    {
+        try {
+            std::vector<Share> shares;
+            for (const nc::db::Row& row: m_db.query(
+                     "SELECT id, token, type, owner, share_with, path, permissions, expires, "
+                     "created, password FROM nc_shares ORDER BY id"
+                 )) {
+                const auto number = [&](std::string_view column)
+                {
+                    return std::strtoll(nc::db::value_of(row, column).c_str(), nullptr, 10);
+                };
+                Share share{
+                    static_cast<std::uint64_t>(number("id")),
+                    nc::db::value_of(row, "token"),
+                    static_cast<int>(number("type")),
+                    nc::db::value_of(row, "owner"),
+                    nc::db::value_of(row, "share_with"),
+                    nc::db::value_of(row, "path"),
+                    static_cast<int>(number("permissions")),
+                    number("expires"),
+                    number("created")
+                };
+                share.set_password(nc::db::value_of(row, "password"));
+                shares.push_back(std::move(share));
+            }
+            return shares;
+        } catch (const std::exception& error) {
+            return nc::util::unexpected<Error>{error.what()};
+        }
+    }
+
+    Result<void> insert(Share& share) override
+    {
+        try {
+            std::int64_t id = 0;
+            const std::string wanted =
+                share.get_id() == 0 ? std::string{} : std::to_string(share.get_id());
+            m_db.exec(
+                wanted.empty()
+                    ? "INSERT INTO nc_shares (token, type, owner, share_with, path, permissions, "
+                      "expires, created, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    : "INSERT INTO nc_shares (token, type, owner, share_with, path, permissions, "
+                      "expires, created, password, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                columns(share, wanted),
+                &id
+            );
+            if (wanted.empty()) {
+                share.set_id(static_cast<std::uint64_t>(id));
+            }
+            return {};
+        } catch (const std::exception& error) {
+            return nc::util::unexpected<Error>{error.what()};
+        }
+    }
+
+    Result<void> update_path(std::uint64_t id, const std::string& path) override
+    {
+        try {
+            m_db.exec("UPDATE nc_shares SET path = ? WHERE id = ?", {path, std::to_string(id)});
+            return {};
+        } catch (const std::exception& error) {
+            return nc::util::unexpected<Error>{error.what()};
+        }
+    }
+
+    Result<void> erase(std::uint64_t id) override
+    {
+        try {
+            m_db.exec("DELETE FROM nc_shares WHERE id = ?", {std::to_string(id)});
+            return {};
+        } catch (const std::exception& error) {
+            return nc::util::unexpected<Error>{error.what()};
+        }
+    }
+
+private:
+    static std::vector<std::string> columns(const Share& share, const std::string& id)
+    {
+        std::vector<std::string> out{
+            share.get_token(),
+            std::to_string(share.get_type()),
+            share.get_owner(),
+            share.get_share_with(),
+            share.get_path(),
+            std::to_string(share.get_permissions()),
+            std::to_string(share.get_expires()),
+            std::to_string(share.get_created()),
+            share.get_password()
+        };
+        if (!id.empty()) {
+            out.push_back(id);
+        }
+        return out;
+    }
+
+    nc::db::Client m_db;
+};
+
 /// A user id that can safely name a directory.
 bool safe_user(std::string_view user) noexcept
 {
@@ -103,7 +224,7 @@ public:
 
     [[nodiscard]] std::span<const std::string_view> get_requires() const noexcept override
     {
-        static constexpr std::string_view REQUIRED[] = {"users"};
+        static constexpr std::string_view REQUIRED[] = {"users", "db"};
         return REQUIRED;
     }
 
@@ -134,11 +255,12 @@ public:
             }
             m_encryption_key = *key;
         }
-        m_shares = std::make_unique<nc::cloud::ShareStore>(m_data_dir + "/shares.db");
+        m_host = &host;
+        m_shares = std::make_unique<nc::cloud::ShareStore>(std::make_unique<DbShareBackend>(&host));
         if (auto loaded = m_shares->load(); !loaded) {
             throw std::runtime_error(loaded.error());
         }
-        m_host = &host;
+        import_legacy_shares();
 
         host.add_service(
             "capabilities.files",
@@ -262,6 +384,27 @@ private:
             );
         };
         return hooks;
+    }
+
+    /// Earlier versions kept the shares in `<data_dir>/shares.db`, a text file. The first start
+    /// with the database takes them over (ids kept) and renames the file, so it is read once.
+    void import_legacy_shares()
+    {
+        const std::string file = m_data_dir + "/shares.db";
+        std::error_code ignored;
+        if (!std::filesystem::exists(file, ignored)) {
+            return;
+        }
+        auto old = nc::cloud::ShareStore::read_legacy_file(file);
+        if (!old) {
+            throw std::runtime_error(old.error());
+        }
+        if (m_shares->all().empty()) {
+            if (auto imported = m_shares->import_all(std::move(*old)); !imported) {
+                throw std::runtime_error(imported.error());
+            }
+        }
+        std::filesystem::rename(file, file + ".imported", ignored);
     }
 
     /// Services for the trash bin and the versions plugin: they keep the records, this plugin keeps

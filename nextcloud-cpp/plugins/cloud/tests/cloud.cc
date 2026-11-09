@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <unistd.h>
 
@@ -141,7 +142,9 @@ void test_storage()
 void test_share_store()
 {
     const std::string dir = temp_dir("shares");
-    nc::cloud::ShareStore store{dir + "/shares.db"};
+    auto memory = std::make_unique<nc::cloud::MemoryShareBackend>();
+    auto restarted = memory->share_with();
+    nc::cloud::ShareStore store{std::move(memory)};
     NC_CHECK(store.load().has_value());
     const auto link = store.add(nc::cloud::Share{"alice", "/docs"});
     NC_CHECK(link.has_value());
@@ -165,7 +168,7 @@ void test_share_store()
     NC_CHECK_EQ(store.remove_under("alice", "/pap"), std::size_t{0}); // a prefix is not a parent
     NC_CHECK_EQ(store.prune_expired(1'000), std::size_t{1});
 
-    nc::cloud::ShareStore reloaded{dir + "/shares.db"};
+    nc::cloud::ShareStore reloaded{std::move(restarted)};
     NC_CHECK(reloaded.load().has_value());
     NC_CHECK_EQ(reloaded.all().size(), std::size_t{1});
     NC_CHECK_EQ(reloaded.remove_under("alice", "/papers"), std::size_t{1});
@@ -211,8 +214,9 @@ void test_plugins()
     ); // before its requirement on purpose
     NC_CHECK(kernel.add_plugin_library("plugins/mail/libmail.so").has_value());
     NC_CHECK(kernel.add_plugin_library("plugins/users/libusers.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/db/libdb.so").has_value());
     NC_CHECK(kernel.start().has_value());
-    NC_CHECK_EQ(kernel.running_count(), std::size_t{3});
+    NC_CHECK_EQ(kernel.running_count(), std::size_t{4});
 
     std::string out;
     ::setenv("OC_PASS", "alice password", 1);
@@ -840,8 +844,10 @@ void test_link_options()
         400
     );
     // The password is stored hashed, not as text.
-    NC_CHECK(slurp(dir + "/shares.db").find("correct horse") == std::string::npos);
-    NC_CHECK(slurp(dir + "/shares.db").find("10000$") != std::string::npos);
+    // (the database may still hold recent writes in its write-ahead log)
+    const std::string stored = slurp(dir + "/nextcloud.db") + slurp(dir + "/nextcloud.db-wal");
+    NC_CHECK(stored.find("correct horse") == std::string::npos);
+    NC_CHECK(stored.find("10000$") != std::string::npos);
 
     // A drop box: people can put files in and cannot see or read anything.
     NC_CHECK_EQ(
@@ -1044,6 +1050,79 @@ void test_public_webdav()
     NC_CHECK(mine.get_body().find("\"share_type\":6") == std::string::npos);
 
     kernel.stop();
+    fs::remove_all(dir);
+}
+
+void test_legacy_share_file()
+{
+    // Earlier versions kept the shares in a text file; the first start with the database takes them
+    // over.
+    const std::string dir = temp_dir("legacy");
+    {
+        std::ofstream legacy{dir + "/shares.db"};
+        legacy << "#next_id\t9\n"
+               << "7\tabcdefabcdefabcdef12\t3\talice\t\t/Docs\t1\t0\t100\n";
+    }
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    NC_CHECK(!fs::exists(dir + "/shares.db"));
+    NC_CHECK(fs::exists(dir + "/shares.db.imported"));
+    const std::string alice = "alice:alice password";
+    NC_CHECK_EQ(
+        kernel.handle(user_req("MKCOL", "/remote.php/dav/files/alice/Docs", "", alice))
+            .get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", "/remote.php/dav/files/alice/Docs/a.txt", "old link", alice))
+            .get_status(),
+        201
+    );
+    // The old link still works, and a new share does not reuse its id.
+    NC_CHECK(
+        kernel.handle(Request{"GET", "/s/abcdefabcdefabcdef12"}).get_body().find("a.txt") !=
+        std::string::npos
+    );
+    const Response added = kernel.handle(user_req(
+        "POST",
+        "/ocs/v2.php/apps/files_sharing/api/v1/shares",
+        "path=/Docs&shareType=3",
+        alice
+    ));
+    NC_CHECK_EQ(added.get_status(), 200);
+    NC_CHECK(added.get_body().find("\"id\":\"8\"") != std::string::npos);
+    kernel.stop();
+
+    // A restart keeps both shares, and a leftover file is not read again.
+    {
+        std::ofstream again{dir + "/shares.db"};
+        again << "9\tffffffffffffffffffff\t3\talice\t\t/Docs\t1\t0\t100\n";
+    }
+    nc::Kernel restarted{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    restarted.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(restarted
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(restarted.start().has_value());
+    NC_CHECK_EQ(restarted.handle(Request{"GET", "/s/abcdefabcdefabcdef12"}).get_status(), 200);
+    NC_CHECK_EQ(restarted.handle(Request{"GET", "/s/ffffffffffffffffffff"}).get_status(), 404);
+    restarted.stop();
     fs::remove_all(dir);
 }
 
@@ -1496,6 +1575,7 @@ void test_quota_through_dav()
                           .value()};
     kernel.get_logger().set_sink({});
     NC_CHECK(kernel.add_plugin_library("plugins/users/libusers.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/db/libdb.so").has_value());
     NC_CHECK(kernel.add_plugin_library("plugins/cloud/libcloud.so").has_value());
     NC_CHECK(kernel.start().has_value());
     std::string out;
@@ -1541,6 +1621,7 @@ int main()
     test_ranges();
     test_link_options();
     test_public_webdav();
+    test_legacy_share_file();
     test_chunked_uploads();
     test_received_shares();
     test_external_storage();

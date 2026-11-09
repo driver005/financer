@@ -130,7 +130,7 @@ int main()
         nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
     };
     plain.get_logger().set_sink({});
-    for (const char* plugin: {"cloud", "users"}) {
+    for (const char* plugin: {"cloud", "users", "db"}) {
         NC_CHECK(plain
                      .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
                      .has_value());

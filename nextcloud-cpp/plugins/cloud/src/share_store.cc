@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <filesystem>
 #include <fstream>
 
 namespace nc::cloud {
@@ -20,14 +19,51 @@ namespace {
 
 } // namespace
 
-ShareStore::Result<void> ShareStore::load()
+ShareBackend::Result<std::vector<Share>> MemoryShareBackend::load()
 {
-    const std::lock_guard lock{m_mutex};
-    m_shares.clear();
-    m_next_id = 1;
-    std::ifstream stream{m_file};
+    return m_state->shares;
+}
+
+ShareBackend::Result<void> MemoryShareBackend::insert(Share& share)
+{
+    if (share.get_id() == 0) {
+        share.set_id(++m_state->last_id);
+    } else {
+        m_state->last_id = std::max(m_state->last_id, share.get_id());
+    }
+    m_state->shares.push_back(share);
+    return {};
+}
+
+ShareBackend::Result<void>
+MemoryShareBackend::update_path(std::uint64_t id, const std::string& path)
+{
+    for (Share& share: m_state->shares) {
+        if (share.get_id() == id) {
+            share.set_path(std::string{path});
+        }
+    }
+    return {};
+}
+
+ShareBackend::Result<void> MemoryShareBackend::erase(std::uint64_t id)
+{
+    std::erase_if(
+        m_state->shares,
+        [id](const Share& share)
+        {
+            return share.get_id() == id;
+        }
+    );
+    return {};
+}
+
+ShareStore::Result<std::vector<Share>> ShareStore::read_legacy_file(const std::string& file)
+{
+    std::vector<Share> shares;
+    std::ifstream stream{file};
     if (!stream) {
-        return {};
+        return shares;
     }
     std::string line;
     std::size_t number = 0;
@@ -38,14 +74,11 @@ ShareStore::Result<void> ShareStore::load()
         }
         const std::vector<std::string> parts = util::split(line, '\t');
         if (parts.size() == 2 && parts[0] == "#next_id") {
-            // Remembered across restarts, so the id of a deleted share is never handed out again.
-            m_next_id =
-                std::max<std::uint64_t>(m_next_id, std::strtoull(parts[1].c_str(), nullptr, 10));
             continue;
         }
         if (parts.size() != 9 && parts.size() != 10) {
             return util::unexpected<Error>{
-                m_file + ":" + std::to_string(number) + ": damaged share line"
+                file + ":" + std::to_string(number) + ": damaged share line"
             };
         }
         Share share{
@@ -62,43 +95,30 @@ ShareStore::Result<void> ShareStore::load()
         if (parts.size() == 10) {
             share.set_password(std::string{parts[9]});
         }
-        m_next_id = std::max(m_next_id, share.get_id() + 1);
-        m_shares.push_back(std::move(share));
+        shares.push_back(std::move(share));
     }
+    return shares;
+}
+
+ShareStore::Result<void> ShareStore::load()
+{
+    const std::lock_guard lock{m_mutex};
+    auto loaded = m_backend->load();
+    if (!loaded) {
+        return util::unexpected<Error>{loaded.error()};
+    }
+    m_shares = std::move(*loaded);
     return {};
 }
 
-ShareStore::Result<void> ShareStore::save_locked() const
+ShareStore::Result<void> ShareStore::import_all(std::vector<Share>&& shares)
 {
-    std::error_code error;
-    const std::filesystem::path path{m_file};
-    if (path.has_parent_path()) {
-        std::filesystem::create_directories(path.parent_path(), error);
-    }
-    const std::string temporary = m_file + ".tmp";
-    {
-        std::ofstream stream{temporary, std::ios::trunc};
-        stream << "#next_id\t" << m_next_id << '\n';
-        for (const Share& share: m_shares) {
-            stream << share.get_id() << '\t' << share.get_token() << '\t' << share.get_type()
-                   << '\t' << share.get_owner() << '\t' << share.get_share_with() << '\t'
-                   << share.get_path() << '\t' << share.get_permissions() << '\t'
-                   << share.get_expires() << '\t' << share.get_created() << '\t'
-                   << share.get_password() << '\n';
+    const std::lock_guard lock{m_mutex};
+    for (Share& share: shares) {
+        if (auto stored = m_backend->insert(share); !stored) {
+            return util::unexpected<Error>{stored.error()};
         }
-        stream.flush();
-        if (!stream) {
-            return util::unexpected<Error>{"cannot write " + temporary};
-        }
-    }
-    std::filesystem::permissions(
-        temporary,
-        std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
-        error
-    );
-    std::filesystem::rename(temporary, m_file, error);
-    if (error) {
-        return util::unexpected<Error>{"cannot replace " + m_file + ": " + error.message()};
+        m_shares.push_back(std::move(share));
     }
     return {};
 }
@@ -110,18 +130,17 @@ ShareStore::Result<Share> ShareStore::add(Share&& share)
         return util::unexpected<Error>{"the path contains characters that are not allowed"};
     }
     const std::lock_guard lock{m_mutex};
-    share.set_id(m_next_id++);
+    share.set_id(0);
     share.set_created(std::chrono::duration_cast<std::chrono::seconds>(
                           std::chrono::system_clock::now().time_since_epoch()
     )
                           .count());
     // Every share gets a token (a user share simply never publishes it): 80 random bits.
     share.set_token(util::random_hex(10));
-    m_shares.push_back(share);
-    if (auto saved = save_locked(); !saved) {
-        m_shares.pop_back();
-        return util::unexpected<Error>{saved.error()};
+    if (auto stored = m_backend->insert(share); !stored) {
+        return util::unexpected<Error>{stored.error()};
     }
+    m_shares.push_back(share);
     return share;
 }
 
@@ -138,72 +157,71 @@ ShareStore::Result<void> ShareStore::remove(std::uint64_t id)
     if (found == m_shares.end()) {
         return util::unexpected<Error>{"no such share"};
     }
+    if (auto erased = m_backend->erase(id); !erased) {
+        return util::unexpected<Error>{erased.error()};
+    }
     m_shares.erase(found);
-    return save_locked();
+    return {};
+}
+
+template<typename Predicate> std::size_t ShareStore::erase_matching(Predicate&& matches)
+{
+    std::size_t count = 0;
+    for (auto it = m_shares.begin(); it != m_shares.end();) {
+        if (matches(*it)) {
+            (void)m_backend->erase(it->get_id());
+            it = m_shares.erase(it);
+            ++count;
+        } else {
+            ++it;
+        }
+    }
+    return count;
 }
 
 std::size_t ShareStore::remove_under(std::string_view owner, std::string_view path)
 {
     const std::lock_guard lock{m_mutex};
-    const std::size_t count = std::erase_if(
-        m_shares,
+    return erase_matching(
         [&](const Share& share)
         {
             return share.get_owner() == owner && under(share.get_path(), path);
         }
     );
-    if (count != 0) {
-        (void)save_locked();
-    }
-    return count;
 }
 
 std::size_t ShareStore::remove_user(std::string_view user)
 {
     const std::lock_guard lock{m_mutex};
-    const std::size_t count = std::erase_if(
-        m_shares,
+    return erase_matching(
         [&](const Share& share)
         {
             return share.get_owner() == user ||
                    (share.get_type() == SHARE_TYPE_USER && share.get_share_with() == user);
         }
     );
-    if (count != 0) {
-        (void)save_locked();
-    }
-    return count;
 }
 
 void ShareStore::rename_under(std::string_view owner, std::string_view from, std::string_view to)
 {
     const std::lock_guard lock{m_mutex};
-    bool changed = false;
     for (Share& share: m_shares) {
         if (share.get_owner() == owner && under(share.get_path(), from)) {
             share.set_path(std::string{to} + share.get_path().substr(from.size()));
-            changed = true;
+            (void)m_backend->update_path(share.get_id(), share.get_path());
         }
-    }
-    if (changed) {
-        (void)save_locked();
     }
 }
 
 std::size_t ShareStore::prune_expired(std::int64_t now)
 {
     const std::lock_guard lock{m_mutex};
-    const std::size_t count = std::erase_if(
-        m_shares,
+    return erase_matching(
         [now](const Share& share)
         {
             return share.expired(now);
         }
     );
-    if (count != 0) {
-        (void)save_locked();
-    }
-    return count;
 }
 
 std::optional<Share> ShareStore::find(std::uint64_t id) const
