@@ -247,6 +247,14 @@ public:
         return m_quota;
     }
 
+    /// @brief Counts what is stored under `root` (the owner's whole tree) against the quota,
+    /// instead of this storage's own root. A shared folder is a storage of its own, but what is
+    /// written into it belongs to the owner's quota.
+    void set_quota_root(std::filesystem::path root)
+    {
+        m_quota_root = std::move(root);
+    }
+
 private:
     [[nodiscard]] Result<std::filesystem::path> resolve(std::string_view normalized) const;
     [[nodiscard]] Result<Node>
@@ -258,6 +266,7 @@ private:
     [[nodiscard]] std::uint64_t plain_size(const std::filesystem::path& real) const;
 
     std::uint64_t m_quota{0};
+    std::filesystem::path m_quota_root{};
     std::shared_ptr<const FileCipher> m_cipher{};
 };
 

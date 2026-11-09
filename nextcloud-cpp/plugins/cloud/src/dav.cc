@@ -199,8 +199,10 @@ std::string multistatus(
         if (node.is_directory()) {
             href += "/";
         }
-        const std::uint64_t size =
-            node.is_directory() ? storage.size_of(node.get_path()).value_or(0) : node.get_size();
+        // A folder that arrives with a size (a mounted share) keeps it; any other is measured.
+        const std::uint64_t size = node.is_directory() && node.get_size() == 0
+                                       ? storage.size_of(node.get_path()).value_or(0)
+                                       : node.get_size();
         xml += " <d:response>\n  <d:href>" + util::xml_escape(href) +
                "</d:href>\n  <d:propstat>\n   <d:prop>\n";
         xml +=

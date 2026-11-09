@@ -555,6 +555,9 @@ Result<std::size_t> Storage::encrypt_existing() const
 
 std::uint64_t Storage::used_bytes() const
 {
+    if (!m_quota_root.empty()) {
+        return Storage{m_quota_root, 0, m_cipher}.size_of("/").value_or(0);
+    }
     return size_of("/").value_or(0);
 }
 

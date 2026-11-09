@@ -1168,6 +1168,16 @@ private:
                 continue;
             }
             node->set_path("/" + mount.name);
+            if (node->is_directory() && mount.remote_id == 0) {
+                // The size of what is inside, so the top-level listing shows it.
+                node->set_size(
+                    mount.external_root.empty()
+                        ? storage_for(mount.share.get_owner())
+                              .size_of(mount.share.get_path())
+                              .value_or(0)
+                        : Storage{mount.external_root}.size_of("/").value_or(0)
+                );
+            }
             nodes.push_back(*node);
         }
         std::string extra;
@@ -1332,8 +1342,17 @@ private:
         // A shared file is a mount of one file: read it, or replace it with update permission.
         const std::string parent = share.get_path().substr(0, share.get_path().rfind('/'));
         const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
-        Storage root = mount.directory ? Storage{std::filesystem::path{m_data_dir} / share.get_owner() / "files" / share.get_path().substr(1), 0, cipher_for(share.get_owner())}
-                                       : Storage{std::filesystem::path{m_data_dir} / share.get_owner() / "files" / (parent.empty() ? "" : parent.substr(1)), 0, cipher_for(share.get_owner())};
+        // What a recipient writes counts against the owner's quota, measured over the owner's whole
+        // tree.
+        const std::filesystem::path owner_root =
+            std::filesystem::path{m_data_dir} / share.get_owner() / "files";
+        Storage root{
+            mount.directory ? owner_root / share.get_path().substr(1)
+                            : owner_root / (parent.empty() ? "" : parent.substr(1)),
+            m_quota,
+            cipher_for(share.get_owner())
+        };
+        root.set_quota_root(owner_root);
         std::string inner = rest;
         std::string href_base = mount_base;
         if (!mount.directory) {

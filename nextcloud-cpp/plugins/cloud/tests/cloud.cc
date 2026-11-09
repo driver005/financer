@@ -1126,6 +1126,73 @@ void test_legacy_share_file()
     fs::remove_all(dir);
 }
 
+void test_shared_folder_quota_and_size()
+{
+    const std::string dir = temp_dir("sharequota");
+    nc::Kernel kernel{nc::Config::parse(
+                          "data_dir = " + dir +
+                          "\nquota_bytes = 30\n[users]\npbkdf2_iterations = 3\n"
+    )
+                          .value()};
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    for (const char* name: {"alice", "bob"}) {
+        ::setenv("OC_PASS", (std::string{name} + " password").c_str(), 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {name}, out), 0);
+    }
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string bob = "bob:bob password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const std::string b = "/remote.php/dav/files/bob";
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Shared", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Shared/one.txt", "1234567890", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/mine.txt", "12345678901234", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel
+            .handle(user_req(
+                "POST",
+                "/ocs/v2.php/apps/files_sharing/api/v1/shares",
+                "path=/Shared&shareType=0&shareWith=bob&permissions=31",
+                alice
+            ))
+            .get_status(),
+        200
+    );
+    // The folder shows how big it is, not 0.
+    const auto top = kernel.handle(user_req("PROPFIND", b + "/", "", bob)).get_body();
+    const std::size_t entry = top.find("<d:href>" + b + "/Shared/</d:href>");
+    NC_CHECK(entry != std::string::npos);
+    NC_CHECK(top.find("<oc:size>10</oc:size>", entry) != std::string::npos);
+    // Alice already uses 24 of 30 bytes: 6 more fit, 7 do not, whatever bob's own quota says.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", b + "/Shared/two.txt", "123456", bob)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", b + "/Shared/three.txt", "1", bob)).get_status(),
+        507
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Shared/two.txt", "", alice)).get_body(),
+        "123456"
+    );
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 void test_received_shares()
 {
     const std::string dir = temp_dir("mounts");
@@ -1622,6 +1689,7 @@ int main()
     test_link_options();
     test_public_webdav();
     test_legacy_share_file();
+    test_shared_folder_quota_and_size();
     test_chunked_uploads();
     test_received_shares();
     test_external_storage();
