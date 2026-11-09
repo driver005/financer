@@ -92,6 +92,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `[users] pbkdf2_iterations`, `min_password_length` | password hashing | `10000`, `8` |
 | `[cloud] quota_bytes`, `overwrite_url` | per-user quota, public URL for share links | unlimited, from `Host` |
 | `[cloud] encryption_key` or `encryption_key_file` | 64 hex digits: files are stored encrypted | off |
+| `[cloud] external_webdav`, `external_webdav_allow_http`, `external_webdav_allow_local`, `external_webdav_ca_file`, `external_webdav_timeout_seconds`, `external_webdav_max_mb` | WebDAV servers shown as folders: `Name=URL|user|password-file[|rw][|group]; ...` | none |
 | `[cloud] external_mounts` | host folders shown to everyone: `Name=/path:ro\|rw[:group]; ...` | none |
 | `[mail] mode` | `spool`, `sendmail`, `smtp`, `null` | `spool` |
 | `[mail] from_address`, `from_name`, `spool_dir`, `sendmail_path`, `smtp_host`, `smtp_port`, `max_recipients` | | |

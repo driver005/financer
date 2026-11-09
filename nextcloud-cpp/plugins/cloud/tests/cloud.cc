@@ -1,4 +1,5 @@
 #include "dav.h"
+#include "nextcloud/runner/http_server.h"
 #include "nextcloud/runner/kernel.h"
 #include "nextcloud/test.h"
 #include "nextcloud/util/crypto.h"
@@ -1428,6 +1429,189 @@ void test_resharing()
     fs::remove_all(dir);
 }
 
+Request with_depth(Request request, const char* depth)
+{
+    request.add_header("Depth", depth);
+    return request;
+}
+
+void test_external_webdav()
+{
+    // The "other" storage is a cloud of its own, reached over real HTTP with one account.
+    const std::string remote_dir = temp_dir("davremote");
+    nc::Kernel remote{
+        nc::Config::parse("data_dir = " + remote_dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    remote.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(remote
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(remote.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "svc password", 1);
+    NC_CHECK_EQ(remote.run_command("user:add", {"svc"}, out), 0);
+    ::unsetenv("OC_PASS");
+    nc::HttpServer server{remote};
+    const auto port = server.start("127.0.0.1", 0);
+    NC_CHECK(port.has_value());
+    if (!port) {
+        return;
+    }
+    const std::string svc = "svc:svc password";
+    const std::string remote_files = "/remote.php/dav/files/svc";
+    NC_CHECK_EQ(
+        remote.handle(user_req("MKCOL", remote_files + "/Archive", "", svc)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        remote.handle(user_req("PUT", remote_files + "/Archive/old.txt", "0123456789", svc))
+            .get_status(),
+        201
+    );
+
+    const std::string dir = temp_dir("davlocal");
+    {
+        std::ofstream secret{dir + "/dav.secret"};
+        secret << "svc password\n";
+    }
+    const std::string url = "http://127.0.0.1:" + std::to_string(*port) + remote_files + "/Archive";
+    nc::Kernel kernel{
+        nc::Config::parse(
+            "data_dir = " + dir +
+            "\n[users]\npbkdf2_iterations = 3\n[cloud]\nexternal_webdav = Archive=" + url +
+            "|svc|" + dir + "/dav.secret|rw;Locked=" + url + "|svc|" + dir +
+            "/dav.secret|ro;Broken=notaurl|x|" + dir +
+            "/dav.secret\nexternal_webdav_allow_http = true\nexternal_webdav_allow_local = true\n"
+        )
+            .value()
+    };
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string a = "/remote.php/dav/files/alice";
+
+    // The storage shows in alice's top folder (the broken entry does not), with links into the
+    // mount.
+    const auto top =
+        kernel.handle(with_depth(user_req("PROPFIND", a + "/", "", alice), "1")).get_body();
+    NC_CHECK(top.find("<d:href>" + a + "/Archive/</d:href>") != std::string::npos);
+    NC_CHECK(top.find("<d:href>" + a + "/Locked/</d:href>") != std::string::npos);
+    NC_CHECK(top.find("Broken") == std::string::npos);
+    const auto listing =
+        kernel.handle(with_depth(user_req("PROPFIND", a + "/Archive", "", alice), "1")).get_body();
+    NC_CHECK(listing.find("<d:href>" + a + "/Archive/old.txt</d:href>") != std::string::npos);
+    NC_CHECK(
+        listing.find("127.0.0.1") == std::string::npos
+    ); // nothing of the other server's address
+    NC_CHECK(listing.find("/remote.php/dav/files/svc") == std::string::npos);
+
+    // Reading, with a range.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Archive/old.txt", "", alice)).get_body(),
+        "0123456789"
+    );
+    Request ranged = user_req("GET", a + "/Archive/old.txt", "", alice);
+    ranged.add_header("Range", "bytes=3-6");
+    const Response part = kernel.handle(std::move(ranged));
+    NC_CHECK_EQ(part.get_status(), 206);
+    NC_CHECK_EQ(part.get_body(), "3456");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Archive/missing.txt", "", alice)).get_status(),
+        404
+    );
+
+    // Writing: create, make a folder, overwrite, copy, move, delete - all land on the other
+    // storage.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Archive/new.txt", "fresh", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        remote.handle(user_req("GET", remote_files + "/Archive/new.txt", "", svc)).get_body(),
+        "fresh"
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Archive/Sub", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Archive/new.txt", "second", alice)).get_status(),
+        204
+    );
+    Request copy = user_req("COPY", a + "/Archive/new.txt", "", alice);
+    copy.add_header("Destination", "http://cloud.example" + a + "/Archive/Sub/copy.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(copy)).get_status(), 201);
+    NC_CHECK_EQ(
+        remote.handle(user_req("GET", remote_files + "/Archive/Sub/copy.txt", "", svc)).get_body(),
+        "second"
+    );
+    Request move = user_req("MOVE", a + "/Archive/new.txt", "", alice);
+    move.add_header("Destination", a + "/Archive/moved.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(move)).get_status(), 201);
+    NC_CHECK_EQ(
+        remote.handle(user_req("GET", remote_files + "/Archive/moved.txt", "", svc)).get_body(),
+        "second"
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", a + "/Archive/moved.txt", "", alice)).get_status(),
+        204
+    );
+    NC_CHECK_EQ(
+        remote.handle(user_req("GET", remote_files + "/Archive/moved.txt", "", svc)).get_status(),
+        404
+    );
+    // Not out of the mount, not over the mount itself, not outside it by a crafted name.
+    Request out_move = user_req("MOVE", a + "/Archive/old.txt", "", alice);
+    out_move.add_header("Destination", a + "/stolen.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(out_move)).get_status(), 502);
+    NC_CHECK_EQ(kernel.handle(user_req("DELETE", a + "/Archive", "", alice)).get_status(), 403);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Archive/../../x.txt", "no", alice)).get_status() >= 400,
+        true
+    );
+    NC_CHECK_EQ(remote.handle(user_req("GET", remote_files + "/x.txt", "", svc)).get_status(), 404);
+
+    // A read-only storage refuses every change, and other verbs are not passed on.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Locked/no.txt", "no", alice)).get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", a + "/Locked/old.txt", "", alice)).get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Locked/old.txt", "", alice)).get_body(),
+        "0123456789"
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PROPPATCH", a + "/Archive/old.txt", "", alice)).get_status(),
+        405
+    );
+    // The file is shown as a download, never run in the browser.
+    const Response download = kernel.handle(user_req("GET", a + "/Archive/old.txt", "", alice));
+    NC_CHECK(std::string{download.header("Content-Disposition")}.find("attachment") == 0);
+    NC_CHECK_EQ(std::string{download.header("X-Content-Type-Options")}, "nosniff");
+
+    // With the other server gone the mount answers 502 instead of hanging.
+    server.stop();
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Archive/old.txt", "", alice)).get_status(),
+        502
+    );
+    kernel.stop();
+    remote.stop();
+    fs::remove_all(dir);
+    fs::remove_all(remote_dir);
+}
+
 void test_received_shares()
 {
     const std::string dir = temp_dir("mounts");
@@ -1928,6 +2112,7 @@ int main()
     test_chunked_uploads();
     test_received_shares();
     test_resharing();
+    test_external_webdav();
     test_external_storage();
     test_encryption();
     test_quota_through_dav();

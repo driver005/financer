@@ -6,6 +6,7 @@
  * `apps/files_sharing`.
  */
 #include "dav.h"
+#include "http_client.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
@@ -243,6 +244,19 @@ public:
         m_public_url = host.config("overwrite_url", "");
         m_host = &host;
         parse_external(host.config("external_mounts", ""));
+        m_dav_client.set_allow_http(host.config("external_webdav_allow_http", "false") == "true");
+        m_dav_client.set_allow_local(host.config("external_webdav_allow_local", "false") == "true");
+        m_dav_client.set_ca_file(host.config("external_webdav_ca_file", ""));
+        m_dav_client.set_timeout_seconds(
+            std::atoi(host.config("external_webdav_timeout_seconds", "30").c_str())
+        );
+        m_dav_client.set_max_response(
+            static_cast<std::size_t>(
+                std::max(1, std::atoi(host.config("external_webdav_max_mb", "256").c_str()))
+            ) *
+            1'024U * 1'024U
+        );
+        parse_external_webdav(host.config("external_webdav", ""));
         m_max_upload =
             std::strtoull(host.config("max_upload_bytes", "2147483648").c_str(), nullptr, 10);
         // Encryption at rest: a 64 hex digit key in the config, or in a file the administrator
@@ -1140,6 +1154,9 @@ private:
         /// Set for a share from another server (federation): the id the federation plugin knows it
         /// by. Then `share` is unused too.
         std::uint64_t remote_id{0};
+        /// Set (to the index in `m_dav`) for an external storage that is a WebDAV server.
+        int dav_index{-1};
+        int dav_permissions{1};
     };
 
     [[nodiscard]] std::vector<Mount> mounts_for(const std::string& user) const
@@ -1176,7 +1193,7 @@ private:
                            : base_name.substr(0, dot) + " (" + std::to_string(attempt) + ")" +
                                  base_name.substr(dot);
             }
-            mounts.push_back(Mount{share, name, node->is_directory(), {}, 1, 0});
+            mounts.push_back(Mount{share, name, node->is_directory(), {}, 1, 0, -1, 1});
         }
         for (const External& external: m_external) {
             if (!external.group.empty() &&
@@ -1201,7 +1218,38 @@ private:
                 }
                 name = external.name + " (" + std::to_string(attempt) + ")";
             }
-            mounts.push_back(Mount{Share{}, name, true, external.path, external.permissions, 0});
+            mounts.push_back(
+                Mount{Share{}, name, true, external.path, external.permissions, 0, -1, 1}
+            );
+        }
+        // External storages that are WebDAV servers.
+        for (std::size_t index = 0; index < m_dav.size(); ++index) {
+            const ExternalDav& dav = m_dav[index];
+            if (!dav.group.empty() &&
+                m_host->call_service(
+                          "groups.is_member",
+                          nc::util::form_encode({{"group", dav.group}, {"user", user}})
+                ).get_status() != 200) {
+                continue;
+            }
+            std::string name = dav.name;
+            for (int attempt = 2; attempt < 1'000; ++attempt) {
+                const bool taken =
+                    own.stat("/" + name).has_value() || std::ranges::any_of(
+                                                            mounts,
+                                                            [&](const Mount& other)
+                                                            {
+                                                                return other.name == name;
+                                                            }
+                                                        );
+                if (!taken) {
+                    break;
+                }
+                name = dav.name + " (" + std::to_string(attempt) + ")";
+            }
+            mounts.push_back(
+                Mount{Share{}, name, true, {}, 1, 0, static_cast<int>(index), dav.writable ? 31 : 1}
+            );
         }
         // Shares from other servers the user accepted.
         const Response remote =
@@ -1235,7 +1283,7 @@ private:
                                : base_name.substr(0, dot) + " (" + std::to_string(attempt) + ")" +
                                      base_name.substr(dot);
                 }
-                mounts.push_back(Mount{Share{}, name, directory, {}, 1, id});
+                mounts.push_back(Mount{Share{}, name, directory, {}, 1, id, -1, 1});
             }
         }
         return mounts;
@@ -1252,7 +1300,7 @@ private:
         for (const Mount& mount: mounts) {
             // A share from another server has no file here; its entry is made up.
             std::optional<nc::cloud::Node> node;
-            if (mount.remote_id != 0) {
+            if (mount.remote_id != 0 || mount.dav_index >= 0) {
                 node = nc::cloud::Node{"/" + mount.name, mount.directory};
             } else if (auto found =
                            mount.external_root.empty()
@@ -1264,7 +1312,7 @@ private:
                 continue;
             }
             node->set_path("/" + mount.name);
-            if (node->is_directory() && mount.remote_id == 0) {
+            if (node->is_directory() && mount.remote_id == 0 && mount.dav_index < 0) {
                 // The size of what is inside, so the top-level listing shows it.
                 node->set_size(
                     mount.external_root.empty()
@@ -1355,6 +1403,182 @@ private:
         );
     }
 
+    /// `Name=https://host/remote.php/webdav|user|/path/to/password-file[|rw][|group]`, several
+    /// separated by `;`. The password is read from the file (never kept in the config). A bad entry
+    /// is ignored and logged.
+    void parse_external_webdav(const std::string& text)
+    {
+        for (const std::string& entry: nc::util::split(text, ';')) {
+            if (nc::util::trim(entry).empty()) {
+                continue;
+            }
+            const std::size_t equals = entry.find('=');
+            const std::vector<std::string> parts = nc::util::split(
+                equals == std::string::npos ? std::string{} : entry.substr(equals + 1),
+                '|'
+            );
+            const std::string name{nc::util::trim(entry.substr(0, equals))};
+            std::string password;
+            if (equals != std::string::npos && parts.size() >= 3) {
+                std::ifstream file{std::string{nc::util::trim(parts[2])}};
+                std::getline(file, password);
+            }
+            const auto url =
+                parts.empty()
+                    ? nc::federation::Result<nc::federation::Url>{nc::util::unexpected<std::string>{
+                          "no url"
+                      }}
+                    : nc::federation::parse_url(nc::util::trim(parts[0]));
+            if (equals == std::string::npos || parts.size() < 3 || parts.size() > 5 || !url ||
+                password.empty() || name.empty() || name.find('/') != std::string::npos ||
+                !Storage::normalize("/" + name) || name == "." || name == ".." ||
+                nc::util::trim(parts[1]).empty() ||
+                nc::util::trim(parts[1]).find(':') != std::string::npos) {
+                m_host->log(nc::LogLevel::WARNING, "ignoring external WebDAV storage: " + name);
+                continue;
+            }
+            std::string base{nc::util::trim(parts[0])};
+            while (!base.empty() && base.back() == '/') {
+                base.pop_back();
+            }
+            ExternalDav dav{name, base, std::string{nc::util::trim(parts[1])}, password, false, {}};
+            for (std::size_t index = 3; index < parts.size(); ++index) {
+                const std::string_view option = nc::util::trim(parts[index]);
+                if (option == "rw") {
+                    dav.writable = true;
+                } else if (option != "ro") {
+                    dav.group = std::string{option};
+                }
+            }
+            m_dav.push_back(std::move(dav));
+        }
+    }
+
+    /// Hrefs of a multistatus answer that start with `remote_prefix` (a path, or a full URL of the
+    /// same server) start with `local_prefix` instead; others are left alone.
+    static std::string rewrite_dav_links(
+        const std::string& xml,
+        const std::string& remote_prefix,
+        const std::string& local_prefix
+    )
+    {
+        std::string out;
+        std::size_t at = 0;
+        while (true) {
+            const std::size_t tag = xml.find("href>", at);
+            if (tag == std::string::npos) {
+                break;
+            }
+            const std::size_t start = tag + 5;
+            const std::size_t end = xml.find('<', start);
+            if (end == std::string::npos) {
+                break;
+            }
+            out.append(xml, at, start - at);
+            std::string link = xml.substr(start, end - start);
+            if (const std::size_t scheme = link.find("://");
+                scheme != std::string::npos && scheme < 6) {
+                const std::size_t path = link.find('/', scheme + 3);
+                link = path == std::string::npos ? std::string{"/"} : link.substr(path);
+            }
+            out += nc::util::starts_with(link, remote_prefix)
+                       ? local_prefix + link.substr(remote_prefix.size())
+                       : link;
+            at = end;
+        }
+        out.append(xml, at, std::string::npos);
+        return out;
+    }
+
+    /// A folder on a WebDAV server the administrator configured: every request inside it is passed
+    /// on with the configured account, and the answer comes back with its links pointing into the
+    /// mount.
+    [[nodiscard]] Response serve_external_dav(
+        const Request& request,
+        const Mount& mount,
+        const std::string& rest,
+        const std::string& base
+    ) const
+    {
+        const ExternalDav& dav = m_dav[static_cast<std::size_t>(mount.dav_index)];
+        const std::string& method = request.get_method();
+        const bool writes = method == "PUT" || method == "MKCOL" || method == "DELETE" ||
+                            method == "MOVE" || method == "COPY";
+        if (!writes && method != "GET" && method != "PROPFIND") {
+            return Response::text(405, "Method Not Allowed");
+        }
+        if (writes && (!dav.writable || rest.empty())) {
+            return Response::text(403, "This storage is read-only");
+        }
+        if (method == "PUT" && request.get_body().size() > m_max_upload) {
+            return Response::text(413, "The file is larger than this server accepts");
+        }
+        const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
+        std::vector<nc::http::Header> headers{
+            {"Authorization", "Basic " + nc::util::base64_encode(dav.user + ":" + dav.password)}
+        };
+        for (const char* name:
+             {"Depth", "Range", "Content-Type", "Overwrite", "If-Match", "If-None-Match"}) {
+            if (const std::string_view value = request.header(name); !value.empty()) {
+                headers.emplace_back(name, std::string{value});
+            }
+        }
+        if (method == "MOVE" || method == "COPY") {
+            const std::string inner =
+                nc::cloud::destination_of(request.header("Destination"), mount_base);
+            const auto target = Storage::normalize("/" + inner);
+            if (inner.empty() || !target || *target == "/") {
+                return Response::text(502, "A file cannot be moved out of its storage");
+            }
+            headers.emplace_back("Destination", dav.url + nc::util::url_encode_path(*target));
+        }
+        const auto answer = nc::federation::request(
+            m_dav_client,
+            method,
+            dav.url + nc::util::url_encode_path(rest),
+            headers,
+            method == "PUT" || method == "PROPFIND" ? request.get_body() : std::string{}
+        );
+        if (!answer) {
+            return Response::text(502, "The storage could not be reached: " + answer.error());
+        }
+        const auto parsed = nc::federation::parse_url(dav.url);
+        std::string content = answer->get_body();
+        if (answer->get_status() == 207 && parsed) {
+            std::string remote_prefix = parsed->target;
+            while (remote_prefix.size() > 1 && remote_prefix.back() == '/') {
+                remote_prefix.pop_back();
+            }
+            content = rewrite_dav_links(
+                content,
+                remote_prefix == "/" ? std::string{} : remote_prefix,
+                mount_base
+            );
+        }
+        Response out{
+            answer->get_status(),
+            answer->get_content_type().empty() ? std::string{"application/octet-stream"}
+                                               : std::string{answer->get_content_type()},
+            std::move(content),
+            {}
+        };
+        for (const std::string_view header:
+             {"Content-Range", "Accept-Ranges", "ETag", "Last-Modified"}) {
+            if (const std::string_view value = answer->header(header); !value.empty()) {
+                out.add_header(std::string{header}, std::string{value});
+            }
+        }
+        if (method == "GET" && out.get_status() < 300) {
+            // Whatever the other server says the file is, a browser must not run it here.
+            const std::string name = rest.empty() ? mount.name : rest.substr(rest.rfind('/') + 1);
+            std::string safe_name = name;
+            std::ranges::replace(safe_name, '"', '_');
+            out.add_header("Content-Disposition", "attachment; filename=\"" + safe_name + "\"");
+            out.add_header("X-Content-Type-Options", "nosniff");
+        }
+        return out;
+    }
+
     /// Serves a request inside a share from another server: only reading, through the federation
     /// plugin, which asks the owner's server. The answer is held in memory, so it has the size
     /// limit of that plugin's client.
@@ -1440,6 +1664,9 @@ private:
         }
         if (mount.remote_id != 0) {
             return serve_remote(request, mount, rest, base);
+        }
+        if (mount.dav_index >= 0) {
+            return serve_external_dav(request, mount, rest, base);
         }
         const Share& share = mount.share;
         const std::string& method = request.get_method();
@@ -2228,6 +2455,16 @@ private:
     std::size_t m_max_chunk{512U * 1'024U * 1'024U};
     std::size_t m_max_upload{2'048U * 1'024U * 1'024U};
 
+    struct ExternalDav
+    {
+        std::string name{};
+        std::string url{}; // without trailing slash
+        std::string user{};
+        std::string password{};
+        bool writable{false};
+        std::string group{};
+    };
+
     struct External
     {
         std::string name{};
@@ -2237,6 +2474,8 @@ private:
     };
 
     std::vector<External> m_external{};
+    std::vector<ExternalDav> m_dav{};
+    nc::federation::ClientSettings m_dav_client{};
     std::unique_ptr<nc::cloud::ShareStore> m_shares{};
     nc::Host* m_host{nullptr};
 };

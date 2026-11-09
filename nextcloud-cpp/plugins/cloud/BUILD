@@ -28,7 +28,10 @@ nc_cc_library(
 nc_plugin(
     name = "cloud",
     srcs = ["src/cloud_plugin.cc"],
-    deps = [":lib"],
+    deps = [
+        ":lib",
+        "//plugins/federation:lib",
+    ],
 )
 
 nc_cc_test(
