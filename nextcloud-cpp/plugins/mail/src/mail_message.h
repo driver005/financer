@@ -215,4 +215,113 @@ private:
     std::string m_html_body{};
 };
 
+/// @brief Builds a `MailMessage` step by step:
+/// `MailMessageBuilder{}.from("a@x").to("b@y").subject("Hi").build()`. Every step takes an rvalue
+/// that is moved in (CODESTYLE.md); `build()` hands the parts to the all-arguments constructor and
+/// leaves the builder empty.
+class MailMessageBuilder
+{
+public:
+    MailMessageBuilder() noexcept = default;
+
+    MailMessageBuilder& from(std::string&& address) noexcept
+    {
+        m_from = std::move(address);
+        return *this;
+    }
+
+    MailMessageBuilder& from_name(std::string&& name) noexcept
+    {
+        m_from_name = std::move(name);
+        return *this;
+    }
+
+    MailMessageBuilder& reply_to(std::string&& address) noexcept
+    {
+        m_reply_to = std::move(address);
+        return *this;
+    }
+
+    MailMessageBuilder& to(std::string&& address)
+    {
+        m_to.push_back(std::move(address));
+        return *this;
+    }
+
+    MailMessageBuilder& to(std::vector<std::string>&& addresses) noexcept
+    {
+        m_to = std::move(addresses);
+        return *this;
+    }
+
+    MailMessageBuilder& cc(std::string&& address)
+    {
+        m_cc.push_back(std::move(address));
+        return *this;
+    }
+
+    MailMessageBuilder& cc(std::vector<std::string>&& addresses) noexcept
+    {
+        m_cc = std::move(addresses);
+        return *this;
+    }
+
+    MailMessageBuilder& bcc(std::string&& address)
+    {
+        m_bcc.push_back(std::move(address));
+        return *this;
+    }
+
+    MailMessageBuilder& bcc(std::vector<std::string>&& addresses) noexcept
+    {
+        m_bcc = std::move(addresses);
+        return *this;
+    }
+
+    MailMessageBuilder& subject(std::string&& text) noexcept
+    {
+        m_subject = std::move(text);
+        return *this;
+    }
+
+    MailMessageBuilder& plain_body(std::string&& text) noexcept
+    {
+        m_plain_body = std::move(text);
+        return *this;
+    }
+
+    MailMessageBuilder& html_body(std::string&& text) noexcept
+    {
+        m_html_body = std::move(text);
+        return *this;
+    }
+
+    /// @brief The message. The builder is empty afterwards.
+    [[nodiscard]] MailMessage build() noexcept
+    {
+        return MailMessage{
+            std::move(m_from),
+            std::move(m_from_name),
+            std::move(m_reply_to),
+            std::move(m_to),
+            std::move(m_cc),
+            std::move(m_bcc),
+            std::move(m_subject),
+            std::move(m_plain_body),
+            std::move(m_html_body)
+        };
+    }
+
+private:
+    std::string m_from{};
+    std::string m_from_name{};
+    std::string m_reply_to{};
+    std::vector<std::string> m_to{};
+    std::vector<std::string> m_cc{};
+    std::vector<std::string> m_bcc{};
+    std::string m_subject{};
+    std::string m_plain_body{};
+    std::string m_html_body{};
+};
+
 } // namespace nc::mail

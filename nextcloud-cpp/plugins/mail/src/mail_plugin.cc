@@ -225,15 +225,19 @@ private:
         const std::string& reply_to
     ) const
     {
-        MailMessage message{std::string{m_from}, nc::util::form_value(form, "subject")};
-        message.set_from_name(std::string{m_from_name});
-        message.set_to(addresses_from(nc::util::form_value(form, "to")));
-        message.set_cc(addresses_from(nc::util::form_value(form, "cc")));
-        message.set_bcc(addresses_from(nc::util::form_value(form, "bcc")));
-        message.set_plain_body(nc::util::form_value(form, "body"));
-        message.set_html_body(nc::util::form_value(form, "html"));
         const std::string asked_reply_to = nc::util::form_value(form, "reply_to");
-        message.set_reply_to(std::string{asked_reply_to.empty() ? reply_to : asked_reply_to});
+        const MailMessage message =
+            nc::mail::MailMessageBuilder{}
+                .from(std::string{m_from})
+                .from_name(std::string{m_from_name})
+                .reply_to(std::string{asked_reply_to.empty() ? reply_to : asked_reply_to})
+                .to(addresses_from(nc::util::form_value(form, "to")))
+                .cc(addresses_from(nc::util::form_value(form, "cc")))
+                .bcc(addresses_from(nc::util::form_value(form, "bcc")))
+                .subject(nc::util::form_value(form, "subject"))
+                .plain_body(nc::util::form_value(form, "body"))
+                .html_body(nc::util::form_value(form, "html"))
+                .build();
 
         const std::vector<std::string> everyone = message.recipients();
         if (everyone.size() > m_max_recipients) {

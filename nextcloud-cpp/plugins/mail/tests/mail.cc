@@ -6,6 +6,7 @@
 
 #include <arpa/inet.h>
 #include <atomic>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -99,6 +100,38 @@ void test_headers_and_body()
         NC_CHECK(alternative->find("--=_nc_seed--\r\n") != std::string::npos);
         NC_CHECK(alternative->find("text/html") != std::string::npos);
     }
+
+    // The builder gives the same message as the setters.
+    MailMessage built = nc::mail::MailMessageBuilder{}
+                            .from("cloud@example.org")
+                            .from_name("Our Cloud")
+                            .to("a@example.org")
+                            .to("b@example.org")
+                            .cc("c@example.org")
+                            .bcc("secret@example.org")
+                            .subject("Hello")
+                            .plain_body("Line one\nLine two")
+                            .html_body("<p>Hi</p>")
+                            .build();
+    NC_CHECK_EQ(built.get_from(), "cloud@example.org");
+    NC_CHECK_EQ(built.get_to().size(), std::size_t{2});
+    NC_CHECK_EQ(built.recipients().size(), std::size_t{4});
+    const auto from_builder = build_message(built, std::chrono::system_clock::time_point{}, "seed");
+    NC_CHECK(from_builder.has_value());
+    if (from_builder && alternative) {
+        // Everything but the random Message-ID line is the same.
+        const auto without_id = [](std::string text)
+        {
+            const std::size_t at = text.find("Message-ID: <");
+            text.erase(at, text.find("\r\n", at) + 2 - at);
+            return text;
+        };
+        NC_CHECK(without_id(*from_builder) == without_id(*alternative));
+    }
+    nc::mail::MailMessageBuilder reused;
+    reused.from("x@example.org").to("y@example.org");
+    NC_CHECK_EQ(reused.build().get_to().size(), std::size_t{1});
+    NC_CHECK(reused.build().get_to().empty()); // emptied by build()
 
     // Everything that could inject a header or a recipient is refused.
     MailMessage bad_subject = message;

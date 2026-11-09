@@ -12,3 +12,4 @@ everywhere a few critical critieras have to be met:
   9. add const to function that are missing them!
   10. add mebem initilizer pelase std::string m_name{};
   11. use builder pattern if possible pelase but for that consulte me first
+     -> approved for MailMessage (MailMessageBuilder); ask again before using it on other classes
