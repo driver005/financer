@@ -32,6 +32,7 @@ namespace {
     constexpr std::string_view ALG_ENVELOPED =
         "http://www.w3.org/2000/09/xmldsig#enveloped-signature";
     constexpr std::size_t MAX_XML = 1U << 20U;
+    constexpr std::int64_t MAX_LOGOUT_AGE = 600; // a logout request older than this is not current
 
     util::unexpected<std::string> failure(std::string message)
     {
@@ -397,6 +398,62 @@ namespace {
         return {};
     }
 
+    /// Reads a message of the identity provider: no DTD, no entities (nothing in the document can
+    /// name a file, a URL or a bomb), size limited. nullptr with `why` set when it is not
+    /// acceptable.
+    Doc parse_message(std::string_view xml, std::string& why)
+    {
+        if (xml.empty() || xml.size() > MAX_XML) {
+            why = "the response is empty or too large";
+            return nullptr;
+        }
+        if (xml.find("<!DOCTYPE") != std::string_view::npos ||
+            xml.find("<!ENTITY") != std::string_view::npos) {
+            why = "the response contains a DTD";
+            return nullptr;
+        }
+        Doc doc{xmlReadMemory(
+            xml.data(),
+            static_cast<int>(xml.size()),
+            nullptr,
+            nullptr,
+            XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_NO_XXE |
+                XML_PARSE_NOBLANKS
+        )};
+        if (doc == nullptr || doc->intSubset != nullptr || doc->extSubset != nullptr) {
+            why = "the response is not well formed XML";
+            return nullptr;
+        }
+        return doc;
+    }
+
+    std::string time_stamp(std::int64_t seconds)
+    {
+        std::tm moment{};
+        const std::time_t value = static_cast<std::time_t>(seconds);
+        gmtime_r(&value, &moment);
+        char stamp[32];
+        std::strftime(stamp, sizeof(stamp), "%Y-%m-%dT%H:%M:%SZ", &moment);
+        return stamp;
+    }
+
+    /// The XML signature directly inside `message` that verifies with the configured certificate.
+    Result<void> verify_own_signature(Doc& doc, xmlNode* message, const Settings& settings)
+    {
+        std::string why = "the message is not signed";
+        for (xmlNode* at = message->children; at != nullptr; at = at->next) {
+            if (is_element(at, NS_DSIG, "Signature")) {
+                const auto verified =
+                    verify_signature(doc.get(), message, at, settings.idp_certificate_pem);
+                if (verified) {
+                    return {};
+                }
+                why = verified.error();
+            }
+        }
+        return failure(why);
+    }
+
 } // namespace
 
 std::optional<std::int64_t> parse_time(std::string_view stamp)
@@ -426,24 +483,13 @@ Result<Assertion> validate_response(
     std::int64_t now
 )
 {
-    if (xml.empty() || xml.size() > MAX_XML || request_id.empty()) {
+    if (request_id.empty()) {
         return failure("the response is empty or too large");
     }
-    // No DTD, no entities: nothing in the document can name a file, a URL or a bomb.
-    if (xml.find("<!DOCTYPE") != std::string_view::npos ||
-        xml.find("<!ENTITY") != std::string_view::npos) {
-        return failure("the response contains a DTD");
-    }
-    Doc doc{xmlReadMemory(
-        xml.data(),
-        static_cast<int>(xml.size()),
-        nullptr,
-        nullptr,
-        XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_NO_XXE |
-            XML_PARSE_NOBLANKS
-    )};
-    if (doc == nullptr || doc->intSubset != nullptr || doc->extSubset != nullptr) {
-        return failure("the response is not well formed XML");
+    std::string problem;
+    Doc doc = parse_message(xml, problem);
+    if (doc == nullptr) {
+        return failure(problem);
     }
     xmlNode* response = xmlDocGetRootElement(doc.get());
     if (!is_element(response, NS_PROTOCOL, "Response")) {
@@ -575,6 +621,76 @@ Result<Assertion> validate_response(
     return out;
 }
 
+Result<LogoutRequest>
+validate_logout_request(std::string_view xml, const Settings& settings, std::int64_t now)
+{
+    std::string problem;
+    Doc doc = parse_message(xml, problem);
+    if (doc == nullptr) {
+        return failure(problem);
+    }
+    xmlNode* request = xmlDocGetRootElement(doc.get());
+    if (!is_element(request, NS_PROTOCOL, "LogoutRequest")) {
+        return failure("not a SAML logout request");
+    }
+    // Only the identity provider may end sessions, so the message has to be signed by it.
+    if (const auto signature = verify_own_signature(doc, request, settings); !signature) {
+        return failure(signature.error());
+    }
+    if (text_of(child(request, NS_ASSERTION, "Issuer")) != settings.idp_entity_id) {
+        return failure("the logout request is from another identity provider");
+    }
+    if (const std::string destination = attribute(request, "Destination");
+        !settings.slo_url.empty() && destination != settings.slo_url) {
+        return failure("the logout request is for another service provider endpoint");
+    }
+    if (const std::string until = attribute(request, "NotOnOrAfter"); !until.empty()) {
+        const auto limit = parse_time(until);
+        if (!limit || *limit + settings.skew_seconds <= now) {
+            return failure("the logout request has expired");
+        }
+    }
+    const auto issued = parse_time(attribute(request, "IssueInstant"));
+    if (!issued || *issued - settings.skew_seconds > now ||
+        *issued + MAX_LOGOUT_AGE + settings.skew_seconds < now) {
+        return failure("the logout request is not current");
+    }
+    if (child(request, NS_ASSERTION, "EncryptedID") != nullptr) {
+        return failure("encrypted names are not supported");
+    }
+    if (count_children(request, NS_ASSERTION, "NameID") != 1) {
+        return failure("the logout request must name exactly one person");
+    }
+    LogoutRequest out;
+    out.id = attribute(request, "ID");
+    out.name_id = text_of(child(request, NS_ASSERTION, "NameID"));
+    if (out.id.empty() || out.name_id.empty() || out.name_id.size() > 256) {
+        return failure("the logout request names no one");
+    }
+    out.issued_at = *issued;
+    return out;
+}
+
+std::string build_logout_response(
+    const Settings& settings,
+    std::string_view in_response_to,
+    std::string_view destination,
+    std::int64_t now,
+    bool success
+)
+{
+    return R"(<samlp:LogoutResponse xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" )"
+           R"(xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_)" +
+           util::random_hex(16) + R"(" Version="2.0" IssueInstant=")" + time_stamp(now) +
+           R"(" Destination=")" + util::xml_escape(destination) + R"(" InResponseTo=")" +
+           util::xml_escape(in_response_to) + R"("><saml:Issuer>)" +
+           util::xml_escape(settings.sp_entity_id) +
+           R"(</saml:Issuer><samlp:Status><samlp:StatusCode Value=")" +
+           (success ? "urn:oasis:names:tc:SAML:2.0:status:Success"
+                    : "urn:oasis:names:tc:SAML:2.0:status:Responder") +
+           R"("/></samlp:Status></samlp:LogoutResponse>)";
+}
+
 std::string build_authn_request(
     const Settings& settings,
     std::string_view request_id,
@@ -582,11 +698,7 @@ std::string build_authn_request(
     std::int64_t now
 )
 {
-    std::tm moment{};
-    const std::time_t seconds = static_cast<std::time_t>(now);
-    gmtime_r(&seconds, &moment);
-    char stamp[32];
-    std::strftime(stamp, sizeof(stamp), "%Y-%m-%dT%H:%M:%SZ", &moment);
+    const std::string stamp = time_stamp(now);
     return R"(<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" )"
            R"(xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID=")" +
            util::xml_escape(request_id) + R"(" Version="2.0" IssueInstant=")" + stamp +
@@ -601,7 +713,8 @@ std::string build_authn_request(
 std::string redirect_url(
     std::string_view destination,
     std::string_view authn_request_xml,
-    std::string_view relay_state
+    std::string_view relay_state,
+    std::string_view parameter
 )
 {
     // Raw DEFLATE (no zlib header), as the HTTP-Redirect binding says.
@@ -618,7 +731,7 @@ std::string redirect_url(
     std::string url{destination};
     url += url.find('?') == std::string::npos ? '?' : '&';
     std::vector<std::pair<std::string, std::string>> query{
-        {"SAMLRequest", util::base64_encode(packed)}
+        {std::string{parameter}, util::base64_encode(packed)}
     };
     if (!relay_state.empty()) {
         query.emplace_back("RelayState", std::string{relay_state});
@@ -631,7 +744,12 @@ std::string metadata(const Settings& settings)
     return R"(<?xml version="1.0"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID=")" +
            util::xml_escape(settings.sp_entity_id) +
            R"("><md:SPSSODescriptor AuthnRequestsSigned="false" WantAssertionsSigned="true" )"
-           R"(protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">)"
+           R"(protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">)" +
+           // The schema wants the logout endpoint before the assertion consumer.
+           (settings.slo_url.empty()
+                ? std::string{}
+                : R"(<md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location=")" +
+                      util::xml_escape(settings.slo_url) + R"("/>)") +
            R"(<md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location=")" +
            util::xml_escape(settings.acs_url) +
            R"(" index="0" isDefault="true"/></md:SPSSODescriptor></md:EntityDescriptor>)";

@@ -31,6 +31,9 @@ using nc::http::Response;
 
 constexpr nc::app::RouteOptions OPEN{nc::app::Access::PUBLIC, nc::app::Format::PLAIN};
 
+/// The name of the app password a sign-in makes, and that a logout revokes.
+constexpr const char* SIGN_IN_TOKEN = "Single sign-on";
+
 std::int64_t now_seconds()
 {
     return std::chrono::duration_cast<std::chrono::seconds>(
@@ -102,6 +105,12 @@ public:
         m_settings.acs_url = base + "/index.php/apps/user_saml/saml/acs";
         m_settings.idp_entity_id = host.config("idp_entity_id", "");
         m_sso_url = host.config("idp_sso_url", "");
+        // Logout is offered only when the identity provider's logout endpoint is known: that is
+        // where the answer goes.
+        m_slo_url = host.config("idp_slo_url", "");
+        if (!m_slo_url.empty()) {
+            m_settings.slo_url = base + "/index.php/apps/user_saml/saml/logout";
+        }
         m_uid_attribute = host.config("uid_attribute", "");
         m_name_attribute = host.config("displayname_attribute", "");
         m_mail_attribute = host.config("email_attribute", "");
@@ -124,6 +133,13 @@ public:
             1,
             "CREATE TABLE nc_saml_requests (id TEXT PRIMARY KEY, expires INTEGER NOT NULL);"
             "CREATE TABLE nc_saml_seen (id TEXT PRIMARY KEY, expires INTEGER NOT NULL);"
+        );
+        // Who the identity provider's name for a person (the NameID) is on this server, so that a
+        // logout request can find the account whose app passwords to revoke.
+        nc::db::Client{&host}.migrate(
+            "saml",
+            2,
+            "CREATE TABLE nc_saml_names (name_id TEXT PRIMARY KEY, uid TEXT NOT NULL);"
         );
 
         m_app->route(
@@ -172,6 +188,15 @@ public:
             [this](const Request& request)
             {
                 return assert_consumer(request);
+            }
+        );
+        m_app->route(
+            "POST",
+            "/index.php/apps/user_saml/saml/logout",
+            OPEN,
+            [this](const Request& request)
+            {
+                return logout(request);
             }
         );
     }
@@ -247,9 +272,14 @@ private:
         if (ensured.get_status() != 200) {
             return page(403, "Sign-in failed", "<p>The account could not be set up.</p>");
         }
+        db.exec(
+            "INSERT INTO nc_saml_names (name_id, uid) VALUES (?, ?) ON CONFLICT (name_id) DO "
+            "UPDATE SET uid = excluded.uid",
+            {assertion->name_id, uid}
+        );
         const Response token = m_host->call_service(
             "tokens.create",
-            nc::util::form_encode({{"user", uid}, {"name", "Single sign-on"}})
+            nc::util::form_encode({{"user", uid}, {"name", SIGN_IN_TOKEN}})
         );
         if (token.get_status() != 200) {
             return page(500, "Sign-in failed", "<p>No app password could be made.</p>");
@@ -262,6 +292,65 @@ private:
                 "<p><code>" +
                 nc::util::xml_escape(token.get_body()) + "</code></p>"
         );
+    }
+
+    /// The identity provider ends a person's sessions (single logout, HTTP-POST binding): the app
+    /// passwords made when they signed in are revoked, and the answer goes back to the identity
+    /// provider's logout endpoint. A request counts once, and only when it is signed by the
+    /// identity provider (see `validate_logout_request`).
+    [[nodiscard]] Response logout(const Request& request) const
+    {
+        if (!m_ready || m_slo_url.empty()) {
+            return Response::text(404, "SAML logout is not configured");
+        }
+        const auto form = nc::util::parse_form(request.get_body());
+        const auto xml = nc::util::base64_decode(nc::util::form_value(form, "SAMLRequest"));
+        if (!xml) {
+            return page(400, "Sign-out failed", "<p>The request is not valid.</p>");
+        }
+        const std::int64_t now = now_seconds();
+        const auto logout_request = nc::saml::validate_logout_request(*xml, m_settings, now);
+        if (!logout_request) {
+            m_host->log(
+                nc::LogLevel::WARNING,
+                "SAML logout request refused: " + logout_request.error()
+            );
+            return page(403, "Sign-out failed", "<p>The request was refused.</p>");
+        }
+        const nc::db::Client db{m_host};
+        db.exec("DELETE FROM nc_saml_seen WHERE expires < ?", {std::to_string(now)});
+        if (db.exec(
+                "INSERT OR IGNORE INTO nc_saml_seen (id, expires) VALUES (?, ?)",
+                {logout_request->id, std::to_string(now + 1'200)}
+            ) == 0) {
+            return page(403, "Sign-out failed", "<p>This request was used before.</p>");
+        }
+        // An unknown person has nothing to end; that is still a success for the identity provider.
+        for (const nc::db::Row& row: db.query(
+                 "SELECT uid FROM nc_saml_names WHERE name_id = ?",
+                 {logout_request->name_id}
+             )) {
+            (void)m_host->call_service(
+                "tokens.revoke_named",
+                nc::util::form_encode(
+                    {{"user", nc::db::value_of(row, "uid")}, {"name", SIGN_IN_TOKEN}}
+                )
+            );
+        }
+        const std::string answer =
+            nc::saml::build_logout_response(m_settings, logout_request->id, m_slo_url, now, true);
+        Response redirect{302};
+        redirect.add_header(
+            "Location",
+            nc::saml::redirect_url(
+                m_slo_url,
+                answer,
+                nc::util::form_value(form, "RelayState"),
+                "SAMLResponse"
+            )
+        );
+        redirect.add_header("Cache-Control", "no-store");
+        return redirect;
     }
 
     /// The `InResponseTo` of the (not yet trusted) response, only to look up our own request.
@@ -286,6 +375,7 @@ private:
     nc::saml::Settings m_settings{};
     std::string m_base{};
     std::string m_sso_url{};
+    std::string m_slo_url{};
     std::string m_uid_attribute{};
     std::string m_name_attribute{};
     std::string m_mail_attribute{};

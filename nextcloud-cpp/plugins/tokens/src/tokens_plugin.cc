@@ -144,6 +144,29 @@ public:
             }
         );
 
+        // Form: user, name. Revokes that account's app passwords of that name (for a plugin that
+        // made them when it signed the person in, and ends the session when the identity provider
+        // says so); the body is how many there were.
+        host.add_service(
+            "tokens.revoke_named",
+            [this](std::string_view args)
+            {
+                const auto form = nc::util::parse_form(args);
+                const std::string user = nc::util::form_value(form, "user");
+                const std::string name = nc::util::form_value(form, "name");
+                if (user.empty() || name.empty()) {
+                    return Response::text(400, "user and name are needed");
+                }
+                return Response::text(
+                    200,
+                    std::to_string(nc::db::Client{m_host}.exec(
+                        "DELETE FROM nc_tokens WHERE uid = ? AND name = ?",
+                        {user, name}
+                    ))
+                );
+            }
+        );
+
         m_app->route(
             "GET",
             "/ocs/v2.php/core/getapppassword",

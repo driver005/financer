@@ -22,6 +22,7 @@ using nc::http::Response;
 const std::string SP = "https://cloud.example/saml/metadata";
 const std::string ACS = "https://cloud.example/index.php/apps/user_saml/saml/acs";
 const std::string IDP = "https://idp.example/metadata";
+const std::string SLO = "https://cloud.example/index.php/apps/user_saml/saml/logout";
 
 std::string stamp(std::int64_t seconds)
 {
@@ -83,8 +84,9 @@ struct Idp
         {
             std::ofstream{dir + "/in.xml", std::ios::binary} << xml;
         }
-        const std::string ns = local_name == "Response" ? "urn:oasis:names:tc:SAML:2.0:protocol"
-                                                        : "urn:oasis:names:tc:SAML:2.0:assertion";
+        const std::string ns = local_name == "Response" || local_name == "LogoutRequest"
+                                   ? "urn:oasis:names:tc:SAML:2.0:protocol"
+                                   : "urn:oasis:names:tc:SAML:2.0:assertion";
         // xmlsec1 1.3 does not fall back to the one loaded key for a template without a KeyInfo
         // unless asked to (--lax-key-search); 1.2 does not know that option and always falls back.
         const auto run = [&](const std::string& extra)
@@ -201,9 +203,41 @@ nc::saml::Settings settings_for(const Idp& idp)
     nc::saml::Settings settings;
     settings.sp_entity_id = SP;
     settings.acs_url = ACS;
+    settings.slo_url = SLO;
     settings.idp_entity_id = IDP;
     settings.idp_certificate_pem = idp.certificate;
     return settings;
+}
+
+struct LogoutOptions
+{
+    std::string id{"_logout1"};
+    std::string name_id{"alice"};
+    std::string issuer{IDP};
+    std::string destination{SLO};
+    std::string not_on_or_after{};
+    std::int64_t issued{now()};
+    bool sign{true};
+    int names{1};
+};
+
+/// A logout request of the identity provider, signed unless the options say otherwise.
+std::string make_logout(const Idp& idp, const LogoutOptions& o)
+{
+    std::string xml =
+        R"(<samlp:LogoutRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID=")" +
+        o.id + R"(" Version="2.0" IssueInstant=")" + stamp(o.issued) + R"(" Destination=")" +
+        o.destination + "\"" +
+        (o.not_on_or_after.empty() ? std::string{} : " NotOnOrAfter=\"" + o.not_on_or_after + "\""
+        ) +
+        "><saml:Issuer>" + o.issuer + "</saml:Issuer>" +
+        (o.sign ? signature_template(o.id, "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256")
+                : std::string{});
+    for (int i = 0; i < o.names; ++i) {
+        xml += "<saml:NameID>" + o.name_id + "</saml:NameID>";
+    }
+    xml += "</samlp:LogoutRequest>";
+    return o.sign ? idp.sign(xml, "LogoutRequest") : xml;
 }
 
 void test_validation()
@@ -373,6 +407,77 @@ void test_validation()
     NC_CHECK(!nc::saml::parse_time("garbage").has_value());
 }
 
+void test_logout_validation()
+{
+    const Idp idp{"logout"};
+    const Idp other{"logout-other"};
+    const nc::saml::Settings settings = settings_for(idp);
+    const auto check = [&](const std::string& xml)
+    {
+        return nc::saml::validate_logout_request(xml, settings, now());
+    };
+
+    const auto good = check(make_logout(idp, {}));
+    NC_CHECK(good.has_value());
+    if (good) {
+        NC_CHECK_EQ(good->name_id, std::string{"alice"});
+        NC_CHECK_EQ(good->id, std::string{"_logout1"});
+    }
+
+    // Only the identity provider may end sessions.
+    NC_CHECK(!check(make_logout(idp, {.sign = false})).has_value());
+    NC_CHECK(!check(make_logout(other, {})).has_value());
+    NC_CHECK(!check(make_logout(idp, {.issuer = "https://evil.example/metadata"})).has_value());
+    // Not for this endpoint, not current, expired, or not naming exactly one person.
+    NC_CHECK(!check(make_logout(idp, {.destination = "https://other.example/logout"})).has_value());
+    NC_CHECK(!check(make_logout(idp, {.issued = now() - 3'600})).has_value());
+    NC_CHECK(!check(make_logout(idp, {.issued = now() + 3'600})).has_value());
+    NC_CHECK(!check(make_logout(idp, {.not_on_or_after = stamp(now() - 600)})).has_value());
+    NC_CHECK(check(make_logout(idp, {.not_on_or_after = stamp(now() + 600)})).has_value());
+    NC_CHECK(!check(make_logout(idp, {.names = 2})).has_value());
+    NC_CHECK(!check(make_logout(idp, {.names = 0})).has_value());
+    // A signature that does not cover what is being read: a changed name after signing.
+    {
+        std::string changed = make_logout(idp, {});
+        const std::size_t at = changed.find(">alice<");
+        NC_CHECK(at != std::string::npos);
+        if (at != std::string::npos) {
+            changed.replace(at, 7, ">admin<");
+            NC_CHECK(!check(changed).has_value());
+        }
+    }
+    // An assertion-style or response document is not a logout request; DTDs and garbage are
+    // refused.
+    NC_CHECK(!check("<a/>").has_value());
+    NC_CHECK(!check("").has_value());
+    NC_CHECK(
+        !check("<!DOCTYPE r [<!ENTITY x SYSTEM \"file:///etc/passwd\">]><r>&x;</r>").has_value()
+    );
+
+    // The answer names the request it answers, and the metadata offers the endpoint.
+    const std::string answer = nc::saml::build_logout_response(
+        settings,
+        "_logout1",
+        "https://idp.example/slo",
+        now(),
+        true
+    );
+    NC_CHECK(answer.find("InResponseTo=\"_logout1\"") != std::string::npos);
+    NC_CHECK(answer.find("status:Success") != std::string::npos);
+    NC_CHECK(
+        nc::saml::build_logout_response(settings, "_x", "https://idp.example/slo", now(), false)
+            .find("status:Responder") != std::string::npos
+    );
+    NC_CHECK(
+        nc::saml::redirect_url("https://idp.example/slo", answer, "", "SAMLResponse")
+            .find("?SAMLResponse=") != std::string::npos
+    );
+    NC_CHECK(nc::saml::metadata(settings).find("SingleLogoutService") != std::string::npos);
+    nc::saml::Settings without = settings;
+    without.slo_url.clear();
+    NC_CHECK(nc::saml::metadata(without).find("SingleLogoutService") == std::string::npos);
+}
+
 void test_login_flow()
 {
     const Idp idp{"flow"};
@@ -391,7 +496,8 @@ void test_login_flow()
                           "idp_entity_id = " +
                           IDP +
                           "\nidp_sso_url = https://idp.example/sso\nidp_certificate_file = " + dir +
-                          "/idp.pem\nuid_attribute = \nemail_attribute = mail\n"
+                          "/idp.pem\nidp_slo_url = https://idp.example/slo\n"
+                          "uid_attribute = \nemail_attribute = mail\n"
                           "displayname_attribute = cn\n"
     )
                           .value()};
@@ -450,11 +556,16 @@ void test_login_flow()
     const std::string body = signed_in.get_body();
     const std::size_t code = body.find("<code>");
     NC_CHECK(code != std::string::npos);
-    if (code != std::string::npos) {
-        const std::string token = body.substr(code + 6, body.find("</code>") - code - 6);
+    std::string token;
+    const auto token_status = [&]
+    {
         Request authed{"GET", "/ocs/v2.php/cloud/apppasswords"};
         authed.add_header("Authorization", "Basic " + nc::util::base64_encode("alice:" + token));
-        NC_CHECK_EQ(kernel.handle(std::move(authed)).get_status(), 200);
+        return kernel.handle(std::move(authed)).get_status();
+    };
+    if (code != std::string::npos) {
+        token = body.substr(code + 6, body.find("</code>") - code - 6);
+        NC_CHECK_EQ(token_status(), 200);
     }
     // The same answer again is a replay; an answer to a request nobody made is refused.
     NC_CHECK_EQ(call("POST", base + "/acs", form).get_status(), 400);
@@ -486,6 +597,51 @@ void test_login_flow()
         403
     );
     NC_CHECK_EQ(call("POST", base + "/acs", "SAMLResponse=%21%21%21").get_status(), 400);
+
+    // Single logout. The metadata offers the endpoint.
+    NC_CHECK(
+        call("GET", base + "/metadata").get_body().find("SingleLogoutService") != std::string::npos
+    );
+    const auto logout_form = [&](const LogoutOptions& options, const Idp& signer)
+    {
+        return nc::util::form_encode(
+            {{"SAMLRequest", nc::util::base64_encode(make_logout(signer, options))},
+             {"RelayState", "back"}}
+        );
+    };
+    // Unsigned, signed by someone else, or naming the wrong place: refused, the password stays.
+    const Idp stranger{"flow-stranger"};
+    NC_CHECK_EQ(
+        call("POST", base + "/logout", logout_form({.sign = false}, idp)).get_status(),
+        403
+    );
+    NC_CHECK_EQ(call("POST", base + "/logout", logout_form({}, stranger)).get_status(), 403);
+    NC_CHECK_EQ(
+        call("POST", base + "/logout", logout_form({.destination = "https://x.example/"}, idp))
+            .get_status(),
+        403
+    );
+    NC_CHECK_EQ(call("POST", base + "/logout", "SAMLRequest=%21%21%21").get_status(), 400);
+    NC_CHECK_EQ(token_status(), 200);
+    // The identity provider's request ends the session: the answer goes back to it, and the app
+    // password the sign-in made no longer works.
+    const Response ended = call("POST", base + "/logout", logout_form({.id = "_lo_a1b2c3"}, idp));
+    NC_CHECK_EQ(ended.get_status(), 302);
+    const std::string where{ended.header("Location")};
+    NC_CHECK(where.rfind("https://idp.example/slo?SAMLResponse=", 0) == 0);
+    NC_CHECK(where.find("RelayState=back") != std::string::npos);
+    NC_CHECK_EQ(token_status(), 401);
+    // The same request again is a replay.
+    NC_CHECK_EQ(
+        call("POST", base + "/logout", logout_form({.id = "_lo_a1b2c3"}, idp)).get_status(),
+        403
+    );
+    // A person nobody here knows has nothing to end, which is still an answer of success.
+    NC_CHECK_EQ(
+        call("POST", base + "/logout", logout_form({.id = "_lo_other", .name_id = "nobody"}, idp))
+            .get_status(),
+        302
+    );
     kernel.stop();
     fs::remove_all(dir);
 }
@@ -495,6 +651,7 @@ void test_login_flow()
 int main()
 {
     test_validation();
+    test_logout_validation();
     test_login_flow();
     return NC_TEST_RESULT();
 }

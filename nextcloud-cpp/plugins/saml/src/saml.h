@@ -21,6 +21,7 @@ struct Settings
 {
     std::string sp_entity_id{};
     std::string acs_url{}; // where the identity provider posts the response
+    std::string slo_url{}; // where the identity provider posts logout requests (empty: no logout)
     std::string idp_entity_id{};
     std::string idp_certificate_pem{}; // the identity provider's signing certificate
     int skew_seconds{120};             // clock difference that is tolerated
@@ -48,6 +49,31 @@ struct Assertion
     std::int64_t now
 );
 
+/// What a valid logout request says.
+struct LogoutRequest
+{
+    std::string id{};
+    std::string name_id{};
+    std::int64_t issued_at{0};
+};
+
+/// @brief Checks a logout request of the identity provider (the decoded XML). Accepted only if: the
+/// XML has no DTD, the root is a LogoutRequest signed by the configured certificate (the signature
+/// directly inside it, the same rules as for assertions), issued by the configured identity
+/// provider to `slo_url`, current (issued recently, not expired), and naming exactly one
+/// unencrypted NameID.
+[[nodiscard]] Result<LogoutRequest>
+validate_logout_request(std::string_view xml, const Settings& settings, std::int64_t now);
+
+/// @brief The LogoutResponse XML that answers the request `in_response_to`.
+[[nodiscard]] std::string build_logout_response(
+    const Settings& settings,
+    std::string_view in_response_to,
+    std::string_view destination,
+    std::int64_t now,
+    bool success
+);
+
 /// @brief The AuthnRequest XML.
 [[nodiscard]] std::string build_authn_request(
     const Settings& settings,
@@ -56,12 +82,13 @@ struct Assertion
     std::int64_t now
 );
 
-/// @brief The URL of the HTTP-Redirect binding: `destination?SAMLRequest=<deflated, base64,
-/// escaped>&RelayState=...`.
+/// @brief The URL of the HTTP-Redirect binding: `destination?<parameter>=<deflated, base64,
+/// escaped>&RelayState=...` (`SAMLRequest` for requests, `SAMLResponse` for answers).
 [[nodiscard]] std::string redirect_url(
     std::string_view destination,
-    std::string_view authn_request_xml,
-    std::string_view relay_state
+    std::string_view message_xml,
+    std::string_view relay_state,
+    std::string_view parameter = "SAMLRequest"
 );
 
 /// @brief The service provider's metadata document.
