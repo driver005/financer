@@ -8,6 +8,7 @@ nc_cc_library(
     srcs = [
         "src/dav.cc",
         "src/file_cipher.cc",
+        "src/ftp.cc",
         "src/s3.cc",
         "src/share_store.cc",
         "src/storage.cc",
@@ -15,6 +16,7 @@ nc_cc_library(
     hdrs = [
         "src/dav.h",
         "src/file_cipher.h",
+        "src/ftp.h",
         "src/s3.h",
         "src/share.h",
         "src/share_store.h",
@@ -22,6 +24,7 @@ nc_cc_library(
     ],
     includes = ["src"],
     deps = [
+        "//plugins/federation:lib",
         "//sdk/plugin:http",
         "//sdk/util",
     ],

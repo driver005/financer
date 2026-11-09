@@ -1,4 +1,5 @@
 #include "dav.h"
+#include "ftp.h"
 #include "nextcloud/runner/http_server.h"
 #include "nextcloud/runner/kernel.h"
 #include "nextcloud/test.h"
@@ -8,13 +9,19 @@
 #include "storage.h"
 
 #include <algorithm>
+#include <arpa/inet.h>
+#include <atomic>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <netinet/in.h>
+#include <set>
 #include <sstream>
+#include <sys/socket.h>
+#include <thread>
 #include <unistd.h>
 
 namespace {
@@ -2040,6 +2047,513 @@ void test_external_s3()
     fs::remove_all(dir);
 }
 
+// ---- a server that speaks just enough FTP ------------------------------------------------------
+
+struct FakeFtp
+{
+    std::mutex mutex{};
+    std::map<std::string, std::string> files{};
+    std::set<std::string> dirs{"/"};
+    bool mlsd{true};
+    int listener{-1};
+    std::uint16_t port{0};
+    std::atomic<bool> running{true};
+    std::thread worker{};
+    std::atomic<int> logins{0};
+    std::atomic<int> bad_logins{0};
+
+    static std::string parent_of(const std::string& path)
+    {
+        const std::size_t slash = path.rfind('/');
+        return slash == 0 ? std::string{"/"} : path.substr(0, slash);
+    }
+
+    static void send_line(int fd, const std::string& line)
+    {
+        const std::string wire = line + "\r\n";
+        (void)::send(fd, wire.data(), wire.size(), MSG_NOSIGNAL);
+    }
+
+    static bool read_line(int fd, std::string& buffer, std::string& line)
+    {
+        while (buffer.find("\r\n") == std::string::npos) {
+            char chunk[1'024];
+            const ssize_t got = ::recv(fd, chunk, sizeof(chunk), 0);
+            if (got <= 0) {
+                return false;
+            }
+            buffer.append(chunk, static_cast<std::size_t>(got));
+        }
+        line = buffer.substr(0, buffer.find("\r\n"));
+        buffer.erase(0, buffer.find("\r\n") + 2);
+        return true;
+    }
+
+    void start()
+    {
+        listener = ::socket(AF_INET, SOCK_STREAM, 0);
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        ::bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address));
+        ::listen(listener, 8);
+        socklen_t size = sizeof(address);
+        ::getsockname(listener, reinterpret_cast<sockaddr*>(&address), &size);
+        port = ntohs(address.sin_port);
+        worker = std::thread{[this]
+                             {
+                                 serve();
+                             }};
+    }
+
+    void stop()
+    {
+        running = false;
+        ::shutdown(listener, SHUT_RDWR);
+        ::close(listener);
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+
+    void serve()
+    {
+        while (running) {
+            const int control = ::accept(listener, nullptr, nullptr);
+            if (control < 0) {
+                return;
+            }
+            session(control);
+            ::close(control);
+        }
+    }
+
+    int passive_listener(std::uint16_t& data_port)
+    {
+        const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        ::bind(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address));
+        ::listen(fd, 1);
+        socklen_t size = sizeof(address);
+        ::getsockname(fd, reinterpret_cast<sockaddr*>(&address), &size);
+        data_port = ntohs(address.sin_port);
+        return fd;
+    }
+
+    void session(int control)
+    {
+        send_line(control, "220 fake ftp");
+        std::string buffer;
+        std::string line;
+        int data_listener = -1;
+        std::string renaming;
+        std::uint64_t restart = 0;
+        bool signed_in = false;
+        const auto data_connection = [&]()
+        {
+            const int connection = ::accept(data_listener, nullptr, nullptr);
+            ::close(data_listener);
+            data_listener = -1;
+            return connection;
+        };
+        while (read_line(control, buffer, line)) {
+            const std::size_t space = line.find(' ');
+            const std::string verb = line.substr(0, space);
+            const std::string argument =
+                space == std::string::npos ? std::string{} : line.substr(space + 1);
+            const std::lock_guard lock{mutex};
+            if (verb == "USER") {
+                send_line(control, "331 password please");
+            } else if (verb == "PASS") {
+                signed_in = argument == "ftp-secret";
+                ++(signed_in ? logins : bad_logins);
+                send_line(control, signed_in ? "230 welcome" : "530 no");
+                if (!signed_in) {
+                    return;
+                }
+            } else if (verb == "TYPE") {
+                send_line(control, "200 binary");
+            } else if (verb == "EPSV") {
+                std::uint16_t data_port = 0;
+                data_listener = passive_listener(data_port);
+                send_line(
+                    control,
+                    "229 Entering Extended Passive Mode (|||" + std::to_string(data_port) + "|)"
+                );
+            } else if (verb == "REST") {
+                restart = std::strtoull(argument.c_str(), nullptr, 10);
+                send_line(control, "350 ok");
+            } else if (verb == "MLSD" || verb == "LIST") {
+                if (verb == "MLSD" && !mlsd) {
+                    ::close(data_listener);
+                    data_listener = -1;
+                    send_line(control, "500 unknown");
+                    continue;
+                }
+                if (!dirs.contains(argument)) {
+                    send_line(control, "550 no such folder");
+                    continue;
+                }
+                send_line(control, "150 here it comes");
+                const int data = data_connection();
+                std::string out;
+                const auto child_name = [&](const std::string& full)
+                {
+                    return full.substr(full.rfind('/') + 1);
+                };
+                for (const std::string& dir: dirs) {
+                    if (dir != "/" && parent_of(dir) == argument) {
+                        out += mlsd ? "type=dir;modify=20240102030405; " + child_name(dir) + "\r\n"
+                                    : "drwxr-xr-x 2 ftp ftp 4096 Jan 02 03:04 " + child_name(dir) +
+                                          "\r\n";
+                    }
+                }
+                for (const auto& [name, data_bytes]: files) {
+                    if (parent_of(name) == argument) {
+                        out += mlsd ? "type=file;size=" + std::to_string(data_bytes.size()) +
+                                          ";modify=20240102030405; " + child_name(name) + "\r\n"
+                                    : "-rw-r--r-- 1 ftp ftp " + std::to_string(data_bytes.size()) +
+                                          " Jan 02 03:04 " + child_name(name) + "\r\n";
+                    }
+                }
+                if (!mlsd) {
+                    out = "total 8\r\n" + out;
+                }
+                (void)::send(data, out.data(), out.size(), MSG_NOSIGNAL);
+                ::close(data);
+                send_line(control, "226 done");
+            } else if (verb == "RETR") {
+                const auto found = files.find(argument);
+                if (found == files.end()) {
+                    ::close(data_listener);
+                    data_listener = -1;
+                    send_line(control, "550 no such file");
+                    continue;
+                }
+                send_line(control, "150 sending");
+                const int data = data_connection();
+                const std::string part =
+                    found->second.substr(std::min<std::size_t>(restart, found->second.size()));
+                restart = 0;
+                (void)::send(data, part.data(), part.size(), MSG_NOSIGNAL);
+                ::close(data);
+                send_line(control, "226 done");
+            } else if (verb == "STOR") {
+                if (!dirs.contains(parent_of(argument))) {
+                    ::close(data_listener);
+                    data_listener = -1;
+                    send_line(control, "550 no such folder");
+                    continue;
+                }
+                send_line(control, "150 send it");
+                const int data = data_connection();
+                std::string body;
+                char chunk[4'096];
+                ssize_t got;
+                while ((got = ::recv(data, chunk, sizeof(chunk), 0)) > 0) {
+                    body.append(chunk, static_cast<std::size_t>(got));
+                }
+                ::close(data);
+                files[argument] = body;
+                send_line(control, "226 stored");
+            } else if (verb == "DELE") {
+                send_line(control, files.erase(argument) != 0 ? "250 deleted" : "550 no such file");
+            } else if (verb == "MKD") {
+                if (dirs.contains(argument) || !dirs.contains(parent_of(argument))) {
+                    send_line(control, "550 cannot");
+                } else {
+                    dirs.insert(argument);
+                    send_line(control, "257 made");
+                }
+            } else if (verb == "RMD") {
+                const bool empty = std::ranges::none_of(
+                                       files,
+                                       [&](const auto& item)
+                                       {
+                                           return parent_of(item.first) == argument;
+                                       }
+                                   ) &&
+                                   std::ranges::none_of(
+                                       dirs,
+                                       [&](const std::string& dir)
+                                       {
+                                           return dir != "/" && parent_of(dir) == argument;
+                                       }
+                                   );
+                if (dirs.contains(argument) && empty) {
+                    dirs.erase(argument);
+                    send_line(control, "250 removed");
+                } else {
+                    send_line(control, "550 cannot");
+                }
+            } else if (verb == "RNFR") {
+                renaming = argument;
+                send_line(
+                    control,
+                    files.contains(argument) || dirs.contains(argument) ? "350 ready" : "550 no"
+                );
+            } else if (verb == "RNTO") {
+                if (files.contains(renaming)) {
+                    files[argument] = files[renaming];
+                    files.erase(renaming);
+                } else if (dirs.contains(renaming)) {
+                    // A folder takes everything below it along.
+                    std::map<std::string, std::string> moved;
+                    for (auto it = files.begin(); it != files.end();) {
+                        if (it->first.rfind(renaming + "/", 0) == 0) {
+                            moved[argument + it->first.substr(renaming.size())] = it->second;
+                            it = files.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                    files.insert(moved.begin(), moved.end());
+                    std::set<std::string> moved_dirs;
+                    for (auto it = dirs.begin(); it != dirs.end();) {
+                        if (*it == renaming || it->rfind(renaming + "/", 0) == 0) {
+                            moved_dirs.insert(argument + it->substr(renaming.size()));
+                            it = dirs.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                    dirs.insert(moved_dirs.begin(), moved_dirs.end());
+                }
+                send_line(control, "250 renamed");
+            } else if (verb == "QUIT") {
+                send_line(control, "221 bye");
+                return;
+            } else {
+                send_line(control, "502 not implemented");
+            }
+        }
+    }
+};
+
+void test_ftp_parsers()
+{
+    namespace ftp = nc::cloud::ftp;
+    const auto file =
+        ftp::parse_list_line("-rw-r--r--    1 ftp      ftp          1234 Jan 02 12:34 my file.txt");
+    NC_CHECK(file.has_value());
+    if (file) {
+        NC_CHECK_EQ(file->name, "my file.txt");
+        NC_CHECK_EQ(file->size, std::uint64_t{1'234});
+        NC_CHECK(!file->directory);
+    }
+    NC_CHECK(ftp::parse_list_line("drwxr-xr-x 2 u g 4096 Jan 02  2020 sub")->directory);
+    NC_CHECK_EQ(
+        ftp::parse_list_line("lrwxrwxrwx 1 u g 4 Jan 02 12:34 link -> target")->name,
+        "link"
+    );
+    NC_CHECK(!ftp::parse_list_line("total 24").has_value());
+    NC_CHECK(!ftp::parse_list_line("").has_value());
+    NC_CHECK(!ftp::parse_list_line("drwxr-xr-x 2 u g 4096 Jan 02 12:34 .").has_value());
+    NC_CHECK(!ftp::parse_list_line("-rw-r--r-- 1 u").has_value());
+    const auto fact = ftp::parse_mlsd_line("type=file;size=12;modify=20240102030405; a b.txt");
+    NC_CHECK(fact.has_value());
+    if (fact) {
+        NC_CHECK_EQ(fact->name, "a b.txt");
+        NC_CHECK_EQ(fact->size, std::uint64_t{12});
+        NC_CHECK(fact->modified > 1'700'000'000);
+    }
+    NC_CHECK(ftp::parse_mlsd_line("type=dir; sub")->directory);
+    NC_CHECK(!ftp::parse_mlsd_line("type=cdir; .").has_value());
+    NC_CHECK(!ftp::parse_mlsd_line("type=pdir; ..").has_value());
+    NC_CHECK(!ftp::parse_mlsd_line("nothing").has_value());
+}
+
+void test_external_ftp()
+{
+    FakeFtp ftp;
+    ftp.files = {{"/pub/a.txt", "0123456789"}, {"/pub/sub/b.txt", "bee"}, {"/outside.txt", "no"}};
+    ftp.dirs = {"/", "/pub", "/pub/sub"};
+    ftp.start();
+    const std::string dir = temp_dir("ftp");
+    {
+        std::ofstream secret{dir + "/ftp.secret"};
+        secret << "ftp-secret\n";
+        std::ofstream wrong{dir + "/wrong.secret"};
+        wrong << "guess\n";
+    }
+    const std::string where = "ftp://127.0.0.1:" + std::to_string(ftp.port);
+    nc::Kernel kernel{nc::Config::parse(
+                          "data_dir = " + dir +
+                          "\n[users]\npbkdf2_iterations = 3\n[cloud]\nexternal_ftp = Files=" +
+                          where + "/pub|ftpuser|" + dir + "/ftp.secret|rw;Locked=" + where +
+                          "/pub|ftpuser|" + dir + "/ftp.secret|ro;Wrong=" + where +
+                          "/pub|ftpuser|" + dir + "/wrong.secret|rw;Bad=http://x|u|" + dir +
+                          "/ftp.secret\nexternal_ftp_allow_local = true\n"
+    )
+                          .value()};
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const auto has = [](const Response& response, const std::string& text)
+    {
+        return response.get_body().find(text) != std::string::npos;
+    };
+    const auto stored = [&](const std::string& path)
+    {
+        const std::lock_guard lock{ftp.mutex};
+        const auto found = ftp.files.find(path);
+        return found == ftp.files.end() ? std::string{"<none>"} : found->second;
+    };
+
+    // The storages with a good entry show up; the broken one does not.
+    const Response top = kernel.handle(with_depth(user_req("PROPFIND", a + "/", "", alice), "1"));
+    NC_CHECK(has(top, "<d:href>" + a + "/Files/</d:href>"));
+    NC_CHECK(!has(top, "Bad"));
+    const Response root =
+        kernel.handle(with_depth(user_req("PROPFIND", a + "/Files", "", alice), "1"));
+    NC_CHECK_EQ(root.get_status(), 207);
+    NC_CHECK(has(root, a + "/Files/a.txt"));
+    NC_CHECK(has(root, "<d:href>" + a + "/Files/sub/</d:href>"));
+    NC_CHECK(!has(root, "outside.txt")); // above the storage's folder
+    NC_CHECK(
+        has(kernel.handle(with_depth(user_req("PROPFIND", a + "/Files/sub", "", alice), "1")),
+            a + "/Files/sub/b.txt")
+    );
+    NC_CHECK(
+        has(kernel.handle(with_depth(user_req("PROPFIND", a + "/Files/a.txt", "", alice), "0")),
+            "<d:getcontentlength>10<")
+    );
+    NC_CHECK_EQ(
+        kernel.handle(with_depth(user_req("PROPFIND", a + "/Files/none", "", alice), "0"))
+            .get_status(),
+        404
+    );
+
+    // Reading, with a range.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Files/a.txt", "", alice)).get_body(),
+        "0123456789"
+    );
+    Request ranged = user_req("GET", a + "/Files/a.txt", "", alice);
+    ranged.add_header("Range", "bytes=2-5");
+    const Response part = kernel.handle(std::move(ranged));
+    NC_CHECK_EQ(part.get_status(), 206);
+    NC_CHECK_EQ(part.get_body(), "2345");
+    NC_CHECK_EQ(std::string{part.header("Content-Range")}, "bytes 2-5/10");
+    Request past = user_req("GET", a + "/Files/a.txt", "", alice);
+    past.add_header("Range", "bytes=50-60");
+    NC_CHECK_EQ(kernel.handle(std::move(past)).get_status(), 416);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Files/nothing.txt", "", alice)).get_status(),
+        404
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/Files/sub", "", alice)).get_status(), 405);
+
+    // Writing.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Files/new.txt", "fresh", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(stored("/pub/new.txt"), "fresh");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Files/new.txt", "again", alice)).get_status(),
+        204
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", a + "/Files/sub", "x", alice)).get_status(), 405);
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Files/made", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Files/made", "", alice)).get_status(), 405);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Files/made/in.txt", "inside", alice)).get_status(),
+        201
+    );
+    Request copy = user_req("COPY", a + "/Files/a.txt", "", alice);
+    copy.add_header("Destination", a + "/Files/copy.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(copy)).get_status(), 201);
+    NC_CHECK_EQ(stored("/pub/copy.txt"), "0123456789");
+    Request move = user_req("MOVE", a + "/Files/made", "", alice);
+    move.add_header("Destination", a + "/Files/renamed");
+    NC_CHECK_EQ(kernel.handle(std::move(move)).get_status(), 201);
+    NC_CHECK_EQ(stored("/pub/renamed/in.txt"), "inside");
+    Request out_of = user_req("MOVE", a + "/Files/a.txt", "", alice);
+    out_of.add_header("Destination", a + "/escaped.txt");
+    NC_CHECK_EQ(kernel.handle(std::move(out_of)).get_status(), 502);
+    Request into_itself = user_req("MOVE", a + "/Files/renamed", "", alice);
+    into_itself.add_header("Destination", a + "/Files/renamed/inner");
+    NC_CHECK_EQ(kernel.handle(std::move(into_itself)).get_status(), 400);
+
+    // Deleting a folder takes what is below it; a missing thing is a 404; nothing outside is
+    // touched.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", a + "/Files/renamed", "", alice)).get_status(),
+        204
+    );
+    NC_CHECK_EQ(stored("/pub/renamed/in.txt"), "<none>");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", a + "/Files/copy.txt", "", alice)).get_status(),
+        204
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", a + "/Files/copy.txt", "", alice)).get_status(),
+        404
+    );
+    NC_CHECK_EQ(stored("/outside.txt"), "no");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Files/../../x", "no", alice)).get_status() >= 400,
+        true
+    );
+    NC_CHECK_EQ(stored("/x"), "<none>");
+    NC_CHECK_EQ(kernel.handle(user_req("DELETE", a + "/Files", "", alice)).get_status(), 403);
+
+    // Read-only, wrong account, and a server that does not know MLSD (LIST is read instead).
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/Locked/no.txt", "no", alice)).get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/Locked/a.txt", "", alice)).get_body(),
+        "0123456789"
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/Wrong/a.txt", "", alice)).get_status(), 502);
+    NC_CHECK(ftp.bad_logins > 0);
+    {
+        const std::lock_guard lock{ftp.mutex};
+        ftp.mlsd = false;
+    }
+    const Response listed =
+        kernel.handle(with_depth(user_req("PROPFIND", a + "/Files", "", alice), "1"));
+    NC_CHECK(has(listed, a + "/Files/a.txt"));
+    NC_CHECK(has(listed, "<d:href>" + a + "/Files/sub/</d:href>"));
+
+    // Without permission for local addresses the storage is refused (the default).
+    nc::Kernel strict{nc::Config::parse(
+                          "data_dir = " + dir +
+                          "\n[users]\npbkdf2_iterations = 3\n[cloud]\nexternal_ftp = Files=" +
+                          where + "/pub|ftpuser|" + dir + "/ftp.secret|rw\n"
+    )
+                          .value()};
+    strict.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(strict
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(strict.start().has_value());
+    NC_CHECK_EQ(strict.handle(user_req("GET", a + "/Files/a.txt", "", alice)).get_status(), 502);
+    strict.stop();
+
+    ftp.stop();
+    NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/Locked/a.txt", "", alice)).get_status(), 502);
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 void test_received_shares()
 {
     const std::string dir = temp_dir("mounts");
@@ -2638,6 +3152,8 @@ int main()
     test_external_webdav();
     test_s3_signing();
     test_external_s3();
+    test_ftp_parsers();
+    test_external_ftp();
     test_external_storage();
     test_encryption();
     test_key_rotation();

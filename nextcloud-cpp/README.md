@@ -94,6 +94,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `[cloud] quota_bytes`, `overwrite_url` | per-user quota, public URL for share links | unlimited, from `Host` |
 | `[cloud] encryption_key` or `encryption_key_file` | 64 hex digits: files are stored encrypted | off |
 | `[cloud] external_webdav`, `external_webdav_allow_http`, `external_webdav_allow_local`, `external_webdav_ca_file`, `external_webdav_timeout_seconds`, `external_webdav_max_mb` | WebDAV servers shown as folders: `Name=URL|user|password-file[|rw][|group]; ...` | none |
+| `[cloud] external_ftp`, `external_ftp_allow_local`, `external_ftp_timeout_seconds`, `external_ftp_max_mb` | FTP servers shown as folders: `Name=ftp://host[:port][/folder]|user|password-file[|rw][|group]; ...` | none |
 | `[cloud] external_s3`, `external_s3_allow_http`, `external_s3_allow_local`, `external_s3_ca_file`, `external_s3_timeout_seconds`, `external_s3_max_mb` | S3 buckets shown as folders: `Name=URL|bucket|ACCESSKEY|secret-file[|rw][|prefix=dir/][|region=r][|group]; ...` | none |
 | `[cloud] external_mounts` | host folders shown to everyone: `Name=/path:ro\|rw[:group]; ...` | none |
 | `[mail] mode` | `spool`, `sendmail`, `smtp`, `null` | `spool` |

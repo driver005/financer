@@ -6,6 +6,7 @@
  * `apps/files_sharing`.
  */
 #include "dav.h"
+#include "ftp.h"
 #include "http_client.h"
 #include "nextcloud/app.h"
 #include "nextcloud/db.h"
@@ -22,6 +23,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -276,6 +278,15 @@ public:
             1'024U * 1'024U
         );
         parse_external_s3(host.config("external_s3", ""));
+        m_ftp_settings.allow_local = host.config("external_ftp_allow_local", "false") == "true";
+        m_ftp_settings.timeout_seconds =
+            std::max(1, std::atoi(host.config("external_ftp_timeout_seconds", "30").c_str()));
+        m_ftp_settings.max_bytes =
+            static_cast<std::size_t>(
+                std::max(1, std::atoi(host.config("external_ftp_max_mb", "256").c_str()))
+            ) *
+            1'024U * 1'024U;
+        parse_external_ftp(host.config("external_ftp", ""));
         m_max_upload =
             std::strtoull(host.config("max_upload_bytes", "2147483648").c_str(), nullptr, 10);
         // Encryption at rest: a 64 hex digit key in the config, or in a file the administrator
@@ -1202,6 +1213,8 @@ private:
         int dav_permissions{1};
         /// Set (to the index in `m_s3`) for an external storage that is an S3 bucket.
         int s3_index{-1};
+        /// Set (to the index in `m_ftp`) for an external storage that is an FTP server.
+        int ftp_index{-1};
     };
 
     [[nodiscard]] std::vector<Mount> mounts_for(const std::string& user) const
@@ -1238,7 +1251,7 @@ private:
                            : base_name.substr(0, dot) + " (" + std::to_string(attempt) + ")" +
                                  base_name.substr(dot);
             }
-            mounts.push_back(Mount{share, name, node->is_directory(), {}, 1, 0, -1, 1, -1});
+            mounts.push_back(Mount{share, name, node->is_directory(), {}, 1, 0, -1, 1, -1, -1});
         }
         for (const External& external: m_external) {
             if (!external.group.empty() &&
@@ -1264,7 +1277,7 @@ private:
                 name = external.name + " (" + std::to_string(attempt) + ")";
             }
             mounts.push_back(
-                Mount{Share{}, name, true, external.path, external.permissions, 0, -1, 1, -1}
+                Mount{Share{}, name, true, external.path, external.permissions, 0, -1, 1, -1, -1}
             );
         }
         // External storages that are WebDAV servers.
@@ -1301,6 +1314,7 @@ private:
                 0,
                 static_cast<int>(index),
                 dav.writable ? 31 : 1,
+                -1,
                 -1
             });
         }
@@ -1329,7 +1343,38 @@ private:
                 }
                 name = bucket.name + " (" + std::to_string(attempt) + ")";
             }
-            mounts.push_back(Mount{Share{}, name, true, {}, 1, 0, -1, 1, static_cast<int>(index)});
+            mounts.push_back(
+                Mount{Share{}, name, true, {}, 1, 0, -1, 1, static_cast<int>(index), -1}
+            );
+        }
+        // External storages that are FTP servers.
+        for (std::size_t index = 0; index < m_ftp.size(); ++index) {
+            const ExternalFtp& server = m_ftp[index];
+            if (!server.group.empty() &&
+                m_host->call_service(
+                          "groups.is_member",
+                          nc::util::form_encode({{"group", server.group}, {"user", user}})
+                ).get_status() != 200) {
+                continue;
+            }
+            std::string name = server.name;
+            for (int attempt = 2; attempt < 1'000; ++attempt) {
+                const bool taken =
+                    own.stat("/" + name).has_value() || std::ranges::any_of(
+                                                            mounts,
+                                                            [&](const Mount& other)
+                                                            {
+                                                                return other.name == name;
+                                                            }
+                                                        );
+                if (!taken) {
+                    break;
+                }
+                name = server.name + " (" + std::to_string(attempt) + ")";
+            }
+            mounts.push_back(
+                Mount{Share{}, name, true, {}, 1, 0, -1, 1, -1, static_cast<int>(index)}
+            );
         }
         // Shares from other servers the user accepted.
         const Response remote =
@@ -1363,7 +1408,7 @@ private:
                                : base_name.substr(0, dot) + " (" + std::to_string(attempt) + ")" +
                                      base_name.substr(dot);
                 }
-                mounts.push_back(Mount{Share{}, name, directory, {}, 1, id, -1, 1, -1});
+                mounts.push_back(Mount{Share{}, name, directory, {}, 1, id, -1, 1, -1, -1});
             }
         }
         return mounts;
@@ -1380,7 +1425,8 @@ private:
         for (const Mount& mount: mounts) {
             // A share from another server has no file here; its entry is made up.
             std::optional<nc::cloud::Node> node;
-            if (mount.remote_id != 0 || mount.dav_index >= 0 || mount.s3_index >= 0) {
+            if (mount.remote_id != 0 || mount.dav_index >= 0 || mount.s3_index >= 0 ||
+                mount.ftp_index >= 0) {
                 node = nc::cloud::Node{"/" + mount.name, mount.directory};
             } else if (auto found =
                            mount.external_root.empty()
@@ -1393,7 +1439,7 @@ private:
             }
             node->set_path("/" + mount.name);
             if (node->is_directory() && mount.remote_id == 0 && mount.dav_index < 0 &&
-                mount.s3_index < 0) {
+                mount.s3_index < 0 && mount.ftp_index < 0) {
                 // The size of what is inside, so the top-level listing shows it.
                 node->set_size(
                     mount.external_root.empty()
@@ -1482,6 +1528,309 @@ private:
             },
             publish
         );
+    }
+
+    /// `Name=ftp://host[:port][/folder]|user|/path/to/password-file[|rw][|group]`, several
+    /// separated by
+    /// `;`. Plain FTP: the password and the files cross the network unprotected, so this is for
+    /// networks the administrator trusts.
+    void parse_external_ftp(const std::string& text)
+    {
+        for (const std::string& entry: nc::util::split(text, ';')) {
+            if (nc::util::trim(entry).empty()) {
+                continue;
+            }
+            const std::size_t equals = entry.find('=');
+            const std::vector<std::string> parts = nc::util::split(
+                equals == std::string::npos ? std::string{} : entry.substr(equals + 1),
+                '|'
+            );
+            const std::string name{nc::util::trim(entry.substr(0, equals))};
+            std::string password;
+            if (equals != std::string::npos && parts.size() >= 3) {
+                std::ifstream file{std::string{nc::util::trim(parts[2])}};
+                std::getline(file, password);
+            }
+            std::string address{parts.empty() ? std::string_view{} : nc::util::trim(parts[0])};
+            ExternalFtp server;
+            bool good = nc::util::starts_with(address, "ftp://");
+            if (good) {
+                address.erase(0, 6);
+                const std::size_t slash = address.find('/');
+                const std::string folder =
+                    slash == std::string::npos ? std::string{} : address.substr(slash);
+                address = address.substr(0, slash);
+                const std::size_t colon = address.rfind(':');
+                server.host = colon == std::string::npos ? address : address.substr(0, colon);
+                if (colon != std::string::npos) {
+                    server.port = address.substr(colon + 1);
+                }
+                const auto normalized = Storage::normalize(folder.empty() ? "/" : folder);
+                good = !server.host.empty() &&
+                       server.host.find_first_of(" \r\n/@") == std::string::npos &&
+                       !server.port.empty() && server.port.size() <= 5 &&
+                       server.port.find_first_not_of("0123456789") == std::string::npos &&
+                       normalized.has_value();
+                if (good) {
+                    server.base = *normalized == "/" ? std::string{} : *normalized;
+                }
+            }
+            if (equals == std::string::npos || parts.size() < 3 || !good || password.empty() ||
+                name.empty() || name.find('/') != std::string::npos ||
+                !Storage::normalize("/" + name) || name == "." || name == ".." ||
+                nc::util::trim(parts[1]).empty() ||
+                password.find_first_of("\r\n") != std::string::npos) {
+                m_host->log(nc::LogLevel::WARNING, "ignoring external FTP storage: " + name);
+                continue;
+            }
+            server.name = name;
+            server.user = std::string{nc::util::trim(parts[1])};
+            server.password = password;
+            for (std::size_t index = 3; index < parts.size(); ++index) {
+                const std::string_view option = nc::util::trim(parts[index]);
+                if (option == "rw") {
+                    server.writable = true;
+                } else if (option != "ro") {
+                    server.group = std::string{option};
+                }
+            }
+            m_ftp.push_back(std::move(server));
+        }
+    }
+
+    /// A folder of an FTP server shown as a WebDAV collection tree. One FTP session per request.
+    [[nodiscard]] Response serve_external_ftp(
+        const Request& request,
+        const Mount& mount,
+        const std::string& rest,
+        const std::string& base
+    ) const
+    {
+        const ExternalFtp& server = m_ftp[static_cast<std::size_t>(mount.ftp_index)];
+        const std::string& method = request.get_method();
+        const bool writes = method == "PUT" || method == "MKCOL" || method == "DELETE" ||
+                            method == "MOVE" || method == "COPY";
+        if (!writes && method != "GET" && method != "PROPFIND") {
+            return Response::text(405, "Method Not Allowed");
+        }
+        if (writes && (!server.writable || rest.empty())) {
+            return Response::text(403, "This storage is read-only");
+        }
+        if (method == "PUT" && request.get_body().size() > m_max_upload) {
+            return Response::text(413, "The file is larger than this server accepts");
+        }
+        const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
+        auto session = nc::cloud::ftp::Session::open(
+            server.host,
+            server.port,
+            server.user,
+            server.password,
+            m_ftp_settings
+        );
+        if (!session) {
+            return Response::text(502, "The storage could not be reached: " + session.error());
+        }
+        const std::string path = rest == "/" ? std::string{} : rest;
+        // The path on the server for one inside the storage; "/" for the storage's own root.
+        const auto remote = [&](const std::string& inner)
+        {
+            const std::string full = server.base + inner;
+            return full.empty() ? std::string{"/"} : full;
+        };
+        const auto folder_of = [&](const std::string& inner)
+        {
+            return remote(inner.substr(0, inner.rfind('/')));
+        };
+        const auto name_of = [](const std::string& inner)
+        {
+            return inner.substr(inner.rfind('/') + 1);
+        };
+        // The entry for a path inside the storage, found in its folder's listing.
+        const auto find = [&](const std::string& inner) -> std::optional<nc::cloud::ftp::Entry>
+        {
+            const auto listing = session->list(folder_of(inner));
+            if (!listing) {
+                return std::nullopt;
+            }
+            for (const nc::cloud::ftp::Entry& entry: *listing) {
+                if (entry.name == name_of(inner)) {
+                    return entry;
+                }
+            }
+            return std::nullopt;
+        };
+        const auto etag_of = [](const nc::cloud::ftp::Entry& entry)
+        {
+            return "\"" + std::to_string(entry.size) + "-" + std::to_string(entry.modified) + "\"";
+        };
+        const auto node_of = [&](const std::string& inner, const nc::cloud::ftp::Entry& entry)
+        {
+            return nc::cloud::Node{
+                std::string{inner},
+                entry.directory,
+                entry.directory ? 0 : entry.size,
+                entry.modified,
+                etag_of(entry)
+            };
+        };
+
+        if (method == "PROPFIND") {
+            const bool deep = request.header("Depth") != "0";
+            std::vector<nc::cloud::Node> nodes;
+            std::optional<nc::cloud::ftp::Entry> self;
+            if (!path.empty()) {
+                self = find(path);
+                if (!self) {
+                    return Response::text(404, "Not Found");
+                }
+            }
+            if (self && !self->directory) {
+                nodes.push_back(node_of(path, *self));
+            } else {
+                nodes.emplace_back(path.empty() ? std::string{"/"} : std::string{path}, true);
+                if (deep) {
+                    const auto listing = session->list(remote(path));
+                    if (!listing) {
+                        return Response::text(
+                            502,
+                            "The folder could not be listed: " + listing.error()
+                        );
+                    }
+                    for (const nc::cloud::ftp::Entry& entry: *listing) {
+                        nodes.push_back(node_of(path + "/" + entry.name, entry));
+                    }
+                }
+            }
+            return Response::xml(
+                207,
+                nc::cloud::multistatus(
+                    nodes,
+                    mount_base,
+                    "",
+                    Storage{std::filesystem::path{"/nonexistent"}}
+                )
+            );
+        }
+        if (method == "GET") {
+            const auto entry = path.empty() ? std::nullopt : find(path);
+            if (!entry) {
+                return Response::text(404, "Not Found");
+            }
+            if (entry->directory) {
+                return Response::text(405, "A folder cannot be downloaded");
+            }
+            const nc::cloud::ByteRange range =
+                nc::cloud::parse_range(request.header("Range"), entry->size);
+            if (range.state == nc::cloud::ByteRange::State::UNSATISFIABLE) {
+                Response refused = Response::text(416, "Range Not Satisfiable");
+                refused.add_header("Content-Range", "bytes */" + std::to_string(entry->size));
+                return refused;
+            }
+            const bool partial = range.state == nc::cloud::ByteRange::State::PARTIAL;
+            const auto data = session->retrieve(
+                remote(path),
+                partial ? range.first : 0,
+                partial ? range.last - range.first + 1 : 0
+            );
+            if (!data) {
+                return Response::text(502, "The file could not be read: " + data.error());
+            }
+            const std::string name = name_of(path);
+            std::string safe_name = name;
+            std::ranges::replace(safe_name, '"', '_');
+            Response out{
+                partial ? 206 : 200,
+                std::string{nc::util::mime_type_for(name)},
+                std::string{*data},
+                {{"Content-Disposition", "attachment; filename=\"" + safe_name + "\""},
+                 {"X-Content-Type-Options", "nosniff"},
+                 {"Accept-Ranges", "bytes"},
+                 {"ETag", etag_of(*entry)}}
+            };
+            if (partial) {
+                out.add_header(
+                    "Content-Range",
+                    "bytes " + std::to_string(range.first) + "-" + std::to_string(range.last) +
+                        "/" + std::to_string(entry->size)
+                );
+            }
+            return out;
+        }
+        if (method == "PUT") {
+            const auto existing = find(path);
+            if (existing && existing->directory) {
+                return Response::text(405, "That is a folder");
+            }
+            const auto stored = session->store(remote(path), request.get_body());
+            return stored ? Response{existing ? 204 : 201}
+                          : Response::text(502, "The file could not be stored: " + stored.error());
+        }
+        if (method == "MKCOL") {
+            if (find(path)) {
+                return Response::text(405, "It already exists");
+            }
+            const auto made = session->make_directory(remote(path));
+            return made ? Response{201} : Response::text(409, made.error());
+        }
+        const auto entry = find(path);
+        if (!entry) {
+            return Response::text(404, "Not Found");
+        }
+        if (method == "DELETE") {
+            // A folder is emptied from the bottom: everything below it, then itself.
+            std::size_t budget = 10'000;
+            const std::function<bool(const std::string&)> remove_all = [&](const std::string& at
+                                                                       ) -> bool
+            {
+                const auto listing = session->list(at);
+                if (!listing || budget < listing->size()) {
+                    return false;
+                }
+                budget -= listing->size();
+                for (const nc::cloud::ftp::Entry& child: *listing) {
+                    const std::string full = (at == "/" ? std::string{} : at) + "/" + child.name;
+                    const bool removed =
+                        child.directory
+                            ? remove_all(full) && session->remove_directory(full).has_value()
+                            : session->remove_file(full).has_value();
+                    if (!removed) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            if (entry->directory) {
+                if (!remove_all(remote(path)) || !session->remove_directory(remote(path))) {
+                    return Response::text(502, "The folder could not be deleted");
+                }
+                return Response{204};
+            }
+            const auto removed = session->remove_file(remote(path));
+            return removed ? Response{204} : Response::text(502, removed.error());
+        }
+        // MOVE and COPY
+        const std::string inner =
+            nc::cloud::destination_of(request.header("Destination"), mount_base);
+        const auto target = Storage::normalize("/" + inner);
+        if (inner.empty() || !target || *target == "/") {
+            return Response::text(502, "A file cannot be moved out of its storage");
+        }
+        if (entry->directory && (*target + "/").rfind(path + "/", 0) == 0) {
+            return Response::text(400, "A folder cannot go into itself");
+        }
+        if (method == "MOVE") {
+            const auto moved = session->rename(remote(path), remote(*target));
+            return moved ? Response{201} : Response::text(502, moved.error());
+        }
+        if (entry->directory) {
+            return Response::text(501, "Folders cannot be copied on an FTP storage");
+        }
+        const auto data = session->retrieve(remote(path), 0, 0);
+        if (!data) {
+            return Response::text(502, "The file could not be read: " + data.error());
+        }
+        const auto copied = session->store(remote(*target), *data);
+        return copied ? Response{201} : Response::text(502, copied.error());
     }
 
     /// `Name=https://s3.host|bucket|ACCESSKEY|/path/to/secret-file[|rw][|prefix=dir/][|region=eu-1][|group]`,
@@ -2154,6 +2503,9 @@ private:
         }
         if (mount.s3_index >= 0) {
             return serve_external_s3(request, mount, rest, base);
+        }
+        if (mount.ftp_index >= 0) {
+            return serve_external_ftp(request, mount, rest, base);
         }
         const Share& share = mount.share;
         const std::string& method = request.get_method();
@@ -3081,6 +3433,18 @@ private:
     std::size_t m_max_chunk{512U * 1'024U * 1'024U};
     std::size_t m_max_upload{2'048U * 1'024U * 1'024U};
 
+    struct ExternalFtp
+    {
+        std::string name{};
+        std::string host{};
+        std::string port{"21"};
+        std::string base{}; // "" or "/some/folder", where the storage starts on the server
+        std::string user{};
+        std::string password{};
+        bool writable{false};
+        std::string group{};
+    };
+
     struct External
     {
         std::string name{};
@@ -3092,6 +3456,8 @@ private:
     std::vector<External> m_external{};
     std::vector<ExternalDav> m_dav{};
     std::vector<ExternalS3> m_s3{};
+    std::vector<ExternalFtp> m_ftp{};
+    nc::cloud::ftp::Session::Settings m_ftp_settings{};
     nc::federation::ClientSettings m_s3_client{};
     nc::federation::ClientSettings m_dav_client{};
     std::unique_ptr<nc::cloud::ShareStore> m_shares{};
