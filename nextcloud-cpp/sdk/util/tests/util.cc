@@ -1,6 +1,7 @@
 #include "nextcloud/test.h"
 #include "nextcloud/util/aead.h"
 #include "nextcloud/util/crypto.h"
+#include "nextcloud/util/json.h"
 #include "nextcloud/util/text.h"
 
 int main()
@@ -99,6 +100,52 @@ int main()
     }
     NC_CHECK_EQ(from_hex("00ff7A").value_or("?"), std::string("\x00\xff\x7a", 3));
     NC_CHECK(!from_hex("abc").has_value() && !from_hex("zz").has_value());
+    // JSON: what it reads, and what it refuses.
+    {
+        const auto doc = Json::parse(
+            R"( {"a": [1, 2.5, -3e2, true, false, null, "x\ty"], "b": {"c": "\u00e4\ud83d\ude00"}, "empty": {}, "list": []} )"
+        );
+        NC_CHECK(doc.has_value());
+        NC_CHECK(doc->is_object());
+        NC_CHECK_EQ((*doc)["a"].items().size(), std::size_t{7});
+        NC_CHECK_EQ((*doc)["a"].items()[1].number(), 2.5);
+        NC_CHECK_EQ((*doc)["a"].items()[2].number(), -300.0);
+        NC_CHECK((*doc)["a"].items()[3].boolean() && !(*doc)["a"].items()[4].boolean());
+        NC_CHECK_EQ((*doc)["a"].items()[6].string(), "x\ty");
+        NC_CHECK_EQ(
+            (*doc)["b"]["c"].string(),
+            "\xC3\xA4\xF0\x9F\x98\x80"
+        ); // a-umlaut and an emoji from a surrogate pair
+        NC_CHECK_EQ((*doc)["missing"]["deeper"]["still"].string(), ""); // chains never fail
+        NC_CHECK((*doc)["empty"].is_object() && (*doc)["list"].is_array());
+        for (const char* bad:
+             {"",
+              "{",
+              "[1,]",
+              "{\"a\":1,}",
+              "{'a':1}",
+              "01",
+              "1.",
+              "+1",
+              "\"\\x\"",
+              "\"\\ud800\"",
+              "\"line\nbreak\"",
+              "tru",
+              "[1] x",
+              "nul",
+              "{\"a\" 1}",
+              "1e999"}) {
+            NC_CHECK(!Json::parse(bad).has_value());
+        }
+        NC_CHECK(!Json::parse(std::string(40, '[') + std::string(40, ']')).has_value()); // too deep
+        NC_CHECK(Json::parse(std::string(30, '[') + std::string(30, ']')).has_value());
+        NC_CHECK(!Json::parse("\"" + std::string(2U << 20U, 'x') + "\"").has_value()); // too long
+        NC_CHECK_EQ(Json::parse("\"plain\"")->string(), "plain");
+        NC_CHECK_EQ(
+            Json::parse("{\"k\":1,\"k\":2}")->operator[]("k").number(),
+            2.0
+        ); // the last one wins
+    }
     NC_CHECK_EQ(base64_encode("Aladdin:open sesame"), "QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
     NC_CHECK_EQ(base64_decode("QWxhZGRpbjpvcGVuIHNlc2FtZQ==").value_or("?"), "Aladdin:open sesame");
     NC_CHECK(!base64_decode("a$b").has_value());
