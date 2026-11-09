@@ -142,6 +142,17 @@ public:
                             : Response::text(404, "no such user");
             }
         );
+        // 200 when the account exists and is an administrator, 404 otherwise.
+        host.add_service(
+            "users.is_admin",
+            [&store](std::string_view args)
+            {
+                const auto user = store.find(args);
+                return user && user->is_admin() && user->is_enabled()
+                           ? Response::text(200, "admin")
+                           : Response::text(404, "not an administrator");
+            }
+        );
         host.add_service(
             "users.email",
             [&store](std::string_view args)

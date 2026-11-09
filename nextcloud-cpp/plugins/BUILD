@@ -20,5 +20,6 @@ test_suite(
         "//plugins/user_status:user_status_test",
         "//plugins/users:users_test",
         "//plugins/versions:versions_test",
+        "//plugins/webhook_listeners:webhook_listeners_test",
     ],
 )
