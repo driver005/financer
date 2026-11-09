@@ -5,17 +5,21 @@
  * of Nextcloud's `apps/files_trashbin`. The cloud plugin asks `trashbin.before_delete` before every
  * delete and keeps the bytes (`cloud.trash.*`); this plugin keeps the records.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 
 #include <chrono>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 std::int64_t now_seconds()
 {
@@ -57,6 +61,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         m_retention_days = std::strtol(host.config("retention_days", "30").c_str(), nullptr, 10);
         nc::db::Client{&host}.migrate(
             "trashbin",
@@ -106,14 +112,12 @@ public:
         );
 
         constexpr std::string_view BASE = "/ocs/v2.php/apps/files_trashbin/api/v1/trash";
-        host.add_route(
+        m_app->route(
             "GET",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 std::string data = "[";
                 bool first = true;
                 for (const nc::db::Row& row: nc::db::Client{m_host}.query(
@@ -132,14 +136,12 @@ public:
                 return nc::http::ocs(200, "OK", data + "]");
             }
         );
-        host.add_route(
+        m_app->route(
             "POST",
             std::string{BASE} + "/{id}/restore",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto rows = entry(request.get_user(), std::string{request.param("id")});
                 if (rows.empty()) {
                     return nc::http::ocs(404, "Not in the trash", "{}");
@@ -176,14 +178,12 @@ public:
                 );
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/{id}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto rows = entry(request.get_user(), std::string{request.param("id")});
                 if (rows.empty()) {
                     return nc::http::ocs(404, "Not in the trash", "{}");
@@ -192,14 +192,12 @@ public:
                 return nc::http::ocs(200, "OK", "{}");
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 for (const nc::db::Row& row: nc::db::Client{m_host}.query(
                          "SELECT name FROM nc_trash WHERE uid = ?",
                          {request.get_user()}
@@ -294,6 +292,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
     long m_retention_days{30};
 };
 

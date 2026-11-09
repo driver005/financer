@@ -5,17 +5,21 @@
  * of Nextcloud's `apps/user_status`. Statuses come back as plain "offline" for invisible users when
  * others look.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/text.h"
 
 #include <algorithm>
 #include <chrono>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 constexpr std::string_view STATUSES[] = {"online", "away", "dnd", "invisible", "offline"};
 constexpr std::size_t MAX_MESSAGE = 80;
@@ -74,6 +78,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         nc::db::Client{&host}.migrate(
             "user_status",
             1,
@@ -85,28 +91,24 @@ public:
 
         constexpr std::string_view BASE = "/ocs/v2.php/apps/user_status/api/v1";
 
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/user_status",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto row = find(request.get_user());
                 return row ? nc::http::ocs(200, "OK", status_json(*row, true))
                            : nc::http::ocs(404, "No status", "{}");
             }
         );
 
-        host.add_route(
+        m_app->route(
             "PUT",
             std::string{BASE} + "/user_status/status",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const std::string status = field(request, "statusType");
                 if (std::ranges::find(STATUSES, status) == std::end(STATUSES)) {
                     return nc::http::ocs(400, "Invalid status type", "{}");
@@ -120,14 +122,12 @@ public:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "PUT",
             std::string{BASE} + "/user_status/message/custom",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const std::string message = field(request, "message");
                 const std::string icon = field(request, "statusIcon");
                 const std::string clear_text = field(request, "clearAt");
@@ -156,14 +156,12 @@ public:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/user_status/message",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 nc::db::Client{m_host}.exec(
                     "UPDATE nc_user_status SET message = '', icon = '', clear_at = 0 WHERE uid = ?",
                     {request.get_user()}
@@ -173,27 +171,23 @@ public:
         );
 
         // What other people may see.
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/statuses/{user}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto row = find(std::string{request.param("user")});
                 return row ? nc::http::ocs(200, "OK", status_json(*row, false))
                            : nc::http::ocs(404, "No status", "{}");
             }
         );
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/statuses",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const std::size_t limit = std::clamp<std::size_t>(
                     std::strtoul(request.query_value("limit").c_str(), nullptr, 10),
                     1,
@@ -292,6 +286,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

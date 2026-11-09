@@ -8,6 +8,7 @@
  * are kept for an hour per location, so the service is not asked more often than that.
  */
 #include "http_client.h"
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/json.h"
@@ -16,12 +17,15 @@
 #include <chrono>
 #include <cmath>
 #include <map>
+#include <memory>
 #include <mutex>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 constexpr std::int64_t CACHE_SECONDS = 3'600;
 constexpr std::size_t MAX_CACHE = 500;
@@ -86,6 +90,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         m_url = host.config("url", "https://api.open-meteo.com/v1/forecast");
         m_client.set_allow_http(host.config("allow_http", "false") == "true");
         m_client.set_allow_local(host.config("allow_local", "false") == "true");
@@ -100,14 +106,12 @@ public:
         );
 
         constexpr std::string_view BASE = "/ocs/v2.php/apps/weather_status/api/v1";
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/location",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto rows = nc::db::Client{m_host}.query(
                     "SELECT lat, lon, address FROM nc_weather_location WHERE uid = ?",
                     {request.get_user()}
@@ -118,14 +122,12 @@ public:
                 return nc::http::ocs(200, "OK", location_json(rows.front()));
             }
         );
-        host.add_route(
+        m_app->route(
             "PUT",
             std::string{BASE} + "/location",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto form = nc::util::parse_form(request.get_body());
                 const auto lat = number_in(nc::util::form_value(form, "lat"), -90.0, 90.0);
                 const auto lon = number_in(nc::util::form_value(form, "lon"), -180.0, 180.0);
@@ -150,14 +152,12 @@ public:
                 );
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/location",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 nc::db::Client{m_host}.exec(
                     "DELETE FROM nc_weather_location WHERE uid = ?",
                     {request.get_user()}
@@ -165,14 +165,12 @@ public:
                 return nc::http::ocs(200, "OK", "{}");
             }
         );
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/forecast",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto rows = nc::db::Client{m_host}.query(
                     "SELECT lat, lon FROM nc_weather_location WHERE uid = ?",
                     {request.get_user()}
@@ -266,6 +264,7 @@ private:
     std::mutex m_mutex{};
     std::map<std::string, std::pair<std::int64_t, std::string>> m_cache{};
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

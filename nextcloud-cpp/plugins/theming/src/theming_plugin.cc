@@ -7,17 +7,22 @@
  * plugin under the app name `theming`.
  */
 #include "color.h"
+#include "nextcloud/app.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 
 #include <algorithm>
 #include <array>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions ADMIN{nc::app::Access::ADMIN, nc::app::Format::OCS};
+constexpr nc::app::RouteOptions OPEN{nc::app::Access::PUBLIC, nc::app::Format::OCS};
 
 constexpr std::string_view DEFAULT_NAME = "Nextcloud";
 constexpr std::string_view DEFAULT_COLOR = "#00679e";
@@ -74,6 +79,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         host.add_service(
             "capabilities.theming",
             [this](std::string_view)
@@ -83,27 +90,20 @@ public:
         );
 
         constexpr std::string_view CONFIG = "/ocs/v2.php/apps/theming/api/v1/config";
-        host.add_route(
-            "GET",
+        m_app->get(
             CONFIG,
+            OPEN,
             [this](const Request&)
             {
                 return nc::http::ocs(200, "OK", capabilities_json());
             }
         );
         // name, slogan, url, color, imprintUrl, privacyUrl: any of them. An empty value resets one.
-        host.add_route(
-            "PUT",
+        m_app->put(
             CONFIG,
+            ADMIN,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
-                if (m_host->call_service("users.is_admin", request.get_user()).get_status() !=
-                    200) {
-                    return nc::http::ocs(403, "Forbidden", "{}");
-                }
                 const auto form = nc::util::parse_form(request.get_body());
                 for (const auto& [key, value]: form) {
                     if (std::ranges::find(KEYS, key) == KEYS.end()) {
@@ -121,9 +121,9 @@ public:
         );
 
         for (const std::string_view theme: {"default", "light", "dark"}) {
-            host.add_route(
-                "GET",
+            m_app->get(
                 "/index.php/apps/theming/theme/" + std::string{theme} + ".css",
+                OPEN,
                 [this, theme](const Request& request)
                 {
                     Response response = Response::text(200, css(theme));
@@ -216,6 +216,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

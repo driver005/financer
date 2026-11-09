@@ -8,17 +8,21 @@
  *
  * A code is accepted once: the time step of the last accepted code is stored and must be exceeded.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 
 #include <chrono>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 constexpr std::int64_t STEP_SECONDS = 30;
 
@@ -68,6 +72,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         m_issuer = host.config("issuer", "Nextcloud");
         nc::db::Client{&host}.migrate(
             "twofactor",
@@ -102,14 +108,12 @@ public:
 
         constexpr std::string_view BASE = "/ocs/v2.php/apps/twofactor/api/v1/totp";
         // Step 1: a new secret (not active yet). Shown once, as text and as an otpauth:// link.
-        host.add_route(
+        m_app->route(
             "POST",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 if (enabled(request.get_user())) {
                     return nc::http::ocs(409, "Two-factor authentication is already on", "{}");
                 }
@@ -133,14 +137,12 @@ public:
         );
         // Step 2: prove the app works with a code; this turns it on and returns the backup codes
         // (once).
-        host.add_route(
+        m_app->route(
             "POST",
             std::string{BASE} + "/verify",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 std::string code =
                     nc::util::form_value(nc::util::parse_form(request.get_body()), "code");
                 if (code.empty()) {
@@ -183,26 +185,22 @@ public:
                 return nc::http::ocs(200, "OK", data + "]}");
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 disable(request.get_user());
                 return nc::http::ocs(200, "OK", "{}");
             }
         );
-        host.add_route(
+        m_app->route(
             "GET",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto left = nc::db::Client{m_host}.query(
                     "SELECT COUNT(*) AS n FROM nc_backup_codes WHERE uid = ?",
                     {request.get_user()}
@@ -334,6 +332,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
     std::string m_issuer{"Nextcloud"};
 };
 

@@ -8,17 +8,21 @@
  * Only a SHA-256 digest of a token is stored (the token has 125 random bits, so no slow hash is
  * needed).
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 
 #include <chrono>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 std::int64_t now_seconds()
 {
@@ -83,6 +87,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         nc::db::Client{&host}.migrate(
             "tokens",
             1,
@@ -119,14 +125,12 @@ public:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "GET",
             "/ocs/v2.php/core/getapppassword",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 std::string name = request.query_value("name");
                 if (name.empty()) {
                     name = std::string{request.header("User-Agent")};
@@ -142,14 +146,12 @@ public:
                 );
             }
         );
-        host.add_route(
+        m_app->route(
             "GET",
             "/ocs/v2.php/cloud/apppasswords",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 std::string data = "[";
                 bool first = true;
                 for (const nc::db::Row& row: nc::db::Client{m_host}.query(
@@ -167,14 +169,12 @@ public:
                 return nc::http::ocs(200, "OK", data + "]");
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             "/ocs/v2.php/cloud/apppasswords/{id}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto removed = nc::db::Client{m_host}.exec(
                     "DELETE FROM nc_tokens WHERE id = ? AND uid = ?",
                     {std::string{request.param("id")}, request.get_user()}
@@ -256,6 +256,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

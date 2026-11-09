@@ -8,6 +8,7 @@
  * no `url` is configured.
  */
 #include "http_client.h"
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/json.h"
@@ -18,6 +19,8 @@ namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions ADMIN{nc::app::Access::ADMIN, nc::app::Format::OCS};
 
 std::string json_string(std::string_view text)
 {
@@ -51,6 +54,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         m_url = host.config("url", "");
         m_client.set_allow_http(host.config("allow_http", "false") == "true");
         m_client.set_allow_local(host.config("allow_local", "false") == "true");
@@ -89,18 +94,11 @@ public:
             }
         );
         // For administrators: the newest version found so far.
-        host.add_route(
-            "GET",
+        m_app->get(
             "/ocs/v2.php/apps/updatenotification/api/v1/applist",
-            [this](const Request& request)
+            ADMIN,
+            [this](const Request&)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
-                if (m_host->call_service("users.is_admin", request.get_user()).get_status() !=
-                    200) {
-                    return nc::http::ocs(403, "Forbidden", "{}");
-                }
                 return nc::http::ocs(200, "OK", latest_json());
             }
         );
@@ -198,6 +196,7 @@ private:
     nc::federation::ClientSettings m_client{};
     std::string m_url{};
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

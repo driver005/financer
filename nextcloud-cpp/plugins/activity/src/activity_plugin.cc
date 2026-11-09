@@ -5,16 +5,20 @@
  * `lib/public/Activity` and the `activity` app. A background job removes entries after
  * `retention_days`.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/text.h"
 
 #include <chrono>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 std::int64_t now_seconds()
 {
@@ -56,6 +60,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         m_retention_days = std::strtol(host.config("retention_days", "365").c_str(), nullptr, 10);
         nc::db::Client{&host}.migrate(
             "activity",
@@ -130,14 +136,12 @@ public:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "GET",
             "/ocs/v2.php/apps/activity/api/v2/activity",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 long limit = std::strtol(request.query_value("limit").c_str(), nullptr, 10);
                 limit = limit <= 0 ? 50 : std::min(limit, 200L);
                 const long since = std::strtol(request.query_value("since").c_str(), nullptr, 10);
@@ -228,6 +232,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
     long m_retention_days{365};
 };
 

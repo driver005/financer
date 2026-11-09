@@ -10,17 +10,21 @@
  * Flows are managed by administrators.
  */
 #include "glob.h"
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/text.h"
 
 #include <algorithm>
 #include <chrono>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions ADMIN{nc::app::Access::ADMIN, nc::app::Format::OCS};
 
 std::string json_string(std::string_view text)
 {
@@ -63,6 +67,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         nc::db::Client{&host}.migrate(
             "workflowengine",
             1,
@@ -81,15 +87,12 @@ public:
         );
 
         constexpr std::string_view BASE = "/ocs/v2.php/apps/workflowengine/api/v1/flows";
-        host.add_route(
+        m_app->route(
             "POST",
             BASE,
+            ADMIN,
             [this](const Request& request)
             {
-                if (!is_admin(request)) {
-                    return request.get_user().empty() ? nc::http::unauthorized()
-                                                      : nc::http::ocs(403, "Forbidden", "{}");
-                }
                 const auto form = nc::util::parse_form(request.get_body());
                 const auto field = [&](std::string_view name)
                 {
@@ -125,15 +128,12 @@ public:
                 return nc::http::ocs(200, "OK", R"({"id":)" + std::to_string(id) + "}");
             }
         );
-        host.add_route(
+        m_app->route(
             "GET",
             BASE,
-            [this](const Request& request)
+            ADMIN,
+            [this](const Request)
             {
-                if (!is_admin(request)) {
-                    return request.get_user().empty() ? nc::http::unauthorized()
-                                                      : nc::http::ocs(403, "Forbidden", "{}");
-                }
                 std::string data = "[";
                 bool first = true;
                 for (const nc::db::Row& row: nc::db::Client{m_host}.query(
@@ -154,15 +154,12 @@ public:
                 return nc::http::ocs(200, "OK", data + "]");
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/{id}",
+            ADMIN,
             [this](const Request& request)
             {
-                if (!is_admin(request)) {
-                    return request.get_user().empty() ? nc::http::unauthorized()
-                                                      : nc::http::ocs(403, "Forbidden", "{}");
-                }
                 return nc::db::Client{m_host}.exec(
                            "DELETE FROM nc_flows WHERE id = ?",
                            {std::string{request.param("id")}}
@@ -174,12 +171,6 @@ public:
     }
 
 private:
-    [[nodiscard]] bool is_admin(const Request& request) const
-    {
-        return !request.get_user().empty() &&
-               m_host->call_service("users.is_admin", request.get_user()).get_status() == 200;
-    }
-
     void run_flows(const std::string& topic, std::string_view payload) const
     {
         const nc::db::Client db{m_host};
@@ -228,6 +219,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

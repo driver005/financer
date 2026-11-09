@@ -4,16 +4,20 @@
  * shared with. Counterpart of Nextcloud's `lib/public/Comments` and `apps/comments`. Access is
  * decided by the cloud plugin (`cloud.can_access`), so it follows shares.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/text.h"
 
 #include <chrono>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 constexpr std::size_t MAX_LENGTH = 1'000;
 
@@ -62,6 +66,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         nc::db::Client{&host}.migrate(
             "comments",
             1,
@@ -79,14 +85,12 @@ public:
         );
 
         constexpr std::string_view BASE = "/ocs/v2.php/apps/comments/api/v1/comments";
-        host.add_route(
+        m_app->route(
             "GET",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto object =
                     access(request, request.query_value("owner"), request.query_value("path"));
                 if (!object.first.empty()) {
@@ -109,14 +113,12 @@ public:
                 return nc::http::ocs(200, "OK", data + "]");
             }
         );
-        host.add_route(
+        m_app->route(
             "POST",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto form = nc::util::parse_form(request.get_body());
                 std::string owner = nc::util::form_value(form, "owner");
                 owner = owner.empty() ? request.get_user() : owner;
@@ -149,14 +151,12 @@ public:
                 return nc::http::ocs(200, "OK", R"({"id":)" + std::to_string(id) + "}");
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/{id}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const nc::db::Client db{m_host};
                 const auto rows = db.query(
                     "SELECT owner, author FROM nc_comments WHERE id = ?",
@@ -238,6 +238,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

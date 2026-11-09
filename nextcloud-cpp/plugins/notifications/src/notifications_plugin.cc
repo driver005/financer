@@ -4,16 +4,20 @@
  * notification for the recipient of a share. Counterpart of Nextcloud's `lib/public/Notification`
  * and `apps/notifications`. Dismissed notifications are deleted; a job removes old ones.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/text.h"
 
 #include <chrono>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 std::int64_t now_seconds()
 {
@@ -64,6 +68,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         nc::db::Client{&host}.migrate(
             "notifications",
             1,
@@ -137,14 +143,12 @@ public:
         );
 
         constexpr std::string_view BASE = "/ocs/v2.php/apps/notifications/api/v2/notifications";
-        host.add_route(
+        m_app->route(
             "GET",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 std::string data = "[";
                 bool first = true;
                 for (const nc::db::Row& row: nc::db::Client{m_host}.query(
@@ -159,14 +163,12 @@ public:
                 return nc::http::ocs(200, "OK", data + "]");
             }
         );
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/{id}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto rows = nc::db::Client{m_host}.query(
                     "SELECT id, ts, subject, message, link FROM nc_notifications WHERE uid = ? AND "
                     "id = ?",
@@ -176,14 +178,12 @@ public:
                                     : nc::http::ocs(200, "OK", notification_json(rows.front()));
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/{id}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto removed = nc::db::Client{m_host}.exec(
                     "DELETE FROM nc_notifications WHERE uid = ? AND id = ?",
                     {request.get_user(), std::string{request.param("id")}}
@@ -192,14 +192,12 @@ public:
                                     : nc::http::ocs(200, "OK", "{}");
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 nc::db::Client{m_host}.exec(
                     "DELETE FROM nc_notifications WHERE uid = ?",
                     {request.get_user()}
@@ -265,6 +263,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

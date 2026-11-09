@@ -10,6 +10,7 @@
  * local addresses are refused unless `[webhook_listeners] allow_local` is set.
  */
 #include "http_client.h"
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
@@ -17,11 +18,14 @@
 
 #include <algorithm>
 #include <chrono>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions ADMIN{nc::app::Access::ADMIN, nc::app::Format::OCS};
 
 constexpr int MAX_ATTEMPTS = 5;
 
@@ -81,6 +85,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         m_client.set_allow_http(host.config("allow_http", "false") == "true");
         m_client.set_allow_local(host.config("allow_local", "false") == "true");
         m_client.set_timeout_seconds(std::atoi(host.config("timeout_seconds", "10").c_str()));
@@ -115,15 +121,12 @@ public:
         );
 
         constexpr std::string_view BASE = "/ocs/v2.php/apps/webhook_listeners/api/v1/webhooks";
-        host.add_route(
+        m_app->route(
             "POST",
             BASE,
+            ADMIN,
             [this](const Request& request)
             {
-                if (!is_admin(request)) {
-                    return request.get_user().empty() ? nc::http::unauthorized()
-                                                      : nc::http::ocs(403, "Forbidden", "{}");
-                }
                 const auto form = nc::util::parse_form(request.get_body());
                 const std::string event = nc::util::form_value(form, "event");
                 const std::string url = nc::util::form_value(form, "uri");
@@ -155,15 +158,12 @@ public:
                 );
             }
         );
-        host.add_route(
+        m_app->route(
             "GET",
             BASE,
-            [this](const Request& request)
+            ADMIN,
+            [this](const Request)
             {
-                if (!is_admin(request)) {
-                    return request.get_user().empty() ? nc::http::unauthorized()
-                                                      : nc::http::ocs(403, "Forbidden", "{}");
-                }
                 std::string data = "[";
                 bool first = true;
                 for (const nc::db::Row& row: nc::db::Client{m_host}.query(
@@ -178,15 +178,12 @@ public:
                 return nc::http::ocs(200, "OK", data + "]");
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/{id}",
+            ADMIN,
             [this](const Request& request)
             {
-                if (!is_admin(request)) {
-                    return request.get_user().empty() ? nc::http::unauthorized()
-                                                      : nc::http::ocs(403, "Forbidden", "{}");
-                }
                 const std::string id{request.param("id")};
                 const nc::db::Client db{m_host};
                 db.exec("DELETE FROM nc_webhook_queue WHERE webhook = ?", {id});
@@ -198,12 +195,6 @@ public:
     }
 
 private:
-    [[nodiscard]] bool is_admin(const Request& request) const
-    {
-        return !request.get_user().empty() &&
-               m_host->call_service("users.is_admin", request.get_user()).get_status() == 200;
-    }
-
     void enqueue(const std::string& topic, std::string_view payload) const
     {
         // Events of this plugin's own bookkeeping would only loop.
@@ -285,6 +276,7 @@ private:
 
     nc::federation::ClientSettings m_client{};
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

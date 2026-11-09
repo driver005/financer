@@ -5,16 +5,20 @@
  * object is the pair (owner, path); assignments follow moved and deleted files through the events
  * of the cloud plugin.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/text.h"
 
 #include <algorithm>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 std::string json_string(std::string_view text)
 {
@@ -65,6 +69,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         nc::db::Client{&host}.migrate(
             "systemtags",
             1,
@@ -109,14 +115,12 @@ public:
         );
 
         constexpr std::string_view BASE = "/ocs/v2.php/apps/systemtags/api/v1";
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/tags",
-            [this](const Request& request)
+            USER,
+            [this](const Request&)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 std::string data = "[";
                 bool first = true;
                 for (const nc::db::Row& row:
@@ -129,14 +133,12 @@ public:
                 return nc::http::ocs(200, "OK", data + "]");
             }
         );
-        host.add_route(
+        m_app->route(
             "POST",
             std::string{BASE} + "/tags",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const std::string name = field(request, "name");
                 if (!valid_tag(name)) {
                     return failure(400, "Invalid tag name");
@@ -150,14 +152,12 @@ public:
                 return nc::http::ocs(200, "OK", R"({"id":)" + std::to_string(id) + "}");
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/tags/{id}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 // Tags belong to everybody, so only an administrator removes one.
                 const Response who = m_host->call_service("users.get", request.get_user());
                 if (who.get_body().find(R"("admin":true)") == std::string::npos) {
@@ -172,14 +172,12 @@ public:
             }
         );
         // Put a tag on one of your own files, or take it off again.
-        host.add_route(
+        m_app->route(
             "POST",
             std::string{BASE} + "/objects",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const Response found = m_host->call_service(
                     "cloud.stat",
                     nc::util::form_encode(
@@ -203,14 +201,12 @@ public:
                 return nc::http::ocs(200, "OK", "{}");
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/objects",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto removed = nc::db::Client{m_host}.exec(
                     "DELETE FROM nc_tag_objects WHERE tag_id = ? AND owner = ? AND path = ?",
                     {field(request, "tag"), request.get_user(), field(request, "path")}
@@ -220,14 +216,12 @@ public:
             }
         );
         // The tags of one file (?path=), or the files that have one tag (?tag=).
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/objects",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const nc::db::Client db{m_host};
                 std::string data = "[";
                 bool first = true;
@@ -335,6 +329,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace
