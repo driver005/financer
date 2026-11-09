@@ -7,6 +7,7 @@
  */
 #include "dav.h"
 #include "nextcloud/plugin.h"
+#include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 #include "share_store.h"
 #include "storage.h"
@@ -18,6 +19,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <span>
 #include <sstream>
 
@@ -1149,6 +1151,8 @@ private:
             json += R"(,"token":)" + json_string(share.get_token()) + R"(,"url":)" +
                     json_string(base_url(request) + "/s/" + share.get_token());
         }
+        json += std::string{R"(,"password_protected":)"} +
+                (share.get_password().empty() ? "false" : "true");
         json += R"(,"expiration":)" + (share.get_expires() == 0
                                            ? std::string{"null"}
                                            : json_string(format_time(share.get_expires())));
@@ -1217,7 +1221,27 @@ private:
                     }
                     share.set_permissions(mask);
                 } else if (type == nc::cloud::SHARE_TYPE_LINK) {
-                    share.set_permissions(1); // public links are read-only
+                    // 1 read only (default), 4 upload only ("file drop"), 5 read and upload; the
+                    // last two need a folder.
+                    const std::string permissions = field("permissions");
+                    const int mask = permissions.empty() ? 1 : std::atoi(permissions.c_str());
+                    const auto shared = storage_for(owner).stat(*path);
+                    if ((mask != 1 && mask != 4 && mask != 5) ||
+                        (mask != 1 && !(shared && shared->is_directory()))) {
+                        return failure(400, "Invalid permissions for a link");
+                    }
+                    share.set_permissions(mask);
+                    if (const std::string password = field("password"); !password.empty()) {
+                        if (password.size() < 8 || password.size() > 256 ||
+                            password.find_first_of("\t\r\n") != std::string::npos) {
+                            return failure(400, "The password needs at least 8 characters");
+                        }
+                        const std::string salt = nc::util::random_hex(16);
+                        share.set_password(
+                            "10000$" + salt + "$" +
+                            nc::util::to_hex(nc::util::pbkdf2_sha256(password, salt, 10'000))
+                        );
+                    }
                 } else {
                     return failure(400, "Unknown share type");
                 }
@@ -1342,14 +1366,107 @@ private:
                 return serve_public(request);
             }
         );
+        host.add_route(
+            "PUT",
+            "/s/{token}/{*path}",
+            [this](const Request& request)
+            {
+                return public_upload(request);
+            }
+        );
+    }
+
+    /// The share behind a link, if the link is valid and the password (header
+    /// `X-NC-Share-Password`, or
+    /// `?password=`) fits. One status for every reason it is not, apart from "needs a password"
+    /// (401).
+    [[nodiscard]] std::optional<Share> open_link(const Request& request, Response& refusal) const
+    {
+        auto share = m_shares->find_by_token(request.param("token"));
+        if (!share || share->expired(now_seconds()) || !safe_user(share->get_owner())) {
+            refusal = Response::text(404, "Not Found");
+            return std::nullopt;
+        }
+        if (!share->get_password().empty()) {
+            std::string given{request.header("X-NC-Share-Password")};
+            if (given.empty()) {
+                given = request.query_value("password");
+            }
+            const std::vector<std::string> parts = nc::util::split(share->get_password(), '$');
+            const bool good =
+                parts.size() == 3 && !given.empty() &&
+                nc::util::constant_time_equals(
+                    nc::util::to_hex(nc::util::pbkdf2_sha256(
+                        given,
+                        parts[1],
+                        static_cast<std::uint32_t>(std::strtoul(parts[0].c_str(), nullptr, 10))
+                    )),
+                    parts[2]
+                );
+            if (!good) {
+                refusal = Response::json(401, R"({"password":"required"})");
+                return std::nullopt;
+            }
+        }
+        return share;
+    }
+
+    /// `PUT /s/<token>/<name>` into a folder shared with upload permission. An existing name is
+    /// never replaced: the new file is numbered ("report (2).pdf").
+    [[nodiscard]] Response public_upload(const Request& request) const
+    {
+        Response refusal;
+        const auto share = open_link(request, refusal);
+        if (!share) {
+            return refusal;
+        }
+        if (!(share->get_permissions() & 4)) {
+            return Response::text(403, "This link does not accept uploads");
+        }
+        if (request.get_body().size() > m_max_upload) {
+            return Response::text(413, "The file is larger than this server accepts");
+        }
+        const Storage storage = storage_for(share->get_owner());
+        (void)storage.ensure_root();
+        const auto target =
+            Storage::normalize(share->get_path() + "/" + std::string{request.param("path")});
+        const auto folder = storage.stat(share->get_path());
+        if (!target || !folder || !folder->is_directory() || *target == share->get_path()) {
+            return Response::text(400, "Bad name");
+        }
+        std::string name = *target;
+        const std::size_t dot = name.rfind('.');
+        const std::size_t slash = name.rfind('/');
+        for (int attempt = 2; storage.stat(name) && attempt < 1'000; ++attempt) {
+            name = dot != std::string::npos && dot > slash + 1
+                       ? target->substr(0, dot) + " (" + std::to_string(attempt) + ")" +
+                             target->substr(dot)
+                       : *target + " (" + std::to_string(attempt) + ")";
+        }
+        const auto written = storage.write(name, request.get_body());
+        if (!written) {
+            return Response::text(
+                nc::cloud::http_status(written.error()),
+                written.error().get_message()
+            );
+        }
+        m_host->publish(
+            "file.created",
+            nc::util::form_encode({{"user", share->get_owner()}, {"path", name}})
+        );
+        return Response{201};
     }
 
     [[nodiscard]] Response serve_public(const Request& request) const
     {
-        const auto share = m_shares->find_by_token(request.param("token"));
+        Response refusal;
         // One answer for "no such token" and "expired", so a token cannot be probed.
-        if (!share || share->expired(now_seconds()) || !safe_user(share->get_owner())) {
-            return Response::text(404, "Not Found");
+        const auto share = open_link(request, refusal);
+        if (!share) {
+            return refusal;
+        }
+        if (!(share->get_permissions() & 1)) {
+            return Response::text(403, "This link only accepts uploads");
         }
         const Storage storage = storage_for(share->get_owner());
         const auto root = storage.stat(share->get_path());

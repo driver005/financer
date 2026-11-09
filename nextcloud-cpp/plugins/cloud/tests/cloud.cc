@@ -769,6 +769,179 @@ void test_chunked_uploads()
     fs::remove_all(dir);
 }
 
+void test_link_options()
+{
+    const std::string dir = temp_dir("links");
+    nc::Kernel kernel{nc::Config::parse(
+                          "data_dir = " + dir +
+                          "\n[users]\npbkdf2_iterations = 3\n[cloud]\nmax_upload_bytes = 50\n"
+    )
+                          .value()};
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string files = "/remote.php/dav/files/alice";
+    const std::string shares = "/ocs/v2.php/apps/files_sharing/api/v1/shares";
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", files + "/Inbox", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", files + "/Inbox/secret.txt", "private", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", files + "/single.txt", "one file", alice)).get_status(),
+        201
+    );
+    const auto token_of = [](const Response& created)
+    {
+        const std::string body = created.get_body();
+        return body.substr(body.find("\"token\":\"") + 9, 20);
+    };
+    const auto with_password = [&](std::string path, const std::string& password)
+    {
+        Request request{"GET", std::move(path)};
+        request.add_header("X-NC-Share-Password", std::string{password});
+        return request;
+    };
+
+    // A link with a password: nothing without it, nothing with a wrong one.
+    const Response locked = kernel.handle(
+        user_req("POST", shares, "path=/single.txt&shareType=3&password=correct+horse", alice)
+    );
+    NC_CHECK_EQ(locked.get_status(), 200);
+    NC_CHECK(locked.get_body().find("\"password_protected\":true") != std::string::npos);
+    NC_CHECK(locked.get_body().find("correct") == std::string::npos); // never echoed
+    const std::string locked_token = token_of(locked);
+    NC_CHECK_EQ(kernel.handle(Request{"GET", "/s/" + locked_token}).get_status(), 401);
+    NC_CHECK_EQ(
+        kernel.handle(with_password("/s/" + locked_token, "wrong password")).get_status(),
+        401
+    );
+    NC_CHECK_EQ(kernel.handle(with_password("/s/" + locked_token, "")).get_status(), 401);
+    NC_CHECK_EQ(
+        kernel.handle(with_password("/s/" + locked_token, "correct horse")).get_body(),
+        "one file"
+    );
+    Request by_query{"GET", "/s/" + locked_token};
+    by_query.set_query("password=correct%20horse");
+    NC_CHECK_EQ(kernel.handle(std::move(by_query)).get_body(), "one file");
+    NC_CHECK_EQ(
+        kernel
+            .handle(user_req("POST", shares, "path=/single.txt&shareType=3&password=short", alice))
+            .get_status(),
+        400
+    );
+    // The password is stored hashed, not as text.
+    NC_CHECK(slurp(dir + "/shares.db").find("correct horse") == std::string::npos);
+    NC_CHECK(slurp(dir + "/shares.db").find("10000$") != std::string::npos);
+
+    // A drop box: people can put files in and cannot see or read anything.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=/single.txt&shareType=3&permissions=4", alice))
+            .get_status(),
+        400
+    ); // needs a folder
+    NC_CHECK_EQ(
+        kernel.handle(user_req("POST", shares, "path=/Inbox&shareType=3&permissions=2", alice))
+            .get_status(),
+        400
+    );
+    const std::string drop = token_of(
+        kernel.handle(user_req("POST", shares, "path=/Inbox&shareType=3&permissions=4", alice))
+    );
+    NC_CHECK_EQ(kernel.handle(Request{"GET", "/s/" + drop}).get_status(), 403);
+    NC_CHECK_EQ(kernel.handle(Request{"GET", "/s/" + drop + "/secret.txt"}).get_status(), 403);
+    NC_CHECK_EQ(
+        kernel.handle(Request{"PUT", "/s/" + drop + "/hello.txt", "", "hi there", "", {}, {}}
+        ).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", files + "/Inbox/hello.txt", "", alice)).get_body(),
+        "hi there"
+    );
+    // An existing name is never replaced, the new file is numbered.
+    NC_CHECK_EQ(
+        kernel.handle(Request{"PUT", "/s/" + drop + "/hello.txt", "", "second", "", {}, {}}
+        ).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(Request{"PUT", "/s/" + drop + "/secret.txt", "", "overwrite?", "", {}, {}}
+        ).get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", files + "/Inbox/hello (2).txt", "", alice)).get_body(),
+        "second"
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", files + "/Inbox/secret.txt", "", alice)).get_body(),
+        "private"
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", files + "/Inbox/secret (2).txt", "", alice)).get_body(),
+        "overwrite?"
+    );
+    // Not outside the folder, not too big, and a read-only link takes no uploads.
+    NC_CHECK_EQ(
+        kernel.handle(Request{"PUT", "/s/" + drop + "/../escape.txt", "", "x", "", {}, {}}
+        ).get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        kernel
+            .handle(Request{"PUT", "/s/" + drop + "/big.bin", "", std::string(51, 'x'), "", {}, {}})
+            .get_status(),
+        413
+    );
+    NC_CHECK_EQ(
+        kernel.handle(Request{"PUT", "/s/" + drop + "/no/such/dir.txt", "", "x", "", {}, {}}
+        ).get_status(),
+        409
+    );
+    const std::string read_only =
+        token_of(kernel.handle(user_req("POST", shares, "path=/Inbox&shareType=3", alice)));
+    NC_CHECK_EQ(
+        kernel.handle(Request{"PUT", "/s/" + read_only + "/x.txt", "", "x", "", {}, {}}
+        ).get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        kernel.handle(Request{"PUT", "/s/" + std::string(20, 'a') + "/x.txt", "", "x", "", {}, {}}
+        ).get_status(),
+        404
+    );
+
+    // Read and upload together.
+    const std::string both = token_of(kernel.handle(user_req(
+        "POST",
+        shares,
+        "path=/Inbox&shareType=3&permissions=5&password=open+sesame",
+        alice
+    )));
+    Request listing = with_password("/s/" + both, "open sesame");
+    NC_CHECK(kernel.handle(std::move(listing)).get_body().find("secret.txt") != std::string::npos);
+    Request upload{"PUT", "/s/" + both + "/both.txt", "", "ok", "", {}, {}};
+    NC_CHECK_EQ(
+        kernel.handle(Request{upload}).get_status(),
+        401
+    ); // the password applies to uploads too
+    upload.add_header("X-NC-Share-Password", "open sesame");
+    NC_CHECK_EQ(kernel.handle(std::move(upload)).get_status(), 201);
+
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 void test_received_shares()
 {
     const std::string dir = temp_dir("mounts");
@@ -1261,6 +1434,7 @@ int main()
     test_share_store();
     test_plugins();
     test_ranges();
+    test_link_options();
     test_chunked_uploads();
     test_received_shares();
     test_external_storage();

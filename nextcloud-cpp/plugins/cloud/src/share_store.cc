@@ -43,7 +43,7 @@ ShareStore::Result<void> ShareStore::load()
                 std::max<std::uint64_t>(m_next_id, std::strtoull(parts[1].c_str(), nullptr, 10));
             continue;
         }
-        if (parts.size() != 9) {
+        if (parts.size() != 9 && parts.size() != 10) {
             return util::unexpected<Error>{
                 m_file + ":" + std::to_string(number) + ": damaged share line"
             };
@@ -59,6 +59,9 @@ ShareStore::Result<void> ShareStore::load()
             std::strtoll(parts[7].c_str(), nullptr, 10),
             std::strtoll(parts[8].c_str(), nullptr, 10)
         };
+        if (parts.size() == 10) {
+            share.set_password(std::string{parts[9]});
+        }
         m_next_id = std::max(m_next_id, share.get_id() + 1);
         m_shares.push_back(std::move(share));
     }
@@ -80,7 +83,8 @@ ShareStore::Result<void> ShareStore::save_locked() const
             stream << share.get_id() << '\t' << share.get_token() << '\t' << share.get_type()
                    << '\t' << share.get_owner() << '\t' << share.get_share_with() << '\t'
                    << share.get_path() << '\t' << share.get_permissions() << '\t'
-                   << share.get_expires() << '\t' << share.get_created() << '\n';
+                   << share.get_expires() << '\t' << share.get_created() << '\t'
+                   << share.get_password() << '\n';
         }
         stream.flush();
         if (!stream) {
@@ -101,7 +105,8 @@ ShareStore::Result<void> ShareStore::save_locked() const
 
 ShareStore::Result<Share> ShareStore::add(Share&& share)
 {
-    if (share.get_path().find_first_of("\t\n\r") != std::string::npos) {
+    if (share.get_path().find_first_of("\t\n\r") != std::string::npos ||
+        share.get_password().find_first_of("\t\n\r") != std::string::npos) {
         return util::unexpected<Error>{"the path contains characters that are not allowed"};
     }
     const std::lock_guard lock{m_mutex};

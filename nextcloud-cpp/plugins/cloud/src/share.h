@@ -91,6 +91,11 @@ public:
         m_created = created;
     }
 
+    void set_password(std::string&& password) noexcept
+    {
+        m_password = std::move(password);
+    }
+
     [[nodiscard]] std::uint64_t get_id() const noexcept
     {
         return m_id;
@@ -156,6 +161,17 @@ public:
         return m_created;
     }
 
+    /// `iterations$salt$hash` of the link's password, empty for a link without one.
+    [[nodiscard]] std::string& get_password() noexcept
+    {
+        return m_password;
+    }
+
+    [[nodiscard]] const std::string& get_password() const noexcept
+    {
+        return m_password;
+    }
+
     /// @brief Whether the share has run out at `now` (unix seconds). 0 means it never does.
     [[nodiscard]] bool expired(std::int64_t now) const noexcept
     {
@@ -172,6 +188,7 @@ private:
     int m_permissions{1};
     std::int64_t m_expires{0};
     std::int64_t m_created{0};
+    std::string m_password{};
 };
 
 } // namespace nc::cloud
