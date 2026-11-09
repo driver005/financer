@@ -6,6 +6,7 @@
  * and names the address book home when the contacts plugin is loaded.
  */
 #include "collection_server.h"
+#include "nextcloud/app.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/text.h"
 
@@ -15,6 +16,8 @@ namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::PLAIN};
 
 std::string principal_response(const std::string& href, const std::string& props)
 {
@@ -61,6 +64,8 @@ public:
 
     void on_load(nc::Host& host) override
     {
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         const std::size_t max_size =
             std::strtoull(host.config("max_object_size", "1048576").c_str(), nullptr, 10);
         m_server = std::make_unique<nc::davobjects::CollectionServer>(
@@ -93,14 +98,12 @@ public:
                 }
             );
         }
-        host.add_route(
+        m_app->route(
             "PROPFIND",
             "/remote.php/dav",
+            USER,
             [](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 return discovery(principal_response(
                     "/remote.php/dav/",
                     "    <d:current-user-principal><d:href>/remote.php/dav/principals/users/" +
@@ -109,14 +112,12 @@ public:
                 ));
             }
         );
-        host.add_route(
+        m_app->route(
             "PROPFIND",
             "/remote.php/dav/principals/users/{user}",
+            USER,
             [&host](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 if (request.param("user") != request.get_user()) {
                     return Response::text(403, "Forbidden");
                 }
@@ -149,6 +150,7 @@ public:
 
 private:
     std::unique_ptr<nc::davobjects::CollectionServer> m_server{};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

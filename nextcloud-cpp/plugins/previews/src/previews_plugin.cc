@@ -10,6 +10,7 @@
  * the pixels, files over 20 MiB and pictures over 8192 pixels a side or 40 megapixels are refused.
  */
 #include "image.h"
+#include "nextcloud/app.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
@@ -17,12 +18,15 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <sstream>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::PLAIN};
 
 constexpr std::uint64_t MAX_FILE = 20U * 1'024U * 1'024U;
 constexpr int MAX_PREVIEW = 2'048;
@@ -63,6 +67,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         m_cache = std::filesystem::path{host.config("data_dir", "data")} / "previews";
         host.add_service(
             "capabilities.previews",
@@ -74,9 +80,9 @@ public:
                 );
             }
         );
-        host.add_route(
-            "GET",
+        m_app->get(
             "/index.php/core/preview.png",
+            USER,
             [this](const Request& request)
             {
                 return preview(request);
@@ -106,9 +112,6 @@ public:
 private:
     [[nodiscard]] Response preview(const Request& request) const
     {
-        if (request.get_user().empty()) {
-            return nc::http::unauthorized();
-        }
         const std::string path = request.query_value("file");
         std::string owner = request.query_value("owner");
         owner = owner.empty() ? request.get_user() : owner;
@@ -194,6 +197,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
     std::filesystem::path m_cache{};
 };
 

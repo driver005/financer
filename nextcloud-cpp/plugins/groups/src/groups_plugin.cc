@@ -3,18 +3,23 @@
  * @brief Groups of accounts: the `groups.*` services, the OCS group API and the `group:*` commands.
  * Counterpart of Nextcloud's `lib/private/Group` and the group part of `apps/provisioning_api`.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/text.h"
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
 #include <optional>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions ADMIN{nc::app::Access::ADMIN, nc::app::Format::OCS};
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 std::string json_string(std::string_view text)
 {
@@ -71,6 +76,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         const nc::db::Client db{&host};
         db.migrate(
             "groups",
@@ -147,14 +154,12 @@ public:
         );
 
         constexpr std::string_view BASE = "/ocs/v2.php/cloud/groups";
-        host.add_route(
+        m_app->route(
             "GET",
             BASE,
-            [this](const Request& request)
+            ADMIN,
+            [this](const Request&)
             {
-                if (const auto denied = require_admin(request)) {
-                    return *denied;
-                }
                 std::string data = R"({"groups":[)";
                 bool first = true;
                 for (const nc::db::Row& row:
@@ -166,14 +171,12 @@ public:
                 return ok(data + "]}");
             }
         );
-        host.add_route(
+        m_app->route(
             "POST",
             BASE,
+            ADMIN,
             [this](const Request& request)
             {
-                if (const auto denied = require_admin(request)) {
-                    return *denied;
-                }
                 const std::string id = field(request, "groupid");
                 if (!valid_group(id)) {
                     return failure(400, "Invalid group id");
@@ -186,14 +189,12 @@ public:
                 return ok();
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/{gid}",
+            ADMIN,
             [this](const Request& request)
             {
-                if (const auto denied = require_admin(request)) {
-                    return *denied;
-                }
                 const std::string id{request.param("gid")};
                 if (nc::db::Client{m_host}.exec("DELETE FROM nc_groups WHERE id = ?", {id}) == 0) {
                     return failure(404, "The group does not exist");
@@ -202,14 +203,12 @@ public:
                 return ok();
             }
         );
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/{gid}/users",
+            ADMIN,
             [this](const Request& request)
             {
-                if (const auto denied = require_admin(request)) {
-                    return *denied;
-                }
                 const std::string id{request.param("gid")};
                 if (!exists(id)) {
                     return failure(404, "The group does not exist");
@@ -227,14 +226,12 @@ public:
                 return ok(data + "]}");
             }
         );
-        host.add_route(
+        m_app->route(
             "GET",
             "/ocs/v2.php/cloud/users/{userid}/groups",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const std::string user{request.param("userid")};
                 if (user != request.get_user() && !is_admin(request.get_user())) {
                     return failure(403, "Forbidden");
@@ -249,17 +246,19 @@ public:
                 return ok(data + "]}");
             }
         );
-        host.add_route(
+        m_app->route(
             "POST",
             "/ocs/v2.php/cloud/users/{userid}/groups",
+            ADMIN,
             [this](const Request& request)
             {
                 return change_membership(request, true);
             }
         );
-        host.add_route(
+        m_app->route(
             "DELETE",
             "/ocs/v2.php/cloud/users/{userid}/groups",
+            ADMIN,
             [this](const Request& request)
             {
                 return change_membership(request, false);
@@ -473,6 +472,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

@@ -5,6 +5,7 @@
  * `lib/private/Mail/Mailer` and the notification mails of `files_sharing` and `settings`.
  */
 #include "mime.h"
+#include "nextcloud/app.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/text.h"
 #include "transport.h"
@@ -16,6 +17,8 @@ namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 using nc::mail::MailMessage;
 
 std::vector<std::string> addresses_from(std::string_view list)
@@ -50,6 +53,8 @@ public:
 
     void on_load(nc::Host& host) override
     {
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         m_from = host.config("from_address", "no-reply@localhost.localdomain");
         m_from_name = host.config("from_name", "Nextcloud");
         m_max_recipients = std::strtoul(host.config("max_recipients", "50").c_str(), nullptr, 10);
@@ -101,14 +106,11 @@ public:
             }
         );
 
-        host.add_route(
-            "POST",
+        m_app->post(
             "/ocs/v2.php/apps/mail/api/v1/send",
+            USER,
             [this, &host](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 // The signed-in user's own address becomes the reply-to, so answers reach them.
                 const Response email = host.call_service("users.email", request.get_user());
                 Response result = send_from_form(
@@ -265,6 +267,7 @@ private:
     bool m_notify_shares{true};
     bool m_welcome{true};
     std::unique_ptr<nc::mail::Transport> m_transport{};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

@@ -870,7 +870,11 @@ int main()
     NC_CHECK_EQ(kernel.run_command("user:delete", {"alice"}, out), 0);
     NC_CHECK_EQ(
         kernel.get_services()
-            .call("db.query", "sql=SELECT+COUNT%28*%29+AS+n+FROM+nc_dav_collections+WHERE+uid+!%3D+%27nc-system%27")
+            .call(
+                "db.query",
+                "sql=SELECT+COUNT%28*%29+AS+n+FROM+nc_dav_collections+WHERE+uid+!%3D+%27nc-system%"
+                "27"
+            )
             .get_body(),
         "n=0\n"
     );

@@ -11,17 +11,23 @@
  * are registered by an administrator on the command line, and a client can only be sent to the
  * exact redirect URI it was registered with.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 
 #include <chrono>
+#include <memory>
 
 namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::PLAIN};
+// The token endpoint is called by the client program, which proves itself with its secret.
+constexpr nc::app::RouteOptions CLIENT{nc::app::Access::PUBLIC, nc::app::Format::PLAIN};
 
 constexpr std::int64_t CODE_LIFETIME = 600;
 constexpr std::int64_t ACCESS_LIFETIME = 3'600;
@@ -92,6 +98,8 @@ public:
     void on_load(nc::Host& host) override
     {
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         nc::db::Client{&host}.migrate(
             "oauth2",
             1,
@@ -127,17 +135,17 @@ public:
             }
         );
 
-        host.add_route(
-            "GET",
+        m_app->get(
             "/index.php/apps/oauth2/authorize",
+            USER,
             [this](const Request& request)
             {
                 return authorize(request);
             }
         );
-        host.add_route(
-            "POST",
+        m_app->post(
             "/index.php/apps/oauth2/api/v1/token",
+            CLIENT,
             [this](const Request& request)
             {
                 return token(request);
@@ -245,9 +253,6 @@ private:
     /// GET authorize: sends the signed-in person back to the client with a one-time code.
     [[nodiscard]] Response authorize(const Request& request) const
     {
-        if (request.get_user().empty()) {
-            return nc::http::unauthorized();
-        }
         const std::string client_id = request.query_value("client_id");
         const std::string redirect = request.query_value("redirect_uri");
         const auto clients = nc::db::Client{m_host}.query(
@@ -381,6 +386,7 @@ private:
     }
 
     nc::Host* m_host{nullptr};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace

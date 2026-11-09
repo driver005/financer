@@ -7,6 +7,7 @@
  */
 #include "dav.h"
 #include "http_client.h"
+#include "nextcloud/app.h"
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
@@ -32,6 +33,8 @@ using nc::cloud::Share;
 using nc::cloud::Storage;
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 
 std::string json_string(std::string_view text)
 {
@@ -244,6 +247,8 @@ public:
         m_quota = std::strtoull(host.config("quota_bytes", "0").c_str(), nullptr, 10);
         m_public_url = host.config("overwrite_url", "");
         m_host = &host;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
         parse_external(host.config("external_mounts", ""));
         m_dav_client.set_allow_http(host.config("external_webdav_allow_http", "false") == "true");
         m_dav_client.set_allow_local(host.config("external_webdav_allow_local", "false") == "true");
@@ -2295,20 +2300,18 @@ private:
         return json;
     }
 
-    void add_share_routes(nc::Host& host)
+    void add_share_routes(nc::Host&)
     {
         constexpr std::string_view BASE = "/ocs/v2.php/apps/files_sharing/api/v1/shares";
 
         // Who a share can go to: people and groups of this server that match the text, and people
         // on other servers this one knows (or the address that was typed, when it looks like one).
-        host.add_route(
+        m_app->route(
             "GET",
             "/ocs/v2.php/apps/files_sharing/api/v1/sharees",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const std::string search = request.query_value("search");
                 if (search.size() > 100) {
                     return failure(400, "The search text is too long");
@@ -2401,14 +2404,12 @@ private:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "POST",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto form = nc::util::parse_form(request.get_body());
                 const auto field = [&](std::string_view name)
                 {
@@ -2646,14 +2647,12 @@ private:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "GET",
             BASE,
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const bool received = request.query_value("shared_with_me") == "true";
                 const std::string path_filter = request.query_value("path");
                 std::string data = "[";
@@ -2672,14 +2671,12 @@ private:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "GET",
             std::string{BASE} + "/{id}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto share = m_shares->find(
                     std::strtoull(std::string{request.param("id")}.c_str(), nullptr, 10)
                 );
@@ -2692,14 +2689,12 @@ private:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "DELETE",
             std::string{BASE} + "/{id}",
+            USER,
             [this](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const std::uint64_t id =
                     std::strtoull(std::string{request.param("id")}.c_str(), nullptr, 10);
                 const auto share = m_shares->find(id);
@@ -3100,6 +3095,7 @@ private:
     nc::federation::ClientSettings m_s3_client{};
     nc::federation::ClientSettings m_dav_client{};
     std::unique_ptr<nc::cloud::ShareStore> m_shares{};
+    std::unique_ptr<nc::app::App> m_app{};
     nc::Host* m_host{nullptr};
 };
 

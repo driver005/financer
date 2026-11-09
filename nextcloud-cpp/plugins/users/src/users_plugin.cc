@@ -4,6 +4,7 @@
  * provisioning API (`/ocs/v2.php/cloud/users`) and the `user:*` commands. Counterpart of
  * Nextcloud's `lib/private/User` and `apps/provisioning_api`.
  */
+#include "nextcloud/app.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
@@ -16,6 +17,9 @@ namespace {
 
 using nc::http::Request;
 using nc::http::Response;
+
+constexpr nc::app::RouteOptions ADMIN{nc::app::Access::ADMIN, nc::app::Format::OCS};
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
 using nc::users::User;
 using nc::users::UserStore;
 
@@ -82,6 +86,8 @@ public:
             throw std::runtime_error(loaded.error());
         }
         UserStore& store = *m_store;
+        m_app = std::make_unique<nc::app::App>(host);
+        m_app->use_defaults();
 
         // ---- services other plugins and the kernel use ----------------------------------------
         host.add_service(
@@ -229,30 +235,23 @@ public:
         );
 
         // ---- provisioning API -----------------------------------------------------------------
-        host.add_route(
+        m_app->route(
             "GET",
             "/ocs/v2.php/cloud/user",
+            USER,
             [&store](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const auto user = store.find(request.get_user());
                 return user ? ok(user_json(*user)) : failure(404, "User not found");
             }
         );
 
-        host.add_route(
+        m_app->route(
             "GET",
             "/ocs/v2.php/cloud/users",
-            [&store](const Request& request)
+            ADMIN,
+            [&store](const Request&)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
-                if (!is_admin(store, request.get_user())) {
-                    return failure(403, "Forbidden");
-                }
                 std::string data = R"({"users":[)";
                 bool first = true;
                 for (const User& user: store.list()) {
@@ -264,17 +263,12 @@ public:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "POST",
             "/ocs/v2.php/cloud/users",
+            ADMIN,
             [&store, &host](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
-                if (!is_admin(store, request.get_user())) {
-                    return failure(403, "Forbidden");
-                }
                 const auto form = nc::util::parse_form(request.get_body());
                 const std::string id = field(request, form, "userid");
                 auto created = store.create(
@@ -295,14 +289,12 @@ public:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "GET",
             "/ocs/v2.php/cloud/users/{userid}",
+            USER,
             [&store](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const std::string target{request.param("userid")};
                 if (target != request.get_user() && !is_admin(store, request.get_user())) {
                     return failure(403, "Forbidden");
@@ -312,14 +304,12 @@ public:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "PUT",
             "/ocs/v2.php/cloud/users/{userid}",
+            USER,
             [&store](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
                 const std::string target{request.param("userid")};
                 const bool admin = is_admin(store, request.get_user());
                 if (target != request.get_user() && !admin) {
@@ -351,17 +341,12 @@ public:
             }
         );
 
-        host.add_route(
+        m_app->route(
             "DELETE",
             "/ocs/v2.php/cloud/users/{userid}",
+            ADMIN,
             [&store, &host](const Request& request)
             {
-                if (request.get_user().empty()) {
-                    return nc::http::unauthorized();
-                }
-                if (!is_admin(store, request.get_user())) {
-                    return failure(403, "Forbidden");
-                }
                 const std::string target{request.param("userid")};
                 if (target == request.get_user()) {
                     return failure(400, "You cannot delete your own account");
@@ -508,6 +493,7 @@ private:
     }
 
     std::unique_ptr<UserStore> m_store{};
+    std::unique_ptr<nc::app::App> m_app{};
 };
 
 } // namespace
