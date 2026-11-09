@@ -108,6 +108,12 @@ public:
     /// front if you prefer.
     Result<void> enable_tls(const std::string& certificate_file, const std::string& key_file);
 
+    /// @brief Uploads (PUT) of `threshold` bytes and more are written to a file in `directory`
+    /// while they arrive instead of being held in memory; the request carries the file's path
+    /// (`Request::get_body_file`) and the file is deleted when the request is answered. Without a
+    /// directory every body stays in memory. Call before `start`.
+    void set_spool(std::string directory, std::size_t threshold = 1U << 20U);
+
     /// @brief Listens on `address:port` (port 0 picks a free one) and returns the port.
     Result<std::uint16_t> start(const std::string& address, std::uint16_t port);
 
@@ -120,6 +126,8 @@ private:
 
     const Kernel* m_kernel{nullptr};
     std::size_t m_max_body{0};
+    std::string m_spool_directory{};
+    std::size_t m_spool_threshold{1U << 20U};
     ssl_ctx_st* m_tls{nullptr};
     int m_listen_fd{-1};
     std::atomic<bool> m_running{false};

@@ -57,6 +57,11 @@ extern "C"
         /** Values of the `{name}` segments of the matched route pattern. */
         const NcPair* params;
         size_t param_count;
+        /**
+         * Set when the body of a big upload was spooled to a file: `body` is empty then and this is
+         * the file's path. It stays valid until the call returns.
+         */
+        NcView body_file;
     } NcRequest;
 
     typedef struct NcResponse

@@ -90,6 +90,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `tls_cert`, `tls_key` | PEM files: serve HTTPS (TLS 1.2 or newer) | plain HTTP |
 | `log_level` | debug, info, warning, error, fatal | `info` (`warning` for commands) |
 | `data_dir` | accounts, shares, files, mail spool | `data` |
+| `upload_spool_kb` | `PUT` bodies of this size or more are written to `<data_dir>/.upload-spool` while they arrive instead of being held in memory | `1024` |
 | `[users] pbkdf2_iterations`, `min_password_length` | password hashing | `10000`, `8` |
 | `[cloud] quota_bytes`, `overwrite_url` | per-user quota, public URL for share links | unlimited, from `Host` |
 | `[cloud] encryption_key` or `encryption_key_file` | 64 hex digits: files are stored encrypted | off |

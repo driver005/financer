@@ -127,7 +127,8 @@ public:
         native.method = view_of(request.get_method());
         native.path = view_of(request.get_path());
         native.query = view_of(request.get_query());
-        native.body = view_of(request.get_body());
+        native.body = view_of(request.get_inline_body());
+        native.body_file = view_of(request.get_body_file());
         native.user = view_of(request.get_user());
         native.headers = headers.data();
         native.header_count = headers.size();

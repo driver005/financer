@@ -336,7 +336,11 @@ Response dav_handle(
                 hooks.before_overwrite(user, path);
             }
         }
-        auto created = storage.write(path, request.get_body(), mtime);
+        // A big upload that the server spooled to disk goes into the storage from that file; an
+        // encrypting storage needs the whole content and reads it.
+        auto created = !request.get_body_file().empty() && !storage.encrypts()
+                           ? storage.write_from_file(path, request.get_body_file(), mtime)
+                           : storage.write(path, request.get_body(), mtime);
         if (!created) {
             return failure(created.error());
         }

@@ -1616,7 +1616,7 @@ private:
         if (writes && (!server.writable || rest.empty())) {
             return Response::text(403, "This storage is read-only");
         }
-        if (method == "PUT" && request.get_body().size() > m_max_upload) {
+        if (method == "PUT" && request.body_size() > m_max_upload) {
             return Response::text(413, "The file is larger than this server accepts");
         }
         const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
@@ -2017,7 +2017,7 @@ private:
         if (writes && (!bucket.writable || rest.empty())) {
             return Response::text(403, "This storage is read-only");
         }
-        if (method == "PUT" && request.get_body().size() > m_max_upload) {
+        if (method == "PUT" && request.body_size() > m_max_upload) {
             return Response::text(413, "The file is larger than this server accepts");
         }
         const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
@@ -2343,7 +2343,7 @@ private:
         if (writes && (!dav.writable || rest.empty())) {
             return Response::text(403, "This storage is read-only");
         }
-        if (method == "PUT" && request.get_body().size() > m_max_upload) {
+        if (method == "PUT" && request.body_size() > m_max_upload) {
             return Response::text(413, "The file is larger than this server accepts");
         }
         const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
@@ -2430,7 +2430,7 @@ private:
                 "This is not possible in a share from another server"
             );
         }
-        if (method == "PUT" && request.get_body().size() > m_max_upload) {
+        if (method == "PUT" && request.body_size() > m_max_upload) {
             return Response::text(413, "The file is larger than this server accepts");
         }
         const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
@@ -3223,7 +3223,7 @@ private:
         if (!(share->get_permissions() & 4)) {
             return Response::text(403, "This link does not accept uploads");
         }
-        if (request.get_body().size() > m_max_upload) {
+        if (request.body_size() > m_max_upload) {
             return Response::text(413, "The file is larger than this server accepts");
         }
         const Storage storage = storage_for(share->get_owner());

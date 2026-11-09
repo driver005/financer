@@ -742,6 +742,27 @@ void test_streamed_downloads()
         NC_CHECK(wire.find("Content-Length: " + std::to_string(big.size())) != std::string::npos);
         NC_CHECK(wire.size() < 4'096U);
 
+        // An upload that the server spooled to a file is stored from that file, quota and all.
+        {
+            const std::string spooled = dir + "/spooled.bin";
+            {
+                std::ofstream{spooled, std::ios::binary} << big;
+            }
+            Request put = user_req("PUT", "/remote.php/dav/files/alice/uploaded.bin", "", alice);
+            put.set_body_file(std::string{spooled});
+            NC_CHECK_EQ(kernel.handle(std::move(put)).get_status(), 201);
+            const Response again =
+                kernel.handle(user_req("GET", "/remote.php/dav/files/alice/uploaded.bin", "", alice)
+                );
+            NC_CHECK(again.is_streamed());
+            NC_CHECK(again.read_body() == big);
+            // Replacing it reports 204.
+            Request replace =
+                user_req("PUT", "/remote.php/dav/files/alice/uploaded.bin", "", alice);
+            replace.set_body_file(std::string{spooled});
+            NC_CHECK_EQ(kernel.handle(std::move(replace)).get_status(), 204);
+        }
+
         // A small file is not worth a stream.
         const std::string small = "/remote.php/dav/files/alice/small.txt";
         NC_CHECK_EQ(kernel.handle(user_req("PUT", small, "tiny", alice)).get_status(), 201);

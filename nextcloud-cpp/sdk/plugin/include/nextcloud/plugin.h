@@ -11,6 +11,7 @@
 #include "nextcloud/http.h"
 #include "nextcloud/stream.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -357,6 +358,10 @@ namespace detail {
                 std::string{string_of(native.params[index].key)},
                 std::string{string_of(native.params[index].value)}
             );
+        }
+        if (native.struct_size >= offsetof(NcRequest, body_file) + sizeof(native.body_file) &&
+            native.body_file.data != nullptr && native.body_file.size != 0) {
+            request.set_body_file(std::string{string_of(native.body_file)});
         }
         return request;
     }

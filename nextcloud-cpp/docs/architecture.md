@@ -49,6 +49,13 @@ plugin (`call_service`) can hand it on unchanged. `http::Response::set_stream` a
 `stream.h` converts between the two. A stream is closed by code of the plugin that made it, so a response must
 be gone before that plugin unloads (the server finishes its connections first).
 
+The request side has the mirror image for big uploads: with a spool directory (`upload_spool_kb`, default
+1024; the directory is `<data_dir>/.upload-spool`) the server writes a `PUT` body of that size or more to a file
+while it arrives and passes the file's path in `NcRequest.body_file`. `Request::body_size()` and
+`get_body_file()` read nothing; `get_body()` still works for a handler that does not know about files (it reads
+the file once). The cloud plugin stores such an upload from the file in pieces, unless the user's files are
+encrypted (that needs the whole content). The server deletes the file when the request is answered.
+
 A plugin never touches these structs. `sdk/plugin/include/nextcloud/plugin.h` wraps them: derive from
 `nc::Plugin`, register in `on_load(nc::Host&)`, export with `NC_PLUGIN(Class)`. Exceptions are caught at the
 boundary: a throwing route becomes a 500, a throwing `on_load` marks the plugin failed and rolls back its

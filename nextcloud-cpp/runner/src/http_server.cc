@@ -1,5 +1,6 @@
 #include "nextcloud/runner/http_server.h"
 
+#include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 
 #include <algorithm>
@@ -7,6 +8,8 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <netinet/in.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -400,6 +403,23 @@ void HttpServer::serve(int client, ssl_st* tls)
         channel.write(serialize_response(http::Response::text(413, "Payload Too Large")));
         return;
     }
+    // The spooled body of a big upload, deleted whichever way this request ends.
+    std::string spool_path;
+
+    struct SpoolGuard
+    {
+        const std::string& path;
+
+        ~SpoolGuard()
+        {
+            if (!path.empty()) {
+                std::error_code error;
+                std::filesystem::remove(path, error);
+            }
+        }
+    };
+
+    const SpoolGuard spool_guard{spool_path};
     std::string body = buffer.substr(head->head_size);
     const bool wants_continue =
         util::equals_ignore_case(http::find_pair(head->headers, "Expect"), "100-continue");
@@ -430,17 +450,48 @@ void HttpServer::serve(int client, ssl_st* tls)
         if (body.size() < head->content_length && wants_continue) {
             channel.write("HTTP/1.1 100 Continue\r\n\r\n");
         }
-        while (body.size() < head->content_length) {
-            const ssize_t got = channel.read(chunk, sizeof(chunk));
-            if (got <= 0) {
+        if (!m_spool_directory.empty() && head->method == "PUT" &&
+            head->content_length >= m_spool_threshold) {
+            // A big upload goes to a file as it arrives.
+            spool_path = m_spool_directory + "/" + util::random_hex(12);
+            std::ofstream file{spool_path, std::ios::binary | std::ios::trunc};
+            std::size_t stored = std::min(body.size(), head->content_length);
+            file.write(body.data(), static_cast<std::streamsize>(stored));
+            body.clear();
+            while (stored < head->content_length) {
+                const ssize_t got = channel.read(chunk, sizeof(chunk));
+                if (got <= 0) {
+                    return;
+                }
+                const std::size_t take =
+                    std::min(static_cast<std::size_t>(got), head->content_length - stored);
+                file.write(chunk, static_cast<std::streamsize>(take));
+                stored += take;
+            }
+            file.flush();
+            if (!file) {
+                channel.write(
+                    serialize_response(http::Response::text(507, "Cannot store the upload"))
+                );
                 return;
             }
-            body.append(chunk, static_cast<std::size_t>(got));
+        } else {
+            while (body.size() < head->content_length) {
+                const ssize_t got = channel.read(chunk, sizeof(chunk));
+                if (got <= 0) {
+                    return;
+                }
+                body.append(chunk, static_cast<std::size_t>(got));
+            }
+            body.resize(head->content_length);
         }
-        body.resize(head->content_length);
     }
 
-    http::Response response = m_kernel->handle(request_from_head(*head, std::move(body)));
+    http::Request request = request_from_head(*head, std::move(body));
+    if (!spool_path.empty()) {
+        request.set_body_file(std::string{spool_path});
+    }
+    http::Response response = m_kernel->handle(std::move(request));
     if (!channel.write(serialize_response(response))) {
         return;
     }
@@ -462,6 +513,19 @@ void HttpServer::serve(int client, ssl_st* tls)
     if (tls == nullptr) {
         ::shutdown(client, SHUT_WR);
     }
+}
+
+void HttpServer::set_spool(std::string directory, std::size_t threshold)
+{
+    m_spool_directory = std::move(directory);
+    m_spool_threshold = threshold;
+    if (m_spool_directory.empty()) {
+        return;
+    }
+    // What a crashed run left behind is of no use to anyone.
+    std::error_code error;
+    std::filesystem::remove_all(m_spool_directory, error);
+    std::filesystem::create_directories(m_spool_directory, error);
 }
 
 void HttpServer::stop() noexcept

@@ -115,6 +115,11 @@ int main(int argc, char** argv)
         }
     }
     nc::HttpServer server{kernel};
+    // Big uploads are written to disk while they arrive, next to the data they will end up in.
+    server.set_spool(
+        kernel.get_config().get("data_dir", "data") + "/.upload-spool",
+        static_cast<std::size_t>(kernel.get_config().get_integer("upload_spool_kb", 1'024)) * 1'024U
+    );
     const std::string tls_cert = kernel.get_config().get("tls_cert", "");
     const std::string tls_key = kernel.get_config().get("tls_key", "");
     if (!tls_cert.empty() || !tls_key.empty()) {

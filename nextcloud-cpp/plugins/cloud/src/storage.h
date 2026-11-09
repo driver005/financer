@@ -260,6 +260,15 @@ public:
     /// `read`.
     [[nodiscard]] std::optional<FileStream> open_stream(std::string_view path) const;
 
+    /// @brief Like `write`, with the content taken from a file in pieces instead of a string (an
+    /// upload the server spooled to disk). Refused for an encrypting storage: encrypting needs the
+    /// whole content, so the caller reads the file and uses `write`.
+    [[nodiscard]] Result<bool> write_from_file(
+        std::string_view path,
+        const std::filesystem::path& source,
+        std::int64_t mtime = 0
+    ) const;
+
     /// @brief Writes a file atomically; true when it did not exist before. Parent must exist.
     [[nodiscard]] Result<bool>
     write(std::string_view path, std::string_view data, std::int64_t mtime = 0) const;
@@ -284,6 +293,12 @@ public:
     /// @brief Bytes under a path (a file's size, or the sum for a folder).
     [[nodiscard]] Result<std::uint64_t> size_of(std::string_view path) const;
     [[nodiscard]] std::uint64_t used_bytes() const;
+
+    /// @brief Whether files are encrypted on write.
+    [[nodiscard]] bool encrypts() const noexcept
+    {
+        return m_cipher != nullptr;
+    }
 
     [[nodiscard]] std::uint64_t get_quota() const noexcept
     {

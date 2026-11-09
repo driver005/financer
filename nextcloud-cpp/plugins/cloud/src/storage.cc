@@ -274,6 +274,78 @@ std::optional<FileStream> Storage::open_stream(std::string_view path) const
     return FileStream{std::move(file), static_cast<std::uint64_t>(end)};
 }
 
+Result<bool> Storage::write_from_file(
+    std::string_view path,
+    const std::filesystem::path& source,
+    std::int64_t mtime
+) const
+{
+    if (m_cipher) {
+        return fail(StorageCode::IO, "an encrypting storage cannot take a file in pieces");
+    }
+    const auto normalized = normalize(path);
+    if (!normalized) {
+        return util::unexpected<StorageError>{normalized.error()};
+    }
+    if (*normalized == "/") {
+        return fail(StorageCode::IS_DIRECTORY, "/");
+    }
+    const auto real = resolve(*normalized);
+    if (!real) {
+        return util::unexpected<StorageError>{real.error()};
+    }
+    std::error_code error;
+    if (!fs::is_directory(real->parent_path(), error)) {
+        return fail(StorageCode::PARENT_MISSING, *normalized);
+    }
+    if (fs::is_directory(*real, error)) {
+        return fail(StorageCode::IS_DIRECTORY, *normalized);
+    }
+    const std::uint64_t incoming = fs::file_size(source, error);
+    if (error) {
+        return fail(StorageCode::IO, "cannot read the upload");
+    }
+    const bool existed = fs::exists(*real, error);
+    if (m_quota != 0) {
+        const std::uint64_t old_size =
+            existed ? static_cast<std::uint64_t>(fs::file_size(*real, error)) : 0;
+        if (used_bytes() - old_size + incoming > m_quota) {
+            return fail(StorageCode::QUOTA, "the storage is full");
+        }
+    }
+    const fs::path temporary =
+        real->parent_path() / (std::string(TEMP_PREFIX) + util::random_hex(6));
+    {
+        std::ifstream in{source, std::ios::binary};
+        std::ofstream out{temporary, std::ios::binary | std::ios::trunc};
+        std::vector<char> piece(64U * 1'024U);
+        while (in.read(piece.data(), static_cast<std::streamsize>(piece.size())) || in.gcount() > 0
+        ) {
+            out.write(piece.data(), in.gcount());
+        }
+        out.flush();
+        if (!in.eof() || !out) {
+            fs::remove(temporary, error);
+            return fail(StorageCode::IO, "cannot write " + *normalized);
+        }
+    }
+    if (mtime > 0) {
+        fs::last_write_time(
+            temporary,
+            fs::file_time_type::clock::now() -
+                (std::chrono::system_clock::now() -
+                 std::chrono::system_clock::from_time_t(static_cast<std::time_t>(mtime))),
+            error
+        );
+    }
+    fs::rename(temporary, *real, error);
+    if (error) {
+        fs::remove(temporary, error);
+        return util::unexpected<StorageError>{from_error(error, "cannot store " + *normalized)};
+    }
+    return !existed;
+}
+
 Result<bool> Storage::write(std::string_view path, std::string_view data, std::int64_t mtime) const
 {
     const auto normalized = normalize(path);

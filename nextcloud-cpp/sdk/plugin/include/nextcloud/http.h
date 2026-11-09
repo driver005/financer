@@ -9,6 +9,8 @@
 #include "nextcloud/util/text.h"
 
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <string>
@@ -142,14 +144,49 @@ public:
         return m_query;
     }
 
-    [[nodiscard]] std::string& get_body() noexcept
+    /// @brief The body. A big upload can live in a file instead (`get_body_file`); asking for the
+    /// body then reads that file into memory once, so a handler that does not know about files
+    /// still works. A handler that does should look at `get_body_file` and `body_size` first.
+    [[nodiscard]] std::string& get_body()
+    {
+        load_body();
+        return m_body;
+    }
+
+    [[nodiscard]] const std::string& get_body() const
+    {
+        load_body();
+        return m_body;
+    }
+
+    /// @brief Path of the file that holds the body when the server spooled a big upload to disk;
+    /// empty otherwise. The file belongs to the server and is gone when the request is answered.
+    [[nodiscard]] const std::string& get_body_file() const noexcept
+    {
+        return m_body_file;
+    }
+
+    void set_body_file(std::string&& path) noexcept
+    {
+        m_body_file = std::move(path);
+        m_body_loaded = false;
+    }
+
+    /// @brief The body as it is held in memory, without reading the spool file.
+    [[nodiscard]] const std::string& get_inline_body() const noexcept
     {
         return m_body;
     }
 
-    [[nodiscard]] const std::string& get_body() const noexcept
+    /// @brief Size of the body in bytes, from the file when there is one (nothing is read).
+    [[nodiscard]] std::uint64_t body_size() const
     {
-        return m_body;
+        if (m_body_file.empty() || m_body_loaded) {
+            return m_body.size();
+        }
+        std::error_code error;
+        const auto size = std::filesystem::file_size(m_body_file, error);
+        return error ? m_body.size() : static_cast<std::uint64_t>(size);
     }
 
     /// @brief The authenticated user id; empty when anonymous.
@@ -216,10 +253,22 @@ public:
     }
 
 private:
+    void load_body() const
+    {
+        if (m_body_file.empty() || m_body_loaded) {
+            return;
+        }
+        std::ifstream file{m_body_file, std::ios::binary};
+        m_body.assign(std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{});
+        m_body_loaded = true;
+    }
+
     std::string m_method{};
     std::string m_path{};
     std::string m_query{};
-    std::string m_body{};
+    mutable std::string m_body{};
+    std::string m_body_file{};
+    mutable bool m_body_loaded{false};
     std::string m_user{};
     std::vector<Header> m_headers{};
     std::vector<Header> m_params{};

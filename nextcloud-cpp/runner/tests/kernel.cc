@@ -80,6 +80,28 @@ public:
             }
         );
         host.add_route(
+            "PUT",
+            "/alpha-upload",
+            [](const Request& request)
+            {
+                // Says what arrived: from a file or from memory, and how big, without reading it.
+                return Response::text(
+                    200,
+                    std::string{request.get_body_file().empty() ? "memory" : "file"} + " " +
+                        std::to_string(request.body_size()) + " " +
+                        (request.get_body_file().empty()
+                             ? std::string{"-"}
+                             : [&]
+                {
+                    std::ifstream in{request.get_body_file(), std::ios::binary};
+                    std::string head(4, ' ');
+                    in.read(head.data(), 4);
+                    return head;
+                }())
+                );
+            }
+        );
+        host.add_route(
             "GET",
             "/alpha/special",
             [](const Request&)
@@ -799,6 +821,11 @@ void test_http_server()
     add<AlphaPlugin>(kernel);
     NC_CHECK(kernel.start().has_value());
     nc::HttpServer server{kernel};
+    const std::string spool_dir =
+        (std::filesystem::temp_directory_path() / ("nc-spool-" + nc::util::random_hex(4)) / "spool")
+            .string();
+    std::filesystem::create_directories(std::filesystem::path{spool_dir}.parent_path());
+    server.set_spool(spool_dir, 1'000'000);
     const auto port = server.start("127.0.0.1", 0);
     NC_CHECK(port.has_value());
     if (port) {
@@ -830,6 +857,35 @@ void test_http_server()
         NC_CHECK(chunked.starts_with("HTTP/1.1 201 Created"));
         NC_CHECK(chunked.ends_with("streamed body"));
 
+        // A big upload is spooled to a file and the handler gets its path; a small one stays in
+        // memory; the file is gone after the answer.
+        const auto fetch = [&](const std::string& command)
+        {
+            std::string text;
+            if (FILE* pipe = popen(command.c_str(), "r")) {
+                char buffer[512];
+                while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                    text += buffer;
+                }
+                pclose(pipe);
+            }
+            return text;
+        };
+        {
+            std::ofstream{spool_dir + "/../up.bin"} << std::string(2'500'000, 'u');
+        }
+        const std::string spooled =
+            fetch("curl -s --max-time 20 -T " + spool_dir + "/../up.bin " + url + "/alpha-upload");
+        NC_CHECK_EQ(spooled, "file 2500000 uuuu");
+        NC_CHECK(std::filesystem::is_empty(spool_dir));
+        NC_CHECK_EQ(
+            fetch(
+                "printf 'tiny' | curl -s --max-time 10 -X PUT --data-binary @- " + url +
+                "/alpha-upload"
+            ),
+            "memory 4 -"
+        );
+
         // A streamed answer: the head announces the length, the body follows in pieces.
         std::string pulled;
         if (FILE* pipe =
@@ -849,6 +905,7 @@ void test_http_server()
     }
     server.stop();
     kernel.stop();
+    std::filesystem::remove_all(std::filesystem::path{spool_dir}.parent_path());
 }
 
 } // namespace
