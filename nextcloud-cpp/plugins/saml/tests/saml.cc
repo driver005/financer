@@ -6,6 +6,7 @@
 #include "nextcloud/util/text.h"
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
@@ -89,8 +90,15 @@ struct Idp
                          " --id-attr:ID " + ns + ":" + local_name + " --output " + dir +
                          "/out.xml " + dir + "/in.xml >/dev/null 2>&1")
                             .c_str());
+        if (status != 0) {
+            std::fprintf(
+                stderr,
+                "xmlsec1 could not sign (exit %d); is the OpenSSL backend installed?\n",
+                status
+            );
+        }
         NC_CHECK_EQ(status, 0);
-        return slurp(dir + "/out.xml");
+        return status == 0 ? slurp(dir + "/out.xml") : std::string{};
     }
 };
 
@@ -230,8 +238,12 @@ void test_validation()
     }
     {
         std::string changed = good;
-        changed.replace(changed.find(">alice<"), 7, ">admin<");
-        NC_CHECK(!check(changed).has_value());
+        const std::size_t at = changed.find(">alice<");
+        NC_CHECK(at != std::string::npos);
+        if (at != std::string::npos) {
+            changed.replace(at, 7, ">admin<");
+            NC_CHECK(!check(changed).has_value());
+        }
     }
 
     // Signature wrapping: the signed assertion is kept as a decoy and the one that is read is not
