@@ -19,6 +19,7 @@
 #include <fstream>
 #include <memory>
 #include <span>
+#include <sstream>
 
 namespace {
 
@@ -111,6 +112,8 @@ public:
         m_public_url = host.config("overwrite_url", "");
         m_host = &host;
         parse_external(host.config("external_mounts", ""));
+        m_max_upload =
+            std::strtoull(host.config("max_upload_bytes", "2147483648").c_str(), nullptr, 10);
         // Encryption at rest: a 64 hex digit key in the config, or in a file the administrator
         // keeps apart.
         std::string key_hex = host.config("encryption_key", "");
@@ -147,6 +150,7 @@ public:
         );
         add_storage_services(host);
         add_dav_routes(host);
+        add_upload_routes(host);
         add_share_routes(host);
         add_public_routes(host);
         add_commands(host);
@@ -471,6 +475,219 @@ private:
     }
 
     // ---- WebDAV ---------------------------------------------------------------------------------
+
+    // ---- chunked uploads
+    // --------------------------------------------------------------------------
+    //
+    // The sync clients cut big files into chunks: MKCOL /remote.php/dav/uploads/<user>/<id>, PUT
+    // each chunk as .../<id>/<number>, then MOVE .../<id>/.file to the real path. Chunks wait
+    // outside the user's files, the assembled file goes through the normal write (quota,
+    // encryption, versions, events).
+
+    [[nodiscard]] std::filesystem::path upload_dir(const std::string& user) const
+    {
+        return std::filesystem::path{m_data_dir} / user / "uploads";
+    }
+
+    [[nodiscard]] static bool valid_upload_name(std::string_view name) noexcept
+    {
+        return !name.empty() && name.size() <= 64 && name != "." && name != ".." &&
+               std::ranges::all_of(
+                   name,
+                   [](unsigned char letter)
+                   {
+                       return std::isalnum(letter) != 0 || letter == '_' || letter == '-' ||
+                              letter == '.';
+                   }
+               );
+    }
+
+    void add_upload_routes(nc::Host& host)
+    {
+        static constexpr std::string_view METHODS[] =
+            {"MKCOL", "PUT", "MOVE", "DELETE", "PROPFIND"};
+        for (const std::string_view method: METHODS) {
+            host.add_route(
+                method,
+                "/remote.php/dav/uploads/{user}/{id}",
+                [this](const Request& request)
+                {
+                    return serve_upload(request);
+                }
+            );
+            host.add_route(
+                method,
+                "/remote.php/dav/uploads/{user}/{id}/{chunk}",
+                [this](const Request& request)
+                {
+                    return serve_upload(request);
+                }
+            );
+        }
+        host.add_job(
+            "expire-uploads",
+            3'600,
+            [this]()
+            {
+                // Half-finished uploads older than a day are removed.
+                std::error_code error;
+                for (const auto& user: std::filesystem::directory_iterator{m_data_dir, error}) {
+                    const auto root = user.path() / "uploads";
+                    for (const auto& upload: std::filesystem::directory_iterator{root, error}) {
+                        const auto age = std::filesystem::file_time_type::clock::now() -
+                                         upload.last_write_time(error);
+                        if (!error && age > std::chrono::hours{24}) {
+                            std::filesystem::remove_all(upload.path(), error);
+                        }
+                    }
+                }
+            }
+        );
+    }
+
+    [[nodiscard]] Response serve_upload(const Request& request) const
+    {
+        const std::string& user = request.get_user();
+        if (user.empty()) {
+            return nc::http::unauthorized();
+        }
+        if (request.param("user") != user || !safe_user(user)) {
+            return Response::text(403, "You can only use your own uploads");
+        }
+        const std::string id{request.param("id")};
+        const std::string chunk{request.param("chunk")};
+        if (!valid_upload_name(id) ||
+            (!chunk.empty() && chunk != ".file" && !valid_upload_name(chunk))) {
+            return Response::text(400, "Bad name");
+        }
+        namespace fs = std::filesystem;
+        const fs::path dir = upload_dir(user) / id;
+        const std::string& method = request.get_method();
+        std::error_code error;
+
+        if (chunk.empty()) {
+            if (method == "MKCOL") {
+                if (fs::exists(dir, error)) {
+                    return Response::text(405, "The upload already exists");
+                }
+                fs::create_directories(dir, error);
+                return error ? Response::text(500, "cannot create the upload") : Response{201};
+            }
+            if (method == "DELETE") {
+                return fs::remove_all(dir, error) > 0 ? Response{204}
+                                                      : Response::text(404, "No such upload");
+            }
+            if (method == "PROPFIND") {
+                if (!fs::is_directory(dir, error)) {
+                    return Response::text(404, "No such upload");
+                }
+                std::string body = "<?xml version=\"1.0\"?>\n<d:multistatus xmlns:d=\"DAV:\">\n";
+                std::vector<std::string> names;
+                for (const auto& entry: fs::directory_iterator{dir, error}) {
+                    names.push_back(entry.path().filename().string());
+                }
+                std::ranges::sort(names);
+                for (const std::string& name: names) {
+                    body += " <d:response><d:href>/remote.php/dav/uploads/" +
+                            nc::util::xml_escape(user) + "/" + nc::util::xml_escape(id) + "/" +
+                            nc::util::xml_escape(name) +
+                            "</d:href><d:propstat><d:prop><d:getcontentlength>" +
+                            std::to_string(fs::file_size(dir / name, error)) +
+                            "</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 "
+                            "OK</d:status></d:propstat></d:response>\n";
+                }
+                return Response::xml(207, body + "</d:multistatus>\n");
+            }
+            return Response::text(405, "Method Not Allowed");
+        }
+
+        if (!fs::is_directory(dir, error)) {
+            return Response::text(404, "No such upload");
+        }
+        if (method == "PUT" && chunk != ".file") {
+            if (request.get_body().size() > m_max_chunk) {
+                return Response::text(413, "The chunk is too large");
+            }
+            const bool existed = fs::exists(dir / chunk, error);
+            std::ofstream out{dir / chunk, std::ios::binary | std::ios::trunc};
+            out.write(
+                request.get_body().data(),
+                static_cast<std::streamsize>(request.get_body().size())
+            );
+            out.flush();
+            return out ? Response{existed ? 204 : 201}
+                       : Response::text(500, "cannot store the chunk");
+        }
+        if (method == "DELETE" && chunk != ".file") {
+            return fs::remove(dir / chunk, error) ? Response{204}
+                                                  : Response::text(404, "No such chunk");
+        }
+        if (method == "MOVE" && chunk == ".file") {
+            const std::string base = "/remote.php/dav/files/" + user;
+            const std::string target =
+                nc::cloud::destination_of(request.header("Destination"), base);
+            if (target.empty() || target == "/") {
+                return Response::text(502, "The destination is not inside this account");
+            }
+            std::vector<std::string> names;
+            for (const auto& entry: fs::directory_iterator{dir, error}) {
+                names.push_back(entry.path().filename().string());
+            }
+            if (names.empty()) {
+                return Response::text(409, "Nothing was uploaded");
+            }
+            // Chunk names are numbers in the clients ("00001"): order them as numbers, else as
+            // text.
+            const bool numeric = std::ranges::all_of(
+                names,
+                [](const std::string& name)
+                {
+                    return name.find_first_not_of("0123456789") == std::string::npos;
+                }
+            );
+            std::ranges::sort(
+                names,
+                [numeric](const std::string& a, const std::string& b)
+                {
+                    return numeric ? (std::stoull(a) < std::stoull(b)) : a < b;
+                }
+            );
+            std::string assembled;
+            for (const std::string& name: names) {
+                std::ifstream in{dir / name, std::ios::binary};
+                std::ostringstream part;
+                part << in.rdbuf();
+                assembled += part.str();
+                if (assembled.size() > m_max_upload) {
+                    return Response::text(413, "The file is larger than this server accepts");
+                }
+            }
+            const std::string_view total = request.header("OC-Total-Length");
+            if (!total.empty() &&
+                std::strtoull(std::string{total}.c_str(), nullptr, 10) != assembled.size()) {
+                return Response::text(409, "The chunks do not add up to OC-Total-Length");
+            }
+            const Storage files = storage_for(user);
+            (void)files.ensure_root();
+            if (const auto existing = files.stat(target); existing && !existing->is_directory()) {
+                (void)hooks().before_overwrite(user, target);
+            }
+            const auto written = files.write(target, assembled);
+            if (!written) {
+                return Response::text(
+                    nc::cloud::http_status(written.error()),
+                    written.error().get_message()
+                );
+            }
+            fs::remove_all(dir, error);
+            m_host->publish(
+                *written ? "file.created" : "file.updated",
+                nc::util::form_encode({{"user", user}, {"path", target}})
+            );
+            return Response{*written ? 201 : 204};
+        }
+        return Response::text(405, "Method Not Allowed");
+    }
 
     void add_dav_routes(nc::Host& host)
     {
@@ -1264,6 +1481,8 @@ private:
     std::uint64_t m_quota{0};
     std::string m_public_url{};
     std::string m_encryption_key{};
+    std::size_t m_max_chunk{512U * 1'024U * 1'024U};
+    std::size_t m_max_upload{2'048U * 1'024U * 1'024U};
 
     struct External
     {

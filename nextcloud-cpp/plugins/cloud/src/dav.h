@@ -114,6 +114,28 @@ private:
 /// running it.
 void add_download_headers(nc::http::Response& response, const Node& node);
 
+/// @brief What a `Range: bytes=...` header asks for, against a file of `size` bytes.
+struct ByteRange
+{
+    enum class State
+    {
+        WHOLE,        // no range, or one to ignore: send the whole file
+        PARTIAL,      // send first..last (inclusive)
+        UNSATISFIABLE // 416
+    };
+    State state{State::WHOLE};
+    std::uint64_t first{0};
+    std::uint64_t last{0};
+};
+
+/// @brief One range only (`a-b`, `a-`, `-n`); several ranges, other units and malformed headers
+/// give WHOLE.
+[[nodiscard]] ByteRange parse_range(std::string_view header, std::uint64_t size);
+
+/// @brief The path inside the user's files that a `Destination` header names (decoded), or empty
+/// when it points somewhere else than below `base_href`.
+[[nodiscard]] std::string destination_of(std::string_view header, std::string_view base_href);
+
 [[nodiscard]] int http_status(const StorageError& error) noexcept;
 
 } // namespace nc::cloud

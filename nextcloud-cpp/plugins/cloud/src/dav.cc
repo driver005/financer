@@ -100,6 +100,66 @@ void add_download_headers(nc::http::Response& response, const Node& node)
     response.add_header("Content-Security-Policy", "default-src 'none'; sandbox");
 }
 
+ByteRange parse_range(std::string_view header, std::uint64_t size)
+{
+    ByteRange out;
+    out.state = ByteRange::State::WHOLE;
+    if (!util::starts_with(header, "bytes=") || header.find(',') != std::string_view::npos) {
+        return out; // another unit, or several ranges: the whole file is a valid answer
+    }
+    const std::string_view spec = header.substr(6);
+    const std::size_t dash = spec.find('-');
+    if (dash == std::string_view::npos) {
+        return out;
+    }
+    const std::string first_text{util::trim(spec.substr(0, dash))};
+    const std::string last_text{util::trim(spec.substr(dash + 1))};
+    const auto number = [](const std::string& text, std::uint64_t& value)
+    {
+        if (text.empty() || text.size() > 18 ||
+            text.find_first_not_of("0123456789") != std::string::npos) {
+            return false;
+        }
+        value = std::strtoull(text.c_str(), nullptr, 10);
+        return true;
+    };
+    std::uint64_t first = 0;
+    std::uint64_t last = 0;
+    if (first_text.empty()) {
+        // "-500": the last 500 bytes
+        if (!number(last_text, last) || last == 0) {
+            return out.state = ByteRange::State::UNSATISFIABLE, out;
+        }
+        if (size == 0) {
+            return out.state = ByteRange::State::UNSATISFIABLE, out;
+        }
+        first = last >= size ? 0 : size - last;
+        last = size - 1;
+    } else {
+        if (!number(first_text, first)) {
+            return out;
+        }
+        if (last_text.empty()) {
+            last = size == 0 ? 0 : size - 1;
+        } else if (!number(last_text, last) || last < first) {
+            return out; // a malformed range is ignored (RFC 9110, 14.1.2)
+        }
+        if (first >= size) {
+            return out.state = ByteRange::State::UNSATISFIABLE, out;
+        }
+        last = std::min<std::uint64_t>(last, size - 1);
+    }
+    out.state = ByteRange::State::PARTIAL;
+    out.first = first;
+    out.last = last;
+    return out;
+}
+
+std::string destination_of(std::string_view header, std::string_view base_href)
+{
+    return destination_path(header, base_href);
+}
+
 int http_status(const StorageError& error) noexcept
 {
     switch (error.get_code()) {
@@ -204,9 +264,43 @@ Response dav_handle(
         if (!data) {
             return failure(data.error());
         }
-        Response
-            response{200, std::string{util::mime_type_for(node->name())}, std::move(*data), {}};
+        // A client that already has this version only needs to hear so.
+        const std::string_view none_match = request.header("If-None-Match");
+        if (!none_match.empty() &&
+            (none_match == "*" || none_match.find(node->get_etag()) != std::string_view::npos)) {
+            Response not_modified{304};
+            add_file_headers(not_modified, *node);
+            return not_modified;
+        }
+        const std::string type{util::mime_type_for(node->name())};
+        const std::string_view range_header = request.header("Range");
+        if (!range_header.empty()) {
+            const ByteRange range = parse_range(range_header, data->size());
+            if (range.state == ByteRange::State::UNSATISFIABLE) {
+                Response refused{416};
+                refused.add_header("Content-Range", "bytes */" + std::to_string(data->size()));
+                return refused;
+            }
+            if (range.state == ByteRange::State::PARTIAL) {
+                Response partial{
+                    206,
+                    std::string{type},
+                    data->substr(range.first, range.last - range.first + 1),
+                    {}
+                };
+                add_download_headers(partial, *node);
+                partial.add_header("Accept-Ranges", "bytes");
+                partial.add_header(
+                    "Content-Range",
+                    "bytes " + std::to_string(range.first) + "-" + std::to_string(range.last) +
+                        "/" + std::to_string(data->size())
+                );
+                return partial;
+            }
+        }
+        Response response{200, std::string{type}, std::move(*data), {}};
         add_download_headers(response, *node);
+        response.add_header("Accept-Ranges", "bytes");
         return response;
     }
 

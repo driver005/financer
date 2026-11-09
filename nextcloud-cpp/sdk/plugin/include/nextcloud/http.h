@@ -368,8 +368,14 @@ private:
             return "Created";
         case 204:
             return "No Content";
+        case 206:
+            return "Partial Content";
         case 207:
             return "Multi-Status";
+        case 304:
+            return "Not Modified";
+        case 416:
+            return "Range Not Satisfiable";
         case 301:
             return "Moved Permanently";
         case 400:

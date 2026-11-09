@@ -534,6 +534,241 @@ user_req(std::string method, std::string path, std::string body, const std::stri
     return request;
 }
 
+void test_ranges()
+{
+    using nc::cloud::ByteRange;
+    using State = ByteRange::State;
+    const auto check = [](const char* header,
+                          std::uint64_t size,
+                          State state,
+                          std::uint64_t first = 0,
+                          std::uint64_t last = 0)
+    {
+        const ByteRange range = nc::cloud::parse_range(header, size);
+        NC_CHECK(range.state == state);
+        if (state == State::PARTIAL) {
+            NC_CHECK_EQ(range.first, first);
+            NC_CHECK_EQ(range.last, last);
+        }
+    };
+    check("bytes=0-4", 10, State::PARTIAL, 0, 4);
+    check("bytes=5-", 10, State::PARTIAL, 5, 9);
+    check("bytes=-3", 10, State::PARTIAL, 7, 9);
+    check("bytes=-100", 10, State::PARTIAL, 0, 9);  // more than the file: all of it
+    check("bytes=8-100", 10, State::PARTIAL, 8, 9); // clipped to the end
+    check("bytes=10-12", 10, State::UNSATISFIABLE);
+    check("bytes=-0", 10, State::UNSATISFIABLE);
+    check("bytes=0-0", 0, State::UNSATISFIABLE);
+    check("bytes=5-2", 10, State::WHOLE); // malformed: ignored
+    check("bytes=a-b", 10, State::WHOLE);
+    check("bytes=0-1,4-5", 10, State::WHOLE); // several ranges: whole file is allowed
+    check("items=0-1", 10, State::WHOLE);
+    check("bytes=99999999999999999999-", 10, State::WHOLE);
+
+    const std::string dir = temp_dir("ranges");
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    NC_CHECK(kernel.add_plugin_library("plugins/users/libusers.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/cloud/libcloud.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/db/libdb.so").has_value());
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string url = "/remote.php/dav/files/alice/digits.txt";
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", url, "0123456789", alice)).get_status(), 201);
+
+    const auto ranged = [&](const std::string& header)
+    {
+        Request request = user_req("GET", url, "", alice);
+        request.add_header("Range", std::string{header});
+        return kernel.handle(std::move(request));
+    };
+    const Response part = ranged("bytes=2-5");
+    NC_CHECK_EQ(part.get_status(), 206);
+    NC_CHECK_EQ(part.get_body(), "2345");
+    NC_CHECK_EQ(std::string(part.header("Content-Range")), "bytes 2-5/10");
+    NC_CHECK_EQ(ranged("bytes=-3").get_body(), "789");
+    NC_CHECK_EQ(ranged("bytes=4-").get_body(), "456789");
+    const Response beyond = ranged("bytes=20-30");
+    NC_CHECK_EQ(beyond.get_status(), 416);
+    NC_CHECK_EQ(std::string(beyond.header("Content-Range")), "bytes */10");
+    NC_CHECK_EQ(ranged("bytes=0-1,3-4").get_status(), 200);
+    const Response whole = kernel.handle(user_req("GET", url, "", alice));
+    NC_CHECK_EQ(whole.get_status(), 200);
+    NC_CHECK_EQ(std::string(whole.header("Accept-Ranges")), "bytes");
+
+    // A client that has the current version is told so; a changed file is sent again.
+    const std::string etag{whole.header("ETag")};
+    Request cached = user_req("GET", url, "", alice);
+    cached.add_header("If-None-Match", std::string{etag});
+    const Response unchanged = kernel.handle(std::move(cached));
+    NC_CHECK_EQ(unchanged.get_status(), 304);
+    NC_CHECK(unchanged.get_body().empty());
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", url, "0123456789!", alice)).get_status(), 204);
+    Request stale = user_req("GET", url, "", alice);
+    stale.add_header("If-None-Match", std::string{etag});
+    NC_CHECK_EQ(kernel.handle(std::move(stale)).get_status(), 200);
+
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
+void test_chunked_uploads()
+{
+    const std::string dir = temp_dir("uploads");
+    nc::Kernel kernel{nc::Config::parse(
+                          "data_dir = " + dir +
+                          "\n[users]\npbkdf2_iterations = 3\n[cloud]\nmax_upload_bytes = "
+                          "100\nquota_bytes = 1000\n"
+    )
+                          .value()};
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    for (const char* name: {"alice", "bob"}) {
+        ::setenv("OC_PASS", (std::string{name} + " password").c_str(), 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {name}, out), 0);
+    }
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string bob = "bob:bob password";
+    const std::string up = "/remote.php/dav/uploads/alice/transfer-1";
+    const std::string files = "/remote.php/dav/files/alice";
+    const auto finish =
+        [&](const std::string& id, const std::string& target, const std::string& total = {})
+    {
+        Request move =
+            user_req("MOVE", "/remote.php/dav/uploads/alice/" + id + "/.file", "", alice);
+        move.add_header("Destination", "https://cloud.example.org" + files + target);
+        if (!total.empty()) {
+            move.add_header("OC-Total-Length", std::string{total});
+        }
+        return kernel.handle(std::move(move));
+    };
+
+    // The three steps the sync clients take; chunks may arrive in any order and are joined by
+    // number.
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", up, "", alice)).get_status(), 201);
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", up, "", alice)).get_status(), 405);
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", up + "/00002", "BBBB", alice)).get_status(), 201);
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", up + "/00001", "AAAA", alice)).get_status(), 201);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", up + "/00010", "CC", alice)).get_status(),
+        201
+    ); // 10 after 2, not after 1
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", up + "/00001", "aaaa", alice)).get_status(),
+        204
+    ); // a retry replaces
+    const auto listed = kernel.handle(user_req("PROPFIND", up, "", alice)).get_body();
+    NC_CHECK(
+        listed.find("00001") != std::string::npos && listed.find("00010") != std::string::npos
+    );
+    NC_CHECK_EQ(finish("transfer-1", "/big.bin", "10").get_status(), 201);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", files + "/big.bin", "", alice)).get_body(),
+        "aaaaBBBBCC"
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PROPFIND", up, "", alice)).get_status(),
+        404
+    ); // the staging area is gone
+
+    // Wrong total, missing destination folder, a destination in another account, nothing uploaded.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("MKCOL", "/remote.php/dav/uploads/alice/t2", "", alice))
+            .get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", "/remote.php/dav/uploads/alice/t2/1", "xyz", alice))
+            .get_status(),
+        201
+    );
+    NC_CHECK_EQ(finish("t2", "/x.bin", "99").get_status(), 409);
+    NC_CHECK_EQ(finish("t2", "/missing/x.bin").get_status(), 409);
+    Request elsewhere = user_req("MOVE", "/remote.php/dav/uploads/alice/t2/.file", "", alice);
+    elsewhere.add_header("Destination", "/remote.php/dav/files/bob/x.bin");
+    NC_CHECK_EQ(kernel.handle(std::move(elsewhere)).get_status(), 502);
+    NC_CHECK_EQ(finish("t2", "/x.bin").get_status(), 201); // the staging area survived the failures
+    NC_CHECK_EQ(
+        kernel.handle(user_req("MKCOL", "/remote.php/dav/uploads/alice/t3", "", alice))
+            .get_status(),
+        201
+    );
+    NC_CHECK_EQ(finish("t3", "/empty.bin").get_status(), 409);
+
+    // Replacing an existing file works, limits hold, and strangers stay out.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("MKCOL", "/remote.php/dav/uploads/alice/t4", "", alice))
+            .get_status(),
+        201
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", "/remote.php/dav/uploads/alice/t4/1", "new", alice))
+            .get_status(),
+        201
+    );
+    NC_CHECK_EQ(finish("t4", "/x.bin").get_status(), 204);
+    NC_CHECK_EQ(kernel.handle(user_req("GET", files + "/x.bin", "", alice)).get_body(), "new");
+    NC_CHECK_EQ(
+        kernel.handle(user_req("MKCOL", "/remote.php/dav/uploads/alice/t5", "", alice))
+            .get_status(),
+        201
+    );
+    for (int index = 1; index <= 3; ++index) {
+        NC_CHECK_EQ(
+            kernel
+                .handle(user_req(
+                    "PUT",
+                    "/remote.php/dav/uploads/alice/t5/" + std::to_string(index),
+                    std::string(40, 'z'),
+                    alice
+                ))
+                .get_status(),
+            201
+        );
+    }
+    NC_CHECK_EQ(finish("t5", "/toobig.bin").get_status(), 413); // 120 bytes, the limit is 100
+    NC_CHECK_EQ(
+        kernel.handle(user_req("MKCOL", "/remote.php/dav/uploads/alice/..", "", alice))
+            .get_status(),
+        400
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", up + "/..%2Fx", "x", alice)).get_status(), 400);
+    NC_CHECK_EQ(
+        kernel.handle(user_req("MKCOL", "/remote.php/dav/uploads/alice/t6", "", bob)).get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        kernel.handle(Request{"MKCOL", "/remote.php/dav/uploads/alice/t6"}).get_status(),
+        401
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", "/remote.php/dav/uploads/alice/t5", "", alice))
+            .get_status(),
+        204
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("DELETE", "/remote.php/dav/uploads/alice/t5", "", alice))
+            .get_status(),
+        404
+    );
+
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 void test_received_shares()
 {
     const std::string dir = temp_dir("mounts");
@@ -1025,6 +1260,8 @@ int main()
     test_storage();
     test_share_store();
     test_plugins();
+    test_ranges();
+    test_chunked_uploads();
     test_received_shares();
     test_external_storage();
     test_encryption();
