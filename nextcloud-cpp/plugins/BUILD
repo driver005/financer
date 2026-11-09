@@ -17,6 +17,7 @@ test_suite(
         "//plugins/systemtags:systemtags_test",
         "//plugins/trashbin:trashbin_test",
         "//plugins/twofactor:twofactor_test",
+        "//plugins/user_status:user_status_test",
         "//plugins/users:users_test",
         "//plugins/versions:versions_test",
     ],
