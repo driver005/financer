@@ -171,10 +171,18 @@ std::string serialize_response(const http::Response& response)
         out += "Content-Type: " + response.get_content_type() + "\r\n";
     }
     if (!has_length) {
-        out += "Content-Length: " + std::to_string(response.get_body().size()) + "\r\n";
+        out +=
+            "Content-Length: " +
+            std::to_string(
+                response.is_streamed() ? response.get_stream_length() : response.get_body().size()
+            ) +
+            "\r\n";
     }
     out += "Connection: close\r\n\r\n";
-    out += response.get_body();
+    // A streamed body is not part of the head string; the server pulls it after writing this.
+    if (!response.is_streamed()) {
+        out += response.get_body();
+    }
     return out;
 }
 
@@ -433,7 +441,24 @@ void HttpServer::serve(int client, ssl_st* tls)
     }
 
     http::Response response = m_kernel->handle(request_from_head(*head, std::move(body)));
-    channel.write(serialize_response(response));
+    if (!channel.write(serialize_response(response))) {
+        return;
+    }
+    if (response.is_streamed()) {
+        // Exactly the announced length goes out; a short or failing stream cuts the connection,
+        // so the client sees an incomplete download and not a wrong file.
+        std::uint64_t left = response.get_stream_length();
+        std::vector<char> piece(64U * 1'024U);
+        while (left > 0) {
+            const std::int64_t got =
+                (*response.get_stream())(piece.data(), std::min<std::uint64_t>(left, piece.size()));
+            if (got <= 0 ||
+                !channel.write(std::string_view{piece.data(), static_cast<std::size_t>(got)})) {
+                return;
+            }
+            left -= static_cast<std::uint64_t>(got);
+        }
+    }
     if (tls == nullptr) {
         ::shutdown(client, SHUT_WR);
     }

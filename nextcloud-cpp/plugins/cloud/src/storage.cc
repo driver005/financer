@@ -213,6 +213,67 @@ Result<std::string> Storage::read(std::string_view path) const
     return data.str();
 }
 
+std::function<std::int64_t(char*, std::size_t)>
+FileStream::reader(std::uint64_t first, std::uint64_t length) const
+{
+    auto file = m_file;
+    auto position = std::make_shared<std::uint64_t>(first);
+    auto left = std::make_shared<std::uint64_t>(length);
+    return [file, position, left](char* buffer, std::size_t capacity) -> std::int64_t
+    {
+        const std::uint64_t want = std::min<std::uint64_t>(*left, capacity);
+        if (want == 0) {
+            return 0;
+        }
+        file->clear();
+        file->seekg(static_cast<std::streamoff>(*position));
+        file->read(buffer, static_cast<std::streamsize>(want));
+        const std::streamsize got = file->gcount();
+        if (got <= 0) {
+            // The file is shorter than it was when the length was announced.
+            return -1;
+        }
+        *position += static_cast<std::uint64_t>(got);
+        *left -= static_cast<std::uint64_t>(got);
+        return got;
+    };
+}
+
+std::optional<FileStream> Storage::open_stream(std::string_view path) const
+{
+    const auto normalized = normalize(path);
+    if (!normalized) {
+        return std::nullopt;
+    }
+    const auto real = resolve(*normalized);
+    if (!real) {
+        return std::nullopt;
+    }
+    std::error_code error;
+    if (fs::is_directory(*real, error)) {
+        return std::nullopt;
+    }
+    auto file = std::make_shared<std::ifstream>(*real, std::ios::binary);
+    if (!*file) {
+        return std::nullopt;
+    }
+    if (m_cipher) {
+        std::string prefix(6, '\0');
+        file->read(prefix.data(), static_cast<std::streamsize>(prefix.size()));
+        prefix.resize(static_cast<std::size_t>(file->gcount()));
+        if (FileCipher::has_tag(prefix)) {
+            return std::nullopt;
+        }
+    }
+    file->clear();
+    file->seekg(0, std::ios::end);
+    const std::streamoff end = file->tellg();
+    if (end < 0) {
+        return std::nullopt;
+    }
+    return FileStream{std::move(file), static_cast<std::uint64_t>(end)};
+}
+
 Result<bool> Storage::write(std::string_view path, std::string_view data, std::int64_t mtime) const
 {
     const auto normalized = normalize(path);

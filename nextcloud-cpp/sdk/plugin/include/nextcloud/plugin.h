@@ -9,6 +9,7 @@
 
 #include "nextcloud/abi.h"
 #include "nextcloud/http.h"
+#include "nextcloud/stream.h"
 
 #include <cstdint>
 #include <exception>
@@ -75,6 +76,7 @@ namespace detail {
             out->body = view_of(body);
             out->headers = pairs.data();
             out->header_count = pairs.size();
+            stream_to_native(response, out);
         }
     };
 
@@ -168,6 +170,7 @@ public:
                 std::string{detail::string_of(out.headers[index].value)}
             );
         }
+        detail::stream_from_native(out, response);
         return response;
     }
 

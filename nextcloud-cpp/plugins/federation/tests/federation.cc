@@ -312,6 +312,35 @@ void test_sharing_between_servers()
     NC_CHECK_EQ(b.call("PUT", mine + "/../escape.txt", "bob", "x").get_status() >= 400, true);
     NC_CHECK_EQ(a.call("GET", "/remote.php/dav/files/alice/escape.txt", "alice").get_status(), 404);
 
+    // A big file is not held in memory on the way: the owner's server streams it to bob's server,
+    // which streams it on to bob (the responses are gone before the plugins unload).
+    {
+        std::string big;
+        for (std::size_t index = 0; index < 2U * 1'024U * 1'024U + 123; ++index) {
+            big.push_back(static_cast<char>('a' + (index * 5 + index / 97) % 26));
+        }
+        NC_CHECK_EQ(
+            a.call("PUT", "/remote.php/dav/files/alice/Shared/big.bin", "alice", big).get_status(),
+            201
+        );
+        const Response got = b.call("GET", mine + "/big.bin", "bob");
+        NC_CHECK_EQ(got.get_status(), 200);
+        NC_CHECK(got.is_streamed());
+        NC_CHECK_EQ(got.get_stream_length(), big.size());
+        NC_CHECK(got.read_body() == big);
+        const Response slice =
+            b.call("GET", mine + "/big.bin", "bob", "", {{"Range", "bytes=100-1600099"}});
+        NC_CHECK_EQ(slice.get_status(), 206);
+        NC_CHECK(slice.is_streamed());
+        NC_CHECK(slice.read_body() == big.substr(100, 1'600'000));
+        // A small range is not worth a stream and arrives in the body.
+        const Response small =
+            b.call("GET", mine + "/big.bin", "bob", "", {{"Range", "bytes=1500000-1500009"}});
+        NC_CHECK_EQ(small.get_status(), 206);
+        NC_CHECK(!small.is_streamed());
+        NC_CHECK(small.get_body() == big.substr(1'500'000, 10));
+    }
+
     NC_CHECK_EQ(a.call("DELETE", SHARES + "/" + first_id(shared_made), "alice").get_status(), 200);
     NC_CHECK_EQ(b.call("GET", mine + "/one.txt", "bob").get_status(), 404);
 

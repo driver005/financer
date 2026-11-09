@@ -5,10 +5,12 @@
 #include "nextcloud/test.h"
 #include "nextcloud/util/crypto.h"
 
+#include <algorithm>
 #include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -50,6 +52,31 @@ public:
                     "hello " + std::string(request.param("name")) + " as [" + request.get_user() +
                         "]"
                 );
+            }
+        );
+        host.add_route(
+            "GET",
+            "/alpha-stream",
+            [](const Request&)
+            {
+                // 300000 bytes handed out 1000 at a time: crosses several TLS records and the
+                // server's write buffer without ever existing as one string.
+                Response response{200, "application/octet-stream", {}, {}};
+                auto sent = std::make_shared<std::size_t>(0);
+                response.set_stream(
+                    300'000,
+                    [sent](char* buffer, std::size_t capacity)
+                    {
+                        const std::size_t piece =
+                            std::min<std::size_t>({capacity, 1'000, 300'000 - *sent});
+                        for (std::size_t index = 0; index < piece; ++index) {
+                            buffer[index] = static_cast<char>('a' + (*sent + index) % 26);
+                        }
+                        *sent += piece;
+                        return static_cast<std::int64_t>(piece);
+                    }
+                );
+                return response;
             }
         );
         host.add_route(
@@ -740,6 +767,12 @@ void test_tls()
             run("curl -s --max-time 20 --cacert " + cert + " -X POST --data-binary @" +
                 (dir / "big.txt").string() + " https://" + base + "/alpha/z");
         NC_CHECK_EQ(upload.size(), big.size());
+        // A streamed answer arrives whole and in order over TLS too.
+        const std::string streamed_tls =
+            run("curl -s --max-time 20 --cacert " + cert + " https://" + base + "/alpha-stream");
+        NC_CHECK_EQ(streamed_tls.size(), 300'000U);
+        NC_CHECK(streamed_tls.substr(0, 30) == "abcdefghijklmnopqrstuvwxyzabcd");
+        NC_CHECK_EQ(streamed_tls[299'999], static_cast<char>('a' + 299'999 % 26));
         // Without trusting the certificate curl refuses (exit code 60), and plain HTTP gets
         // nothing.
         NC_CHECK_EQ(
@@ -796,6 +829,23 @@ void test_http_server()
         }
         NC_CHECK(chunked.starts_with("HTTP/1.1 201 Created"));
         NC_CHECK(chunked.ends_with("streamed body"));
+
+        // A streamed answer: the head announces the length, the body follows in pieces.
+        std::string pulled;
+        if (FILE* pipe =
+                popen(("curl -s -i --max-time 10 " + url + "/alpha-stream").c_str(), "r")) {
+            char buffer[4'096];
+            std::size_t got = 0;
+            while ((got = fread(buffer, 1, sizeof(buffer), pipe)) > 0) {
+                pulled.append(buffer, got);
+            }
+            pclose(pipe);
+        }
+        NC_CHECK(pulled.starts_with("HTTP/1.1 200 OK"));
+        NC_CHECK(pulled.find("Content-Length: 300000\r\n") != std::string::npos);
+        const std::size_t head_end = pulled.find("\r\n\r\n");
+        NC_CHECK(head_end != std::string::npos);
+        NC_CHECK_EQ(pulled.size() - head_end - 4, 300'000U);
     }
     server.stop();
     kernel.stop();

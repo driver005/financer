@@ -262,10 +262,6 @@ Response dav_handle(
         if (node->is_directory()) {
             return Response::text(405, "Cannot download a folder; use PROPFIND to list it");
         }
-        auto data = storage.read(path);
-        if (!data) {
-            return failure(data.error());
-        }
         // A client that already has this version only needs to hear so.
         const std::string_view none_match = request.header("If-None-Match");
         if (!none_match.empty() &&
@@ -276,31 +272,53 @@ Response dav_handle(
         }
         const std::string type{util::mime_type_for(node->name())};
         const std::string_view range_header = request.header("Range");
+
+        // A big plain file goes out in pieces; everything else is read whole.
+        std::optional<FileStream> stream;
+        std::string whole;
+        if (node->get_size() >= Storage::STREAM_THRESHOLD) {
+            stream = storage.open_stream(path);
+        }
+        if (!stream) {
+            auto data = storage.read(path);
+            if (!data) {
+                return failure(data.error());
+            }
+            whole = std::move(*data);
+        }
+        const std::uint64_t size = stream ? stream->size() : whole.size();
         if (!range_header.empty()) {
-            const ByteRange range = parse_range(range_header, data->size());
+            const ByteRange range = parse_range(range_header, size);
             if (range.state == ByteRange::State::UNSATISFIABLE) {
                 Response refused{416};
-                refused.add_header("Content-Range", "bytes */" + std::to_string(data->size()));
+                refused.add_header("Content-Range", "bytes */" + std::to_string(size));
                 return refused;
             }
             if (range.state == ByteRange::State::PARTIAL) {
+                const std::uint64_t length = range.last - range.first + 1;
                 Response partial{
                     206,
                     std::string{type},
-                    data->substr(range.first, range.last - range.first + 1),
+                    stream ? std::string{} : whole.substr(range.first, length),
                     {}
                 };
+                if (stream) {
+                    partial.set_stream(length, stream->reader(range.first, length));
+                }
                 add_download_headers(partial, *node);
                 partial.add_header("Accept-Ranges", "bytes");
                 partial.add_header(
                     "Content-Range",
                     "bytes " + std::to_string(range.first) + "-" + std::to_string(range.last) +
-                        "/" + std::to_string(data->size())
+                        "/" + std::to_string(size)
                 );
                 return partial;
             }
         }
-        Response response{200, std::string{type}, std::move(*data), {}};
+        Response response{200, std::string{type}, std::move(whole), {}};
+        if (stream) {
+            response.set_stream(size, stream->reader(0, size));
+        }
         add_download_headers(response, *node);
         response.add_header("Accept-Ranges", "bytes");
         return response;

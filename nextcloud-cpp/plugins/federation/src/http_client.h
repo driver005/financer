@@ -3,6 +3,7 @@
 #include "nextcloud/http.h"
 #include "nextcloud/util/expected.h"
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -100,12 +101,18 @@ template<typename Value> using Result = util::expected<Value, std::string>;
 
 /// @brief One request, one response, then the connection is closed. HTTP or HTTPS (certificate and
 /// host name are checked), no redirects, bounded time and size. `headers` are added as given.
+///
+/// @param stream_over when not 0, a successful answer whose `Content-Length` is at least this many
+/// bytes is not read into memory: the response carries a stream that pulls the rest from the
+/// connection (which stays open until the stream is gone), and `max_response` does not apply to it.
+/// Answers without a `Content-Length` (chunked) are still read whole.
 [[nodiscard]] Result<nc::http::Response> request(
     const ClientSettings& settings,
     std::string_view method,
     std::string_view url,
     const std::vector<nc::http::Header>& headers,
-    std::string_view body
+    std::string_view body,
+    std::uint64_t stream_over = 0
 );
 
 /// @brief Splits `scheme://host[:port]/path?query` (no userinfo, no fragment).

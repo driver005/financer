@@ -166,6 +166,27 @@ void test_round_trip()
         if (big) {
             NC_CHECK_EQ(big->get_body().size(), std::size_t{100'000});
         }
+        // A big answer can be left on the connection and pulled piece by piece; the size limit is
+        // for answers held in memory, not for streams.
+        ClientSettings tight = local;
+        tight.set_max_response(1'000);
+        const auto pulled =
+            nc::federation::request(tight, "GET", plain_url + "/big", {}, "", 50'000);
+        NC_CHECK(pulled.has_value());
+        if (pulled) {
+            NC_CHECK_EQ(pulled->get_status(), 200);
+            NC_CHECK(pulled->is_streamed());
+            NC_CHECK_EQ(pulled->get_stream_length(), std::uint64_t{100'000});
+            NC_CHECK(pulled->read_body() == std::string(100'000, 'b'));
+        }
+        // Below the threshold the answer is read whole as before.
+        const auto inline_answer =
+            nc::federation::request(local, "GET", plain_url + "/big", {}, "", 200'000);
+        NC_CHECK(inline_answer.has_value());
+        if (inline_answer) {
+            NC_CHECK(!inline_answer->is_streamed());
+            NC_CHECK_EQ(inline_answer->get_body().size(), std::size_t{100'000});
+        }
         // A redirect is returned as it is, never followed.
         const auto redirect =
             nc::federation::request(local, "GET", plain_url + "/redirect", {}, "");
@@ -213,6 +234,14 @@ void test_round_trip()
         NC_CHECK(over_tls.has_value());
         if (over_tls) {
             NC_CHECK_EQ(over_tls->get_body().size(), std::size_t{300'000});
+        }
+        // A streamed answer over TLS keeps the TLS session alive for the pull.
+        const auto tls_pulled =
+            nc::federation::request(trusted, "GET", secure_name + "/big", {}, "", 50'000);
+        NC_CHECK(tls_pulled.has_value());
+        if (tls_pulled) {
+            NC_CHECK(tls_pulled->is_streamed());
+            NC_CHECK(tls_pulled->read_body() == std::string(100'000, 'b'));
         }
         const auto by_address = nc::federation::request(
             trusted,

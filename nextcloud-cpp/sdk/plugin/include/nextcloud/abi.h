@@ -67,6 +67,16 @@ extern "C"
         NcView body;
         const NcPair* headers;
         size_t header_count;
+        /**
+         * A streamed body (set when `stream` is not NULL; `body` is ignored then). The producer
+         * allocates `stream`; whoever receives the response calls `stream_read` until it returns
+         * 0 (the end) or a negative value (an error), and always calls `stream_close` once. The
+         * stream outlives the call that returned it and may be read from another thread.
+         */
+        uint64_t stream_length;
+        void* stream;
+        int64_t (*stream_read)(void* stream, char* buffer, size_t capacity);
+        void (*stream_close)(void* stream);
     } NcResponse;
 
     typedef enum NcLogLevel

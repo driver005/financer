@@ -41,6 +41,14 @@ One header, `sdk/plugin/include/nextcloud/abi.h`, plain C. Same rules as congela
 * the runner gives the plugin an `NcHost` table (log, register_route/service/command, subscribe, publish,
   call_service, config_get).
 
+A response normally carries its body as one view. A big body can be a *stream* instead: the response names a
+length and three things (`stream`, `stream_read`, `stream_close`), and whoever receives it pulls the bytes
+piece by piece and closes it. The HTTP server writes the head with that length and then pulls from the
+stream, so a big file is never held in memory whole; a plugin that gets a streamed answer from another
+plugin (`call_service`) can hand it on unchanged. `http::Response::set_stream` and `read_body` are the C++ side;
+`stream.h` converts between the two. A stream is closed by code of the plugin that made it, so a response must
+be gone before that plugin unloads (the server finishes its connections first).
+
 A plugin never touches these structs. `sdk/plugin/include/nextcloud/plugin.h` wraps them: derive from
 `nc::Plugin`, register in `on_load(nc::Host&)`, export with `NC_PLUGIN(Class)`. Exceptions are caught at the
 boundary: a throwing route becomes a 500, a throwing `on_load` marks the plugin failed and rolls back its

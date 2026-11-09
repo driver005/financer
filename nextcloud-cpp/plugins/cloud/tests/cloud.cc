@@ -684,6 +684,83 @@ void test_ranges()
     fs::remove_all(dir);
 }
 
+void test_streamed_downloads()
+{
+    const std::string dir = temp_dir("streamed");
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    NC_CHECK(kernel.add_plugin_library("plugins/users/libusers.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/cloud/libcloud.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/db/libdb.so").has_value());
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+
+    // A stream is closed by code of the plugin, so every response is gone before it unloads.
+    {
+        // 3 MiB with a pattern that shows a wrong offset.
+        std::string big;
+        for (std::size_t index = 0; index < 3U * 1'024U * 1'024U; ++index) {
+            big.push_back(static_cast<char>('a' + (index * 7 + index / 251) % 26));
+        }
+        const std::string url = "/remote.php/dav/files/alice/big.bin";
+        NC_CHECK_EQ(kernel.handle(user_req("PUT", url, big, alice)).get_status(), 201);
+
+        // The whole file is streamed, not copied into the response.
+        const Response whole = kernel.handle(user_req("GET", url, "", alice));
+        NC_CHECK_EQ(whole.get_status(), 200);
+        NC_CHECK(whole.is_streamed());
+        NC_CHECK(whole.get_body().empty());
+        NC_CHECK_EQ(whole.get_stream_length(), big.size());
+        NC_CHECK(whole.read_body() == big);
+
+        // A range is streamed too, from the right offset.
+        Request ranged = user_req("GET", url, "", alice);
+        ranged.add_header("Range", "bytes=1048570-1048589");
+        const Response part = kernel.handle(std::move(ranged));
+        NC_CHECK_EQ(part.get_status(), 206);
+        NC_CHECK(part.is_streamed());
+        NC_CHECK_EQ(part.get_stream_length(), 20U);
+        NC_CHECK(part.read_body() == big.substr(1'048'570, 20));
+        NC_CHECK_EQ(
+            std::string(part.header("Content-Range")),
+            "bytes 1048570-1048589/" + std::to_string(big.size())
+        );
+
+        // HEAD announces the length and sends no body.
+        const Response head = kernel.handle(user_req("HEAD", url, "", alice));
+        NC_CHECK(!head.is_streamed());
+        NC_CHECK_EQ(std::string(head.header("Content-Length")), std::to_string(big.size()));
+
+        // What the server writes: the head, then exactly the announced bytes.
+        const std::string wire = nc::serialize_response(whole);
+        NC_CHECK(wire.find("Content-Length: " + std::to_string(big.size())) != std::string::npos);
+        NC_CHECK(wire.size() < 4'096U);
+
+        // A small file is not worth a stream.
+        const std::string small = "/remote.php/dav/files/alice/small.txt";
+        NC_CHECK_EQ(kernel.handle(user_req("PUT", small, "tiny", alice)).get_status(), 201);
+        const Response tiny = kernel.handle(user_req("GET", small, "", alice));
+        NC_CHECK(!tiny.is_streamed());
+        NC_CHECK_EQ(tiny.get_body(), "tiny");
+
+        // A file that shrinks under the download cuts the stream (a negative read), never pads it.
+        const Response shrinking = kernel.handle(user_req("GET", url, "", alice));
+        NC_CHECK_EQ(kernel.handle(user_req("PUT", url, "now short", alice)).get_status(), 204);
+        // The open descriptor still holds the old content: the download completes with the old
+        // file.
+        NC_CHECK(shrinking.read_body() == big);
+    }
+
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 void test_chunked_uploads()
 {
     const std::string dir = temp_dir("uploads");
@@ -3146,6 +3223,7 @@ int main()
     test_public_webdav();
     test_legacy_share_file();
     test_shared_folder_quota_and_size();
+    test_streamed_downloads();
     test_chunked_uploads();
     test_received_shares();
     test_resharing();

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <arpa/inet.h>
 #include <cstring>
+#include <memory>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <openssl/err.h>
@@ -159,7 +160,8 @@ Result<nc::http::Response> request(
     std::string_view method,
     std::string_view url,
     const std::vector<nc::http::Header>& headers,
-    std::string_view body
+    std::string_view body,
+    std::uint64_t stream_over
 )
 {
     auto parsed = parse_url(url);
@@ -181,7 +183,17 @@ Result<nc::http::Response> request(
         code != 0) {
         return failure("cannot resolve " + parsed->host + ": " + ::gai_strerror(code));
     }
-    Socket connection;
+
+    // On the heap, because a streamed answer keeps the connection alive after this function.
+    // `tls` is declared after `connection`, so it is freed first.
+    struct Live
+    {
+        Socket connection{};
+        Tls tls{};
+    };
+
+    const auto live = std::make_shared<Live>();
+    Socket& connection = live->connection;
     bool refused = false;
     for (const addrinfo* candidate = found; candidate != nullptr && connection.fd < 0;
          candidate = candidate->ai_next) {
@@ -224,7 +236,7 @@ Result<nc::http::Response> request(
         );
     }
 
-    Tls tls;
+    Tls& tls = live->tls;
     if (secure) {
         tls.context = SSL_CTX_new(TLS_client_method());
         if (tls.context == nullptr) {
@@ -319,8 +331,39 @@ Result<nc::http::Response> request(
         return failure("the connection to " + parsed->host + " was lost");
     }
 
+    // Turns the text of an answer's head (status line and headers) into a response without body.
+    const auto parse_head = [&](const std::string& text,
+                                std::size_t end) -> Result<nc::http::Response>
+    {
+        if (!util::starts_with(text, "HTTP/1.")) {
+            return failure("no valid answer from " + parsed->host);
+        }
+        const std::vector<std::string> lines =
+            util::split(std::string_view{text}.substr(0, end), '\n');
+        const std::vector<std::string> status_line = util::split(util::trim(lines.front()), ' ');
+        if (status_line.size() < 2) {
+            return failure("bad status line");
+        }
+        nc::http::Response parsed_head{std::atoi(status_line[1].c_str())};
+        for (std::size_t index = 1; index < lines.size(); ++index) {
+            const std::string_view line = util::trim(lines[index]);
+            const std::size_t colon = line.find(':');
+            if (colon != std::string_view::npos && colon > 0) {
+                const std::string name{util::trim(line.substr(0, colon))};
+                const std::string value{util::trim(line.substr(colon + 1))};
+                if (util::equals_ignore_case(name, "Content-Type")) {
+                    parsed_head.set_content_type(std::string{value});
+                } else {
+                    parsed_head.add_header(std::string{name}, std::string{value});
+                }
+            }
+        }
+        return parsed_head;
+    };
+
     std::string raw;
     char chunk[16'384];
+    bool head_checked = stream_over == 0 || method == "HEAD";
     while (true) {
         const ssize_t got = secure ? SSL_read(tls.ssl, chunk, sizeof(chunk))
                                    : ::recv(connection.fd, chunk, sizeof(chunk), 0);
@@ -328,34 +371,83 @@ Result<nc::http::Response> request(
             break;
         }
         raw.append(chunk, static_cast<std::size_t>(got));
+        if (!head_checked) {
+            const std::size_t end = raw.find("\r\n\r\n");
+            if (end != std::string::npos) {
+                head_checked = true;
+                auto head_only = parse_head(raw, end);
+                if (head_only && head_only->get_status() >= 200 && head_only->get_status() < 300 &&
+                    !util::equals_ignore_case(head_only->header("Transfer-Encoding"), "chunked")) {
+                    const std::string length_text{head_only->header("Content-Length")};
+                    if (!length_text.empty() &&
+                        length_text.find_first_not_of("0123456789") == std::string::npos &&
+                        length_text.size() < 19) {
+                        const std::uint64_t length =
+                            std::strtoull(length_text.c_str(), nullptr, 10);
+                        if (length >= stream_over) {
+                            // The body stays on the connection; what already arrived goes out
+                            // first.
+                            struct Pull
+                            {
+                                std::string pending;
+                                std::uint64_t left;
+                            };
+
+                            auto pull =
+                                std::make_shared<Pull>(Pull{raw.substr(end + 4, length), length});
+                            pull->left -= pull->pending.size();
+                            head_only->set_stream(
+                                length,
+                                [live,
+                                 pull,
+                                 secure](char* buffer, std::size_t capacity) -> std::int64_t
+                                {
+                                    if (!pull->pending.empty()) {
+                                        const std::size_t piece =
+                                            std::min(capacity, pull->pending.size());
+                                        std::copy_n(pull->pending.data(), piece, buffer);
+                                        pull->pending.erase(0, piece);
+                                        return static_cast<std::int64_t>(piece);
+                                    }
+                                    if (pull->left == 0) {
+                                        return 0;
+                                    }
+                                    const std::size_t want = static_cast<std::size_t>(
+                                        std::min<std::uint64_t>(pull->left, capacity)
+                                    );
+                                    const ssize_t more =
+                                        secure ? SSL_read(
+                                                     live->tls.ssl,
+                                                     buffer,
+                                                     static_cast<int>(want)
+                                                 )
+                                               : ::recv(live->connection.fd, buffer, want, 0);
+                                    if (more <= 0) {
+                                        return -1; // the owner's server cut the download short
+                                    }
+                                    pull->left -= static_cast<std::uint64_t>(more);
+                                    return more;
+                                }
+                            );
+                            return std::move(*head_only);
+                        }
+                    }
+                }
+            }
+        }
         if (raw.size() > settings.get_max_response() + 65'536) {
             return failure("the answer is larger than allowed");
         }
     }
     const std::size_t head_end = raw.find("\r\n\r\n");
-    if (head_end == std::string::npos || !util::starts_with(raw, "HTTP/1.")) {
+    if (head_end == std::string::npos) {
         return failure("no valid answer from " + parsed->host);
     }
-    const std::vector<std::string> lines =
-        util::split(std::string_view{raw}.substr(0, head_end), '\n');
-    const std::vector<std::string> status_line = util::split(util::trim(lines.front()), ' ');
-    if (status_line.size() < 2) {
-        return failure("bad status line");
+    auto head_result = parse_head(raw, head_end);
+    if (!head_result) {
+        return util::unexpected<std::string>{head_result.error()};
     }
-    nc::http::Response response{std::atoi(status_line[1].c_str())};
-    for (std::size_t index = 1; index < lines.size(); ++index) {
-        const std::string_view line = util::trim(lines[index]);
-        const std::size_t colon = line.find(':');
-        if (colon != std::string_view::npos && colon > 0) {
-            const std::string name{util::trim(line.substr(0, colon))};
-            const std::string value{util::trim(line.substr(colon + 1))};
-            if (util::equals_ignore_case(name, "Content-Type")) {
-                response.set_content_type(std::string{value});
-            } else {
-                response.add_header(std::string{name}, std::string{value});
-            }
-        }
-    }
+    nc::http::Response response = std::move(*head_result);
     std::string content = raw.substr(head_end + 4);
     if (method == "HEAD") {
         return response; // the headers describe a body that is not sent

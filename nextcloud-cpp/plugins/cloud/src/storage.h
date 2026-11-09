@@ -5,7 +5,10 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -186,6 +189,32 @@ private:
 /// a canonical one: no `.`/`..` segments, no empty or over-long names, no control characters. A
 /// real path is built only from a canonical one, and a symbolic link anywhere on it is refused, so
 /// nothing can reach outside the root.
+/// @brief A plain file opened for reading in pieces, so a download never holds it in memory whole.
+class FileStream
+{
+public:
+    FileStream(std::shared_ptr<std::ifstream> file, std::uint64_t size) :
+        m_file{std::move(file)},
+        m_size{size}
+    {
+    }
+
+    /// @brief The file's size when it was opened.
+    [[nodiscard]] std::uint64_t size() const noexcept
+    {
+        return m_size;
+    }
+
+    /// @brief Reads `length` bytes from `first`: each call fills the buffer with the next piece
+    /// and returns how many bytes it wrote (0 at the end, negative when the file cannot be read).
+    [[nodiscard]] std::function<std::int64_t(char*, std::size_t)>
+    reader(std::uint64_t first, std::uint64_t length) const;
+
+private:
+    std::shared_ptr<std::ifstream> m_file{};
+    std::uint64_t m_size{0};
+};
+
 class Storage
 {
 public:
@@ -222,6 +251,14 @@ public:
     [[nodiscard]] Result<Node> stat(std::string_view path) const;
     [[nodiscard]] Result<std::vector<Node>> list(std::string_view path) const;
     [[nodiscard]] Result<std::string> read(std::string_view path) const;
+
+    /// @brief Files from this size on are streamed instead of read into memory.
+    static constexpr std::uint64_t STREAM_THRESHOLD = 1U << 20U;
+
+    /// @brief Opens a file for streaming. Empty when it cannot be streamed: an encrypted file is
+    /// only readable as a whole (it is authenticated as a whole), so the caller falls back to
+    /// `read`.
+    [[nodiscard]] std::optional<FileStream> open_stream(std::string_view path) const;
 
     /// @brief Writes a file atomically; true when it did not exist before. Parent must exist.
     [[nodiscard]] Result<bool>

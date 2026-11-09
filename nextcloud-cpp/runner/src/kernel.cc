@@ -1,5 +1,6 @@
 #include "nextcloud/runner/kernel.h"
 
+#include "nextcloud/stream.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 
@@ -38,6 +39,7 @@ namespace {
             out->body = {body.data(), body.size()};
             out->headers = pairs.data();
             out->header_count = pairs.size();
+            detail::stream_to_native(response, out);
         }
     };
 
@@ -71,6 +73,7 @@ namespace {
                 std::string{text_of(out.headers[index].value)}
             );
         }
+        detail::stream_from_native(out, response);
         return response;
     }
 
@@ -588,7 +591,13 @@ http::Response Kernel::handle(http::Request&& request) const
         response = http::Response::text(404, "Not Found");
     }
     if (head) {
-        response.add_header("Content-Length", std::to_string(response.get_body().size()));
+        response.add_header(
+            "Content-Length",
+            std::to_string(
+                response.is_streamed() ? response.get_stream_length() : response.get_body().size()
+            )
+        );
+        response.clear_stream();
         response.set_body(std::string{});
     }
     return response;

@@ -2470,7 +2470,7 @@ private:
         Response out{
             status,
             std::string{nc::util::mime_type_for(name)},
-            std::string{answer.get_body()},
+            answer.is_streamed() ? std::string{} : std::string{answer.get_body()},
             {{"Content-Disposition", "attachment; filename=\"" + safe_name + "\""},
              {"X-Content-Type-Options", "nosniff"}}
         };
@@ -2479,6 +2479,16 @@ private:
             if (const std::string_view value = answer.header(header); !value.empty()) {
                 out.add_header(std::string{header}, std::string{value});
             }
+        }
+        if (answer.is_streamed()) {
+            // The owner's server sends a big file in pieces; it goes on to the client the same way.
+            out.set_stream(
+                answer.get_stream_length(),
+                [reader = answer.get_stream()](char* buffer, std::size_t capacity)
+                {
+                    return (*reader)(buffer, capacity);
+                }
+            );
         }
         return out;
     }
@@ -3298,12 +3308,20 @@ private:
             }
             return Response::json(200, json + "]}");
         }
-        auto data = storage.read(inner);
-        if (!data) {
-            return Response::text(404, "Not Found");
+        Response response{200, std::string{nc::util::mime_type_for(node->name())}, {}, {}};
+        std::optional<nc::cloud::FileStream> stream;
+        if (node->get_size() >= Storage::STREAM_THRESHOLD) {
+            stream = storage.open_stream(inner);
         }
-        Response
-            response{200, std::string{nc::util::mime_type_for(node->name())}, std::move(*data), {}};
+        if (stream) {
+            response.set_stream(stream->size(), stream->reader(0, stream->size()));
+        } else {
+            auto data = storage.read(inner);
+            if (!data) {
+                return Response::text(404, "Not Found");
+            }
+            response.set_body(std::move(*data));
+        }
         nc::cloud::add_download_headers(response, *node);
         return response;
     }

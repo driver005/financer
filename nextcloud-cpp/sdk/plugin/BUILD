@@ -12,9 +12,15 @@ nc_cc_library(
 # The value types of a request and a response; header only, shared by the runner and the plugins.
 nc_cc_library(
     name = "http",
-    hdrs = ["include/nextcloud/http.h"],
+    hdrs = [
+        "include/nextcloud/http.h",
+        "include/nextcloud/stream.h",
+    ],
     includes = ["include"],
-    deps = ["//sdk/util"],
+    deps = [
+        ":abi",
+        "//sdk/util",
+    ],
 )
 
 # What a plugin includes: the base class, the host wrapper and NC_PLUGIN.

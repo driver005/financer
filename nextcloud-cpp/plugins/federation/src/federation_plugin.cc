@@ -43,6 +43,8 @@ using nc::http::Response;
 using nc::util::Json;
 
 constexpr std::string_view PUBLIC_DAV = "/public.php/webdav";
+/// Downloads of this size and above are streamed through, not held in memory.
+constexpr std::uint64_t STREAM_OVER = 1U << 20U;
 
 std::int64_t now_seconds()
 {
@@ -811,7 +813,9 @@ private:
             method,
             base + std::string{PUBLIC_DAV} + nc::util::url_encode_path(path),
             headers,
-            body
+            body,
+            // A big download is passed on in pieces instead of being held in memory.
+            method == "GET" ? STREAM_OVER : 0
         );
         if (!answer) {
             return Response::text(502, answer.error());
@@ -820,7 +824,7 @@ private:
         if (status == 401) {
             return Response::text(502, "the owner's server no longer accepts this share");
         }
-        std::string content = answer->get_body();
+        std::string content = answer->is_streamed() ? std::string{} : answer->get_body();
         if (status == 207) {
             content = rewrite_links(content, field("href_base"));
         }
@@ -838,6 +842,15 @@ private:
                 !value.empty() && name != "Content-Length") {
                 out.add_header(std::string{name}, std::string{value});
             }
+        }
+        if (answer->is_streamed()) {
+            out.set_stream(
+                answer->get_stream_length(),
+                [reader = answer->get_stream()](char* buffer, std::size_t capacity)
+                {
+                    return (*reader)(buffer, capacity);
+                }
+            );
         }
         return out;
     }

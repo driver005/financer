@@ -8,6 +8,9 @@
 
 #include "nextcloud/util/text.h"
 
+#include <cstdint>
+#include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -222,6 +225,11 @@ private:
     std::vector<Header> m_params{};
 };
 
+/// @brief Produces the next piece of a streamed body: writes at most `capacity` bytes into
+/// `buffer` and returns how many. 0 means the end, a negative value an error (the connection is
+/// cut, because the head with the length is already out).
+using BodyReader = std::function<std::int64_t(char* buffer, std::size_t capacity)>;
+
 class Response
 {
 public:
@@ -289,6 +297,58 @@ public:
         m_headers = std::move(headers);
     }
 
+    /// @brief Makes the body a stream of exactly `length` bytes that the server pulls piece by
+    /// piece, so a big file is never held in memory whole. Replaces any plain body.
+    Response& set_stream(std::uint64_t length, BodyReader&& reader)
+    {
+        m_body.clear();
+        m_stream_length = length;
+        m_stream = std::make_shared<BodyReader>(std::move(reader));
+        return *this;
+    }
+
+    /// @brief Drops the stream (the body is empty afterwards); the length stays readable.
+    void clear_stream() noexcept
+    {
+        m_stream.reset();
+    }
+
+    [[nodiscard]] bool is_streamed() const noexcept
+    {
+        return m_stream != nullptr;
+    }
+
+    [[nodiscard]] std::uint64_t get_stream_length() const noexcept
+    {
+        return m_stream_length;
+    }
+
+    /// @brief The stream's reader; empty when the body is not streamed. Copies of a response
+    /// share one stream, so only one of them should be read.
+    [[nodiscard]] const std::shared_ptr<BodyReader>& get_stream() const noexcept
+    {
+        return m_stream;
+    }
+
+    /// @brief The whole body: the plain body, or a drained stream (a test, or a caller that
+    /// needs all of it).
+    [[nodiscard]] std::string read_body() const
+    {
+        if (m_stream == nullptr) {
+            return m_body;
+        }
+        std::string out;
+        out.reserve(static_cast<std::size_t>(m_stream_length));
+        char buffer[16'384];
+        for (;;) {
+            const std::int64_t got = (*m_stream)(buffer, sizeof(buffer));
+            if (got <= 0) {
+                return out;
+            }
+            out.append(buffer, static_cast<std::size_t>(got));
+        }
+    }
+
     [[nodiscard]] int get_status() const noexcept
     {
         return m_status;
@@ -334,6 +394,8 @@ private:
     std::string m_content_type{};
     std::string m_body{};
     std::vector<Header> m_headers{};
+    std::shared_ptr<BodyReader> m_stream{};
+    std::uint64_t m_stream_length{0};
 };
 
 /// @brief An OCS v2 JSON envelope, the answer shape of Nextcloud's `/ocs/v2.php` API. `data_json`
