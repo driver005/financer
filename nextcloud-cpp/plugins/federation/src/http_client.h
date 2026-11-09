@@ -36,6 +36,13 @@ public:
         m_timeout_seconds = seconds;
     }
 
+    /// How long the TLS handshake may take. A server that speaks plain http does not answer a TLS
+    /// hello at all, so this is what a wrong guess of the scheme costs.
+    void set_handshake_timeout_seconds(int seconds) noexcept
+    {
+        m_handshake_timeout_seconds = seconds;
+    }
+
     void set_max_response(std::size_t bytes) noexcept
     {
         m_max_response = bytes;
@@ -66,6 +73,11 @@ public:
         return m_timeout_seconds;
     }
 
+    [[nodiscard]] int get_handshake_timeout_seconds() const noexcept
+    {
+        return m_handshake_timeout_seconds;
+    }
+
     [[nodiscard]] std::size_t get_max_response() const noexcept
     {
         return m_max_response;
@@ -76,6 +88,7 @@ private:
     bool m_allow_local{false};
     std::string m_ca_file{};
     int m_timeout_seconds{15};
+    int m_handshake_timeout_seconds{5};
     std::size_t m_max_response{64U * 1'024U * 1'024U};
 };
 

@@ -19,6 +19,7 @@ plugins/users/     accounts, sign-in, the provisioning API, user:* commands
 plugins/ldap/      sign in with an LDAP directory
 plugins/oauth2/    OAuth 2.0 authorization server
 plugins/previews/  thumbnails of pictures
+plugins/federation/ sharing with users on other servers (Open Cloud Mesh)
 plugins/groups/    groups and membership
 plugins/tokens/    app passwords
 plugins/twofactor/ TOTP second factor with backup codes
@@ -88,6 +89,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `[mail] mode` | `spool`, `sendmail`, `smtp`, `null` | `spool` |
 | `[mail] from_address`, `from_name`, `spool_dir`, `sendmail_path`, `smtp_host`, `smtp_port`, `max_recipients` | | |
 | `[ldap] host`, `port`, `base_dn`, `bind_dn`, `bind_password`, `user_attribute`, `object_class`, `display_attribute`, `mail_attribute` | directory sign-in | none (plugin stays off) |
+| `[federation] url`, `allow_http`, `allow_local`, `ca_file`, `timeout_seconds`, `handshake_timeout_seconds`, `max_pending_per_user` | sharing with other servers: this server's public address (else the `Host` header), plain http and local addresses (both off; for tests and private networks), trusted certificates (else the system's), limits | from `Host`, `false`, `false`, system, 15, 5, 100 |
 | `[db] file` | SQLite file | `<data_dir>/nextcloud.db` |
 | `[twofactor] issuer` | name shown in authenticator apps | `Nextcloud` |
 | `[trashbin] retention_days`, `[versions] max_versions`, `retention_days`, `[activity] retention_days` | how long things are kept | 30; 10, 365; 365 |

@@ -898,6 +898,9 @@ private:
         /// `share` is unused.
         std::filesystem::path external_root{};
         int external_permissions{1};
+        /// Set for a share from another server (federation): the id the federation plugin knows it
+        /// by. Then `share` is unused too.
+        std::uint64_t remote_id{0};
     };
 
     [[nodiscard]] std::vector<Mount> mounts_for(const std::string& user) const
@@ -934,7 +937,7 @@ private:
                            : base_name.substr(0, dot) + " (" + std::to_string(attempt) + ")" +
                                  base_name.substr(dot);
             }
-            mounts.push_back(Mount{share, name, node->is_directory(), {}, 1});
+            mounts.push_back(Mount{share, name, node->is_directory(), {}, 1, 0});
         }
         for (const External& external: m_external) {
             if (!external.group.empty() &&
@@ -959,7 +962,42 @@ private:
                 }
                 name = external.name + " (" + std::to_string(attempt) + ")";
             }
-            mounts.push_back(Mount{Share{}, name, true, external.path, external.permissions});
+            mounts.push_back(Mount{Share{}, name, true, external.path, external.permissions, 0});
+        }
+        // Shares from other servers the user accepted.
+        const Response remote =
+            m_host->call_service("federation.mounts", nc::util::form_encode({{"user", user}}));
+        if (remote.get_status() == 200) {
+            for (const std::string& line: nc::util::split(remote.get_body(), '\n')) {
+                const auto form = nc::util::parse_form(line);
+                const std::uint64_t id =
+                    std::strtoull(nc::util::form_value(form, "id").c_str(), nullptr, 10);
+                const std::string base_name = nc::util::form_value(form, "name");
+                if (id == 0 || !Storage::normalize("/" + base_name) || base_name.empty()) {
+                    continue;
+                }
+                const bool directory = nc::util::form_value(form, "directory") == "1";
+                const std::size_t dot = directory ? std::string::npos : base_name.rfind('.');
+                std::string name = base_name;
+                for (int attempt = 2; attempt < 1'000; ++attempt) {
+                    const bool taken =
+                        own.stat("/" + name).has_value() || std::ranges::any_of(
+                                                                mounts,
+                                                                [&](const Mount& other)
+                                                                {
+                                                                    return other.name == name;
+                                                                }
+                                                            );
+                    if (!taken) {
+                        break;
+                    }
+                    name = dot == std::string::npos || dot == 0
+                               ? base_name + " (" + std::to_string(attempt) + ")"
+                               : base_name.substr(0, dot) + " (" + std::to_string(attempt) + ")" +
+                                     base_name.substr(dot);
+                }
+                mounts.push_back(Mount{Share{}, name, directory, {}, 1, id});
+            }
         }
         return mounts;
     }
@@ -973,9 +1011,16 @@ private:
         }
         std::vector<nc::cloud::Node> nodes;
         for (const Mount& mount: mounts) {
-            auto node = mount.external_root.empty()
-                            ? storage_for(mount.share.get_owner()).stat(mount.share.get_path())
-                            : Storage{mount.external_root}.stat("/");
+            // A share from another server has no file here; its entry is made up.
+            std::optional<nc::cloud::Node> node;
+            if (mount.remote_id != 0) {
+                node = nc::cloud::Node{"/" + mount.name, mount.directory};
+            } else if (auto found =
+                           mount.external_root.empty()
+                               ? storage_for(mount.share.get_owner()).stat(mount.share.get_path())
+                               : Storage{mount.external_root}.stat("/")) {
+                node = std::move(*found);
+            }
             if (!node) {
                 continue;
             }
@@ -1061,6 +1106,62 @@ private:
         );
     }
 
+    /// Serves a request inside a share from another server: only reading, through the federation
+    /// plugin, which asks the owner's server. The answer is held in memory, so it has the size
+    /// limit of that plugin's client.
+    [[nodiscard]] Response serve_remote(
+        const Request& request,
+        const Mount& mount,
+        const std::string& rest,
+        const std::string& base
+    ) const
+    {
+        const std::string& method = request.get_method();
+        if (method != "GET" && method != "PROPFIND") {
+            return Response::text(
+                method == "PUT" || method == "MKCOL" || method == "DELETE" || method == "MOVE" ||
+                        method == "COPY"
+                    ? 403
+                    : 405,
+                "A share from another server is read-only here"
+            );
+        }
+        const std::string mount_base = base + "/" + nc::util::url_encode_path(mount.name);
+        Response answer = m_host->call_service(
+            "federation.fetch",
+            nc::util::form_encode(
+                {{"id", std::to_string(mount.remote_id)},
+                 {"user", request.get_user()},
+                 {"method", method},
+                 {"path", rest},
+                 {"depth", std::string{request.header("Depth")}},
+                 {"href_base", mount.directory ? mount_base : base}}
+            )
+        );
+        const int status = answer.get_status();
+        if (status != 200 && status != 207) {
+            return Response::text(status >= 400 ? status : 502, answer.get_body());
+        }
+        if (method == "PROPFIND") {
+            return Response{
+                207,
+                "application/xml; charset=utf-8",
+                std::string{answer.get_body()},
+                {}
+            };
+        }
+        const std::string name = rest.empty() ? mount.name : rest.substr(rest.rfind('/') + 1);
+        std::string safe_name = name;
+        std::ranges::replace(safe_name, '"', '_');
+        return Response{
+            200,
+            std::string{nc::util::mime_type_for(name)},
+            std::string{answer.get_body()},
+            {{"Content-Disposition", "attachment; filename=\"" + safe_name + "\""},
+             {"X-Content-Type-Options", "nosniff"}}
+        };
+    }
+
     /// Serves a request inside a mounted share: the owner's folder is the root, and the share's
     /// permissions (1 read, 2 update, 4 create, 8 delete) decide what is allowed.
     [[nodiscard]] Response serve_mount(
@@ -1072,6 +1173,9 @@ private:
     {
         if (!mount.external_root.empty()) {
             return serve_external(request, mount, rest, base);
+        }
+        if (mount.remote_id != 0) {
+            return serve_remote(request, mount, rest, base);
         }
         const Share& share = mount.share;
         const std::string& method = request.get_method();
@@ -1332,7 +1436,8 @@ private:
                              {"directory", node && node->is_directory() ? "1" : "0"},
                              {"token", added->get_token()},
                              {"share_with", added->get_share_with()},
-                             {"permissions", std::to_string(added->get_permissions())}}
+                             {"permissions", std::to_string(added->get_permissions())},
+                             {"base_url", base_url(request)}}
                         )
                     );
                     if (sent.get_status() != 200) {

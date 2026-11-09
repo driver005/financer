@@ -2,6 +2,7 @@
 
 #include "nextcloud/util/text.h"
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <cstring>
 #include <netdb.h>
@@ -245,6 +246,14 @@ Result<nc::http::Response> request(
         if (tls.ssl == nullptr || SSL_set_fd(tls.ssl, connection.fd) != 1) {
             return failure("cannot start TLS");
         }
+        const auto limit = [&](int seconds)
+        {
+            timeval timeout{};
+            timeout.tv_sec = seconds;
+            ::setsockopt(connection.fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+            ::setsockopt(connection.fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+        };
+        limit(std::min(settings.get_handshake_timeout_seconds(), settings.get_timeout_seconds()));
         SSL_set_tlsext_host_name(tls.ssl, parsed->host.c_str());
         X509_VERIFY_PARAM* params = SSL_get0_param(tls.ssl);
         // An address in the URL is matched against the IP entries of the certificate, a name
@@ -268,6 +277,7 @@ Result<nc::http::Response> request(
                     : "the TLS handshake with " + parsed->host + " failed"
             );
         }
+        limit(settings.get_timeout_seconds());
     }
     const auto write_all = [&](std::string_view data)
     {
