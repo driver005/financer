@@ -74,15 +74,15 @@ namespace {
         };
         Kind kind{Kind::SIMPLE};
         std::int64_t integer{0};
-        std::string text{}; // bytes or text
-        std::vector<Cbor> items{};
-        std::vector<std::pair<std::string, Cbor>> members{};
+        std::string text{};               // bytes or text
+        std::vector<Cbor> items{};        // an array's elements, or a map's values
+        std::vector<std::string> names{}; // a map's keys, in step with `items`
 
         [[nodiscard]] const Cbor* get(std::string_view key) const
         {
-            for (const auto& [name, value]: members) {
-                if (name == key) {
-                    return &value;
+            for (std::size_t index = 0; index < names.size(); ++index) {
+                if (names[index] == key) {
+                    return &items[index];
                 }
             }
             return nullptr;
@@ -181,7 +181,8 @@ namespace {
                             if (out.get(name) != nullptr) {
                                 return failure("the CBOR map repeats a key");
                             }
-                            out.members.emplace_back(std::move(name), std::move(*value));
+                            out.names.push_back(std::move(name));
+                            out.items.push_back(std::move(*value));
                         }
                         return out;
                     }
@@ -567,7 +568,7 @@ Result<Credential> verify_registration(
         !authenticator->is(Cbor::Kind::BYTES)) {
         return failure("only attestation \"none\" is accepted");
     }
-    if (statement != nullptr && (!statement->is(Cbor::Kind::MAP) || !statement->members.empty())) {
+    if (statement != nullptr && (!statement->is(Cbor::Kind::MAP) || !statement->items.empty())) {
         return failure("an attestation \"none\" has no statement");
     }
     const std::string& auth_data = authenticator->text;
