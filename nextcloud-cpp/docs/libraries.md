@@ -14,7 +14,8 @@ have to be vendored by hand (see `third_party/`).
 | `symfony/event-dispatcher`, `psr/event-dispatcher`, `psr/container`, `pimple/pimple` | `EventBus`, `ServiceRegistry` | |
 | `doctrine/dbal`, `ext-pdo` | `db` plugin on SQLite (`sqlite3`, BCR) | no PostgreSQL/MySQL (see below) |
 | `guzzlehttp/guzzle`, `psr/http-client`, `ext-curl` | `plugins/federation/src/http_client` (BoringSSL) | `curl` (BCR) would add redirects/HTTP2 |
-| `phpseclib/phpseclib`, `ext-openssl` | BoringSSL (`boringssl`, BCR), mbedTLS via libssh2 | |
+| `phpseclib/phpseclib`, `ext-openssl` | BoringSSL (`boringssl`, BCR), mbedTLS via libssh2 | hashes, HMAC, PBKDF2 and random bytes in `sdk/util` are BoringSSL calls too (the hand-written SHA-1/SHA-256 are gone) |
+| `ext-json` | `nlohmann_json` (BCR, **in use**) | `util::Json` is built from its SAX events, with the depth and size limits; the hand-written parser is gone |
 | `icewind/streams` | `http::Response` streams, spooled uploads | |
 | `aws/aws-sdk-php` | own AWS SigV4 (`s3.cc`) | `aws-sdk-cpp` is not in BCR |
 | `sabre/dav` | `cloud`, `calendar`, `contacts` plugins | XML is hand-written; see `pugixml` below |

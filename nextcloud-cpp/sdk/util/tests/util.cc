@@ -134,7 +134,18 @@ int main()
               "[1] x",
               "nul",
               "{\"a\" 1}",
-              "1e999"}) {
+              "1e999",
+              "\xEF\xBB\xBF{}",     // a byte order mark
+              "\"\xC3\"",           // UTF-8 that stops in the middle of a character
+              "\"\xFF\xFE\"",       // bytes that are not UTF-8 at all
+              "\"\\udc00\"",        // a low surrogate without its high one
+              "[1, 2",              // never closed
+              "{\"a\":1}{\"b\":2}", // two documents
+              "[NaN]",
+              "{\"a\":/*c*/1}"}) { // comments are not JSON
+            NC_CHECK(!Json::parse(bad).has_value());
+        }
+        for (const char* bad: {"[]]", "}", "[}", "{]", "\"unterminated", "[\"a\"\"b\"]"}) {
             NC_CHECK(!Json::parse(bad).has_value());
         }
         NC_CHECK(!Json::parse(std::string(40, '[') + std::string(40, ']')).has_value()); // too deep

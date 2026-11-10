@@ -1,303 +1,176 @@
 #include "nextcloud/util/json.h"
 
 #include <cmath>
-#include <cstdlib>
+#include <nlohmann/json.hpp>
 
 namespace nc::util {
 
 namespace {
 
     constexpr std::size_t MAX_JSON_BYTES = 1U << 20U;
-    constexpr int MAX_JSON_DEPTH = 32;
-
-    void append_utf8(std::string& out, std::uint32_t code)
-    {
-        if (code < 0x80U) {
-            out.push_back(static_cast<char>(code));
-        } else if (code < 0x8'00U) {
-            out.push_back(static_cast<char>(0xC0U | (code >> 6U)));
-            out.push_back(static_cast<char>(0x80U | (code & 0x3FU)));
-        } else if (code < 0x1'00'00U) {
-            out.push_back(static_cast<char>(0xE0U | (code >> 12U)));
-            out.push_back(static_cast<char>(0x80U | ((code >> 6U) & 0x3FU)));
-            out.push_back(static_cast<char>(0x80U | (code & 0x3FU)));
-        } else {
-            out.push_back(static_cast<char>(0xF0U | (code >> 18U)));
-            out.push_back(static_cast<char>(0x80U | ((code >> 12U) & 0x3FU)));
-            out.push_back(static_cast<char>(0x80U | ((code >> 6U) & 0x3FU)));
-            out.push_back(static_cast<char>(0x80U | (code & 0x3FU)));
-        }
-    }
+    // A container may sit inside up to 32 others: 33 levels of nesting in all.
+    constexpr std::size_t MAX_JSON_NESTING = 33;
 
 } // namespace
 
-class JsonParser
+/// Builds a `Json` from the events of nlohmann's parser. The parsing itself (RFC 8259: strings,
+/// escapes, surrogate pairs, UTF-8, numbers) is the library's; what is added here are the limits
+/// that make it safe to read what other servers send, and the shape of `Json`.
+class JsonParser final : public nlohmann::json::json_sax_t
 {
 public:
-    explicit JsonParser(std::string_view text) noexcept :
-        m_text{text}
+    explicit JsonParser(Json& root) noexcept :
+        m_root{&root}
     {
     }
 
-    std::optional<Json> run()
+    bool null() override
     {
-        if (m_text.size() > MAX_JSON_BYTES) {
-            return std::nullopt;
-        }
-        Json value;
-        skip();
-        if (!parse_value(value, 0)) {
-            return std::nullopt;
-        }
-        skip();
-        if (m_at != m_text.size()) {
-            return std::nullopt;
-        }
-        return value;
+        return place(Json{}) != nullptr;
     }
 
-private:
-    void skip() noexcept
+    bool boolean(bool value) override
     {
-        while (m_at < m_text.size() && (m_text[m_at] == ' ' || m_text[m_at] == '\t' ||
-                                        m_text[m_at] == '\n' || m_text[m_at] == '\r')) {
-            ++m_at;
-        }
+        Json json;
+        json.m_kind = Json::Kind::BOOLEAN;
+        json.m_boolean = value;
+        return place(std::move(json)) != nullptr;
     }
 
-    bool literal(std::string_view word) noexcept
+    bool number_integer(number_integer_t value) override
     {
-        if (m_text.substr(m_at, word.size()) == word) {
-            m_at += word.size();
-            return true;
-        }
-        return false;
+        return number(static_cast<double>(value));
     }
 
-    bool hex4(std::uint32_t& out) noexcept
+    bool number_unsigned(number_unsigned_t value) override
     {
-        if (m_at + 4 > m_text.size()) {
-            return false;
-        }
-        out = 0;
-        for (int index = 0; index < 4; ++index) {
-            const char letter = m_text[m_at++];
-            out <<= 4U;
-            if (letter >= '0' && letter <= '9') {
-                out |= static_cast<std::uint32_t>(letter - '0');
-            } else if (letter >= 'a' && letter <= 'f') {
-                out |= static_cast<std::uint32_t>(letter - 'a' + 10);
-            } else if (letter >= 'A' && letter <= 'F') {
-                out |= static_cast<std::uint32_t>(letter - 'A' + 10);
-            } else {
-                return false;
-            }
-        }
+        return number(static_cast<double>(value));
+    }
+
+    bool number_float(number_float_t value, const string_t&) override
+    {
+        return number(value);
+    }
+
+    bool string(string_t& value) override
+    {
+        Json json;
+        json.m_kind = Json::Kind::STRING;
+        json.m_string = value;
+        return place(std::move(json)) != nullptr;
+    }
+
+    bool binary(binary_t&) override
+    {
+        return false; // not a thing in JSON text
+    }
+
+    bool start_object(std::size_t) override
+    {
+        return open(Json::Kind::OBJECT);
+    }
+
+    bool key(string_t& value) override
+    {
+        m_key = value;
         return true;
     }
 
-    bool parse_string(std::string& out)
+    bool end_object() override
     {
-        if (m_at >= m_text.size() || m_text[m_at] != '"') {
-            return false;
-        }
-        ++m_at;
-        while (m_at < m_text.size()) {
-            const auto letter = static_cast<unsigned char>(m_text[m_at++]);
-            if (letter == '"') {
-                return true;
-            }
-            if (letter < 0x20U) {
-                return false; // raw control characters are not allowed in a string
-            }
-            if (letter != '\\') {
-                out.push_back(static_cast<char>(letter));
-                continue;
-            }
-            if (m_at >= m_text.size()) {
-                return false;
-            }
-            const char escape = m_text[m_at++];
-            switch (escape) {
-                case '"':
-                case '\\':
-                case '/':
-                    out.push_back(escape);
-                    break;
-                case 'b':
-                    out.push_back('\b');
-                    break;
-                case 'f':
-                    out.push_back('\f');
-                    break;
-                case 'n':
-                    out.push_back('\n');
-                    break;
-                case 'r':
-                    out.push_back('\r');
-                    break;
-                case 't':
-                    out.push_back('\t');
-                    break;
-                case 'u':
-                    {
-                        std::uint32_t code = 0;
-                        if (!hex4(code)) {
-                            return false;
-                        }
-                        if (code >= 0xD8'00U &&
-                            code < 0xDC'00U) { // a surrogate pair is one character
-                            std::uint32_t low = 0;
-                            if (!literal("\\u") || !hex4(low) || low < 0xDC'00U || low > 0xDF'FFU) {
-                                return false;
-                            }
-                            code = 0x1'00'00U + ((code - 0xD8'00U) << 10U) + (low - 0xDC'00U);
-                        } else if (code >= 0xDC'00U && code <= 0xDF'FFU) {
-                            return false;
-                        }
-                        append_utf8(out, code);
-                        break;
-                    }
-                default:
-                    return false;
-            }
-        }
+        return close();
+    }
+
+    bool start_array(std::size_t) override
+    {
+        return open(Json::Kind::ARRAY);
+    }
+
+    bool end_array() override
+    {
+        return close();
+    }
+
+    bool parse_error(std::size_t, const std::string&, const nlohmann::json::exception&) override
+    {
         return false;
     }
 
-    bool parse_value(Json& out, int depth)
+private:
+    bool number(double value)
     {
-        if (depth > MAX_JSON_DEPTH || m_at >= m_text.size()) {
+        if (!std::isfinite(value)) {
             return false;
         }
-        const char first = m_text[m_at];
-        if (first == '{') {
-            ++m_at;
-            out.m_kind = Json::Kind::OBJECT;
-            skip();
-            if (m_at < m_text.size() && m_text[m_at] == '}') {
-                ++m_at;
-                return true;
-            }
-            while (true) {
-                skip();
-                std::string key;
-                if (!parse_string(key)) {
-                    return false;
-                }
-                skip();
-                if (m_at >= m_text.size() || m_text[m_at++] != ':') {
-                    return false;
-                }
-                skip();
-                Json member;
-                if (!parse_value(member, depth + 1)) {
-                    return false;
-                }
-                out.m_members[std::move(key)] = std::move(member);
-                skip();
-                if (m_at >= m_text.size()) {
-                    return false;
-                }
-                const char separator = m_text[m_at++];
-                if (separator == '}') {
-                    return true;
-                }
-                if (separator != ',') {
-                    return false;
-                }
-            }
-        }
-        if (first == '[') {
-            ++m_at;
-            out.m_kind = Json::Kind::ARRAY;
-            skip();
-            if (m_at < m_text.size() && m_text[m_at] == ']') {
-                ++m_at;
-                return true;
-            }
-            while (true) {
-                skip();
-                Json item;
-                if (!parse_value(item, depth + 1)) {
-                    return false;
-                }
-                out.m_items.push_back(std::move(item));
-                skip();
-                if (m_at >= m_text.size()) {
-                    return false;
-                }
-                const char separator = m_text[m_at++];
-                if (separator == ']') {
-                    return true;
-                }
-                if (separator != ',') {
-                    return false;
-                }
-            }
-        }
-        if (first == '"') {
-            out.m_kind = Json::Kind::STRING;
-            return parse_string(out.m_string);
-        }
-        if (literal("true")) {
-            out.m_kind = Json::Kind::BOOLEAN;
-            out.m_boolean = true;
-            return true;
-        }
-        if (literal("false")) {
-            out.m_kind = Json::Kind::BOOLEAN;
-            return true;
-        }
-        if (literal("null")) {
-            return true;
-        }
-        // A number: -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?
-        const std::size_t start = m_at;
-        if (m_text[m_at] == '-') {
-            ++m_at;
-        }
-        const auto digits = [this]
-        {
-            const std::size_t from = m_at;
-            while (m_at < m_text.size() && m_text[m_at] >= '0' && m_text[m_at] <= '9') {
-                ++m_at;
-            }
-            return m_at - from;
-        };
-        if (m_at < m_text.size() && m_text[m_at] == '0') {
-            ++m_at;
-        } else if (digits() == 0) {
-            return false;
-        }
-        if (m_at < m_text.size() && m_text[m_at] == '.') {
-            ++m_at;
-            if (digits() == 0) {
-                return false;
-            }
-        }
-        if (m_at < m_text.size() && (m_text[m_at] == 'e' || m_text[m_at] == 'E')) {
-            ++m_at;
-            if (m_at < m_text.size() && (m_text[m_at] == '+' || m_text[m_at] == '-')) {
-                ++m_at;
-            }
-            if (digits() == 0) {
-                return false;
-            }
-        }
-        out.m_kind = Json::Kind::NUMBER;
-        out.m_number =
-            std::strtod(std::string{m_text.substr(start, m_at - start)}.c_str(), nullptr);
-        return std::isfinite(out.m_number);
+        Json json;
+        json.m_kind = Json::Kind::NUMBER;
+        json.m_number = value;
+        return place(std::move(json)) != nullptr;
     }
 
-    std::string_view m_text;
-    std::size_t m_at{0};
+    bool open(Json::Kind kind)
+    {
+        if (m_open.size() >= MAX_JSON_NESTING) {
+            return false;
+        }
+        Json json;
+        json.m_kind = kind;
+        Json* placed = place(std::move(json));
+        if (placed == nullptr) {
+            return false;
+        }
+        m_open.push_back(placed);
+        return true;
+    }
+
+    bool close()
+    {
+        if (m_open.empty()) {
+            return false;
+        }
+        m_open.pop_back();
+        return true;
+    }
+
+    /// Puts a finished value where it belongs: the root, the open array, or the open object (a
+    /// repeated key replaces the earlier member: the last one wins).
+    Json* place(Json value)
+    {
+        if (m_open.empty()) {
+            *m_root = std::move(value);
+            return m_root;
+        }
+        Json& parent = *m_open.back();
+        if (parent.m_kind == Json::Kind::ARRAY) {
+            parent.m_items.push_back(std::move(value));
+            return &parent.m_items.back();
+        }
+        Json& member = parent.m_members[m_key];
+        member = std::move(value);
+        return &member;
+    }
+
+    Json* m_root;
+    std::vector<Json*> m_open{};
+    std::string m_key{};
 };
 
 std::optional<Json> Json::parse(std::string_view text)
 {
-    return JsonParser{text}.run();
+    // Bytes of a byte order mark are not JSON (RFC 8259 section 8.1 lets a parser refuse them).
+    if (text.size() > MAX_JSON_BYTES || text.starts_with("\xEF\xBB\xBF")) {
+        return std::nullopt;
+    }
+    Json root;
+    JsonParser handler{root};
+    try {
+        if (!nlohmann::json::sax_parse(text.begin(), text.end(), &handler)) {
+            return std::nullopt;
+        }
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+    return root;
 }
 
 const Json& Json::operator[](std::string_view key) const noexcept
