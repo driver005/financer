@@ -39,6 +39,9 @@ public:
     void set_favorite(const std::string& user, const std::string& path, bool favorite) const;
     [[nodiscard]] bool is_favorite(const std::string& user, const std::string& path) const;
 
+    /// @brief The path with this number, empty when there is none.
+    [[nodiscard]] std::string path_of(const std::string& user, std::int64_t id) const;
+
     /// @brief The favorite paths of a user.
     [[nodiscard]] std::vector<std::string> favorites(const std::string& user) const;
 

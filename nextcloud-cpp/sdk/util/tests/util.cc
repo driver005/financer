@@ -3,6 +3,7 @@
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/json.h"
 #include "nextcloud/util/text.h"
+#include "nextcloud/util/time.h"
 #include "nextcloud/util/xml.h"
 
 int main()
@@ -284,5 +285,56 @@ int main()
     NC_CHECK_EQ(random_hex(8).size(), std::size_t{16});
     NC_CHECK(constant_time_equals("abc", "abc") && !constant_time_equals("abc", "abd"));
 
+    // ISO 8601: values from other implementations (python's datetime and GNU date).
+    {
+        using nc::util::parse_iso8601;
+        NC_CHECK_EQ(parse_iso8601("1970-01-01T00:00:00Z").value_or(-1), 0);
+        NC_CHECK_EQ(parse_iso8601("2026-11-12T10:30:00Z").value_or(-1), 1'794'479'400);
+        NC_CHECK_EQ(parse_iso8601("2026-11-12T10:30:00+00:00").value_or(-1), 1'794'479'400);
+        NC_CHECK_EQ(parse_iso8601("2026-11-12T11:30:00+01:00").value_or(-1), 1'794'479'400);
+        NC_CHECK_EQ(parse_iso8601("2026-11-12T11:30:00+0100").value_or(-1), 1'794'479'400);
+        NC_CHECK_EQ(parse_iso8601("2026-11-12T05:30:00-05:00").value_or(-1), 1'794'479'400);
+        NC_CHECK_EQ(parse_iso8601("2026-11-12 10:30:00.987654Z").value_or(-1), 1'794'479'400);
+        NC_CHECK_EQ(parse_iso8601("2000-02-29T12:00:00Z").value_or(-1), 951'825'600);
+        NC_CHECK_EQ(parse_iso8601("1969-12-31T23:59:59Z").value_or(-1), -1);
+        NC_CHECK_EQ(parse_iso8601("1900-03-01T00:00:00Z").value_or(0), -2'203'891'200);
+        NC_CHECK_EQ(parse_iso8601("2100-01-01T00:00:00Z").value_or(-1), 4'102'444'800);
+        // Not a time: a date that does not exist, a leap second, odd shapes.
+        for (const char* bad:
+             {"",
+              "2026",
+              "2026-02-29T00:00:00Z",
+              "2026-13-01T00:00:00Z",
+              "2026-00-10T00:00:00Z",
+              "2026-04-31T00:00:00Z",
+              "2026-11-12T24:00:00Z",
+              "2026-11-12T10:60:00Z",
+              "2026-11-12T10:30:60Z",
+              "2026-11-12T10:30:00",
+              "2026-11-12T10:30Z",
+              "2026-11-12T10:30:00+25:00",
+              "2026-11-12T10:30:00Zjunk",
+              "2026-11-12T10:30:00.Z",
+              "20261112T103000Z",
+              "2026-11-12T10:30:00 +01:00",
+              "now",
+              "-2026-11-12T10:30:00Z",
+              "2026-11-12T10:30:00+01:60"}) {
+            NC_CHECK(!parse_iso8601(bad).has_value());
+        }
+        NC_CHECK_EQ(nc::util::format_atom(1'794'479'400), "2026-11-12T10:30:00+00:00");
+        NC_CHECK_EQ(nc::util::format_atom(0), "1970-01-01T00:00:00+00:00");
+        NC_CHECK_EQ(nc::util::format_atom(-1), "1969-12-31T23:59:59+00:00");
+        NC_CHECK_EQ(nc::util::format_atom(951'825'600), "2000-02-29T12:00:00+00:00");
+        // Round trip over a few thousand days, either side of 1970.
+        for (std::int64_t seconds = -3'000'000'000; seconds < 4'000'000'000;
+             seconds += 86'399'111) {
+            const auto back = parse_iso8601(nc::util::format_atom(seconds));
+            NC_CHECK(back.has_value());
+            if (back) {
+                NC_CHECK_EQ(*back, seconds);
+            }
+        }
+    }
     return NC_TEST_RESULT();
 }

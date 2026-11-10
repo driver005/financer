@@ -34,6 +34,7 @@ plugins/tokens/    app passwords
 plugins/twofactor/ TOTP second factor with backup codes
 plugins/admin_audit/ audit log of sign-ins, files, shares, accounts and groups
 plugins/bruteforce/ makes an address wait after too many wrong passwords
+plugins/files_reminders/ reminders for files (a notification when they are due)
 plugins/webauthn/  passkeys and security keys (WebAuthn): registration and passwordless sign-in
 plugins/cloud/     file storage, WebDAV, shares by user and public link
 plugins/trashbin/  deleted files can be restored

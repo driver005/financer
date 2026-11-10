@@ -76,7 +76,7 @@ style (`CODESTYLE.md`).
 
 ## Verification
 
-* `bazelisk test //...` (33 targets) and the three sanitizer configs: done, all pass (clang 18).
+* `bazelisk test //...` (34 targets) and the three sanitizer configs: done, all pass (clang 18).
 * clang 22, C++26, `--config=warnings` (-Werror): done, all pass.
 * `tools/smoke.sh`: done, the built binary with all plugins over curl.
 * Not done: C++26 *modules*. The Bazel module rules and `import std;` of congelado need GCC 16's libstdc++

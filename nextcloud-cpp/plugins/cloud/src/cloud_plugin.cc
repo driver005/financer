@@ -338,6 +338,30 @@ public:
         if (m_instance_id.empty()) {
             m_instance_id = "oc" + nc::util::to_hex(nc::util::sha256(m_data_dir)).substr(0, 10);
         }
+        // "user\nnumber": the path of a file that has that number and still exists (for plugins
+        // that keep a number, like the reminders), else 404.
+        host.add_service(
+            "files.path_of",
+            [this](std::string_view args)
+            {
+                const std::size_t newline = args.find('\n');
+                if (newline == std::string_view::npos) {
+                    return Response::text(400, "user and number are required");
+                }
+                const std::string user{args.substr(0, newline)};
+                const std::string number{args.substr(newline + 1)};
+                if (!safe_user(user) || number.empty() ||
+                    number.find_first_not_of("0123456789") != std::string::npos ||
+                    number.size() > 18) {
+                    return Response::text(404, "");
+                }
+                const std::string path = m_meta->path_of(user, std::atoll(number.c_str()));
+                if (path.empty() || !storage_for(user).stat(path)) {
+                    return Response::text(404, "");
+                }
+                return Response::text(200, path);
+            }
+        );
         add_dav_routes(host);
         add_upload_routes(host);
         add_share_routes(host);

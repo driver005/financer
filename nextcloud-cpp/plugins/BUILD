@@ -9,6 +9,7 @@ test_suite(
         "//plugins/comments:comments_test",
         "//plugins/db:db_test",
         "//plugins/federation:federation_test",
+        "//plugins/files_reminders:files_reminders_test",
         "//plugins/federation:http_client_test",
         "//plugins/groups:groups_test",
         "//plugins/ldap:ldap_test",

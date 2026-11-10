@@ -93,6 +93,15 @@ bool FileMeta::is_favorite(const std::string& user, const std::string& path) con
     return !rows.empty() && nc::db::value_of(rows.front(), "favorite") == "1";
 }
 
+std::string FileMeta::path_of(const std::string& user, std::int64_t id) const
+{
+    const auto rows = nc::db::Client{m_host}.query(
+        "SELECT path FROM nc_file_meta WHERE uid = ? AND id = ?",
+        {user, std::to_string(id)}
+    );
+    return rows.empty() ? std::string{} : nc::db::value_of(rows.front(), "path");
+}
+
 std::vector<std::string> FileMeta::favorites(const std::string& user) const
 {
     std::vector<std::string> out;
