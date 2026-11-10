@@ -761,7 +761,9 @@ namespace {
                 target.get_base_href(),
                 target.get_user(),
                 storage,
-                extra_props(hooks, target.get_user(), target.get_base_href())
+                extra_props(hooks, target.get_user(), target.get_base_href()),
+                {},
+                hooks.permissions
             )
         );
     }
@@ -802,7 +804,8 @@ namespace {
                 target.get_user(),
                 storage,
                 extra_props(hooks, target.get_user(), target.get_base_href()),
-                *wanted
+                *wanted,
+                hooks.permissions
             )
         );
     }
@@ -963,13 +966,39 @@ namespace {
 
 } // namespace
 
+std::string permission_letters(int permissions, bool directory)
+{
+    std::string out;
+    if ((permissions & 16) != 0) {
+        out += 'R';
+    }
+    if ((permissions & 1) != 0) {
+        out += 'G';
+    }
+    if ((permissions & 8) != 0) {
+        out += 'D';
+    }
+    if ((permissions & 2) != 0) {
+        out += "NV";
+    }
+    if (directory) {
+        if ((permissions & 4) != 0) {
+            out += "CK";
+        }
+    } else if ((permissions & 2) != 0) {
+        out += 'W';
+    }
+    return out;
+}
+
 std::string multistatus(
     const std::vector<Node>& nodes,
     std::string_view base_href,
     std::string_view owner,
     const Storage& storage,
     const ExtraProps& extra,
-    const PropRequest& wanted
+    const PropRequest& wanted,
+    int permissions
 )
 {
     std::string xml = "<?xml version=\"1.0\"?>\n"
@@ -1016,7 +1045,8 @@ std::string multistatus(
                                        ? storage.size_of(node.get_path()).value_or(0)
                                        : node.get_size();
         props.push_back({"oc", "size", std::to_string(size)});
-        props.push_back({"oc", "permissions", node.is_directory() ? "RGDNVCK" : "RGDNVW"});
+        props.push_back({"oc", "permissions", permission_letters(permissions, node.is_directory())}
+        );
         props.push_back({"oc", "owner-id", util::xml_escape(owner)});
         if (extra) {
             for (Prop& more: extra(node, wanted)) {

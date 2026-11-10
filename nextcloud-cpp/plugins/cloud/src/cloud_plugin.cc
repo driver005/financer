@@ -1639,7 +1639,13 @@ private:
                 {node},
                 base,
                 mount.share.get_owner(),
-                Storage{std::filesystem::path{"/nonexistent"}}
+                Storage{std::filesystem::path{"/nonexistent"}},
+                {},
+                {},
+                mount.external_root.empty() && mount.remote_id == 0 && mount.dav_index < 0 &&
+                        mount.s3_index < 0 && mount.ftp_index < 0
+                    ? mount.share.get_permissions()
+                    : nc::cloud::ALL_PERMISSIONS
             );
             // multistatus() wraps its answer; keep only the <d:response> elements. (The size of a
             // mounted folder is not worked out here: it reads 0 in the listing of the top folder.)
@@ -2844,6 +2850,7 @@ private:
             m_host->publish(topic, nc::util::form_encode(form));
         };
         nc::cloud::Hooks hooks = this->hooks();
+        hooks.permissions = permissions;
         // A received share is the owner's tree under another path: no numbers or favorites there.
         hooks.file_id = nullptr;
         hooks.is_favorite = nullptr;

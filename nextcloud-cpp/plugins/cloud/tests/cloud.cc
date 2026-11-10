@@ -4876,6 +4876,103 @@ void test_locks()
     fs::remove_all(dir);
 }
 
+// ---- permissions shown to clients ---------------------------------------------------------------
+
+void test_share_permission_letters()
+{
+    NC_CHECK_EQ(nc::cloud::permission_letters(31, false), "RGDNVW");
+    NC_CHECK_EQ(nc::cloud::permission_letters(31, true), "RGDNVCK");
+    NC_CHECK_EQ(nc::cloud::permission_letters(1, false), "G");
+    NC_CHECK_EQ(nc::cloud::permission_letters(1, true), "G");
+    NC_CHECK_EQ(nc::cloud::permission_letters(3, false), "GNVW");
+    NC_CHECK_EQ(nc::cloud::permission_letters(3, true), "GNV");
+    NC_CHECK_EQ(nc::cloud::permission_letters(5, true), "GCK");
+    NC_CHECK_EQ(nc::cloud::permission_letters(5, false), "G");
+    NC_CHECK_EQ(nc::cloud::permission_letters(9, true), "GD");
+    NC_CHECK_EQ(nc::cloud::permission_letters(0, true), "");
+
+    const std::string dir = temp_dir("share_letters");
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "groups", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    for (const char* name: {"alice", "bob"}) {
+        ::setenv("OC_PASS", (std::string{name} + " password").c_str(), 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {name}, out), 0);
+    }
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string bob = "bob:bob password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const std::string b = "/remote.php/dav/files/bob";
+    const auto call = [&](const std::string& method,
+                          const std::string& path,
+                          const std::string& body,
+                          const std::string& who)
+    {
+        Request request = user_req(method, path, body, who);
+        request.add_header("Depth", "1");
+        return kernel.handle(std::move(request));
+    };
+    NC_CHECK_EQ(call("MKCOL", a + "/ReadOnly", "", alice).get_status(), 201);
+    NC_CHECK_EQ(call("PUT", a + "/ReadOnly/f.txt", "x", alice).get_status(), 201);
+    NC_CHECK_EQ(call("MKCOL", a + "/Editable", "", alice).get_status(), 201);
+    NC_CHECK_EQ(call("PUT", a + "/Editable/f.txt", "x", alice).get_status(), 201);
+    NC_CHECK_EQ(call("MKCOL", a + "/Everything", "", alice).get_status(), 201);
+    NC_CHECK_EQ(call("PUT", a + "/Everything/f.txt", "x", alice).get_status(), 201);
+    const std::string shares = "/ocs/v2.php/apps/files_sharing/api/v1/shares";
+    for (const auto& [path, permissions]: std::vector<std::pair<std::string, int>>{
+             {"ReadOnly", 1},
+             {"Editable", 7},
+             {"Everything", 31}
+         }) {
+        NC_CHECK_EQ(
+            call(
+                "POST",
+                shares,
+                "path=%2F" + path +
+                    "&shareType=0&shareWith=bob&permissions=" + std::to_string(permissions),
+                alice
+            )
+                .get_status(),
+            200
+        );
+    }
+    // The top folder of the recipient, and inside each share.
+    const std::string top = call("PROPFIND", b + "/", "", bob).get_body();
+    NC_CHECK_EQ(property_of(top, b + "/ReadOnly/", "permissions"), "G");
+    NC_CHECK_EQ(property_of(top, b + "/Editable/", "permissions"), "GNVCK");
+    NC_CHECK_EQ(property_of(top, b + "/Everything/", "permissions"), "RGDNVCK");
+    const auto inside = [&](const std::string& name)
+    {
+        return call("PROPFIND", b + "/" + name, "", bob).get_body();
+    };
+    NC_CHECK_EQ(property_of(inside("ReadOnly"), b + "/ReadOnly/f.txt", "permissions"), "G");
+    NC_CHECK_EQ(property_of(inside("Editable"), b + "/Editable/f.txt", "permissions"), "GNVW");
+    NC_CHECK_EQ(
+        property_of(inside("Everything"), b + "/Everything/f.txt", "permissions"),
+        "RGDNVW"
+    );
+    // The owner still sees everything on their own files.
+    NC_CHECK_EQ(
+        property_of(
+            call("PROPFIND", a + "/ReadOnly", "", alice).get_body(),
+            a + "/ReadOnly/f.txt",
+            "permissions"
+        ),
+        "RGDNVW"
+    );
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 int main()
 {
     test_normalize();
@@ -4902,6 +4999,7 @@ int main()
     test_propfind_requests();
     test_checksums();
     test_locks();
+    test_share_permission_letters();
     test_folder_archives();
     test_external_storage();
     test_encryption();

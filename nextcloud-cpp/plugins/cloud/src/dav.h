@@ -17,6 +17,10 @@ namespace nc::cloud {
 /// bus.
 using Publish = std::function<void(std::string_view topic, std::string_view payload)>;
 
+/// @brief What a share allows, as Nextcloud counts it: 1 read, 2 update, 4 create, 8 delete, 16
+/// share. All of it is what a person has in their own files.
+inline constexpr int ALL_PERMISSIONS = 31;
+
 /// @brief Points where other plugins may step in before the files change; both are optional.
 struct Hooks
 {
@@ -65,6 +69,9 @@ struct Hooks
     std::function<bool(const std::string& user, const std::string& token, std::int64_t expires)>
         refresh_lock{};
     std::function<bool(const std::string& user, const std::string& token)> remove_lock{};
+    /// What the person may do with what they see (for a received share: the share's mask), shown
+    /// as `oc:permissions` so that clients do not offer what the server would refuse.
+    int permissions{ALL_PERMISSIONS};
     /// This server's id, the tail of `oc:id`.
     std::string instance_id{};
     /// The user's own shares as (path, share type) pairs, for `oc:share-types`; unset: none shown.
@@ -213,6 +220,10 @@ using ExtraProps = std::function<std::vector<Prop>(const Node& node, const PropR
 /// @brief The namespace URI of a property prefix (`d`, `oc`, `nc`).
 [[nodiscard]] std::string_view namespace_of(std::string_view prefix) noexcept;
 
+/// @brief The `oc:permissions` letters for such a mask (`RGDNVW` for a file, `RGDNVCK` for a
+/// folder with everything allowed).
+[[nodiscard]] std::string permission_letters(int permissions, bool directory);
+
 /// @brief The `207 Multi-Status` XML for a PROPFIND answer. The quota properties
 /// (`quota-used-bytes`, `quota-available-bytes`) are worked out only when asked for by name.
 [[nodiscard]] std::string multistatus(
@@ -221,7 +232,8 @@ using ExtraProps = std::function<std::vector<Prop>(const Node& node, const PropR
     std::string_view owner,
     const Storage& storage,
     const ExtraProps& extra = {},
-    const PropRequest& wanted = {}
+    const PropRequest& wanted = {},
+    int permissions = ALL_PERMISSIONS
 );
 
 /// @brief ETag, Last-Modified and the headers that make a browser download the file instead of
