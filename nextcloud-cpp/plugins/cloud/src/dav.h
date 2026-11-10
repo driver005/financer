@@ -3,7 +3,9 @@
 #include "nextcloud/http.h"
 #include "storage.h"
 
+#include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -103,6 +105,19 @@ private:
     const DavTarget& target,
     const Publish& publish,
     const Hooks& hooks = {}
+);
+
+/// @brief A folder as a zip or tar file when the request asks for one (`?accept=zip|tar`, the
+/// `Accept` header; with `default_zip` a request without either gets a zip), else nothing.
+/// `?files=[...]` / `X-NC-Files` pick names inside the folder. `path` is the folder's path in the
+/// storage; the files may add up to `max_bytes` (0: archives are off).
+[[nodiscard]] std::optional<nc::http::Response> folder_archive_for(
+    const nc::http::Request& request,
+    const Storage& storage,
+    const Node& folder,
+    const std::string& path,
+    std::uint64_t max_bytes,
+    bool default_zip = false
 );
 
 /// @brief The `207 Multi-Status` XML for a PROPFIND answer.

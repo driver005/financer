@@ -470,6 +470,29 @@ std::string multistatus(
     return xml + "</d:multistatus>\n";
 }
 
+std::optional<Response> folder_archive_for(
+    const Request& request,
+    const Storage& storage,
+    const Node& folder,
+    const std::string& path,
+    std::uint64_t max_bytes,
+    bool default_zip
+)
+{
+    auto format = archive_format(request);
+    if (!format && default_zip) {
+        format = ArchiveWriter::Format::ZIP;
+    }
+    if (!format) {
+        return std::nullopt;
+    }
+    const auto files = archive_files(request);
+    if (!files) {
+        return Response::text(400, "The files parameter is not a list of names");
+    }
+    return archive_response(storage, folder, path, *format, *files, max_bytes);
+}
+
 Response dav_handle(
     const Request& request,
     const Storage& storage,
@@ -501,19 +524,9 @@ Response dav_handle(
         }
         if (node->is_directory()) {
             // As a zip or tar file when the request asks for one.
-            if (const auto format = archive_format(request)) {
-                const auto files = archive_files(request);
-                if (!files) {
-                    return Response::text(400, "The files parameter is not a list of names");
-                }
-                return archive_response(
-                    storage,
-                    *node,
-                    path,
-                    *format,
-                    *files,
-                    hooks.archive_max_bytes
-                );
+            if (auto archive =
+                    folder_archive_for(request, storage, *node, path, hooks.archive_max_bytes)) {
+                return std::move(*archive);
             }
             return Response::text(405, "Cannot download a folder; use PROPFIND to list it");
         }

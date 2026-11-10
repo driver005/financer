@@ -3376,6 +3376,16 @@ private:
             return Response::text(404, "Not Found");
         }
         if (node->is_directory()) {
+            // The folder as one zip or tar file: `?accept=zip|tar`.
+            if (auto archive = nc::cloud::folder_archive_for(
+                    request,
+                    storage,
+                    *node,
+                    inner,
+                    m_archive_max_bytes
+                )) {
+                return std::move(*archive);
+            }
             auto children = storage.list(inner);
             if (!children) {
                 return Response::text(404, "Not Found");

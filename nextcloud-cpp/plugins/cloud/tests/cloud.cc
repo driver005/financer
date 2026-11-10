@@ -3894,6 +3894,58 @@ void test_folder_archives()
     // Without a request for an archive, a folder is still not a download; a file is a file.
     NC_CHECK_EQ(download("/Docs", "").get_status(), 405);
     NC_CHECK_EQ(download("/Docs/a.txt", "accept=zip").get_body(), "hello");
+    // A public link to a folder gives the same archives: of the folder shared, or of a folder
+    // below it, behind the link's password; the rest of the account is not in it.
+    {
+        const std::string shares = "/ocs/v2.php/apps/files_sharing/api/v1/shares";
+        const auto token_of = [](const Response& created)
+        {
+            const std::string body = created.get_body();
+            return body.substr(body.find("\"token\":\"") + 9, 20);
+        };
+        const Response open_link =
+            kernel.handle(user_req("POST", shares, "path=/Docs&shareType=3", alice));
+        NC_CHECK_EQ(open_link.get_status(), 200);
+        const std::string token = token_of(open_link);
+        const auto linked = [&](const std::string& path, const std::string& query)
+        {
+            Request request{"GET", "/s/" + token + path};
+            request.set_query(std::string{query});
+            return kernel.handle(std::move(request));
+        };
+        const Response whole = linked("", "accept=zip");
+        NC_CHECK_EQ(whole.get_status(), 200);
+        NC_CHECK_EQ(whole.get_content_type(), "application/zip");
+        const std::string listing = archive_listing(save(whole, "link.zip"), true);
+        NC_CHECK(listing.find("Docs/a.txt 5 ") != std::string::npos);
+        NC_CHECK(listing.find("Docs/Sub/b.txt 3 ") != std::string::npos);
+        NC_CHECK(listing.find("top.txt") == std::string::npos);
+        const std::string below =
+            archive_listing(save(linked("/Sub", "accept=tar"), "sub.tar"), false);
+        NC_CHECK(below.find("Sub/b.txt 3 ") != std::string::npos);
+        NC_CHECK(below.find("a.txt") == std::string::npos);
+        // Without a request for an archive the link still lists the folder, and the sub path
+        // cannot climb out of it.
+        NC_CHECK(linked("", "").get_body().find("\"files\"") != std::string::npos);
+        NC_CHECK_EQ(linked("/..", "accept=zip").get_status(), 404);
+        // A link with a password and one that only takes uploads give no archive.
+        const Response locked = kernel.handle(
+            user_req("POST", shares, "path=/Docs&shareType=3&password=correct+horse", alice)
+        );
+        const std::string locked_token = token_of(locked);
+        Request without{"GET", "/s/" + locked_token};
+        without.set_query("accept=zip");
+        NC_CHECK_EQ(kernel.handle(std::move(without)).get_status(), 401);
+        Request with{"GET", "/s/" + locked_token};
+        with.set_query("accept=zip");
+        with.add_header("X-NC-Share-Password", "correct horse");
+        NC_CHECK_EQ(kernel.handle(std::move(with)).get_status(), 200);
+        const Response upload_only =
+            kernel.handle(user_req("POST", shares, "path=/Docs&shareType=3&permissions=4", alice));
+        Request drop{"GET", "/s/" + token_of(upload_only)};
+        drop.set_query("accept=zip");
+        NC_CHECK_EQ(kernel.handle(std::move(drop)).get_status(), 403);
+    }
     // Somebody else's account is not reachable.
     NC_CHECK(
         kernel.handle(user_req("GET", "/remote.php/dav/files/bob/?accept=zip", "", alice))
