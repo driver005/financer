@@ -4,9 +4,11 @@
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
 #include "nextcloud/util/time.h"
+#include "nextcloud/util/xml.h"
 
 #include <algorithm>
 #include <chrono>
+#include <optional>
 
 namespace nc::davobjects {
 
@@ -45,108 +47,37 @@ namespace {
         );
     }
 
-    /// The texts of every element whose local name is `name`, whatever prefix it has:
-    /// `<d:href>x</d:href>`.
-    std::vector<std::string> xml_values(std::string_view xml, std::string_view name)
+    /// The request body as XML. An empty body is fine (nullopt, `bad` stays false: a plain MKCOL);
+    /// a body that is not well formed XML sets `bad`. Elements are found by local name, whatever
+    /// prefix the client chose, with entities and CDATA resolved.
+    std::optional<util::Xml> request_xml(std::string_view body, bool& bad)
     {
-        std::vector<std::string> values;
-        std::size_t at = 0;
-        while ((at = xml.find('<', at)) != std::string_view::npos) {
-            const std::size_t close = xml.find('>', at);
-            if (close == std::string_view::npos) {
-                break;
-            }
-            std::string_view tag = xml.substr(at + 1, close - at - 1);
-            at = close + 1;
-            if (tag.empty() || tag.front() == '/' || tag.front() == '?' || tag.back() == '/') {
-                continue;
-            }
-            const std::size_t space = tag.find_first_of(" \t\r\n");
-            tag = tag.substr(0, space);
-            const std::size_t colon = tag.find(':');
-            if (colon != std::string_view::npos) {
-                tag.remove_prefix(colon + 1);
-            }
-            if (tag != name) {
-                continue;
-            }
-            const std::size_t end = xml.find('<', at);
-            if (end == std::string_view::npos) {
-                break;
-            }
-            values.emplace_back(util::trim(xml.substr(at, end - at)));
+        bad = false;
+        if (util::trim(body).empty()) {
+            return std::nullopt;
         }
-        return values;
+        auto xml = util::Xml::parse(body);
+        bad = !xml.has_value();
+        return xml;
     }
 
-    /// The inner text of every element whose local name is `name`, nested tags included:
-    /// `<cs:set><d:href>a</d:href><cs:read/></cs:set>` gives `<d:href>a</d:href><cs:read/>`.
-    std::vector<std::string> xml_blocks(std::string_view xml, std::string_view name)
+    /// The people named in the `<d:href>` elements below `block`: `mailto:`, `principal:` and path
+    /// forms end in the user name.
+    std::vector<std::string> named_people(const util::Xml& block)
     {
-        std::vector<std::string> blocks;
-        std::size_t at = 0;
-        while ((at = xml.find('<', at)) != std::string_view::npos) {
-            const std::size_t close = xml.find('>', at);
-            if (close == std::string_view::npos) {
-                break;
+        std::vector<std::string> people;
+        for (const std::string& ref: block.texts("href")) {
+            std::string who = util::url_decode(ref);
+            while (!who.empty() && who.back() == '/') {
+                who.pop_back();
             }
-            std::string_view tag = xml.substr(at + 1, close - at - 1);
-            const std::size_t content = close + 1;
-            at = content;
-            if (tag.empty() || tag.front() == '/' || tag.front() == '?' || tag.back() == '/') {
-                continue;
+            who = who.substr(who.rfind('/') + 1);
+            if (const std::size_t colon = who.rfind(':'); colon != std::string::npos) {
+                who = who.substr(colon + 1);
             }
-            tag = tag.substr(0, tag.find_first_of(" \t\r\n"));
-            const std::size_t colon = tag.find(':');
-            const std::string_view local =
-                colon == std::string_view::npos ? tag : tag.substr(colon + 1);
-            if (local != name) {
-                continue;
-            }
-            const std::string closing = "</" + std::string{tag} + ">";
-            const std::size_t end = xml.find(closing, content);
-            if (end == std::string_view::npos) {
-                break;
-            }
-            blocks.emplace_back(xml.substr(content, end - content));
-            at = end + closing.size();
+            people.push_back(std::move(who));
         }
-        return blocks;
-    }
-
-    /// Value of an attribute of the first element with local name `element`: `<c:time-range
-    /// start="...">`.
-    std::string
-    xml_attribute(std::string_view xml, std::string_view element, std::string_view attribute)
-    {
-        std::size_t at = 0;
-        while ((at = xml.find('<', at)) != std::string_view::npos) {
-            const std::size_t close = xml.find('>', at);
-            if (close == std::string_view::npos) {
-                break;
-            }
-            const std::string_view tag = xml.substr(at + 1, close - at - 1);
-            at = close + 1;
-            const std::size_t colon = tag.find(':');
-            const std::size_t space = tag.find_first_of(" \t\r\n");
-            const std::string_view local = tag.substr(
-                colon != std::string_view::npos && colon < space ? colon + 1 : 0,
-                space == std::string_view::npos
-                    ? std::string_view::npos
-                    : space - (colon != std::string_view::npos && colon < space ? colon + 1 : 0)
-            );
-            if (local != element || space == std::string_view::npos) {
-                continue;
-            }
-            const std::string needle = std::string{attribute} + "=\"";
-            const std::size_t found = tag.find(needle, space);
-            if (found == std::string_view::npos) {
-                return {};
-            }
-            const std::size_t begin = found + needle.size();
-            return std::string{tag.substr(begin, tag.find('"', begin) - begin)};
-        }
-        return {};
+        return people;
     }
 
     Response multistatus(const std::string& body)
@@ -476,7 +407,12 @@ Response CollectionServer::serve(const Request& request, int) const
             MAX_COLLECTIONS) {
             return Response::text(507, "Too many collections");
         }
-        const auto names = xml_values(request.get_body(), "displayname");
+        bool bad_body = false;
+        const auto xml = request_xml(request.get_body(), bad_body);
+        if (bad_body) {
+            return Response::text(400, "The body is not valid XML");
+        }
+        const auto names = xml ? xml->texts("displayname") : std::vector<std::string>{};
         db.exec(
             "INSERT INTO nc_dav_collections (uid, kind, uri, displayname, ctag) VALUES (?, ?, ?, "
             "?, ?)",
@@ -504,17 +440,14 @@ Response CollectionServer::serve(const Request& request, int) const
         if (access != "owner") {
             return Response::text(403, "Only the owner shares a collection");
         }
-        const std::string& xml = request.get_body();
-        for (const std::string& block: xml_blocks(xml, "set")) {
-            for (const std::string& ref: xml_values(block, "href")) {
-                std::string who = util::url_decode(ref);
-                while (!who.empty() && who.back() == '/') {
-                    who.pop_back();
-                }
-                who = who.substr(who.rfind('/') + 1);
-                if (const std::size_t colon = who.rfind(':'); colon != std::string::npos) {
-                    who = who.substr(colon + 1);
-                }
+        bool bad_body = false;
+        const auto xml = request_xml(request.get_body(), bad_body);
+        if (bad_body || !xml) {
+            return Response::text(400, "The body is not valid XML");
+        }
+        for (const util::Xml* block: xml->find_all("set")) {
+            const bool writable = block->find("read-write") != nullptr;
+            for (const std::string& who: named_people(*block)) {
                 if (!valid_uri(who) || who == user ||
                     m_host->call_service("users.get", who).get_status() != 200) {
                     return Response::text(400, "No such person to share with");
@@ -522,20 +455,12 @@ Response CollectionServer::serve(const Request& request, int) const
                 db.exec(
                     "INSERT INTO nc_dav_shares (collection_id, sharee, access) VALUES (?, ?, ?) ON "
                     "CONFLICT (collection_id, sharee) DO UPDATE SET access = excluded.access",
-                    {id, who, block.find("read-write") != std::string::npos ? "write" : "read"}
+                    {id, who, writable ? "write" : "read"}
                 );
             }
         }
-        for (const std::string& block: xml_blocks(xml, "remove")) {
-            for (const std::string& ref: xml_values(block, "href")) {
-                std::string who = util::url_decode(ref);
-                while (!who.empty() && who.back() == '/') {
-                    who.pop_back();
-                }
-                who = who.substr(who.rfind('/') + 1);
-                if (const std::size_t colon = who.rfind(':'); colon != std::string::npos) {
-                    who = who.substr(colon + 1);
-                }
+        for (const util::Xml* block: xml->find_all("remove")) {
+            for (const std::string& who: named_people(*block)) {
                 db.exec(
                     "DELETE FROM nc_dav_shares WHERE collection_id = ? AND sharee = ?",
                     {id, who}
@@ -581,7 +506,12 @@ Response CollectionServer::serve(const Request& request, int) const
             if (access != "owner") {
                 return Response::text(403, "Only the owner renames a collection");
             }
-            const auto names = xml_values(request.get_body(), "displayname");
+            bool bad_body = false;
+            const auto xml = request_xml(request.get_body(), bad_body);
+            if (bad_body) {
+                return Response::text(400, "The body is not valid XML");
+            }
+            const auto names = xml ? xml->texts("displayname") : std::vector<std::string>{};
             if (!names.empty()) {
                 db.exec(
                     "UPDATE nc_dav_collections SET displayname = ? WHERE id = ?",
@@ -591,7 +521,12 @@ Response CollectionServer::serve(const Request& request, int) const
             return multistatus(response_xml(href, "    <d:displayname/>\n"));
         }
         if (method == "REPORT") {
-            const std::string& xml = request.get_body();
+            bool bad_body = false;
+            const auto xml = request_xml(request.get_body(), bad_body);
+            if (bad_body) {
+                return Response::text(400, "The body is not valid XML");
+            }
+            const std::string kind = xml ? xml->name() : std::string{};
             std::string body;
             const auto emit = [&](const nc::db::Row& row)
             {
@@ -600,8 +535,8 @@ Response CollectionServer::serve(const Request& request, int) const
                     object_props(row, true)
                 );
             };
-            if (xml.find("multiget") != std::string::npos) {
-                for (const std::string& ref: xml_values(xml, "href")) {
+            if (kind.find("multiget") != std::string::npos) {
+                for (const std::string& ref: xml->texts("href")) {
                     const std::string decoded = util::url_decode(ref);
                     const std::string uri = decoded.substr(decoded.rfind('/') + 1);
                     const auto rows = db.query(
@@ -615,10 +550,10 @@ Response CollectionServer::serve(const Request& request, int) const
                         emit(rows.front());
                     }
                 }
-            } else if (xml.find("sync-collection") != std::string::npos) {
+            } else if (kind == "sync-collection") {
                 // The token is the collection's ctag. Deletions are not tracked: a changed token
                 // gets everything, and the client drops what it no longer sees.
-                const auto tokens = xml_values(xml, "sync-token");
+                const auto tokens = xml->texts("sync-token");
                 if (tokens.empty() || tokens.front() != nc::db::value_of(found.front(), "ctag")) {
                     for (const nc::db::Row& row: db.query(
                              "SELECT uri, etag, data, lastmod FROM nc_dav_objects WHERE "
@@ -636,8 +571,11 @@ Response CollectionServer::serve(const Request& request, int) const
                         "</d:sync-token>\n</d:multistatus>\n"
                 );
             } else {
-                const std::string start = normalize_time(xml_attribute(xml, "time-range", "start"));
-                const std::string end = normalize_time(xml_attribute(xml, "time-range", "end"));
+                const util::Xml* range = xml ? xml->find("time-range") : nullptr;
+                const std::string start =
+                    normalize_time(range != nullptr ? range->attribute("start") : std::string{});
+                const std::string end =
+                    normalize_time(range != nullptr ? range->attribute("end") : std::string{});
                 for (const nc::db::Row& row: db.query(
                          "SELECT uri, etag, data, lastmod FROM nc_dav_objects WHERE collection_id "
                          "= ? ORDER BY uri",

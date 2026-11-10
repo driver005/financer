@@ -18,7 +18,7 @@ have to be vendored by hand (see `third_party/`).
 | `ext-json` | `nlohmann_json` (BCR, **in use**) | `util::Json` is built from its SAX events, with the depth and size limits; the hand-written parser is gone |
 | `icewind/streams` | `http::Response` streams, spooled uploads | |
 | `aws/aws-sdk-php` | own AWS SigV4 (`s3.cc`) | `aws-sdk-cpp` is not in BCR |
-| `sabre/dav` | `cloud`, `calendar`, `contacts` plugins | XML is hand-written; see `pugixml` below |
+| `sabre/dav` | `cloud`, `calendar`, `contacts` plugins | request bodies are read with `util::Xml` (libxml2); the multistatus answers are still written as text |
 | `psr/log`, `nextcloud/lognormalizer` | `Logger` | |
 | `mlocati/ip-lib` | `is_local_address` | |
 | `bantu/ini-get-wrapper`, `symfony/polyfill-*`, `laravel/serializable-closure`, `cweagans/composer-patches` | not needed | PHP specific |
@@ -32,7 +32,7 @@ have to be vendored by hand (see `third_party/`).
 | Nextcloud uses | C++ library (BCR) | For |
 |---|---|---|
 | `ext-gd`, previews | `lunasvg` (SVG, **in use**), `libwebp` (**in use**), `libtiff` (**in use**), `libheif` (HEIC, not used: no test files), `libpng`, `libjpeg_turbo`, `giflib`, `freetype`, `harfbuzz` | previews of more formats; `stb` stays for what it covers |
-| `ext-xml`, `ext-dom`, `ext-simplexml`, `ext-xmlreader`, `ext-xmlwriter` | `pugixml` or `libxml2` | WebDAV/CalDAV/CardDAV XML parsing; `libxml2` also has exclusive canonicalization, which SAML needs |
+| `ext-xml`, `ext-dom`, `ext-simplexml`, `ext-xmlreader`, `ext-xmlwriter` | `libxml2` (**in use**: `util::Xml` for DAV bodies and S3 listings, and SAML) | the hand-written tag scanners are gone (they did not decode entities, CDATA or comments); `libxml2` also has exclusive canonicalization, which SAML needs |
 | SAML (`apps/user_saml`, external app) | `libxml2` (c14n) + BoringSSL + `zlib` (**in use**, `plugins/saml`) | XML signatures: no `xmlsec` in BCR, so the verification is written on top of these and tested against `xmlsec1` |
 | `firebase/php-jwt` | `jwt-cpp` | OAuth2/OIDC tokens |
 | `predis/predis` | `hiredis` | Redis cache and locking |

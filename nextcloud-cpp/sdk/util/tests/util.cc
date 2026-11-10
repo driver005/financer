@@ -3,6 +3,7 @@
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/json.h"
 #include "nextcloud/util/text.h"
+#include "nextcloud/util/xml.h"
 
 int main()
 {
@@ -156,6 +157,51 @@ int main()
             Json::parse("{\"k\":1,\"k\":2}")->operator[]("k").number(),
             2.0
         ); // the last one wins
+    }
+    // XML: elements by local name whatever the prefix, entities and CDATA resolved; no DTDs.
+    {
+        const auto doc = Xml::parse(
+            R"(<?xml version="1.0"?><!-- a > comment --><D:propfind xmlns:D="DAV:" xmlns="urn:x">)"
+            R"(<D:prop><displayname>A &amp; B</displayname>)"
+            R"(<x:note xmlns:x="urn:y"><![CDATA[<raw> & ]]></x:note></D:prop>)"
+            R"(<D:href> /a </D:href><d:href xmlns:d="DAV:">/b</d:href>)"
+            R"(<tr q:start="s1" end="e1" xmlns:q="urn:q"/></D:propfind>)"
+        );
+        NC_CHECK(doc.has_value());
+        if (doc) {
+            NC_CHECK_EQ(doc->name(), "propfind");
+            NC_CHECK_EQ(doc->find("displayname")->text(), "A & B");
+            NC_CHECK_EQ(doc->find("note")->text(), "<raw> &");
+            NC_CHECK_EQ(doc->texts("href").size(), std::size_t{2});
+            NC_CHECK_EQ(doc->texts("href")[0], "/a");
+            NC_CHECK_EQ(doc->find("href")->raw_text(), " /a ");
+            NC_CHECK_EQ(doc->find("tr")->attribute("start"), "s1"); // a prefixed attribute
+            NC_CHECK_EQ(doc->find("tr")->attribute("end"), "e1");
+            NC_CHECK_EQ(doc->find("tr")->attribute("nothing"), "");
+            NC_CHECK(doc->find("missing") == nullptr);
+            NC_CHECK_EQ(doc->find_all("prop").size(), std::size_t{1});
+        }
+        for (const char* bad:
+             {"",
+              "not xml",
+              "<a>",
+              "<a></b>",
+              "<a/><b/>",
+              "<!DOCTYPE r [<!ENTITY x SYSTEM \"file:///etc/passwd\">]><r>&x;</r>",
+              "<!DOCTYPE lolz [<!ENTITY a \"aaaa\">]><r>&a;</r>",
+              "<r>&undefined;</r>"}) {
+            NC_CHECK(!Xml::parse(bad).has_value());
+        }
+        std::string deep;
+        for (int level = 0; level < 100; ++level) {
+            deep += "<a>";
+        }
+        for (int level = 0; level < 100; ++level) {
+            deep += "</a>";
+        }
+        NC_CHECK(!Xml::parse(deep).has_value()); // nested too deep
+        NC_CHECK(!Xml::parse("<a>" + std::string(100, 'x') + "</a>", 50).has_value()); // too long
+        NC_CHECK(Xml::parse("<a>" + std::string(100, 'x') + "</a>", 200).has_value());
     }
     NC_CHECK_EQ(base64_encode("Aladdin:open sesame"), "QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
     NC_CHECK_EQ(base64_decode("QWxhZGRpbjpvcGVuIHNlc2FtZQ==").value_or("?"), "Aladdin:open sesame");

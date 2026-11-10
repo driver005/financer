@@ -829,6 +829,43 @@ int main()
         kernel.handle(with(req("PROPFIND", cal), "Depth", "1")).get_body().find("Renamed") !=
         std::string::npos
     );
+    // A name with an entity is stored as the text it stands for (and written out escaped once),
+    // CDATA and comments are read as XML says, and a body that is not XML is refused.
+    NC_CHECK_EQ(
+        kernel
+            .handle(req(
+                "PROPPATCH",
+                cal + "/work",
+                "<d:propertyupdate xmlns:d=\"DAV:\"><d:set><d:prop><!-- a > comment "
+                "--><d:displayname>Q&amp;A <![CDATA[<2024>]]></d:displayname></d:prop></d:set></"
+                "d:propertyupdate>"
+            ))
+            .get_status(),
+        207
+    );
+    {
+        const std::string with_entity =
+            kernel.handle(with(req("PROPFIND", cal), "Depth", "1")).get_body();
+        NC_CHECK(with_entity.find("Q&amp;A &lt;2024&gt;") != std::string::npos);
+        NC_CHECK(with_entity.find("&amp;amp;") == std::string::npos);
+    }
+    NC_CHECK_EQ(
+        kernel.handle(req("PROPPATCH", cal + "/work", "<d:propertyupdate")).get_status(),
+        400
+    );
+    NC_CHECK_EQ(
+        kernel
+            .handle(
+                req("PROPPATCH",
+                    cal + "/work",
+                    "<!DOCTYPE x [<!ENTITY e SYSTEM \"file:///etc/passwd\">]><d:propertyupdate "
+                    "xmlns:d=\"DAV:\"><d:set><d:prop><d:displayname>&e;</d:displayname></d:prop></"
+                    "d:set></"
+                    "d:propertyupdate>")
+            )
+            .get_status(),
+        400
+    );
     NC_CHECK_EQ(kernel.handle(req("DELETE", cal + "/work")).get_status(), 204);
     NC_CHECK_EQ(kernel.handle(req("PROPFIND", cal + "/work")).get_status(), 404);
 

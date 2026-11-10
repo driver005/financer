@@ -2,6 +2,7 @@
 
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
+#include "nextcloud/util/xml.h"
 
 #include <algorithm>
 #include <ctime>
@@ -9,50 +10,6 @@
 namespace nc::cloud::s3 {
 
 namespace {
-
-    std::string xml_unescape(std::string_view text)
-    {
-        std::string out;
-        for (std::size_t at = 0; at < text.size(); ++at) {
-            if (text[at] == '&') {
-                for (const auto& [entity, letter]:
-                     {std::pair<std::string_view, char>{"&amp;", '&'},
-                      {"&lt;", '<'},
-                      {"&gt;", '>'},
-                      {"&quot;", '"'},
-                      {"&apos;", '\''}}) {
-                    if (text.substr(at, entity.size()) == entity) {
-                        out += letter;
-                        at += entity.size() - 1;
-                        goto next;
-                    }
-                }
-            }
-            out += text[at];
-        next:;
-        }
-        return out;
-    }
-
-    /// The text of the first `<name>` element at or after `from`; `end` receives the position after
-    /// it.
-    std::string
-    element(std::string_view xml, std::string_view name, std::size_t from, std::size_t& end)
-    {
-        const std::string open = "<" + std::string{name} + ">";
-        const std::size_t begin = xml.find(open, from);
-        if (begin == std::string_view::npos) {
-            end = std::string_view::npos;
-            return {};
-        }
-        const std::size_t close = xml.find("</" + std::string{name} + ">", begin);
-        if (close == std::string_view::npos) {
-            end = std::string_view::npos;
-            return {};
-        }
-        end = close + name.size() + 3;
-        return xml_unescape(xml.substr(begin + open.size(), close - begin - open.size()));
-    }
 
     std::int64_t parse_iso(const std::string& text)
     {
@@ -156,52 +113,41 @@ std::vector<nc::http::Header> sign(
 Listing parse_listing(std::string_view xml)
 {
     Listing listing;
-    if (xml.find("<ListBucketResult") == std::string_view::npos) {
+    // A listing of 1000 keys of up to 1 KiB each is about a megabyte.
+    const auto document = util::Xml::parse(xml, 16U << 20U);
+    if (!document || document->name() != "ListBucketResult") {
         return listing;
     }
     listing.valid = true;
-    std::size_t at = 0;
-    while (true) {
-        const std::size_t block = xml.find("<Contents>", at);
-        if (block == std::string_view::npos) {
-            break;
+    for (const util::Xml& part: document->children()) {
+        if (part.name() == "Contents") {
+            Entry entry;
+            for (const util::Xml& field: part.children()) {
+                if (field.name() == "Key") {
+                    entry.key = field.raw_text();
+                } else if (field.name() == "Size") {
+                    entry.size = std::strtoull(field.text().c_str(), nullptr, 10);
+                } else if (field.name() == "LastModified") {
+                    entry.modified = parse_iso(field.text());
+                } else if (field.name() == "ETag") {
+                    entry.etag = field.text();
+                }
+            }
+            if (!entry.key.empty()) {
+                listing.files.push_back(std::move(entry));
+            }
+        } else if (part.name() == "CommonPrefixes") {
+            if (const util::Xml* prefix = part.find("Prefix"); prefix != nullptr) {
+                if (!prefix->raw_text().empty()) {
+                    listing.folders.push_back(prefix->raw_text());
+                }
+            }
+        } else if (part.name() == "IsTruncated") {
+            listing.truncated = part.text() == "true";
+        } else if (part.name() == "NextContinuationToken") {
+            listing.next_token = part.text();
         }
-        const std::size_t close = xml.find("</Contents>", block);
-        if (close == std::string_view::npos) {
-            break;
-        }
-        const std::string_view part = xml.substr(block, close - block);
-        std::size_t end = 0;
-        Entry entry;
-        entry.key = element(part, "Key", 0, end);
-        entry.size = std::strtoull(element(part, "Size", 0, end).c_str(), nullptr, 10);
-        entry.modified = parse_iso(element(part, "LastModified", 0, end));
-        entry.etag = element(part, "ETag", 0, end);
-        if (!entry.key.empty()) {
-            listing.files.push_back(std::move(entry));
-        }
-        at = close + 11;
     }
-    at = 0;
-    while (true) {
-        const std::size_t block = xml.find("<CommonPrefixes>", at);
-        if (block == std::string_view::npos) {
-            break;
-        }
-        const std::size_t close = xml.find("</CommonPrefixes>", block);
-        if (close == std::string_view::npos) {
-            break;
-        }
-        std::size_t end = 0;
-        std::string prefix = element(xml.substr(block, close - block), "Prefix", 0, end);
-        if (!prefix.empty()) {
-            listing.folders.push_back(std::move(prefix));
-        }
-        at = close + 17;
-    }
-    std::size_t end = 0;
-    listing.truncated = element(xml, "IsTruncated", 0, end) == "true";
-    listing.next_token = element(xml, "NextContinuationToken", 0, end);
     return listing;
 }
 
