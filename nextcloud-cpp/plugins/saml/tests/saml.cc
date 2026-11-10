@@ -11,6 +11,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <openssl/aead.h>
 #include <sstream>
 #include <zlib.h>
 
@@ -153,6 +154,8 @@ struct Options
     // With openssl doing the key wrapping: {named digest, named MGF, wrapping digest, wrapping
     // MGF}.
     std::vector<std::string> openssl_oaep{};
+    // Encrypt with xmlsec1 instead (what versions of it accept differs, so it is a cross-check).
+    bool xmlsec{false};
     std::string encryption{"aes128-cbc"};
     std::string key_transport{
         R"(<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p"/>)"
@@ -202,7 +205,8 @@ std::string without_declaration(std::string xml)
 }
 
 /// The assertion encrypted to the certificate in `cert_file` by xmlsec1 (an independent
-/// implementation), wrapped in an `EncryptedAssertion`; empty when xmlsec1 cannot do that.
+/// implementation), wrapped in an `EncryptedAssertion`; empty when xmlsec1 cannot do that (what it
+/// says is passed on, once, because versions differ in what they accept).
 std::string encrypt_assertion(
     const Idp& idp,
     const std::string& cert_file,
@@ -233,29 +237,38 @@ std::string encrypt_assertion(
                  R"(<xenc:CipherData><xenc:CipherValue/></xenc:CipherData></xenc:EncryptedData>)";
     }
     fs::remove(idp.dir + "/encrypted.xml");
-    const int status =
-        std::system(("xmlsec1 --encrypt --pubkey-cert-pem " + cert_file + " --session-key aes-" +
-                     bits + " --xml-data " + idp.dir + "/plain.xml --output " + idp.dir +
-                     "/encrypted.xml " + idp.dir + "/enc-template.xml >/dev/null 2>&1")
-                        .c_str());
+    const int status = std::system(("xmlsec1 --encrypt --pubkey-cert-pem " + cert_file +
+                                    " --session-key aes-" + bits + " --xml-data " + idp.dir +
+                                    "/plain.xml --output " + idp.dir + "/encrypted.xml " + idp.dir +
+                                    "/enc-template.xml >" + idp.dir + "/xmlsec.out 2>&1")
+                                       .c_str());
     if (status != 0 || !fs::exists(idp.dir + "/encrypted.xml")) {
+        static bool said = false;
+        if (!said) {
+            said = true;
+            std::fprintf(
+                stderr,
+                "xmlsec1 --encrypt failed:\n%s\n",
+                slurp(idp.dir + "/xmlsec.out").c_str()
+            );
+        }
         return {};
     }
     return R"(<saml:EncryptedAssertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">)" +
            without_declaration(slurp(idp.dir + "/encrypted.xml")) + "</saml:EncryptedAssertion>";
 }
 
-/// The same, but with `openssl` doing the RSA-OAEP key wrapping with the given digests, so that
-/// combinations xmlsec1 cannot make are checked as well. `wrap_digest` is what openssl wraps with;
-/// `named_digest` and `named_mgf` are what the XML says (they differ in the negative tests).
-std::string encrypt_assertion_with_openssl(
+/// The assertion encrypted to `cert_file` without xmlsec1, which differs between versions in what
+/// it can do: `openssl` wraps the session key with RSA-OAEP (any digests) and does AES-CBC, and
+/// BoringSSL's AEAD does AES-GCM. `wrap` is {digest the XML names, MGF the XML names, digest used,
+/// MGF used}; an empty MGF name means the classic `rsa-oaep-mgf1p` (MGF1 with SHA-1). The two
+/// pairs differ in the negative tests.
+std::string encrypt_assertion_locally(
     const Idp& idp,
     const std::string& cert_file,
     const std::string& assertion,
-    const std::string& named_digest,
-    const std::string& named_mgf,
-    const std::string& wrap_digest,
-    const std::string& wrap_mgf
+    const std::string& cipher, // "aes128-cbc" ... "aes256-gcm"
+    const std::vector<std::string>& wrap
 )
 {
     const auto digest_uri = [](const std::string& name) -> std::string
@@ -271,9 +284,47 @@ std::string encrypt_assertion_with_openssl(
         }
         return "urn:unknown:" + name;
     };
-    const std::string session = nc::util::from_hex(nc::util::random_hex(16)).value();
+    const bool gcm = cipher.find("gcm") != std::string::npos;
+    const std::size_t key_size = std::stoul(cipher.substr(3, 3)) / 8;
+    const std::string session = nc::util::from_hex(nc::util::random_hex(key_size)).value();
+    std::string body; // what the CipherValue holds
+    if (gcm) {
+        const std::string nonce = nc::util::from_hex(nc::util::random_hex(12)).value();
+        EVP_AEAD_CTX context;
+        EVP_AEAD_CTX_zero(&context);
+        const EVP_AEAD* aead = key_size == 16 ? EVP_aead_aes_128_gcm() : EVP_aead_aes_256_gcm();
+        NC_CHECK(
+            EVP_AEAD_CTX_init(
+                &context,
+                aead,
+                reinterpret_cast<const unsigned char*>(session.data()),
+                session.size(),
+                16,
+                nullptr
+            ) == 1
+        );
+        std::string sealed(assertion.size() + 16, '\0');
+        std::size_t length = 0;
+        NC_CHECK(
+            EVP_AEAD_CTX_seal(
+                &context,
+                reinterpret_cast<unsigned char*>(sealed.data()),
+                &length,
+                sealed.size(),
+                reinterpret_cast<const unsigned char*>(nonce.data()),
+                nonce.size(),
+                reinterpret_cast<const unsigned char*>(assertion.data()),
+                assertion.size(),
+                nullptr,
+                0
+            ) == 1
+        );
+        EVP_AEAD_CTX_cleanup(&context);
+        sealed.resize(length);
+        body = nonce + sealed;
+    }
     const std::string iv = nc::util::from_hex(nc::util::random_hex(16)).value();
-    // XML Encryption padding: any bytes, the last one counts them.
+    // XML Encryption padding for CBC: any bytes, the last one counts them.
     std::string padded = assertion;
     const std::size_t pad = 16 - padded.size() % 16;
     padded.append(pad - 1, '\0');
@@ -282,31 +333,54 @@ std::string encrypt_assertion_with_openssl(
         std::ofstream{idp.dir + "/o-plain.bin", std::ios::binary} << padded;
         std::ofstream{idp.dir + "/o-key.bin", std::ios::binary} << session;
     }
-    const std::string commands =
-        "openssl enc -aes-128-cbc -nopad -K " + nc::util::to_hex(session) + " -iv " +
-        nc::util::to_hex(iv) + " -in " + idp.dir + "/o-plain.bin -out " + idp.dir +
-        "/o-cipher.bin >/dev/null 2>&1 && openssl x509 -in " + cert_file + " -pubkey -noout > " +
-        idp.dir + "/o-pub.pem 2>/dev/null && openssl pkeyutl -encrypt -pubin -inkey " + idp.dir +
-        "/o-pub.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:" + wrap_digest +
-        " -pkeyopt rsa_mgf1_md:" + wrap_mgf + " -in " + idp.dir + "/o-key.bin -out " + idp.dir +
-        "/o-wrapped.bin >/dev/null 2>&1";
+    const bool pkcs1 = wrap[0] == "rsa-1_5"; // the transport that must be refused
+    std::string commands =
+        "openssl x509 -in " + cert_file + " -pubkey -noout > " + idp.dir +
+        "/o-pub.pem 2>/dev/null && openssl pkeyutl -encrypt -pubin -inkey " + idp.dir +
+        "/o-pub.pem " +
+        (pkcs1 ? std::string{"-pkeyopt rsa_padding_mode:pkcs1"}
+               : "-pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:" + wrap[2] +
+                     " -pkeyopt rsa_mgf1_md:" + wrap[3]) +
+        " -in " + idp.dir + "/o-key.bin -out " + idp.dir + "/o-wrapped.bin >/dev/null 2>&1";
+    if (!gcm) {
+        commands += " && openssl enc -aes-" + std::to_string(key_size * 8) + "-cbc -nopad -K " +
+                    nc::util::to_hex(session) + " -iv " + nc::util::to_hex(iv) + " -in " + idp.dir +
+                    "/o-plain.bin -out " + idp.dir + "/o-cipher.bin >/dev/null 2>&1";
+    }
     if (std::system(commands.c_str()) != 0) {
         return {};
     }
+    if (!gcm) {
+        body = iv + slurp(idp.dir + "/o-cipher.bin");
+    }
+    const std::string transport =
+        pkcs1 ? R"(<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>)"
+        : wrap[1].empty()
+            ? R"(<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p">)" +
+                  (wrap[0] == "sha1"
+                       ? std::string{}
+                       : R"(<ds:DigestMethod Algorithm=")" + digest_uri(wrap[0]) + R"("/>)") +
+                  "</xenc:EncryptionMethod>"
+            : R"(<xenc:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#rsa-oaep">)"
+              R"(<ds:DigestMethod Algorithm=")" +
+                  digest_uri(wrap[0]) +
+                  R"("/><xenc11:MGF Algorithm="http://www.w3.org/2009/xmlenc11#mgf1)" + wrap[1] +
+                  R"("/></xenc:EncryptionMethod>)";
     return R"(<saml:EncryptedAssertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">)"
            R"(<xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" )"
            R"(xmlns:xenc11="http://www.w3.org/2009/xmlenc11#" Type="http://www.w3.org/2001/04/xmlenc#Element">)"
-           R"(<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>)"
-           R"(<ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><xenc:EncryptedKey>)"
-           R"(<xenc:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#rsa-oaep">)"
-           R"(<ds:DigestMethod Algorithm=")" +
-           digest_uri(named_digest) +
-           R"("/><xenc11:MGF Algorithm="http://www.w3.org/2009/xmlenc11#mgf1)" + named_mgf +
-           R"("/></xenc:EncryptionMethod><xenc:CipherData><xenc:CipherValue>)" +
+           R"(<xenc:EncryptionMethod Algorithm=")" +
+           std::string{
+               gcm ? "http://www.w3.org/2009/xmlenc11#" : "http://www.w3.org/2001/04/xmlenc#"
+           } +
+           cipher +
+           R"("/>)"
+           R"(<ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><xenc:EncryptedKey>)" +
+           transport + R"(<xenc:CipherData><xenc:CipherValue>)" +
            nc::util::base64_encode(slurp(idp.dir + "/o-wrapped.bin")) +
            R"(</xenc:CipherValue></xenc:CipherData></xenc:EncryptedKey></ds:KeyInfo>)"
            R"(<xenc:CipherData><xenc:CipherValue>)" +
-           nc::util::base64_encode(iv + slurp(idp.dir + "/o-cipher.bin")) +
+           nc::util::base64_encode(body) +
            R"(</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData></saml:EncryptedAssertion>)";
 }
 
@@ -325,19 +399,18 @@ std::string make_response(const Idp& idp, const Options& o)
             }
         }
     }
-    if (!o.encrypt_cert.empty() && o.openssl_oaep.size() == 4) {
-        assertion = encrypt_assertion_with_openssl(
+    if (!o.encrypt_cert.empty() && o.xmlsec) {
+        assertion =
+            encrypt_assertion(idp, o.encrypt_cert, assertion, o.encryption, o.key_transport);
+    } else if (!o.encrypt_cert.empty()) {
+        assertion = encrypt_assertion_locally(
             idp,
             o.encrypt_cert,
             assertion,
-            o.openssl_oaep[0],
-            o.openssl_oaep[1],
-            o.openssl_oaep[2],
-            o.openssl_oaep[3]
+            o.encryption,
+            o.openssl_oaep.size() == 4 ? o.openssl_oaep
+                                       : std::vector<std::string>{"sha1", "", "sha1", "sha1"}
         );
-    } else if (!o.encrypt_cert.empty()) {
-        assertion =
-            encrypt_assertion(idp, o.encrypt_cert, assertion, o.encryption, o.key_transport);
     }
     std::string response = response_xml(o, assertion);
     if (o.pretty) {
@@ -794,25 +867,35 @@ void test_encrypted_assertions()
         NC_CHECK(check(make_response(idp, both)).has_value());
     }
 
-    // Every cipher an identity provider is likely to use, the assertion signed inside.
+    // Every cipher an identity provider is likely to use, the assertion signed inside. The local
+    // encryptor is the baseline; xmlsec1 (an independent implementation, whose versions differ in
+    // what they accept) is asked as well and counts when it can make the same.
     for (const char* cipher:
          {"aes128-cbc", "aes192-cbc", "aes256-cbc", "aes128-gcm", "aes256-gcm"}) {
-        Options o = encrypted({});
-        o.encryption = cipher;
-        const std::string response = make_response(idp, o);
-        if (response.find("EncryptedAssertion") == std::string::npos) {
-            // The first one is what every xmlsec1 can do; the others depend on the build.
-            NC_CHECK(std::string{cipher} != "aes128-cbc");
-            std::fprintf(stderr, "xmlsec1 cannot make %s here; skipped\n", cipher);
-            continue;
-        }
-        const auto accepted = check(response);
-        NC_CHECK(accepted.has_value());
-        if (accepted) {
-            NC_CHECK_EQ(accepted->name_id, "alice");
-            NC_CHECK_EQ(accepted->attributes.at("mail").front(), "alice@example.org");
-        } else {
-            std::fprintf(stderr, "%s: %s\n", cipher, accepted.error().c_str());
+        for (const bool with_xmlsec: {false, true}) {
+            Options o = encrypted({});
+            o.encryption = cipher;
+            o.xmlsec = with_xmlsec;
+            const std::string response = make_response(idp, o);
+            if (response.find("EncryptedAssertion") == std::string::npos) {
+                NC_CHECK(with_xmlsec); // the local encryptor must always work
+                std::fprintf(stderr, "xmlsec1 cannot make %s here; skipped\n", cipher);
+                continue;
+            }
+            const auto accepted = check(response);
+            NC_CHECK(accepted.has_value());
+            if (accepted) {
+                NC_CHECK_EQ(accepted->name_id, "alice");
+                NC_CHECK_EQ(accepted->attributes.at("mail").front(), "alice@example.org");
+            } else {
+                std::fprintf(
+                    stderr,
+                    "%s (%s): %s\n",
+                    cipher,
+                    with_xmlsec ? "xmlsec1" : "local",
+                    accepted.error().c_str()
+                );
+            }
         }
     }
     // The signature on the response covers the cipher text: an unsigned assertion inside is fine.
@@ -821,6 +904,7 @@ void test_encrypted_assertions()
         o.sign_assertion = false;
         o.sign_response = true;
         const std::string response = make_response(idp, o);
+        NC_CHECK(response.find("EncryptedAssertion") != std::string::npos);
         const auto accepted = check(response);
         NC_CHECK(accepted.has_value());
         if (!accepted) {
@@ -860,8 +944,12 @@ void test_encrypted_assertions()
             NC_CHECK(!check(cut).has_value());
         }
         std::string odd = good;
-        odd.replace(odd.find("aes128-cbc"), 10, "des3-cbc00");
-        NC_CHECK(!check(odd).has_value());
+        const std::size_t cipher_at = odd.find("aes128-cbc");
+        NC_CHECK(cipher_at != std::string::npos);
+        if (cipher_at != std::string::npos) {
+            odd.replace(cipher_at, 10, "des3-cbc00");
+            NC_CHECK(!check(odd).has_value());
+        }
         std::string keyless = good;
         const std::size_t key_at = keyless.find("<xenc:EncryptedKey>");
         NC_CHECK(key_at != std::string::npos);
@@ -878,21 +966,18 @@ void test_encrypted_assertions()
         two.insert(two.rfind("</samlp:Response>"), assertion_xml(extra, false));
         NC_CHECK(!check(two).has_value());
     }
-    // PKCS#1 v1.5 key transport is not accepted, whatever the cipher text says.
+    // PKCS#1 v1.5 key transport is not accepted, however well the rest is made.
     {
         Options o = encrypted({});
-        o.key_transport =
-            R"(<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>)";
+        o.openssl_oaep = {"rsa-1_5", "", "", ""};
         const std::string response = make_response(idp, o);
-        if (response.find("EncryptedAssertion") != std::string::npos) {
-            NC_CHECK(!check(response).has_value());
-        } else {
-            std::fprintf(stderr, "xmlsec1 cannot make rsa-1_5 here; that case is skipped\n");
-        }
+        NC_CHECK(response.find("rsa-1_5") != std::string::npos);
+        NC_CHECK(!check(response).has_value());
     }
-    // OAEP with SHA-256 and MGF1-SHA-256 (XML Encryption 1.1), when xmlsec1 can make it.
+    // The same OAEP/SHA-256 with xmlsec1 doing the wrapping, when this version of it can.
     {
         Options o = encrypted({});
+        o.xmlsec = true;
         o.key_transport =
             R"(<xenc:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#rsa-oaep">)"
             R"(<ds:DigestMethod xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>)"
@@ -914,7 +999,9 @@ void test_encrypted_assertions()
          }) {
         Options o = encrypted({});
         o.openssl_oaep = digests;
-        const auto accepted = check(make_response(idp, o));
+        const std::string response = make_response(idp, o);
+        NC_CHECK(response.find("EncryptedAssertion") != std::string::npos);
+        const auto accepted = check(response);
         NC_CHECK(accepted.has_value());
         if (!accepted) {
             std::fprintf(
