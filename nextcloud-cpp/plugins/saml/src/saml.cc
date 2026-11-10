@@ -12,9 +12,12 @@
 #include <libxml/tree.h>
 #include <libxml/xmlIO.h>
 #include <memory>
+#include <openssl/aead.h>
 #include <openssl/bio.h>
+#include <openssl/cipher.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#include <openssl/rsa.h>
 #include <openssl/x509.h>
 #include <set>
 #include <zlib.h>
@@ -416,22 +419,44 @@ namespace {
         return out;
     }
 
+    /// A `KeyDescriptor` for what the certificate is used for.
+    std::string key_descriptor(std::string_view use, std::string_view certificate_pem)
+    {
+        return R"(<md:KeyDescriptor use=")" + std::string{use} +
+               R"("><ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:X509Data>)"
+               R"(<ds:X509Certificate>)" +
+               pem_body(certificate_pem) +
+               R"(</ds:X509Certificate></ds:X509Data></ds:KeyInfo></md:KeyDescriptor>)";
+    }
+
     constexpr std::string_view ALG_RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
+
+    using Pkey = std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)>;
+
+    /// The RSA private key in a PEM text; empty when it is not one.
+    Pkey load_rsa_key(std::string_view pem)
+    {
+        const std::unique_ptr<BIO, decltype(&BIO_free)> bio{
+            BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())),
+            &BIO_free
+        };
+        Pkey key{
+            bio == nullptr ? nullptr
+                           : PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr),
+            &EVP_PKEY_free
+        };
+        if (key != nullptr && EVP_PKEY_id(key.get()) != EVP_PKEY_RSA) {
+            key.reset();
+        }
+        return key;
+    }
 
     /// RSA PKCS#1 v1.5 signature with SHA-256 of `data` by the PEM key, base64 encoded; empty when
     /// the key cannot sign.
     std::string sign_rsa_sha256(std::string_view key_pem, std::string_view data)
     {
-        const std::unique_ptr<BIO, decltype(&BIO_free)> bio{
-            BIO_new_mem_buf(key_pem.data(), static_cast<int>(key_pem.size())),
-            &BIO_free
-        };
-        const std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key{
-            bio == nullptr ? nullptr
-                           : PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr),
-            &EVP_PKEY_free
-        };
-        if (key == nullptr || EVP_PKEY_id(key.get()) != EVP_PKEY_RSA) {
+        const Pkey key = load_rsa_key(key_pem);
+        if (key == nullptr) {
             return {};
         }
         const std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> context{
@@ -457,6 +482,257 @@ namespace {
         return util::base64_encode(signature);
     }
 
+    constexpr std::string_view NS_XENC = "http://www.w3.org/2001/04/xmlenc#";
+    constexpr std::string_view NS_XENC11 = "http://www.w3.org/2009/xmlenc11#";
+
+    /// The bytes in the `CipherData/CipherValue` below `parent`.
+    Result<std::string> cipher_bytes(xmlNode* parent)
+    {
+        xmlNode* value = child(child(parent, NS_XENC, "CipherData"), NS_XENC, "CipherValue");
+        if (value == nullptr) {
+            return failure("the encrypted data has no cipher value");
+        }
+        std::string compact;
+        for (const char letter: text_of(value)) {
+            if (std::isspace(static_cast<unsigned char>(letter)) == 0) {
+                compact.push_back(letter);
+            }
+        }
+        auto bytes = util::base64_decode(compact);
+        if (!bytes || bytes->empty() || bytes->size() > MAX_XML) {
+            return failure("the cipher value is not base64");
+        }
+        return *std::move(bytes);
+    }
+
+    const EVP_MD* oaep_digest_for(std::string_view algorithm)
+    {
+        if (algorithm == "http://www.w3.org/2000/09/xmldsig#sha1") {
+            return EVP_sha1();
+        }
+        if (algorithm == "http://www.w3.org/2001/04/xmlenc#sha256") {
+            return EVP_sha256();
+        }
+        if (algorithm == "http://www.w3.org/2001/04/xmldsig-more#sha384") {
+            return EVP_sha384();
+        }
+        if (algorithm == "http://www.w3.org/2001/04/xmlenc#sha512") {
+            return EVP_sha512();
+        }
+        return nullptr;
+    }
+
+    const EVP_MD* mgf1_digest_for(std::string_view algorithm)
+    {
+        if (algorithm == "http://www.w3.org/2009/xmlenc11#mgf1sha1") {
+            return EVP_sha1();
+        }
+        if (algorithm == "http://www.w3.org/2009/xmlenc11#mgf1sha256") {
+            return EVP_sha256();
+        }
+        if (algorithm == "http://www.w3.org/2009/xmlenc11#mgf1sha384") {
+            return EVP_sha384();
+        }
+        if (algorithm == "http://www.w3.org/2009/xmlenc11#mgf1sha512") {
+            return EVP_sha512();
+        }
+        return nullptr;
+    }
+
+    /// The session key out of an `EncryptedKey`: RSA-OAEP only. (PKCS#1 v1.5 key transport can be
+    /// attacked through the answers it gives, and every identity provider can do OAEP.)
+    Result<std::string> unwrap_key(EVP_PKEY* key, xmlNode* encrypted_key)
+    {
+        xmlNode* method = child(encrypted_key, NS_XENC, "EncryptionMethod");
+        const std::string algorithm = attribute(method, "Algorithm");
+        const EVP_MD* oaep = EVP_sha1();
+        const EVP_MD* mgf1 = EVP_sha1();
+        if (algorithm != "http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p" &&
+            algorithm != "http://www.w3.org/2009/xmlenc11#rsa-oaep") {
+            return failure("the key transport algorithm is not accepted");
+        }
+        if (xmlNode* digest = child(method, NS_DSIG, "DigestMethod"); digest != nullptr) {
+            oaep = oaep_digest_for(attribute(digest, "Algorithm"));
+        }
+        if (xmlNode* generator = child(method, NS_XENC11, "MGF"); generator != nullptr) {
+            mgf1 = mgf1_digest_for(attribute(generator, "Algorithm"));
+        }
+        if (oaep == nullptr || mgf1 == nullptr) {
+            return failure("the key transport digest is not accepted");
+        }
+        const auto wrapped = cipher_bytes(encrypted_key);
+        if (!wrapped) {
+            return failure(wrapped.error());
+        }
+        const std::unique_ptr<EVP_PKEY_CTX, decltype(&EVP_PKEY_CTX_free)> context{
+            EVP_PKEY_CTX_new(key, nullptr),
+            &EVP_PKEY_CTX_free
+        };
+        std::size_t size = 0;
+        const auto* in = reinterpret_cast<const unsigned char*>(wrapped->data());
+        if (context == nullptr || EVP_PKEY_decrypt_init(context.get()) != 1 ||
+            EVP_PKEY_CTX_set_rsa_padding(context.get(), RSA_PKCS1_OAEP_PADDING) != 1 ||
+            EVP_PKEY_CTX_set_rsa_oaep_md(context.get(), oaep) != 1 ||
+            EVP_PKEY_CTX_set_rsa_mgf1_md(context.get(), mgf1) != 1 ||
+            EVP_PKEY_decrypt(context.get(), nullptr, &size, in, wrapped->size()) != 1) {
+            return failure("the session key cannot be unwrapped");
+        }
+        std::string session(size, '\0');
+        if (EVP_PKEY_decrypt(
+                context.get(),
+                reinterpret_cast<unsigned char*>(session.data()),
+                &size,
+                in,
+                wrapped->size()
+            ) != 1) {
+            return failure("the session key cannot be unwrapped");
+        }
+        session.resize(size);
+        return session;
+    }
+
+    /// The plain text of XML Encryption data: AES-CBC (the IV in front, XML padding at the end) or
+    /// AES-GCM (the 12 byte IV in front, the 16 byte tag at the end).
+    Result<std::string>
+    decrypt_data(std::string_view algorithm, std::string_view session_key, std::string_view data)
+    {
+        struct Cbc
+        {
+            std::string_view name;
+            std::size_t key_size;
+            const EVP_CIPHER* (*cipher)();
+        };
+
+        static const Cbc CBC[] = {
+            {"http://www.w3.org/2001/04/xmlenc#aes128-cbc", 16, &EVP_aes_128_cbc},
+            {"http://www.w3.org/2001/04/xmlenc#aes192-cbc", 24, &EVP_aes_192_cbc},
+            {"http://www.w3.org/2001/04/xmlenc#aes256-cbc", 32, &EVP_aes_256_cbc}
+        };
+        const auto* key = reinterpret_cast<const unsigned char*>(session_key.data());
+        for (const Cbc& mode: CBC) {
+            if (mode.name != algorithm) {
+                continue;
+            }
+            if (session_key.size() != mode.key_size || data.size() < 32 || data.size() % 16 != 0) {
+                return failure("the encrypted data is malformed");
+            }
+            const std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)> context{
+                EVP_CIPHER_CTX_new(),
+                &EVP_CIPHER_CTX_free
+            };
+            const auto* iv = reinterpret_cast<const unsigned char*>(data.data());
+            const std::string_view body = data.substr(16);
+            std::string plain(body.size() + 16, '\0');
+            int written = 0;
+            int finished = 0;
+            if (context == nullptr ||
+                EVP_DecryptInit_ex(context.get(), mode.cipher(), nullptr, key, iv) != 1 ||
+                EVP_CIPHER_CTX_set_padding(context.get(), 0) != 1 ||
+                EVP_DecryptUpdate(
+                    context.get(),
+                    reinterpret_cast<unsigned char*>(plain.data()),
+                    &written,
+                    reinterpret_cast<const unsigned char*>(body.data()),
+                    static_cast<int>(body.size())
+                ) != 1 ||
+                EVP_DecryptFinal_ex(
+                    context.get(),
+                    reinterpret_cast<unsigned char*>(plain.data()) + written,
+                    &finished
+                ) != 1) {
+                return failure("the encrypted data cannot be decrypted");
+            }
+            plain.resize(static_cast<std::size_t>(written + finished));
+            // XML Encryption pads with arbitrary bytes and a last byte that counts them.
+            const std::size_t padding =
+                plain.empty() ? 0 : static_cast<unsigned char>(plain.back());
+            if (padding < 1 || padding > 16 || padding > plain.size()) {
+                return failure("the encrypted data cannot be decrypted");
+            }
+            plain.resize(plain.size() - padding);
+            return plain;
+        }
+        const EVP_AEAD* aead = nullptr;
+        if (algorithm == "http://www.w3.org/2009/xmlenc11#aes128-gcm" && session_key.size() == 16) {
+            aead = EVP_aead_aes_128_gcm();
+        } else if (algorithm == "http://www.w3.org/2009/xmlenc11#aes256-gcm" &&
+                   session_key.size() == 32) {
+            aead = EVP_aead_aes_256_gcm();
+        }
+        if (aead == nullptr) {
+            return failure("the encryption algorithm is not accepted");
+        }
+        if (data.size() < 12 + 16) {
+            return failure("the encrypted data is malformed");
+        }
+        EVP_AEAD_CTX context;
+        EVP_AEAD_CTX_zero(&context);
+        if (EVP_AEAD_CTX_init(&context, aead, key, session_key.size(), 16, nullptr) != 1) {
+            return failure("the encrypted data cannot be decrypted");
+        }
+        std::string plain(data.size() - 12 - 16, '\0');
+        std::size_t length = 0;
+        const bool opened = EVP_AEAD_CTX_open(
+                                &context,
+                                reinterpret_cast<unsigned char*>(plain.data()),
+                                &length,
+                                plain.size(),
+                                reinterpret_cast<const unsigned char*>(data.data()),
+                                12,
+                                reinterpret_cast<const unsigned char*>(data.data()) + 12,
+                                data.size() - 12,
+                                nullptr,
+                                0
+                            ) == 1;
+        EVP_AEAD_CTX_cleanup(&context);
+        if (!opened) {
+            return failure("the encrypted data cannot be decrypted");
+        }
+        plain.resize(length);
+        return plain;
+    }
+
+    /// The assertion inside an `EncryptedAssertion`, decrypted with the service's RSA key. The
+    /// session key is in the `EncryptedKey` inside the data's `KeyInfo`, or next to the data.
+    Result<std::string> decrypt_assertion(xmlNode* encrypted, std::string_view key_pem)
+    {
+        if (count_children(encrypted, NS_XENC, "EncryptedData") != 1) {
+            return failure("the encrypted assertion must hold exactly one encrypted element");
+        }
+        xmlNode* data = child(encrypted, NS_XENC, "EncryptedData");
+        if (attribute(data, "Type") != "http://www.w3.org/2001/04/xmlenc#Element") {
+            return failure("the encrypted data is not an element");
+        }
+        const Pkey key = load_rsa_key(key_pem);
+        if (key == nullptr) {
+            return failure("there is no private key to decrypt with");
+        }
+        xmlNode* encrypted_key = child(child(data, NS_DSIG, "KeyInfo"), NS_XENC, "EncryptedKey");
+        if (encrypted_key == nullptr) {
+            encrypted_key = child(encrypted, NS_XENC, "EncryptedKey");
+        }
+        if (encrypted_key == nullptr) {
+            return failure("the encrypted assertion carries no key");
+        }
+        const auto session = unwrap_key(key.get(), encrypted_key);
+        if (!session) {
+            return failure(session.error());
+        }
+        const auto bytes = cipher_bytes(data);
+        if (!bytes) {
+            return failure(bytes.error());
+        }
+        auto plain = decrypt_data(
+            attribute(child(data, NS_XENC, "EncryptionMethod"), "Algorithm"),
+            *session,
+            *bytes
+        );
+        if (!plain) {
+            return failure(plain.error());
+        }
+        return plain;
+    }
+
     /// Reads a message of the identity provider: no DTD, no entities (nothing in the document can
     /// name a file, a URL or a bomb), size limited. nullptr with `why` set when it is not
     /// acceptable.
@@ -476,8 +752,10 @@ namespace {
             static_cast<int>(xml.size()),
             nullptr,
             nullptr,
-            XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_NO_XXE |
-                XML_PARSE_NOBLANKS
+            // The white space between elements stays: the identity provider signed it with the
+            // rest (a pretty printed response is signed as it is printed), and dropping it would
+            // change what is digested.
+            XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_NO_XXE
         )};
         if (doc == nullptr || doc->intSubset != nullptr || doc->extSubset != nullptr) {
             why = "the response is not well formed XML";
@@ -571,22 +849,57 @@ Result<Assertion> validate_response(
         issuer != nullptr && text_of(issuer) != settings.idp_entity_id) {
         return failure("the response is from another identity provider");
     }
-    if (child(response, NS_ASSERTION, "EncryptedAssertion") != nullptr) {
-        return failure("encrypted assertions are not supported");
-    }
-    if (count_children(response, NS_ASSERTION, "Assertion") != 1) {
+    // One assertion: in the clear, or encrypted to this service's key.
+    const std::size_t plain_count = count_children(response, NS_ASSERTION, "Assertion");
+    const std::size_t encrypted_count =
+        count_children(response, NS_ASSERTION, "EncryptedAssertion");
+    if (plain_count + encrypted_count != 1) {
         return failure("the response must contain exactly one assertion");
     }
-    xmlNode* assertion = child(response, NS_ASSERTION, "Assertion");
+    xmlNode* assertion = nullptr;
+    Doc decrypted; // the assertion of an encrypted one lives in a document of its own
+    xmlDoc* assertion_owner = doc.get();
+    if (encrypted_count == 1) {
+        if (settings.sp_private_key_pem.empty()) {
+            return failure("encrypted assertions need the key of this service (sp_private_key_file)"
+            );
+        }
+        const auto plain = decrypt_assertion(
+            child(response, NS_ASSERTION, "EncryptedAssertion"),
+            settings.sp_private_key_pem
+        );
+        if (!plain) {
+            return failure(plain.error());
+        }
+        std::string inner_problem;
+        decrypted = parse_message(*plain, inner_problem);
+        if (decrypted == nullptr) {
+            return failure("the decrypted assertion is not acceptable: " + inner_problem);
+        }
+        assertion = xmlDocGetRootElement(decrypted.get());
+        if (!is_element(assertion, NS_ASSERTION, "Assertion")) {
+            return failure("the encrypted element is not an assertion");
+        }
+        assertion_owner = decrypted.get();
+    } else {
+        assertion = child(response, NS_ASSERTION, "Assertion");
+    }
 
-    // The assertion must be covered by a valid signature: its own, or its Response's.
+    // The assertion must be covered by a valid signature: its own, or its Response's (which, for an
+    // encrypted assertion, covers the cipher text: only the identity provider can have made it).
+    struct Target
+    {
+        xmlNode* node;
+        xmlDoc* owner;
+    };
+
     bool signed_ok = false;
     std::string why = "the assertion is not signed";
-    for (xmlNode* target: {assertion, response}) {
-        for (xmlNode* at = target->children; at != nullptr; at = at->next) {
+    for (const Target& target: {Target{assertion, assertion_owner}, Target{response, doc.get()}}) {
+        for (xmlNode* at = target.node->children; at != nullptr; at = at->next) {
             if (is_element(at, NS_DSIG, "Signature")) {
                 const auto verified =
-                    verify_signature(doc.get(), target, at, settings.idp_certificate_pem);
+                    verify_signature(target.owner, target.node, at, settings.idp_certificate_pem);
                 if (verified) {
                     signed_ok = true;
                 } else {
@@ -835,10 +1148,10 @@ std::string metadata(const Settings& settings)
            // The schema wants the key, then the logout endpoint, before the assertion consumer.
            (settings.sp_certificate_pem.empty()
                 ? std::string{}
-                : R"(<md:KeyDescriptor use="signing"><ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">)"
-                  R"(<ds:X509Data><ds:X509Certificate>)" +
-                      pem_body(settings.sp_certificate_pem) +
-                      R"(</ds:X509Certificate></ds:X509Data></ds:KeyInfo></md:KeyDescriptor>)") +
+                : key_descriptor("signing", settings.sp_certificate_pem) +
+                      (settings.sp_private_key_pem.empty()
+                           ? std::string{}
+                           : key_descriptor("encryption", settings.sp_certificate_pem))) +
            (settings.slo_url.empty()
                 ? std::string{}
                 : R"(<md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location=")" +
