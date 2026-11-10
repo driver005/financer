@@ -18,6 +18,7 @@ enum class Format
     WEBP,
     SVG,
     TIFF,
+    HEIF,
     UNKNOWN
 };
 
@@ -88,6 +89,9 @@ inline constexpr long MAX_PIXELS = 40L * 1'000 * 1'000;
 [[nodiscard]] Result<Image> decode(std::string_view bytes);
 /// @brief The TIFF decoder alone (`decode` calls it for pictures that sniff as TIFF).
 [[nodiscard]] Result<Image> decode_tiff(std::string_view bytes);
+/// @brief The HEIC/HEIF decoder alone (HEVC pictures, as phones take them; `decode` calls it for
+/// pictures that sniff as HEIF). Rotation and mirroring stored in the file are applied.
+[[nodiscard]] Result<Image> decode_heif(std::string_view bytes);
 
 /// @brief The picture scaled to fit inside `max_width` x `max_height`, keeping its shape; never
 /// enlarged.

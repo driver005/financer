@@ -10,6 +10,7 @@ nc_cc_library(
     deps = [
         "//sdk/util",
         "//third_party/stb",
+        "@libheif",
         "@libtiff//:tiff",
         "@libwebp",
         "@lunasvg",
@@ -24,7 +25,10 @@ nc_plugin(
 
 nc_cc_test(
     name = "previews",
-    srcs = ["tests/previews.cc"],
+    srcs = [
+        "tests/heic_data.h",
+        "tests/previews.cc",
+    ],
     data = [
         ":libpreviews.so",
         "//plugins/cloud:libcloud.so",

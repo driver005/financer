@@ -1,3 +1,4 @@
+#include "heic_data.h"
 #include "image.h"
 #include "nextcloud/runner/kernel.h"
 #include "nextcloud/test.h"
@@ -245,6 +246,80 @@ void test_tiff()
     NC_CHECK(!nc::previews::decode(huge.substr(0, 20)).has_value());
 }
 
+void test_heic()
+{
+    const std::string two{reinterpret_cast<const char*>(HEIC_TWO), sizeof(HEIC_TWO)};
+    NC_CHECK(nc::previews::sniff(two) == Format::HEIF);
+    const auto read = nc::previews::decode(two);
+    NC_CHECK(read.has_value());
+    if (read) {
+        NC_CHECK_EQ(read->get_width(), 48);
+        NC_CHECK_EQ(read->get_height(), 32);
+        NC_CHECK_EQ(read->get_pixels().size(), std::size_t{48U * 32U * 4U});
+        // Lossy coding moves the colours a little; red stays red and blue stays blue.
+        const auto at = [&](int x, int y, int channel)
+        {
+            return static_cast<int>(read->get_pixels(
+            )[(static_cast<std::size_t>(y) * 48 + static_cast<std::size_t>(x)) * 4 +
+              static_cast<std::size_t>(channel)]);
+        };
+        NC_CHECK(at(6, 6, 0) > 200 && at(6, 6, 1) < 60 && at(6, 6, 2) < 60);
+        NC_CHECK(at(41, 25, 0) < 60 && at(41, 25, 1) < 60 && at(41, 25, 2) > 200);
+        NC_CHECK_EQ(at(6, 6, 3), 255); // opaque
+    }
+    // A picture with an alpha channel keeps it.
+    const std::string alpha{reinterpret_cast<const char*>(HEIC_ALPHA), sizeof(HEIC_ALPHA)};
+    const auto with_alpha = nc::previews::decode(alpha);
+    NC_CHECK(with_alpha.has_value());
+    if (with_alpha) {
+        NC_CHECK_EQ(with_alpha->get_width(), 16);
+        const auto channel_at = [&](int y, std::size_t channel)
+        {
+            return static_cast<int>(with_alpha->get_pixels(
+            )[static_cast<std::size_t>(y) * 16 * 4 + 8 * 4 + channel]);
+        };
+        NC_CHECK(channel_at(2, 3) < 40);   // transparent at the top
+        NC_CHECK(channel_at(13, 3) > 215); // opaque at the bottom
+        NC_CHECK(channel_at(13, 1) > 160); // and green
+    }
+    // It is scaled and re-encoded like any other picture.
+    if (read) {
+        const nc::previews::Image small = nc::previews::fit(*read, 24, 24);
+        NC_CHECK_EQ(small.get_width(), 24);
+        NC_CHECK_EQ(small.get_height(), 16);
+        NC_CHECK(nc::previews::encode_png(small).rfind("\x89PNG", 0) == 0);
+    }
+    // Damaged, cut, lying or foreign files are refused, never a crash or a big allocation.
+    NC_CHECK(!nc::previews::decode(two.substr(0, two.size() / 2)).has_value());
+    NC_CHECK(!nc::previews::decode(two.substr(0, 12)).has_value());
+    NC_CHECK(!nc::previews::decode(
+                  std::string(
+                      "\0\0\0\x18"
+                      "ftypheic",
+                      12
+                  ) +
+                  std::string(64, '\xff')
+    )
+                  .has_value());
+    std::string flipped = two;
+    for (std::size_t at = two.size() / 3; at < two.size(); at += 7) {
+        flipped[at] = static_cast<char>(flipped[at] ^ 0x5a);
+    }
+    (void)nc::previews::decode(flipped); // damaged inside: an error or a picture, but no crash
+    // An AVIF file is another codec: not sniffed as HEIF, so not handed to this decoder.
+    NC_CHECK(
+        nc::previews::sniff(
+            std::string(
+                "\0\0\0\x1c"
+                "ftypavif",
+                12
+            ) +
+            std::string(40, '\0')
+        ) == Format::UNKNOWN
+    );
+    NC_CHECK(nc::previews::sniff("short") != Format::HEIF);
+}
+
 void test_svg_and_webp()
 {
     // SVG: drawn at its own size; the colours and the transparency come out right.
@@ -315,6 +390,7 @@ int main()
     test_image();
     test_svg_and_webp();
     test_tiff();
+    test_heic();
 
     const std::string dir =
         (fs::temp_directory_path() / ("nc-previews-" + nc::util::random_hex(4))).string();
@@ -431,6 +507,22 @@ int main()
         size_of(kernel.handle(req("GET", preview, "", alice, "file=/Photos/logo.svg&x=60&y=60"))) ==
         std::make_pair(60, 30)
     );
+    // A phone photo (HEIC) is decoded, scaled and answered as PNG.
+    NC_CHECK_EQ(
+        kernel
+            .handle(
+                req("PUT",
+                    files + "/Photos/phone.heic",
+                    std::string{reinterpret_cast<const char*>(HEIC_TWO), sizeof(HEIC_TWO)},
+                    alice)
+            )
+            .get_status(),
+        201
+    );
+    const Response phone =
+        kernel.handle(req("GET", preview, "", alice, "file=/Photos/phone.heic&x=24&y=24"));
+    NC_CHECK_EQ(phone.get_status(), 200);
+    NC_CHECK(size_of(phone) == std::make_pair(24, 16));
     NC_CHECK_EQ(kernel.handle(req("GET", preview, "", alice, "file=/notes.txt")).get_status(), 415);
     NC_CHECK_EQ(kernel.handle(req("GET", preview, "", alice, "file=/Photos")).get_status(), 404);
     NC_CHECK_EQ(

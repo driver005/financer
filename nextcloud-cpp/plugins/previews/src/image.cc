@@ -16,10 +16,12 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdint>
+#include <memory>
 // The stb headers are third party code that is built with its own warning habits; ours do not apply
 // to it.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Weverything"
+#include <libheif/heif.h>
 #include <lunasvg.h>
 #include <stb_image.h>
 #include <stb_image_resize2.h>
@@ -78,6 +80,17 @@ Format sniff(std::string_view bytes) noexcept
     // WebP: a RIFF container whose form type is "WEBP".
     if (bytes.size() >= 12 && bytes.substr(0, 4) == "RIFF" && bytes.substr(8, 4) == "WEBP") {
         return Format::WEBP;
+    }
+    // HEIC/HEIF: an ISO base media file, "....ftyp" and a brand of the HEVC kind (AVIF is another
+    // codec that is not built in).
+    if (bytes.size() >= 12 && bytes.substr(4, 4) == "ftyp") {
+        const std::string_view brand = bytes.substr(8, 4);
+        for (const std::string_view known:
+             {"heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"}) {
+            if (brand == known) {
+                return Format::HEIF;
+            }
+        }
     }
     // SVG: text that starts (after an optional BOM, XML declaration, comments or doctype) with an
     // <svg> element.
@@ -219,6 +232,89 @@ Result<Image> decode_tiff(std::string_view bytes)
     return Image{static_cast<int>(width), static_cast<int>(height), std::move(pixels)};
 }
 
+Result<Image> decode_heif(std::string_view bytes)
+{
+    const std::unique_ptr<heif_context, decltype(&heif_context_free)> context{
+        heif_context_alloc(),
+        &heif_context_free
+    };
+    if (context == nullptr) {
+        return failure("cannot read the picture");
+    }
+    // A small file must not be able to ask for gigabytes: the library refuses pictures and memory
+    // blocks over these before it allocates them.
+    if (heif_security_limits* limits = heif_context_get_security_limits(context.get());
+        limits != nullptr) {
+        limits->max_image_size_pixels = static_cast<std::uint64_t>(MAX_PIXELS);
+        limits->max_memory_block_size = 256ULL * 1'024 * 1'024;
+    }
+    if (heif_context_read_from_memory_without_copy(
+            context.get(),
+            bytes.data(),
+            bytes.size(),
+            nullptr
+        )
+            .code != heif_error_Ok) {
+        return failure("the picture is damaged");
+    }
+    heif_image_handle* raw_handle = nullptr;
+    if (heif_context_get_primary_image_handle(context.get(), &raw_handle).code != heif_error_Ok) {
+        return failure("the picture is damaged");
+    }
+    const std::unique_ptr<heif_image_handle, decltype(&heif_image_handle_release)> handle{
+        raw_handle,
+        &heif_image_handle_release
+    };
+    // Look at the size before decoding.
+    const int stored_width = heif_image_handle_get_width(handle.get());
+    const int stored_height = heif_image_handle_get_height(handle.get());
+    if (stored_width <= 0 || stored_height <= 0 || stored_width > MAX_SIDE ||
+        stored_height > MAX_SIDE || static_cast<long>(stored_width) * stored_height > MAX_PIXELS) {
+        return failure("the picture is too large to preview");
+    }
+    const std::unique_ptr<heif_decoding_options, decltype(&heif_decoding_options_free)> options{
+        heif_decoding_options_alloc(),
+        &heif_decoding_options_free
+    };
+    if (options == nullptr) {
+        return failure("cannot read the picture");
+    }
+    options->convert_hdr_to_8bit = 1;
+    heif_image* raw_image = nullptr;
+    if (heif_decode_image(
+            handle.get(),
+            &raw_image,
+            heif_colorspace_RGB,
+            heif_chroma_interleaved_RGBA,
+            options.get()
+        )
+            .code != heif_error_Ok) {
+        return failure("the picture is damaged or in an unsupported variant");
+    }
+    const std::unique_ptr<heif_image, decltype(&heif_image_release)> image{
+        raw_image,
+        &heif_image_release
+    };
+    int stride = 0;
+    const std::uint8_t* plane =
+        heif_image_get_plane_readonly(image.get(), heif_channel_interleaved, &stride);
+    const int width = heif_image_get_width(image.get(), heif_channel_interleaved);
+    const int height = heif_image_get_height(image.get(), heif_channel_interleaved);
+    if (plane == nullptr || width <= 0 || height <= 0 || width > MAX_SIDE || height > MAX_SIDE ||
+        static_cast<long>(width) * height > MAX_PIXELS || stride < width * 4) {
+        return failure("the picture is damaged or too large to preview");
+    }
+    std::vector<unsigned char> pixels(static_cast<std::size_t>(width) * height * 4);
+    for (int row = 0; row < height; ++row) {
+        std::copy_n(
+            plane + static_cast<std::size_t>(row) * static_cast<std::size_t>(stride),
+            static_cast<std::size_t>(width) * 4,
+            pixels.begin() + static_cast<std::ptrdiff_t>(row) * width * 4
+        );
+    }
+    return Image{width, height, std::move(pixels)};
+}
+
 Result<Image> decode(std::string_view bytes)
 {
     const Format format = sniff(bytes);
@@ -259,6 +355,9 @@ Result<Image> decode(std::string_view bytes)
     }
     if (format == Format::TIFF) {
         return decode_tiff(bytes);
+    }
+    if (format == Format::HEIF) {
+        return decode_heif(bytes);
     }
     if (format == Format::WEBP) {
         int width = 0;
