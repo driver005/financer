@@ -13,6 +13,7 @@
 #include "nextcloud/db.h"
 #include "nextcloud/plugin.h"
 #include "nextcloud/util/crypto.h"
+#include "nextcloud/util/json.h"
 #include "nextcloud/util/text.h"
 #include "remote_files.h"
 #include "s3.h"
@@ -501,6 +502,21 @@ private:
             m_meta->removed(user, path);
         };
         hooks.instance_id = m_instance_id;
+        hooks.share_types = [this](const std::string& user)
+        {
+            std::vector<std::pair<std::string, int>> out;
+            for (const Share& share: m_shares->owned_by(user)) {
+                out.emplace_back(share.get_path(), share.get_type());
+            }
+            return out;
+        };
+        hooks.display_name = [this](const std::string& user)
+        {
+            const Response answer = m_host->call_service("users.get", user);
+            const auto json = nc::util::Json::parse(answer.get_body());
+            return json && (*json)["displayname"].is_string() ? (*json)["displayname"].string()
+                                                              : user;
+        };
         return hooks;
     }
 
@@ -2742,6 +2758,8 @@ private:
         hooks.favorites = nullptr;
         hooks.after_move = nullptr;
         hooks.after_delete = nullptr;
+        hooks.share_types = nullptr;
+        hooks.display_name = nullptr;
         hooks.before_delete =
             [this, owner = share.get_owner(), prefix](const std::string&, const std::string& path)
         {

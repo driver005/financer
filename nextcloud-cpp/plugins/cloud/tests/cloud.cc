@@ -4260,6 +4260,54 @@ void test_propfind_requests()
     NC_CHECK(has(flags, "<nc:has-preview>false</nc:has-preview>"));
     NC_CHECK(has(flags, "<d:displayname>pic.png</d:displayname>"));
     NC_CHECK(has(flags, "<nc:is-encrypted>0</nc:is-encrypted>"));
+    // Share types and the owner's name, on request: a folder shared by link and with a person, a
+    // file shared with nobody.
+    {
+        const std::string shares = "/ocs/v2.php/apps/files_sharing/api/v1/shares";
+        ::setenv("OC_PASS", "bob password", 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {"bob", "--display-name=Bob Builder"}, out), 0);
+        ::unsetenv("OC_PASS");
+        NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Shared", "", alice)).get_status(), 201);
+        NC_CHECK_EQ(
+            kernel.handle(user_req("POST", shares, "path=/Shared&shareType=3", alice)).get_status(),
+            200
+        );
+        NC_CHECK_EQ(
+            kernel.handle(user_req("POST", shares, "path=/Shared&shareType=0&shareWith=bob", alice))
+                .get_status(),
+            200
+        );
+        const Response types = propfind(
+            "/",
+            head + "<d:prop><oc:share-types/><oc:owner-display-name/></d:prop></d:propfind>",
+            "1"
+        );
+        const std::string body = types.get_body();
+        const std::size_t shared = body.find("<d:href>" + a + "/Shared/</d:href>");
+        NC_CHECK(shared != std::string::npos);
+        const std::string shared_part =
+            body.substr(shared, body.find("</d:response>", shared) - shared);
+        NC_CHECK(
+            shared_part.find("<oc:share-type>0</oc:share-type><oc:share-type>3</oc:share-type>") !=
+            std::string::npos
+        );
+        const std::size_t plain = body.find("<d:href>" + a + "/note.txt</d:href>");
+        NC_CHECK(plain != std::string::npos);
+        const std::string plain_part =
+            body.substr(plain, body.find("</d:response>", plain) - plain);
+        NC_CHECK(plain_part.find("<oc:share-types/>") != std::string::npos);
+        NC_CHECK(
+            types.get_body().find("<oc:owner-display-name>alice</oc:owner-display-name>") !=
+            std::string::npos
+        );
+        // Not worked out unless asked for.
+        NC_CHECK(
+            propfind("/Shared", head + "<d:prop><d:getetag/></d:prop></d:propfind>")
+                .get_body()
+                .find("share-type") == std::string::npos
+        );
+        NC_CHECK(propfind("/Shared", "").get_body().find("share-type") == std::string::npos);
+    }
     // Odd bodies: not a propfind, not XML, too many properties, a DTD.
     NC_CHECK_EQ(propfind("/note.txt", "<x/>").get_status(), 400);
     NC_CHECK_EQ(propfind("/note.txt", "not xml").get_status(), 400);

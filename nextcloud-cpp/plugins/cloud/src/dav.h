@@ -40,6 +40,10 @@ struct Hooks
     std::function<void(const std::string& user, const std::string& path)> after_delete{};
     /// This server's id, the tail of `oc:id`.
     std::string instance_id{};
+    /// The user's own shares as (path, share type) pairs, for `oc:share-types`; unset: none shown.
+    std::function<std::vector<std::pair<std::string, int>>(const std::string& user)> share_types{};
+    /// The name to show for a user, for `oc:owner-display-name`.
+    std::function<std::string(const std::string& user)> display_name{};
 };
 
 /// @brief Where a DAV request lands: whose files, under which URL, and which path inside them.
@@ -143,9 +147,6 @@ struct Prop
     std::string value{};
 };
 
-/// @brief More properties for a node (the ones only some files have, like the number).
-using ExtraProps = std::function<std::vector<Prop>(const Node& node)>;
-
 /// @brief What a PROPFIND asked for: everything (`allprop`, or no body), the names only
 /// (`propname`), or a list of properties; those a node does not have come back in a 404 part.
 struct PropRequest
@@ -170,6 +171,10 @@ struct PropRequest
     /// cost something are worked out only then.
     [[nodiscard]] bool asked(std::string_view ns, std::string_view name) const;
 };
+
+/// @brief More properties for a node (the ones only some files have, like the number); the request
+/// says which were asked for, so that what costs something is worked out only then.
+using ExtraProps = std::function<std::vector<Prop>(const Node& node, const PropRequest& wanted)>;
 
 /// @brief Reads the body of a PROPFIND; nullopt when it is not one.
 [[nodiscard]] std::optional<PropRequest> parse_prop_request(std::string_view body);

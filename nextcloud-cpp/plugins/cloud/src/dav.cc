@@ -11,7 +11,9 @@
 #include <chrono>
 #include <ctime>
 #include <map>
+#include <memory>
 #include <optional>
+#include <set>
 
 namespace nc::cloud {
 
@@ -298,13 +300,17 @@ namespace {
         return decoded.substr(base_href.size());
     }
 
-    /// The properties that only a user's own files have: the number, `oc:id` and the favorite mark.
+    /// The properties that only a user's own files have: the number, `oc:id`, the favorite mark,
+    /// and, when asked for, the share types and the owner's name.
     ExtraProps extra_props(const Hooks& hooks, const std::string& user)
     {
         if (!hooks.file_id) {
             return {};
         }
-        return [&hooks, user](const Node& node)
+        // Worked out once per answer, the first time a node needs it.
+        auto shares = std::make_shared<std::optional<std::vector<std::pair<std::string, int>>>>();
+        auto name = std::make_shared<std::optional<std::string>>();
+        return [&hooks, user, shares, name](const Node& node, const PropRequest& wanted)
         {
             std::vector<Prop> out;
             const std::int64_t id = hooks.file_id(user, node.get_path());
@@ -324,6 +330,29 @@ namespace {
                  "favorite",
                  hooks.is_favorite && hooks.is_favorite(user, node.get_path()) ? "1" : "0"}
             );
+            if (hooks.share_types && wanted.asked("http://owncloud.org/ns", "share-types")) {
+                if (!shares->has_value()) {
+                    *shares = hooks.share_types(user);
+                }
+                std::set<int> types;
+                for (const auto& [path, type]: **shares) {
+                    if (path == node.get_path()) {
+                        types.insert(type);
+                    }
+                }
+                std::string value;
+                for (const int type: types) {
+                    value += "<oc:share-type>" + std::to_string(type) + "</oc:share-type>";
+                }
+                out.push_back({"oc", "share-types", value});
+            }
+            if (hooks.display_name &&
+                wanted.asked("http://owncloud.org/ns", "owner-display-name")) {
+                if (!name->has_value()) {
+                    *name = hooks.display_name(user);
+                }
+                out.push_back({"oc", "owner-display-name", util::xml_escape(**name)});
+            }
             return out;
         };
     }
@@ -686,7 +715,7 @@ std::string multistatus(
         props.push_back({"oc", "permissions", node.is_directory() ? "RGDNVCK" : "RGDNVW"});
         props.push_back({"oc", "owner-id", util::xml_escape(owner)});
         if (extra) {
-            for (Prop& more: extra(node)) {
+            for (Prop& more: extra(node, wanted)) {
                 props.push_back(std::move(more));
             }
         }
