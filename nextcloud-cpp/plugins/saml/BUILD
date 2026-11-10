@@ -35,5 +35,6 @@ nc_cc_test(
         ":lib",
         "//runner:kernel",
         "//sdk/testing",
+        "@zlib",
     ],
 )

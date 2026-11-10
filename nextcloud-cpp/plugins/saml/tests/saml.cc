@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <zlib.h>
 
 namespace {
 
@@ -478,29 +479,153 @@ void test_logout_validation()
     NC_CHECK(nc::saml::metadata(without).find("SingleLogoutService") == std::string::npos);
 }
 
+/// Inflates what the HTTP-Redirect binding carries (raw DEFLATE, then base64).
+std::string redirect_payload(const std::string& encoded)
+{
+    const auto packed = nc::util::base64_decode(encoded);
+    if (!packed) {
+        return {};
+    }
+    z_stream stream{};
+    inflateInit2(&stream, -15);
+    stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(packed->data()));
+    stream.avail_in = static_cast<uInt>(packed->size());
+    std::string out(64U * 1'024U, '\0');
+    stream.next_out = reinterpret_cast<Bytef*>(out.data());
+    stream.avail_out = static_cast<uInt>(out.size());
+    inflate(&stream, Z_FINISH);
+    out.resize(stream.total_out);
+    inflateEnd(&stream);
+    return out;
+}
+
+/// Whether `signature` (base64) is a valid RSA-SHA256 signature of `data` by the key of
+/// `cert_file`, checked by `openssl`, which is not this code.
+bool openssl_verifies(
+    const std::string& dir,
+    const std::string& cert_file,
+    const std::string& data,
+    const std::string& signature
+)
+{
+    const auto raw = nc::util::base64_decode(signature);
+    if (!raw) {
+        return false;
+    }
+    {
+        std::ofstream{dir + "/data.bin", std::ios::binary} << data;
+        std::ofstream{dir + "/sig.bin", std::ios::binary} << *raw;
+    }
+    return std::system(("openssl x509 -in " + cert_file + " -pubkey -noout > " + dir +
+                        "/pub.pem 2>/dev/null && openssl dgst -sha256 -verify " + dir +
+                        "/pub.pem -signature " + dir + "/sig.bin " + dir +
+                        "/data.bin >/dev/null 2>&1")
+                           .c_str()) == 0;
+}
+
+void test_signed_requests()
+{
+    const Idp sp{"sp"};
+    nc::saml::Settings settings = settings_for(sp);
+    settings.sp_certificate_pem = sp.certificate;
+    settings.sp_private_key_pem = slurp(sp.dir + "/key.pem");
+    const std::string cert_file = sp.dir + "/cert.pem";
+
+    const std::string xml =
+        nc::saml::build_logout_request(settings, "_lo9", "https://idp.example/slo", "alice", now());
+    NC_CHECK(xml.find("<saml:NameID>alice</saml:NameID>") != std::string::npos);
+    NC_CHECK(xml.find("ID=\"_lo9\"") != std::string::npos);
+    NC_CHECK(xml.find("Destination=\"https://idp.example/slo\"") != std::string::npos);
+    NC_CHECK(xml.find("<saml:Issuer>" + SP + "</saml:Issuer>") != std::string::npos);
+
+    // The binding signs the query as it is sent; openssl, an independent implementation, checks it.
+    const std::string url = nc::saml::redirect_url(
+        "https://idp.example/slo",
+        xml,
+        "back to /here?a=b&c",
+        "SAMLRequest",
+        settings.sp_private_key_pem
+    );
+    NC_CHECK(url.rfind("https://idp.example/slo?SAMLRequest=", 0) == 0);
+    const std::size_t query_at = url.find('?') + 1;
+    const std::string query = url.substr(query_at);
+    const std::size_t signature_at = query.find("&Signature=");
+    NC_CHECK(signature_at != std::string::npos);
+    if (signature_at != std::string::npos) {
+        const auto form = nc::util::parse_form(query);
+        const std::string signed_part = query.substr(0, signature_at);
+        NC_CHECK(
+            signed_part.find(
+                "&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256"
+            ) != std::string::npos
+        );
+        NC_CHECK_EQ(nc::util::form_value(form, "RelayState"), "back to /here?a=b&c");
+        NC_CHECK_EQ(redirect_payload(nc::util::form_value(form, "SAMLRequest")), xml);
+        const std::string signature = nc::util::form_value(form, "Signature");
+        NC_CHECK(openssl_verifies(sp.dir, cert_file, signed_part, signature));
+        // Any change to what was signed breaks it.
+        std::string changed = signed_part;
+        changed.replace(changed.find("back"), 4, "evil");
+        NC_CHECK(!openssl_verifies(sp.dir, cert_file, changed, signature));
+        // Another service's key does not verify it.
+        const Idp other{"sp-other"};
+        NC_CHECK(!openssl_verifies(sp.dir, other.dir + "/cert.pem", signed_part, signature));
+    }
+    // Without a key nothing is signed; with one that cannot sign, nothing is sent.
+    NC_CHECK(
+        nc::saml::redirect_url("https://idp.example/slo", xml, "").find("Signature=") ==
+        std::string::npos
+    );
+    NC_CHECK(
+        nc::saml::redirect_url("https://idp.example/slo", xml, "", "SAMLRequest", "garbage").empty()
+    );
+
+    // The metadata carries the certificate and says that requests are signed.
+    const std::string document = nc::saml::metadata(settings);
+    NC_CHECK(document.find("AuthnRequestsSigned=\"true\"") != std::string::npos);
+    NC_CHECK(document.find("<md:KeyDescriptor use=\"signing\">") != std::string::npos);
+    NC_CHECK(document.find("<ds:X509Certificate>MII") != std::string::npos);
+    NC_CHECK(document.find("BEGIN CERTIFICATE") == std::string::npos);
+    NC_CHECK(
+        document.find("KeyDescriptor") < document.find("SingleLogoutService") ||
+        document.find("SingleLogoutService") == std::string::npos
+    );
+    NC_CHECK(
+        nc::saml::metadata(settings_for(sp)).find("AuthnRequestsSigned=\"false\"") !=
+        std::string::npos
+    );
+    NC_CHECK(nc::saml::metadata(settings_for(sp)).find("KeyDescriptor") == std::string::npos);
+}
+
 void test_login_flow()
 {
     const Idp idp{"flow"};
+    const Idp service{"flow-sp"};
     const std::string dir =
         (fs::temp_directory_path() / ("nc-saml-flow-" + nc::util::random_hex(4))).string();
     fs::create_directories(dir);
     {
         std::ofstream{dir + "/idp.pem"} << idp.certificate;
+        std::ofstream{dir + "/sp-cert.pem"} << service.certificate;
+        std::ofstream{dir + "/sp-key.pem"} << slurp(service.dir + "/key.pem");
     }
-    nc::Kernel kernel{nc::Config::parse(
-                          "data_dir = " + dir +
-                          "\n[users]\npbkdf2_iterations = 3\n[saml]\nurl = "
-                          "https://cloud.example\nsp_entity_id = " +
-                          SP +
-                          "\n"
-                          "idp_entity_id = " +
-                          IDP +
-                          "\nidp_sso_url = https://idp.example/sso\nidp_certificate_file = " + dir +
-                          "/idp.pem\nidp_slo_url = https://idp.example/slo\n"
-                          "uid_attribute = \nemail_attribute = mail\n"
-                          "displayname_attribute = cn\n"
-    )
-                          .value()};
+    nc::Kernel kernel{
+        nc::Config::parse(
+            "data_dir = " + dir +
+            "\n[users]\npbkdf2_iterations = 3\n[saml]\nurl = "
+            "https://cloud.example\nsp_entity_id = " +
+            SP +
+            "\n"
+            "idp_entity_id = " +
+            IDP + "\nidp_sso_url = https://idp.example/sso\nidp_certificate_file = " + dir +
+            "/idp.pem\nidp_slo_url = https://idp.example/slo\nsp_certificate_file = " + dir +
+            "/sp-cert.pem\nsp_private_key_file = " + dir +
+            "/sp-key.pem\n"
+            "uid_attribute = \nemail_attribute = mail\n"
+            "displayname_attribute = cn\n"
+        )
+            .value()
+    };
     kernel.get_logger().set_sink({});
     for (const char* plugin: {"saml", "tokens", "users", "db"}) {
         NC_CHECK(kernel
@@ -642,6 +767,69 @@ void test_login_flow()
             .get_status(),
         302
     );
+
+    // Logout started from this side: sign in again, then ask to end the session. The app password
+    // goes, and the browser is sent to the identity provider with a signed logout request.
+    (void)call("GET", base + "/login");
+    Options again;
+    again.request_id = pending();
+    again.assertion_id = "_assertion_" + nc::util::random_hex(6);
+    again.not_on_or_after = now() + 300;
+    const Response second = call(
+        "POST",
+        base + "/acs",
+        nc::util::form_encode({{"SAMLResponse", nc::util::base64_encode(make_response(idp, again))}}
+        )
+    );
+    NC_CHECK_EQ(second.get_status(), 200);
+    {
+        const std::string again_body = second.get_body();
+        const std::size_t start = again_body.find("<code>");
+        NC_CHECK(start != std::string::npos);
+        if (start != std::string::npos) {
+            token = again_body.substr(start + 6, again_body.find("</code>") - start - 6);
+        }
+    }
+    NC_CHECK_EQ(token_status(), 200);
+    // Not without being signed in.
+    NC_CHECK_EQ(call("GET", base + "/sp-logout").get_status(), 401);
+    NC_CHECK_EQ(token_status(), 200);
+    Request leaving{"GET", base + "/sp-logout"};
+    leaving.get_query() = "RelayState=done";
+    leaving.add_header("Authorization", "Basic " + nc::util::base64_encode("alice:" + token));
+    const Response left = kernel.handle(std::move(leaving));
+    NC_CHECK_EQ(left.get_status(), 302);
+    const std::string away{left.header("Location")};
+    NC_CHECK(away.rfind("https://idp.example/slo?SAMLRequest=", 0) == 0);
+    NC_CHECK(away.find("&SigAlg=") != std::string::npos);
+    {
+        const std::string query = away.substr(away.find('?') + 1);
+        const auto sent = nc::util::parse_form(query);
+        const std::string request_xml = redirect_payload(nc::util::form_value(sent, "SAMLRequest"));
+        NC_CHECK(request_xml.find("<saml:NameID>alice</saml:NameID>") != std::string::npos);
+        NC_CHECK(request_xml.find("Destination=\"https://idp.example/slo\"") != std::string::npos);
+        NC_CHECK_EQ(nc::util::form_value(sent, "RelayState"), "done");
+        const std::size_t signature_at = query.find("&Signature=");
+        NC_CHECK(signature_at != std::string::npos);
+        NC_CHECK(openssl_verifies(
+            service.dir,
+            service.dir + "/cert.pem",
+            query.substr(0, signature_at),
+            nc::util::form_value(sent, "Signature")
+        ));
+    }
+    NC_CHECK_EQ(token_status(), 401);
+    // The metadata offers the key; the identity provider's answer is a page, a request by redirect
+    // is not accepted.
+    NC_CHECK(call("GET", base + "/metadata").get_body().find("KeyDescriptor") != std::string::npos);
+    const auto logout_query = [&](const std::string& query)
+    {
+        Request request{"GET", base + "/logout"};
+        request.get_query() = query;
+        return kernel.handle(std::move(request)).get_status();
+    };
+    NC_CHECK_EQ(logout_query("SAMLResponse=abc"), 200);
+    NC_CHECK_EQ(logout_query("SAMLRequest=abc"), 400);
     kernel.stop();
     fs::remove_all(dir);
 }
@@ -652,6 +840,7 @@ int main()
 {
     test_validation();
     test_logout_validation();
+    test_signed_requests();
     test_login_flow();
     return NC_TEST_RESULT();
 }

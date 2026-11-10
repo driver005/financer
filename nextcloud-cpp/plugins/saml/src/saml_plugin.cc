@@ -30,6 +30,7 @@ using nc::http::Request;
 using nc::http::Response;
 
 constexpr nc::app::RouteOptions OPEN{nc::app::Access::PUBLIC, nc::app::Format::PLAIN};
+constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::PLAIN};
 
 /// The name of the app password a sign-in makes, and that a logout revokes.
 constexpr const char* SIGN_IN_TOKEN = "Single sign-on";
@@ -111,6 +112,35 @@ public:
         if (!m_slo_url.empty()) {
             m_settings.slo_url = base + "/index.php/apps/user_saml/saml/logout";
         }
+        // With a key of its own this service signs the requests it sends by redirect (identity
+        // providers often insist on that for logout), and the metadata says so.
+        const auto slurp = [](const std::string& file)
+        {
+            std::ifstream stream{file};
+            std::ostringstream text;
+            text << stream.rdbuf();
+            return text.str();
+        };
+        if (const std::string key_file = host.config("sp_private_key_file", "");
+            !key_file.empty()) {
+            m_settings.sp_private_key_pem = slurp(key_file);
+            if (nc::saml::redirect_url(
+                    "https://idp.invalid/",
+                    "<a/>",
+                    "",
+                    "SAMLRequest",
+                    m_settings.sp_private_key_pem
+                )
+                    .empty()) {
+                throw std::runtime_error(
+                    "sp_private_key_file is not a usable RSA key: " + key_file
+                );
+            }
+        }
+        if (const std::string cert_file = host.config("sp_certificate_file", "");
+            !cert_file.empty()) {
+            m_settings.sp_certificate_pem = slurp(cert_file);
+        }
         m_uid_attribute = host.config("uid_attribute", "");
         m_name_attribute = host.config("displayname_attribute", "");
         m_mail_attribute = host.config("email_attribute", "");
@@ -176,7 +206,17 @@ public:
                 const std::string xml =
                     nc::saml::build_authn_request(m_settings, id, m_sso_url, now_seconds());
                 Response redirect{302};
-                redirect.add_header("Location", nc::saml::redirect_url(m_sso_url, xml, ""));
+                const std::string location = nc::saml::redirect_url(
+                    m_sso_url,
+                    xml,
+                    "",
+                    "SAMLRequest",
+                    m_settings.sp_private_key_pem
+                );
+                if (location.empty()) {
+                    return Response::text(500, "The sign-in request could not be signed");
+                }
+                redirect.add_header("Location", std::string{location});
                 redirect.add_header("Cache-Control", "no-store");
                 return redirect;
             }
@@ -197,6 +237,25 @@ public:
             [this](const Request& request)
             {
                 return logout(request);
+            }
+        );
+        // The identity provider's answer to a logout this service started comes by redirect.
+        m_app->route(
+            "GET",
+            "/index.php/apps/user_saml/saml/logout",
+            OPEN,
+            [this](const Request& request)
+            {
+                return logout(request);
+            }
+        );
+        m_app->route(
+            "GET",
+            "/index.php/apps/user_saml/saml/sp-logout",
+            USER,
+            [this](const Request& request)
+            {
+                return start_logout(request);
             }
         );
     }
@@ -303,7 +362,20 @@ private:
         if (!m_ready || m_slo_url.empty()) {
             return Response::text(404, "SAML logout is not configured");
         }
-        const auto form = nc::util::parse_form(request.get_body());
+        auto form = nc::util::parse_form(request.get_body());
+        if (request.get_method() == "GET") {
+            form = nc::util::parse_form(request.get_query());
+        }
+        // The answer to a logout this service started: the sign-in passwords were revoked when it
+        // was sent, so there is nothing to do but to say so. (Whatever it says changes nothing
+        // here.)
+        if (!nc::util::form_value(form, "SAMLResponse").empty() &&
+            nc::util::form_value(form, "SAMLRequest").empty()) {
+            return page(200, "Signed out", "<p>You are signed out.</p>");
+        }
+        if (request.get_method() == "GET") {
+            return page(400, "Sign-out failed", "<p>A logout request must be posted.</p>");
+        }
         const auto xml = nc::util::base64_decode(nc::util::form_value(form, "SAMLRequest"));
         if (!xml) {
             return page(400, "Sign-out failed", "<p>The request is not valid.</p>");
@@ -346,9 +418,52 @@ private:
                 m_slo_url,
                 answer,
                 nc::util::form_value(form, "RelayState"),
-                "SAMLResponse"
+                "SAMLResponse",
+                m_settings.sp_private_key_pem
             )
         );
+        redirect.add_header("Cache-Control", "no-store");
+        return redirect;
+    }
+
+    /// A signed-in person ends their session (service provider initiated single logout): the app
+    /// passwords their sign-in made are revoked here, and the browser goes to the identity provider
+    /// with a logout request (signed when this service has a key), so that its session ends too.
+    [[nodiscard]] Response start_logout(const Request& request) const
+    {
+        if (!m_ready || m_slo_url.empty()) {
+            return Response::text(404, "SAML logout is not configured");
+        }
+        const std::string uid = request.get_user();
+        const nc::db::Client db{m_host};
+        const auto names = db.query("SELECT name_id FROM nc_saml_names WHERE uid = ?", {uid});
+        (void)m_host->call_service(
+            "tokens.revoke_named",
+            nc::util::form_encode({{"user", uid}, {"name", SIGN_IN_TOKEN}})
+        );
+        if (names.empty()) {
+            // Not a person the identity provider signed in: there is no session over there to end.
+            return page(200, "Signed out", "<p>You are signed out.</p>");
+        }
+        const std::string xml = nc::saml::build_logout_request(
+            m_settings,
+            "_" + nc::util::random_hex(16),
+            m_slo_url,
+            nc::db::value_of(names.front(), "name_id"),
+            now_seconds()
+        );
+        const std::string location = nc::saml::redirect_url(
+            m_slo_url,
+            xml,
+            request.query_value("RelayState"),
+            "SAMLRequest",
+            m_settings.sp_private_key_pem
+        );
+        if (location.empty()) {
+            return Response::text(500, "The logout request could not be signed");
+        }
+        Response redirect{302};
+        redirect.add_header("Location", std::string{location});
         redirect.add_header("Cache-Control", "no-store");
         return redirect;
     }

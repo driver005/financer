@@ -22,6 +22,9 @@ struct Settings
     std::string sp_entity_id{};
     std::string acs_url{}; // where the identity provider posts the response
     std::string slo_url{}; // where the identity provider posts logout requests (empty: no logout)
+    std::string sp_certificate_pem{
+    }; // this service's signing certificate (advertised in the metadata)
+    std::string sp_private_key_pem{}; // its key: requests sent by redirect are signed with it
     std::string idp_entity_id{};
     std::string idp_certificate_pem{}; // the identity provider's signing certificate
     int skew_seconds{120};             // clock difference that is tolerated
@@ -83,12 +86,24 @@ validate_logout_request(std::string_view xml, const Settings& settings, std::int
 );
 
 /// @brief The URL of the HTTP-Redirect binding: `destination?<parameter>=<deflated, base64,
-/// escaped>&RelayState=...` (`SAMLRequest` for requests, `SAMLResponse` for answers).
+/// escaped>&RelayState=...` (`SAMLRequest` for requests, `SAMLResponse` for answers). With a
+/// `private_key_pem` (RSA) the query is signed as the binding says: `&SigAlg=...&Signature=...`,
+/// the signature over the query string as it is sent. Empty when the key cannot sign.
 [[nodiscard]] std::string redirect_url(
     std::string_view destination,
     std::string_view message_xml,
     std::string_view relay_state,
-    std::string_view parameter = "SAMLRequest"
+    std::string_view parameter = "SAMLRequest",
+    std::string_view private_key_pem = {}
+);
+
+/// @brief The LogoutRequest XML that asks the identity provider to end the session of `name_id`.
+[[nodiscard]] std::string build_logout_request(
+    const Settings& settings,
+    std::string_view request_id,
+    std::string_view destination,
+    std::string_view name_id,
+    std::int64_t now
 );
 
 /// @brief The service provider's metadata document.

@@ -398,6 +398,65 @@ namespace {
         return {};
     }
 
+    /// The base64 between the lines of a PEM certificate, on one line.
+    std::string pem_body(std::string_view pem)
+    {
+        std::string out;
+        bool inside = false;
+        for (const std::string& line: util::split(pem, '\n')) {
+            const std::string_view text = util::trim(line);
+            if (text.starts_with("-----BEGIN")) {
+                inside = true;
+            } else if (text.starts_with("-----END")) {
+                break;
+            } else if (inside) {
+                out += text;
+            }
+        }
+        return out;
+    }
+
+    constexpr std::string_view ALG_RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
+
+    /// RSA PKCS#1 v1.5 signature with SHA-256 of `data` by the PEM key, base64 encoded; empty when
+    /// the key cannot sign.
+    std::string sign_rsa_sha256(std::string_view key_pem, std::string_view data)
+    {
+        const std::unique_ptr<BIO, decltype(&BIO_free)> bio{
+            BIO_new_mem_buf(key_pem.data(), static_cast<int>(key_pem.size())),
+            &BIO_free
+        };
+        const std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key{
+            bio == nullptr ? nullptr
+                           : PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr),
+            &EVP_PKEY_free
+        };
+        if (key == nullptr || EVP_PKEY_id(key.get()) != EVP_PKEY_RSA) {
+            return {};
+        }
+        const std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> context{
+            EVP_MD_CTX_new(),
+            &EVP_MD_CTX_free
+        };
+        std::size_t size = 0;
+        if (context == nullptr ||
+            EVP_DigestSignInit(context.get(), nullptr, EVP_sha256(), nullptr, key.get()) != 1 ||
+            EVP_DigestSignUpdate(context.get(), data.data(), data.size()) != 1 ||
+            EVP_DigestSignFinal(context.get(), nullptr, &size) != 1) {
+            return {};
+        }
+        std::string signature(size, '\0');
+        if (EVP_DigestSignFinal(
+                context.get(),
+                reinterpret_cast<unsigned char*>(signature.data()),
+                &size
+            ) != 1) {
+            return {};
+        }
+        signature.resize(size);
+        return util::base64_encode(signature);
+    }
+
     /// Reads a message of the identity provider: no DTD, no entities (nothing in the document can
     /// name a file, a URL or a bomb), size limited. nullptr with `why` set when it is not
     /// acceptable.
@@ -671,6 +730,22 @@ validate_logout_request(std::string_view xml, const Settings& settings, std::int
     return out;
 }
 
+std::string build_logout_request(
+    const Settings& settings,
+    std::string_view request_id,
+    std::string_view destination,
+    std::string_view name_id,
+    std::int64_t now
+)
+{
+    return R"(<samlp:LogoutRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" )"
+           R"(xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID=")" +
+           util::xml_escape(request_id) + R"(" Version="2.0" IssueInstant=")" + time_stamp(now) +
+           R"(" Destination=")" + util::xml_escape(destination) + R"("><saml:Issuer>)" +
+           util::xml_escape(settings.sp_entity_id) + R"(</saml:Issuer><saml:NameID>)" +
+           util::xml_escape(name_id) + R"(</saml:NameID></samlp:LogoutRequest>)";
+}
+
 std::string build_logout_response(
     const Settings& settings,
     std::string_view in_response_to,
@@ -714,7 +789,8 @@ std::string redirect_url(
     std::string_view destination,
     std::string_view authn_request_xml,
     std::string_view relay_state,
-    std::string_view parameter
+    std::string_view parameter,
+    std::string_view private_key_pem
 )
 {
     // Raw DEFLATE (no zlib header), as the HTTP-Redirect binding says.
@@ -736,6 +812,15 @@ std::string redirect_url(
     if (!relay_state.empty()) {
         query.emplace_back("RelayState", std::string{relay_state});
     }
+    if (!private_key_pem.empty()) {
+        // The HTTP-Redirect binding signs the query as it is sent (without the signature itself).
+        query.emplace_back("SigAlg", std::string{ALG_RSA_SHA256});
+        const std::string signature = sign_rsa_sha256(private_key_pem, util::form_encode(query));
+        if (signature.empty()) {
+            return {};
+        }
+        query.emplace_back("Signature", signature);
+    }
     return url + util::form_encode(query);
 }
 
@@ -743,9 +828,17 @@ std::string metadata(const Settings& settings)
 {
     return R"(<?xml version="1.0"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID=")" +
            util::xml_escape(settings.sp_entity_id) +
-           R"("><md:SPSSODescriptor AuthnRequestsSigned="false" WantAssertionsSigned="true" )"
+           R"("><md:SPSSODescriptor AuthnRequestsSigned=")" +
+           (settings.sp_private_key_pem.empty() ? "false" : "true") +
+           R"(" WantAssertionsSigned="true" )"
            R"(protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">)" +
-           // The schema wants the logout endpoint before the assertion consumer.
+           // The schema wants the key, then the logout endpoint, before the assertion consumer.
+           (settings.sp_certificate_pem.empty()
+                ? std::string{}
+                : R"(<md:KeyDescriptor use="signing"><ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">)"
+                  R"(<ds:X509Data><ds:X509Certificate>)" +
+                      pem_body(settings.sp_certificate_pem) +
+                      R"(</ds:X509Certificate></ds:X509Data></ds:KeyInfo></md:KeyDescriptor>)") +
            (settings.slo_url.empty()
                 ? std::string{}
                 : R"(<md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location=")" +
