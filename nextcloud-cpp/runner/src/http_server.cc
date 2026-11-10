@@ -492,6 +492,13 @@ void HttpServer::serve(int client, ssl_st* tls)
         request.set_body_file(std::string{spool_path});
     }
     http::Response response = m_kernel->handle(std::move(request));
+    if (!spool_path.empty()) {
+        // The handler is done with the upload: the file goes before the answer does, so a client
+        // that has the answer never finds it still there (the guard is for the paths that return
+        // early).
+        std::error_code error;
+        std::filesystem::remove(spool_path, error);
+    }
     if (!channel.write(serialize_response(response))) {
         return;
     }
