@@ -780,6 +780,159 @@ void test_group_shares()
 
 } // namespace
 
+/// The shared secret two trusted servers exchange (Nextcloud's `apps/federation` handshake).
+void test_trusted_server_handshake()
+{
+    Server a{"trust-a"};
+    Server b{"trust-b"};
+    Server stranger{"trust-c"};
+    // Each secret that is handed over is announced; there must be exactly one for the pair.
+    int handed_over = 0;
+    for (Server* server: {&a, &b}) {
+        server->kernel->get_events().subscribe(
+            "federation.secret_exchanged",
+            "test",
+            [&handed_over](std::string_view, std::string_view)
+            {
+                ++handed_over;
+            }
+        );
+    }
+    for (Server* server: {&a, &b, &stranger}) {
+        std::string out;
+        ::setenv("OC_PASS", "root password", 1);
+        NC_CHECK_EQ(server->kernel->run_command("user:add", {"root", "--admin"}, out), 0);
+        ::unsetenv("OC_PASS");
+        server->add_user("plain");
+    }
+    const std::string list = "/ocs/v2.php/apps/federation/trusted-servers";
+    const auto secret_of = [](Server& server, const std::string& other)
+    {
+        const Response answer =
+            server.kernel->get_services().call("federation.shared_secret", other);
+        return answer.get_status() == 200 ? answer.get_body() : std::string{};
+    };
+    const auto handshake = [](Server& server)
+    {
+        std::string out;
+        NC_CHECK_EQ(server.kernel->run_command("federation:handshake", {}, out), 0);
+        return out;
+    };
+
+    // Only an administrator manages the list; a bad address is refused.
+    NC_CHECK_EQ(a.call("POST", list, "plain", "url=" + b.address()).get_status(), 403);
+    NC_CHECK_EQ(a.call("POST", list, "root", "url=not an address").get_status(), 400);
+    NC_CHECK_EQ(a.call("POST", list, "root", "url=http://user@x.example/").get_status(), 400);
+    NC_CHECK_EQ(a.call("GET", list, "plain").get_status(), 403);
+
+    // A adds B. B does not know A yet, so B refuses to hand out anything.
+    const Response added = a.call("POST", list, "root", "url=http://" + b.address() + "/");
+    NC_CHECK_EQ(added.get_status(), 200);
+    NC_CHECK(contains(added, "\"status\":2")); // pending
+    NC_CHECK_EQ(
+        a.call("POST", list, "root", "url=http://" + b.address()).get_status(),
+        409
+    ); // known
+    NC_CHECK_EQ(handshake(a), "1 step(s) tried\n");
+    NC_CHECK(secret_of(a, b.address()).empty());
+    // The server that asks is not trusted by the one asked: the secret cannot be fetched either.
+    NC_CHECK_EQ(
+        b.call(
+             "GET",
+             "/ocs/v2.php/apps/federation/api/v1/shared-secret?url=http://" + a.address() +
+                 "&token=whatever"
+        )
+            .get_status(),
+        403
+    );
+
+    // B adds A: now both ask. Of the two tokens the lower one wins, exactly one side fetches.
+    NC_CHECK_EQ(b.call("POST", list, "root", "url=http://" + a.address()).get_status(), 200);
+    for (int round = 0; round < 3; ++round) {
+        (void)handshake(a);
+        (void)handshake(b);
+    }
+    const std::string at_a = secret_of(a, b.address());
+    const std::string at_b = secret_of(b, a.address());
+    NC_CHECK(!at_a.empty());
+    NC_CHECK_EQ(at_a, at_b);
+    NC_CHECK_EQ(handed_over, 1); // the server with the lower token asked, the other one did not
+    NC_CHECK(at_a.size() >= 16);
+    const Response listed = a.call("GET", list, "root");
+    NC_CHECK(contains(listed, "\"status\":1")); // OK now
+    NC_CHECK(!contains(listed, at_a));          // the list never shows the secret
+    // Done: nothing is left to try.
+    NC_CHECK_EQ(handshake(a), "0 step(s) tried\n");
+    NC_CHECK_EQ(handshake(b), "0 step(s) tried\n");
+    // The secret can be checked by what needs it (the system address book).
+    NC_CHECK_EQ(
+        a.kernel->get_services()
+            .call("federation.check_secret", b.address() + "\n" + at_a)
+            .get_status(),
+        200
+    );
+    NC_CHECK_EQ(
+        a.kernel->get_services()
+            .call("federation.check_secret", b.address() + "\nwrong")
+            .get_status(),
+        401
+    );
+    NC_CHECK_EQ(
+        a.kernel->get_services()
+            .call("federation.check_secret", "other.example\n" + at_a)
+            .get_status(),
+        401
+    );
+
+    // A wrong token, or an unknown server, gets nothing; so does an oversized token.
+    const std::string get = "/ocs/v2.php/apps/federation/api/v1/shared-secret";
+    NC_CHECK_EQ(
+        a.call("GET", get + "?url=http://" + b.address() + "&token=guess").get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        a.call("GET", get + "?url=http://" + stranger.address() + "&token=guess").get_status(),
+        403
+    );
+    NC_CHECK_EQ(a.call("GET", get + "?url=http://" + b.address()).get_status(), 403);
+    NC_CHECK_EQ(
+        a.call(
+             "POST",
+             "/ocs/v2.php/apps/federation/api/v1/request-shared-secret",
+             {},
+             "url=http://" + stranger.address() + "&token=abc"
+        )
+            .get_status(),
+        403
+    );
+    NC_CHECK_EQ(
+        a.call(
+             "POST",
+             "/ocs/v2.php/apps/federation/api/v1/request-shared-secret",
+             {},
+             "url=http://" + b.address() + "&token=" + std::string(65, 'x')
+        )
+            .get_status(),
+        403
+    );
+    // The newer endpoints do the same.
+    NC_CHECK_EQ(
+        a.call("GET", "/ocs/v2.php/cloud/shared-secret?url=http://" + b.address() + "&token=guess")
+            .get_status(),
+        403
+    );
+    NC_CHECK_EQ(handshake(a), "0 step(s) tried\n"); // the refused requests queued nothing
+
+    // Removing a server forgets its secret and its waiting steps.
+    const std::string id = data_id(a.call("GET", list, "root"));
+    NC_CHECK(!id.empty());
+    NC_CHECK_EQ(a.call("DELETE", list + "/" + id, "plain").get_status(), 403);
+    NC_CHECK_EQ(a.call("DELETE", list + "/" + id, "root").get_status(), 200);
+    NC_CHECK_EQ(a.call("DELETE", list + "/" + id, "root").get_status(), 404);
+    NC_CHECK(secret_of(a, b.address()).empty());
+    NC_CHECK(contains(a.call("GET", list, "root"), "[]"));
+}
+
 int main()
 {
     test_sharing_between_servers();
@@ -787,5 +940,6 @@ int main()
     test_signatures_and_trust();
     test_rsa_signatures();
     test_group_shares();
+    test_trusted_server_handshake();
     return NC_TEST_RESULT();
 }

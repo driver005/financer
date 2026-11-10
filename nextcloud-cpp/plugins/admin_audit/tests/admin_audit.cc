@@ -85,6 +85,8 @@ int main()
             .get_status(),
         200
     );
+    // A shared secret was exchanged with a trusted server.
+    kernel.get_events().publish("federation.secret_exchanged", "server=cloud.example%3A8443");
     // An account and a group go away.
     NC_CHECK_EQ(kernel.run_command("group:delete", {"staff"}, out), 0);
     NC_CHECK_EQ(kernel.run_command("user:delete", {"alice"}, out), 0);
@@ -111,6 +113,7 @@ int main()
     NC_CHECK(has("File copied: \\\"/b.txt\\\" to \\\"/c.txt\\\""));
     NC_CHECK(has("File deleted: \\\"/b.txt\\\""));
     NC_CHECK(has("Share created: \\\"/c.txt\\\" (link share"));
+    NC_CHECK(has("Shared secret with trusted server \\\"cloud.example:8443\\\" was exchanged"));
     NC_CHECK(has("Group deleted: \\\"staff\\\""));
     NC_CHECK(has("Account deleted: \\\"alice\\\""));
     // No password anywhere.

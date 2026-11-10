@@ -17,7 +17,11 @@ nc_cc_library(
 
 nc_plugin(
     name = "federation",
-    srcs = ["src/federation_plugin.cc"],
+    srcs = [
+        "src/federation_plugin.cc",
+        "src/trusted_servers.cc",
+        "src/trusted_servers.h",
+    ],
     deps = [":lib"],
 )
 

@@ -54,9 +54,10 @@ style (`CODESTYLE.md`).
       decision for the owner, not a build detail.
     * Per-user encryption keys derived from passwords and a recovery key: needs a design for sign-in
       with app passwords (no password at hand) and for sharing between users.
-    * Federation: re-share chains across servers, and Nextcloud's trusted-server hand-shake with the
-      CardDAV pull of the system address books (people on trusted servers are found through
-      `[lookup] servers` instead). Not checked against a real Nextcloud server.
+    * Federation: re-share chains across servers, and the use of the trusted-server shared secret
+      (the CardDAV pull of the system address books; people on trusted servers are found through
+      `[lookup] servers` instead). The handshake itself is done. Not checked against a real
+      Nextcloud server.
     * SAML: ECDH key agreement for encrypted assertions (signatures are RSA and ECDSA, logout works by POST and by redirect).
     * The web front end and the viewer: Nextcloud renders them with PHP templates.
     * C++26 modules: this tree builds with plain headers (`docs/architecture.md`, "Toolchain").

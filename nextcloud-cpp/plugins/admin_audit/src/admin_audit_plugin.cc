@@ -74,7 +74,8 @@ public:
               "user.deleted",
               "group.created",
               "group.deleted",
-              "twofactor.disabled"}) {
+              "twofactor.disabled",
+              "federation.secret_exchanged"}) {
             host.subscribe(
                 topic,
                 [this](std::string_view event, std::string_view payload)
@@ -126,6 +127,10 @@ private:
             user = "--";
         } else if (event == "group.created" || event == "group.deleted") {
             message = "Group " + std::string{event.substr(6)} + ": " + in_quotes(field("id"));
+            user = "--";
+        } else if (event == "federation.secret_exchanged") {
+            message = "Shared secret with trusted server " + in_quotes(field("server")) +
+                      " was exchanged";
             user = "--";
         } else if (event == "twofactor.disabled") {
             message = "Two-factor authentication was switched off for " + in_quotes(user);

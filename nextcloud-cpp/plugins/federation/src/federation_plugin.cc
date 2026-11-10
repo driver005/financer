@@ -25,6 +25,7 @@
 #include "nextcloud/util/json.h"
 #include "nextcloud/util/text.h"
 #include "nextcloud/util/time.h"
+#include "trusted_servers.h"
 
 #include <algorithm>
 #include <cctype>
@@ -398,6 +399,7 @@ public:
         add_services(host);
         add_protocol_routes(host);
         add_user_routes();
+        add_trusted_server_routes(host);
 
         host.subscribe(
             "share.deleted",
@@ -1403,6 +1405,299 @@ private:
         );
     }
 
+    // ---- trusted servers and their shared secrets -----------------------------------------------
+
+    static constexpr std::int64_t HANDSHAKE_MAX_AGE = 30LL * 24 * 3'600;
+    static constexpr int HANDSHAKE_REFUSALS = 5;
+    static constexpr std::string_view SECRET_PATH =
+        "/ocs/v2.php/apps/federation/api/v1/shared-secret";
+    static constexpr std::string_view REQUEST_PATH =
+        "/ocs/v2.php/apps/federation/api/v1/request-shared-secret";
+
+    /// One try at a queued step of the handshake; true when it is done with (good, or given up).
+    void run_step(const nc::federation::TrustedServers::Step& step)
+    {
+        using Servers = nc::federation::TrustedServers;
+        const auto server = m_servers->find(step.server);
+        if (!server) {
+            m_servers->finish(step.id); // removed meanwhile
+            return;
+        }
+        const std::int64_t now = now_seconds();
+        if (step.created < now - HANDSHAKE_MAX_AGE) {
+            m_host->log(
+                nc::LogLevel::WARNING,
+                "the handshake with " + server->server + " took too long"
+            );
+            m_servers->set_status(server->server, Servers::FAILURE);
+            m_servers->finish(step.id);
+            return;
+        }
+        if (step.own.empty()) {
+            m_host->log(
+                nc::LogLevel::WARNING,
+                "the handshake with " + server->server + " needs [federation] url to be set"
+            );
+            m_servers->retry(step, now);
+            return;
+        }
+        if (step.kind == "request") {
+            const std::vector<nc::http::Header> headers{
+                {"Content-Type", "application/x-www-form-urlencoded"},
+                {"OCS-APIRequest", "true"}
+            };
+            const auto answer = nc::federation::request(
+                discovery_settings(),
+                "POST",
+                server->url + std::string{REQUEST_PATH},
+                headers,
+                nc::util::form_encode({{"url", step.own}, {"token", step.token}, {"format", "json"}}
+                )
+            );
+            const int status = answer ? answer->get_status() : -1;
+            if (status == 200) {
+                m_servers->finish(step.id);
+            } else if (status == 403 && step.attempt + 1 >= HANDSHAKE_REFUSALS) {
+                m_host->log(
+                    nc::LogLevel::INFO,
+                    server->server + " refuses to give a shared secret"
+                );
+                m_servers->finish(step.id);
+            } else {
+                m_servers->retry(step, now);
+            }
+            return;
+        }
+        // "get": only the server with the lower token asks; the other one hands the secret over.
+        if (server->token.compare(step.token) > 0) {
+            m_servers->finish(step.id);
+            return;
+        }
+        const std::vector<nc::http::Header> headers{{"OCS-APIRequest", "true"}};
+        const auto answer = nc::federation::request(
+            discovery_settings(),
+            "GET",
+            server->url + std::string{SECRET_PATH} + "?" +
+                nc::util::form_encode({{"url", step.own}, {"token", step.token}, {"format", "json"}}
+                ),
+            headers,
+            {}
+        );
+        const int status = answer ? answer->get_status() : -1;
+        if (status == 200) {
+            const auto json = nc::util::Json::parse(answer->get_body());
+            const std::string secret =
+                json ? (*json)["ocs"]["data"]["sharedSecret"].string() : std::string{};
+            if (secret.empty() || secret.size() > 128) {
+                m_host->log(
+                    nc::LogLevel::ERROR,
+                    server->server + " did not return a usable shared secret"
+                );
+                m_servers->set_status(server->server, Servers::FAILURE);
+            } else {
+                m_servers->set_secret(server->server, secret);
+            }
+            m_servers->finish(step.id);
+        } else if (status == 403) {
+            m_host->log(
+                nc::LogLevel::INFO,
+                server->server + " refused to exchange a shared secret"
+            );
+            m_servers->finish(step.id);
+        } else {
+            m_servers->retry(step, now);
+        }
+    }
+
+    /// Tries every step that is due (all of them, waiting or not, with `force`); returns how many
+    /// it looked at.
+    std::size_t run_handshake(bool force = false)
+    {
+        const auto steps = m_servers->due(force ? INT64_MAX : now_seconds());
+        for (const auto& step: steps) {
+            run_step(step);
+        }
+        return steps.size();
+    }
+
+    [[nodiscard]] std::string address_for_peers(const Request& request) const
+    {
+        return own_base(request);
+    }
+
+    void add_trusted_server_routes(nc::Host& host)
+    {
+        m_servers = std::make_unique<nc::federation::TrustedServers>(&host);
+        m_servers->migrate();
+        constexpr nc::app::RouteOptions ADMIN{nc::app::Access::ADMIN, nc::app::Format::OCS};
+        constexpr nc::app::RouteOptions OPEN{nc::app::Access::PUBLIC, nc::app::Format::OCS};
+        constexpr std::string_view LIST = "/ocs/v2.php/apps/federation/trusted-servers";
+
+        // The administrator's list.
+        m_app->route(
+            "GET",
+            LIST,
+            ADMIN,
+            [this](const Request&)
+            {
+                std::string json = "[";
+                for (const auto& server: m_servers->list()) {
+                    json += json.size() > 1 ? "," : "";
+                    json += R"({"id":)" + std::to_string(server.id) + R"(,"url":")" +
+                            nc::util::json_escape(server.url) + R"(","status":)" +
+                            std::to_string(server.status) + "}";
+                }
+                return nc::http::ocs(200, "OK", json + "]");
+            }
+        );
+        m_app->route(
+            "POST",
+            LIST,
+            ADMIN,
+            [this](const Request& request)
+            {
+                const auto form = nc::util::parse_form(request.get_body());
+                const auto added = m_servers->add(
+                    nc::util::form_value(form, "url"),
+                    address_for_peers(request),
+                    now_seconds()
+                );
+                if (!added) {
+                    return nc::http::ocs(
+                        added.error().find("already") != std::string::npos ? 409 : 400,
+                        added.error(),
+                        "{}"
+                    );
+                }
+                return nc::http::ocs(
+                    200,
+                    "OK",
+                    R"({"id":)" + std::to_string(added->id) + R"(,"url":")" +
+                        nc::util::json_escape(added->url) + R"(","status":)" +
+                        std::to_string(added->status) + "}"
+                );
+            }
+        );
+        m_app->route(
+            "DELETE",
+            std::string{LIST} + "/{id}",
+            ADMIN,
+            [this](const Request& request)
+            {
+                return m_servers->remove(std::atoll(std::string{request.param("id")}.c_str()))
+                           ? nc::http::ocs(200, "OK", "{}")
+                           : nc::http::ocs(404, "No such server", "{}");
+            }
+        );
+
+        // What the other server calls. A server that is not on the list, or presents a wrong token,
+        // is refused alike (403, and the failure goes on the bus for the brute-force protection).
+        const auto refuse = [this](const Request& request, std::string_view why)
+        {
+            m_host->log(
+                nc::LogLevel::WARNING,
+                "shared secret request refused: " + std::string{why}
+            );
+            m_host->publish(
+                "auth.failed",
+                nc::util::form_encode(
+                    {{"user", "(federation)"},
+                     {"reason", "shared secret"},
+                     {"ip", std::string{request.header("X-NC-Remote-Addr")}}}
+                )
+            );
+            return nc::http::ocs(403, "Forbidden", "{}");
+        };
+        const auto field = [](const Request& request, std::string_view name)
+        {
+            const std::string from_body =
+                nc::util::form_value(nc::util::parse_form(request.get_body()), name);
+            return from_body.empty() ? request.query_value(name) : from_body;
+        };
+        const auto request_secret = [this, refuse, field](const Request& request)
+        {
+            const std::string url = field(request, "url");
+            const std::string token = field(request, "token");
+            if (!m_servers->find(url)) {
+                return refuse(request, "not a trusted server: " + url);
+            }
+            if (token.empty() || token.size() > 64) {
+                return refuse(request, "bad token from " + url);
+            }
+            m_servers->queue(
+                "get",
+                nc::federation::TrustedServers::normalize(url),
+                token,
+                address_for_peers(request),
+                now_seconds()
+            );
+            return nc::http::ocs(200, "OK", "{}");
+        };
+        const auto give_secret = [this, refuse, field](const Request& request)
+        {
+            const std::string url = field(request, "url");
+            const std::string token = field(request, "token");
+            if (!m_servers->find(url)) {
+                return refuse(request, "not a trusted server: " + url);
+            }
+            if (!m_servers->token_matches(url, token)) {
+                return refuse(request, "wrong token from " + url);
+            }
+            const std::string secret = nc::util::random_hex(16);
+            m_servers->set_secret(url, secret);
+            m_host->publish(
+                "federation.secret_exchanged",
+                nc::util::form_encode({{"server", nc::federation::TrustedServers::normalize(url)}})
+            );
+            return nc::http::ocs(200, "OK", R"({"sharedSecret":")" + secret + "\"}");
+        };
+        m_app->route("POST", std::string{REQUEST_PATH}, OPEN, request_secret);
+        m_app->route("GET", std::string{SECRET_PATH}, OPEN, give_secret);
+        m_app->route("POST", "/ocs/v2.php/cloud/shared-secret", OPEN, request_secret);
+        m_app->route("GET", "/ocs/v2.php/cloud/shared-secret", OPEN, give_secret);
+
+        // Other plugins (the system address book) ask for the secret with a server.
+        host.add_service(
+            "federation.shared_secret",
+            [this](std::string_view server)
+            {
+                const std::string secret = m_servers->secret_of(server);
+                return secret.empty() ? Response::text(404, "") : Response::text(200, secret);
+            }
+        );
+        host.add_service(
+            "federation.check_secret",
+            [this](std::string_view args)
+            {
+                const std::size_t newline = args.find('\n');
+                return newline != std::string_view::npos && m_servers->secret_matches(
+                                                                args.substr(0, newline),
+                                                                args.substr(newline + 1)
+                                                            )
+                           ? Response::text(200, "")
+                           : Response::text(401, "");
+            }
+        );
+        host.add_job(
+            "handshake",
+            60,
+            [this]()
+            {
+                run_handshake();
+            }
+        );
+        host.add_command(
+            "federation:handshake",
+            "Tries the steps of the shared secret exchange with trusted servers now, waiting or "
+            "not",
+            [this](const std::vector<std::string>&, std::string& out)
+            {
+                out = std::to_string(run_handshake(true)) + " step(s) tried\n";
+                return 0;
+            }
+        );
+    }
+
     void add_user_routes()
     {
         constexpr nc::app::RouteOptions USER{nc::app::Access::USER, nc::app::Format::OCS};
@@ -1478,6 +1773,7 @@ private:
     }
 
     std::unique_ptr<nc::app::App> m_app{};
+    std::unique_ptr<nc::federation::TrustedServers> m_servers{};
     nc::federation::ClientSettings m_client{};
     std::string m_public_url{};
     std::string m_public_key{};
