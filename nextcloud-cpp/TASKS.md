@@ -49,7 +49,18 @@ style (`CODESTYLE.md`).
 - [x] Second tranche, to close the gaps of the first porting map: background jobs in the ABI, the `db` plugin
       (SQLite and migrations), groups, activity, notifications, app passwords, TOTP two-factor, trash bin,
       versions, CalDAV, CardDAV, tags, comments, the capabilities endpoint, external storage (local folders), encryption at rest, LDAP sign-in, HTTPS (BoringSSL), OAuth2 provider, previews, federation (OCM, mounts with read and write, signed requests, trusted servers), Range/304 downloads, chunked uploads, password and drop links, chunked request bodies, group shares and received shares in the recipient's tree.
-- [ ] Still not ported (see `docs/porting-map.md`): SAML extras (ECDSA, ECDH key agreement, logout by redirect binding), external storage backends other than local folders, WebDAV, S3, FTP, FTPS and SFTP (SMB), SFTP sign-in with a key (libssh2's mbedTLS backend does not read the key formats reliably), the web front end, C++26 modules.
+- [ ] Still not ported, with the reason (details in `docs/porting-map.md`):
+    * SMB external storage: `libsmb2` is not in the registry and is LGPL, so linking it is a licensing
+      decision for the owner, not a build detail.
+    * SFTP sign-in with a key: libssh2's mbedTLS backend does not read the key formats reliably.
+    * Per-user encryption keys derived from passwords and a recovery key: needs a design for sign-in
+      with app passwords (no password at hand) and for sharing between users.
+    * Federation: re-share chains across servers, and Nextcloud's trusted-server hand-shake with the
+      CardDAV pull of the system address books (people on trusted servers are found through
+      `[lookup] servers` instead). Not checked against a real Nextcloud server.
+    * SAML: ECDSA, ECDH key agreement, logout requests by redirect binding.
+    * The web front end and the viewer: Nextcloud renders them with PHP templates.
+    * C++26 modules: this tree builds with plain headers (`docs/architecture.md`, "Toolchain").
 
 ## Acceptance criteria
 
@@ -65,7 +76,7 @@ style (`CODESTYLE.md`).
 
 ## Verification
 
-* `bazelisk test //...` (13 targets) and the three sanitizer configs: done, all pass (clang 18).
+* `bazelisk test //...` (30 targets) and the three sanitizer configs: done, all pass (clang 18).
 * clang 22, C++26, `--config=warnings` (-Werror): done, all pass.
 * `tools/smoke.sh`: done, the built binary with all plugins over curl.
 * Not done: C++26 *modules*. The Bazel module rules and `import std;` of congelado need GCC 16's libstdc++
