@@ -21,6 +21,9 @@ struct Hooks
     std::function<bool(const std::string& user, const std::string& path)> before_delete{};
     /// Called before an existing file is overwritten (to keep a version of it).
     std::function<void(const std::string& user, const std::string& path)> before_overwrite{};
+    /// What the files of one downloaded archive (a folder as zip or tar) may add up to; 0 turns
+    /// archives off.
+    std::uint64_t archive_max_bytes{4ULL * 1'024U * 1'024U * 1'024U};
 };
 
 /// @brief Where a DAV request lands: whose files, under which URL, and which path inside them.

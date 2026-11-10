@@ -1,9 +1,16 @@
 #include "dav.h"
 
+#include "folder_archive.h"
+#include "nextcloud/util/json.h"
 #include "nextcloud/util/text.h"
 #include "nextcloud/util/time.h"
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <ctime>
+#include <map>
+#include <optional>
 
 namespace nc::cloud {
 
@@ -25,6 +32,239 @@ namespace {
     Response failure(const StorageError& error)
     {
         return Response::text(http_status(error), error.get_message());
+    }
+
+    /// `zip` or `tar` when the request asks for a folder as an archive: by `?accept=zip` (or
+    /// `tar`, `application/zip`, `application/x-tar`, comma separated) or by the Accept header.
+    std::optional<ArchiveWriter::Format> archive_format(const Request& request)
+    {
+        std::vector<std::string> accepted;
+        const std::string parameter = request.query_value("accept");
+        const std::string source =
+            parameter.empty() ? std::string{request.header("Accept")} : parameter;
+        for (const std::string& part: util::split(source, ',')) {
+            std::string name{util::trim(part.substr(0, part.find(';')))};
+            std::transform(
+                name.begin(),
+                name.end(),
+                name.begin(),
+                [](unsigned char letter)
+                {
+                    return static_cast<char>(std::tolower(letter));
+                }
+            );
+            accepted.push_back(std::move(name));
+        }
+        const auto asks = [&](std::string_view a, std::string_view b)
+        {
+            return std::find(accepted.begin(), accepted.end(), a) != accepted.end() ||
+                   std::find(accepted.begin(), accepted.end(), b) != accepted.end();
+        };
+        if (asks("application/zip", "zip")) {
+            return ArchiveWriter::Format::ZIP;
+        }
+        if (asks("application/x-tar", "tar")) {
+            return ArchiveWriter::Format::TAR;
+        }
+        return std::nullopt;
+    }
+
+    /// The names the client picked (`?files=["a","b"]` as JSON, or `X-NC-Files: a,b`); nullopt
+    /// when the parameter is not usable.
+    std::optional<std::vector<std::string>> archive_files(const Request& request)
+    {
+        std::vector<std::string> names;
+        const std::string parameter = request.query_value("files");
+        if (!parameter.empty()) {
+            const auto json = util::Json::parse(parameter);
+            if (!json) {
+                return std::nullopt;
+            }
+            if (json->is_string()) {
+                names.push_back(json->string());
+            } else if (json->is_array()) {
+                for (const util::Json& item: json->items()) {
+                    if (!item.is_string()) {
+                        return std::nullopt;
+                    }
+                    names.push_back(item.string());
+                }
+            } else {
+                return std::nullopt;
+            }
+            return names;
+        }
+        for (const std::string& part: util::split(request.header("X-NC-Files"), ',')) {
+            if (!util::trim(part).empty()) {
+                names.emplace_back(util::trim(part));
+            }
+        }
+        return names;
+    }
+
+    /// Writes `node` (and below it, for a folder) into the archive under `name`. What cannot be
+    /// read is listed in `missing` with the reason; an error is for the archive itself.
+    util::expected<void, std::string> archive_tree(
+        ArchiveWriter& writer,
+        const Storage& storage,
+        const Node& node,
+        const std::string& name,
+        std::map<std::string, std::string>& missing,
+        int depth
+    )
+    {
+        if (node.is_directory()) {
+            if (depth > 64) {
+                missing[name] = "The folder is nested too deeply.";
+                return {};
+            }
+            if (auto added = writer.add_directory(name, node.get_mtime()); !added) {
+                return added;
+            }
+            auto children = storage.list(node.get_path());
+            if (!children) {
+                missing[name] = children.error().get_message();
+                return {};
+            }
+            for (const Node& child: *children) {
+                if (auto added = archive_tree(
+                        writer,
+                        storage,
+                        child,
+                        name + "/" + child.name(),
+                        missing,
+                        depth + 1
+                    );
+                    !added) {
+                    return added;
+                }
+            }
+            return {};
+        }
+        std::optional<FileStream> stream;
+        std::string whole;
+        ArchiveWriter::Source source;
+        std::uint64_t size = node.get_size();
+        if (size >= Storage::STREAM_THRESHOLD) {
+            stream = storage.open_stream(node.get_path());
+        }
+        if (stream) {
+            size = stream->size();
+            source = stream->reader(0, size);
+        } else {
+            auto data = storage.read(node.get_path());
+            if (!data) {
+                missing[name] = data.error().get_message();
+                return {};
+            }
+            whole = std::move(*data);
+            size = whole.size();
+            source = [&whole, offset = std::size_t{0}](char* buffer, std::size_t capacity) mutable
+                -> std::int64_t
+            {
+                const std::size_t count = std::min(capacity, whole.size() - offset);
+                std::copy_n(whole.data() + offset, count, buffer);
+                offset += count;
+                return static_cast<std::int64_t>(count);
+            };
+        }
+        const auto added = writer.add_file(name, node.get_mtime(), size, source);
+        if (!added) {
+            return util::unexpected<std::string>{added.error()};
+        }
+        if (!*added) {
+            missing[name] =
+                "The file could not be read completely; the rest was filled with zeros.";
+        }
+        return {};
+    }
+
+    /// A folder as one zip or tar file (Nextcloud's `ZipFolderPlugin`): the whole folder, or the
+    /// names in `files`. Files that cannot be read are listed in `missing_files.json` inside.
+    Response archive_response(
+        const Storage& storage,
+        const Node& folder,
+        const std::string& path,
+        ArchiveWriter::Format format,
+        const std::vector<std::string>& files,
+        std::uint64_t max_bytes
+    )
+    {
+        if (max_bytes == 0) {
+            return Response::text(405, "Folders cannot be downloaded as archives here");
+        }
+        auto writer = ArchiveWriter::create(format, max_bytes);
+        if (!writer) {
+            return Response::text(500, writer.error());
+        }
+        // The top folder of the archive is the folder's name; for the root of the account it is
+        // "download".
+        const std::string archive_name = path == "/" ? "download" : folder.name();
+        std::map<std::string, std::string> missing;
+        std::vector<std::string> top_names;
+        const auto fail = [](const std::string& message)
+        {
+            return Response::text(
+                message.find("larger than an archive") != std::string::npos ? 413 : 500,
+                message
+            );
+        };
+        if (files.empty()) {
+            if (auto added = archive_tree(*writer, storage, folder, archive_name, missing, 0);
+                !added) {
+                return fail(added.error());
+            }
+        } else {
+            for (const std::string& file: files) {
+                const auto inside = Storage::normalize((path == "/" ? "" : path) + "/" + file);
+                if (!inside || file.empty() || file.find('/') != std::string::npos) {
+                    return Response::text(400, "Invalid file name in the list");
+                }
+                auto node = storage.stat(*inside);
+                if (!node) {
+                    missing[file] = node.error().get_message();
+                    continue;
+                }
+                top_names.push_back(file);
+                if (auto added = archive_tree(*writer, storage, *node, file, missing, 0); !added) {
+                    return fail(added.error());
+                }
+            }
+        }
+        if (!missing.empty()) {
+            std::string name = "missing_files.json";
+            for (int attempt = 1;
+                 std::find(top_names.begin(), top_names.end(), name) != top_names.end();
+                 ++attempt) {
+                name = "missing_files (" + std::to_string(attempt) + ").json";
+            }
+            std::string json = "{\n";
+            for (auto it = missing.begin(); it != missing.end(); ++it) {
+                json += "    \"" + util::json_escape(it->first) + "\": \"" +
+                        util::json_escape(it->second) + "\"" +
+                        (std::next(it) == missing.end() ? "\n" : ",\n");
+            }
+            json += "}";
+            // Next to the files in a list, inside the folder otherwise.
+            const std::string where = files.empty() ? archive_name + "/" + name : name;
+            if (auto added = writer->add_text(where, std::time(nullptr), json); !added) {
+                return fail(added.error());
+            }
+        }
+        auto finished = writer->finish();
+        if (!finished) {
+            return Response::text(500, finished.error());
+        }
+        const bool zip = format == ArchiveWriter::Format::ZIP;
+        Response response{200, zip ? "application/zip" : "application/x-tar", std::string{}, {}};
+        response.set_stream(finished->size, finished->reader());
+        response.add_header(
+            "Content-Disposition",
+            "attachment; filename*=UTF-8''" + util::url_encode_path(archive_name) +
+                (zip ? ".zip" : ".tar")
+        );
+        response.add_header("Cache-Control", "no-store");
+        return response;
     }
 
     void add_file_headers(Response& response, const Node& node)
@@ -260,6 +500,21 @@ Response dav_handle(
             return failure(node.error());
         }
         if (node->is_directory()) {
+            // As a zip or tar file when the request asks for one.
+            if (const auto format = archive_format(request)) {
+                const auto files = archive_files(request);
+                if (!files) {
+                    return Response::text(400, "The files parameter is not a list of names");
+                }
+                return archive_response(
+                    storage,
+                    *node,
+                    path,
+                    *format,
+                    *files,
+                    hooks.archive_max_bytes
+                );
+            }
             return Response::text(405, "Cannot download a folder; use PROPFIND to list it");
         }
         // A client that already has this version only needs to hear so.

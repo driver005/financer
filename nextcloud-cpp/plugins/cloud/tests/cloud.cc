@@ -3710,6 +3710,223 @@ void test_external_sftp()
     run(privileged + "rm -rf " + dir);
 }
 
+// ---- folders downloaded as zip or tar -----------------------------------------------------------
+
+/// What python's zipfile / tarfile (not this code) finds in an archive: "name size sha256" lines,
+/// sorted; directories end with "/" and have size 0.
+std::string archive_listing(const std::string& file, bool zip)
+{
+    const std::string script =
+        zip ? "import zipfile,hashlib,sys\n"
+              "z=zipfile.ZipFile(sys.argv[1])\n"
+              "assert z.testzip() is None\n"
+              "for i in z.infolist():\n"
+              "  d=z.read(i.filename)\n"
+              "  print(i.filename,len(d),hashlib.sha256(d).hexdigest())\n"
+            : "import tarfile,hashlib,sys\n"
+              "t=tarfile.open(sys.argv[1])\n"
+              "for m in t.getmembers():\n"
+              "  d=t.extractfile(m).read() if m.isfile() else b''\n"
+              "  print(m.name+('/' if m.isdir() else ''),len(d),hashlib.sha256(d).hexdigest())\n";
+    {
+        std::ofstream{file + ".py"} << script;
+    }
+    std::string out = command_output("python3 -I " + file + ".py " + file + " 2>&1");
+    std::vector<std::string> lines = nc::util::split(out, '\n');
+    std::sort(lines.begin(), lines.end());
+    std::string sorted;
+    for (const std::string& line: lines) {
+        if (!line.empty()) {
+            sorted += line + "\n";
+        }
+    }
+    return sorted;
+}
+
+std::string listing_line(const std::string& name, const std::string& content)
+{
+    return name + " " + std::to_string(content.size()) + " " +
+           nc::util::to_hex(nc::util::sha256(content)) + "\n";
+}
+
+void test_folder_archives()
+{
+    if (command_output("command -v python3").empty()) {
+        std::fprintf(stderr, "skipping the archive test: no python3 here\n");
+        return;
+    }
+    const std::string dir = temp_dir("archives");
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    NC_CHECK(kernel.add_plugin_library("plugins/users/libusers.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/cloud/libcloud.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/db/libdb.so").has_value());
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const auto put = [&](const std::string& path, const std::string& content)
+    {
+        NC_CHECK_EQ(kernel.handle(user_req("PUT", a + path, content, alice)).get_status(), 201);
+    };
+    // A big file (streamed out of the storage), a small one, a nested one, an empty folder, a name
+    // with letters outside ASCII.
+    std::string big(3U * 1'024U * 1'024U + 17U, '\0');
+    for (std::size_t index = 0; index < big.size(); ++index) {
+        big[index] = static_cast<char>((index * 31U + (index >> 9U)) & 0xFFU);
+    }
+    const std::string name_with_umlaut = "gr\xC3\xBC\xC3\x9F"
+                                         "e.txt";
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Docs", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Docs/Sub", "", alice)).get_status(), 201);
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Docs/Empty", "", alice)).get_status(), 201);
+    put("/Docs/a.txt", "hello");
+    put("/Docs/Sub/b.txt", "bee");
+    put("/Docs/big.bin", big);
+    put("/Docs/" + nc::util::url_encode_path(name_with_umlaut), "umlaut");
+    put("/top.txt", "top");
+
+    const auto download = [&](const std::string& path, const std::string& query)
+    {
+        Request request = user_req("GET", a + path, "", alice);
+        request.set_query(std::string{query});
+        return kernel.handle(std::move(request));
+    };
+    const auto save = [&](const Response& response, const std::string& name)
+    {
+        const std::string file = dir + "/" + name;
+        std::ofstream{file, std::ios::binary} << response.read_body();
+        return file;
+    };
+
+    // A folder as zip: every entry under the folder's name, the content intact.
+    const Response zipped = download("/Docs", "accept=zip");
+    NC_CHECK_EQ(zipped.get_status(), 200);
+    NC_CHECK_EQ(zipped.get_content_type(), "application/zip");
+    NC_CHECK(
+        std::string{zipped.header("Content-Disposition")}.find("Docs.zip") != std::string::npos
+    );
+    const std::string expected_docs =
+        listing_line("Docs/", "") + listing_line("Docs/Empty/", "") +
+        listing_line("Docs/Sub/", "") + listing_line("Docs/Sub/b.txt", "bee") +
+        listing_line("Docs/a.txt", "hello") + listing_line("Docs/big.bin", big) +
+        listing_line("Docs/" + name_with_umlaut, "umlaut");
+    {
+        std::vector<std::string> lines = nc::util::split(expected_docs, '\n');
+        std::sort(lines.begin(), lines.end());
+        std::string sorted;
+        for (const std::string& line: lines) {
+            if (!line.empty()) {
+                sorted += line + "\n";
+            }
+        }
+        NC_CHECK_EQ(archive_listing(save(zipped, "docs.zip"), true), sorted);
+        // The same through the Accept header, and as a tar file.
+        Request by_header = user_req("GET", a + "/Docs", "", alice);
+        by_header.add_header("Accept", "application/zip");
+        NC_CHECK_EQ(
+            archive_listing(save(kernel.handle(std::move(by_header)), "h.zip"), true),
+            sorted
+        );
+        const Response tarred = download("/Docs", "accept=tar");
+        NC_CHECK_EQ(tarred.get_status(), 200);
+        NC_CHECK_EQ(tarred.get_content_type(), "application/x-tar");
+        NC_CHECK_EQ(archive_listing(save(tarred, "docs.tar"), false), sorted);
+    }
+    // Also with unzip and tar, which are other implementations again.
+    NC_CHECK_EQ(std::system(("unzip -tq " + dir + "/docs.zip >/dev/null 2>&1").c_str()), 0);
+    NC_CHECK_EQ(std::system(("tar -tf " + dir + "/docs.tar >/dev/null 2>&1").c_str()), 0);
+
+    // Only the names asked for, relative to the folder; a name that is not there is reported in
+    // missing_files.json inside the archive.
+    {
+        const Response picked = download(
+            "/Docs",
+            "accept=zip&files=" + nc::util::url_encode_path("[\"a.txt\",\"Sub\",\"nope.txt\"]")
+        );
+        NC_CHECK_EQ(picked.get_status(), 200);
+        const std::string listing = archive_listing(save(picked, "picked.zip"), true);
+        NC_CHECK(listing.find("a.txt 5 ") == 0 || listing.find("\na.txt 5 ") != std::string::npos);
+        NC_CHECK(listing.find("Sub/b.txt 3 ") != std::string::npos);
+        NC_CHECK(listing.find("missing_files.json ") != std::string::npos);
+        NC_CHECK(listing.find("big.bin") == std::string::npos);
+        NC_CHECK(listing.find("Docs/") == std::string::npos);
+        const std::string report = command_output(
+            "python3 -I -c \"import "
+            "zipfile,sys;print(zipfile.ZipFile(sys.argv[1]).read('missing_files.json').decode())"
+            "\" " +
+            dir + "/picked.zip"
+        );
+        NC_CHECK(report.find("nope.txt") != std::string::npos);
+        // The list can be a single name, or come in the header.
+        NC_CHECK_EQ(
+            download("/Docs", "accept=zip&files=" + nc::util::url_encode_path("\"a.txt\""))
+                .get_status(),
+            200
+        );
+        Request header_list = user_req("GET", a + "/Docs", "", alice);
+        header_list.add_header("Accept", "application/zip");
+        header_list.add_header("X-NC-Files", "a.txt, Sub");
+        NC_CHECK_EQ(kernel.handle(std::move(header_list)).get_status(), 200);
+    }
+    // The whole account is called "download"; a bad list is refused; a name cannot leave the
+    // folder.
+    {
+        const Response everything = download("", "accept=zip");
+        NC_CHECK_EQ(everything.get_status(), 200);
+        NC_CHECK(
+            std::string{everything.header("Content-Disposition")}.find("download.zip") !=
+            std::string::npos
+        );
+        const std::string listing = archive_listing(save(everything, "all.zip"), true);
+        NC_CHECK(listing.find("download/top.txt 3 ") != std::string::npos);
+        NC_CHECK(listing.find("download/Docs/a.txt 5 ") != std::string::npos);
+    }
+    NC_CHECK_EQ(download("/Docs", "accept=zip&files=%5B1%5D").get_status(), 400);
+    NC_CHECK_EQ(download("/Docs", "accept=zip&files=%5B%22..%2Ftop.txt%22%5D").get_status(), 400);
+    NC_CHECK_EQ(download("/Docs", "accept=zip&files=%5B%22Sub%2Fb.txt%22%5D").get_status(), 400);
+    NC_CHECK_EQ(download("/Docs", "accept=zip&files=not-json").get_status(), 400);
+    // Without a request for an archive, a folder is still not a download; a file is a file.
+    NC_CHECK_EQ(download("/Docs", "").get_status(), 405);
+    NC_CHECK_EQ(download("/Docs/a.txt", "accept=zip").get_body(), "hello");
+    // Somebody else's account is not reachable.
+    NC_CHECK(
+        kernel.handle(user_req("GET", "/remote.php/dav/files/bob/?accept=zip", "", alice))
+            .get_status() >= 400
+    );
+    kernel.stop();
+    fs::remove_all(dir);
+
+    // The size limit: the files in an archive may not add up to more than the limit says.
+    {
+        const std::string root = temp_dir("archive-limit");
+        nc::cloud::Storage storage{root + "/files"};
+        NC_CHECK(storage.ensure_root().has_value());
+        NC_CHECK(
+            storage.write("/Big/one.bin", std::string(600, 'x')).has_value() ||
+            storage.make_directory("/Big").has_value()
+        );
+        NC_CHECK(storage.write("/Big/one.bin", std::string(600, 'x')).has_value());
+        NC_CHECK(storage.write("/Big/two.bin", std::string(600, 'y')).has_value());
+        nc::cloud::Hooks hooks;
+        hooks.archive_max_bytes = 1'000;
+        Request request{"GET", "/remote.php/dav/files/alice/Big"};
+        request.set_query("accept=zip");
+        const nc::cloud::DavTarget target{"alice", "/remote.php/dav/files/alice", "/Big"};
+        NC_CHECK_EQ(nc::cloud::dav_handle(request, storage, target, {}, hooks).get_status(), 413);
+        hooks.archive_max_bytes = 1'300;
+        NC_CHECK_EQ(nc::cloud::dav_handle(request, storage, target, {}, hooks).get_status(), 200);
+        hooks.archive_max_bytes = 0; // archives off
+        NC_CHECK_EQ(nc::cloud::dav_handle(request, storage, target, {}, hooks).get_status(), 405);
+        fs::remove_all(root);
+    }
+}
+
 int main()
 {
     test_normalize();
@@ -3732,6 +3949,7 @@ int main()
     test_external_ftp();
     test_external_ftps();
     test_external_sftp();
+    test_folder_archives();
     test_external_storage();
     test_encryption();
     test_key_rotation();

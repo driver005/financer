@@ -292,6 +292,9 @@ public:
         parse_external_ftp(host.config("external_ftp", ""));
         m_max_upload =
             std::strtoull(host.config("max_upload_bytes", "2147483648").c_str(), nullptr, 10);
+        m_archive_max_bytes =
+            std::strtoull(host.config("archive_max_mb", "4096").c_str(), nullptr, 10) * 1'024U *
+            1'024U;
         // Encryption at rest: a 64 hex digit key in the config, or in a file the administrator
         // keeps apart.
         std::string key_hex = host.config("encryption_key", "");
@@ -438,6 +441,7 @@ private:
                 nc::util::form_encode({{"user", user}, {"path", path}})
             );
         };
+        hooks.archive_max_bytes = m_archive_max_bytes;
         return hooks;
     }
 
@@ -3531,6 +3535,7 @@ private:
     std::string m_encryption_key{};
     std::size_t m_max_chunk{512U * 1'024U * 1'024U};
     std::size_t m_max_upload{2'048U * 1'024U * 1'024U};
+    std::uint64_t m_archive_max_bytes{4'096ULL * 1'024U * 1'024U};
 
     struct ExternalFtp
     {

@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 nc_cc_library(
     name = "lib",
     srcs = [
+        "src/folder_archive.cc",
         "src/dav.cc",
         "src/file_cipher.cc",
         "src/ftp.cc",
@@ -16,6 +17,7 @@ nc_cc_library(
         "src/storage.cc",
     ],
     hdrs = [
+        "src/folder_archive.h",
         "src/dav.h",
         "src/file_cipher.h",
         "src/ftp.h",
@@ -33,6 +35,7 @@ nc_cc_library(
         "//sdk/plugin:http",
         "//sdk/util",
         "@boringssl//:crypto",
+        "@libarchive//libarchive",
         "@libssh2",
     ],
 )

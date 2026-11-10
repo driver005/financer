@@ -48,7 +48,7 @@ have to be vendored by hand (see `third_party/`).
 | `firebase/php-jwt` | `jwt-cpp` | OAuth2/OIDC tokens |
 | `predis/predis` | `hiredis` | Redis cache and locking |
 | `punic/punic`, `symfony/translation`, `symfony/string`, `symfony/polyfill-intl-*`, `ext-mbstring` | `icu`, `utf8proc`, `simdutf` | locale data, normalization, translations |
-| `pear/archive_tar`, `deepdiver/zipstreamer`, `deepdiver1975/tarstreamer`, `ext-zip` | `libarchive` | download of a folder as zip/tar |
+| `pear/archive_tar`, `deepdiver/zipstreamer`, `deepdiver1975/tarstreamer`, `ext-zip` | `libarchive` (BCR, **in use**: `plugins/cloud/src/folder_archive.cc`) | download of a folder as zip/tar |
 | `ext-fileinfo` | `libmagic` | content-based MIME types |
 | `justinrainbow/json-schema` | `jsoncons` (jsonschema) | schema validation |
 | `web-auth/webauthn-lib` | `jsoncons` (CBOR) + BoringSSL (COSE, ES256) | WebAuthn |
