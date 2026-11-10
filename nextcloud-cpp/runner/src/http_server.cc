@@ -68,7 +68,8 @@ Result<RequestHead> parse_request_head(std::string_view raw)
     return head;
 }
 
-http::Request request_from_head(const RequestHead& head, std::string&& body)
+http::Request
+request_from_head(const RequestHead& head, std::string&& body, std::string_view remote)
 {
     const std::size_t question = head.target.find('?');
     std::string path = head.target.substr(0, question);
@@ -88,8 +89,56 @@ http::Request request_from_head(const RequestHead& head, std::string&& body)
         {},
         {}
     };
-    request.set_headers(std::vector<http::Header>(head.headers));
+    std::vector<http::Header> headers;
+    for (const http::Header& header: head.headers) {
+        // The address comes from the connection only, never from the wire.
+        if (!util::equals_ignore_case(header.first, "X-NC-Remote-Addr")) {
+            headers.push_back(header);
+        }
+    }
+    if (!remote.empty()) {
+        headers.emplace_back("X-NC-Remote-Addr", std::string{remote});
+    }
+    request.set_headers(std::move(headers));
     return request;
+}
+
+namespace {
+
+    bool looks_like_address(std::string_view text)
+    {
+        return !text.empty() && text.size() <= 45 &&
+               text.find_first_not_of("0123456789abcdefABCDEF.:") == std::string_view::npos;
+    }
+
+} // namespace
+
+std::string resolve_remote(
+    std::string_view peer,
+    std::string_view forwarded_for,
+    const std::vector<std::string>& trusted
+)
+{
+    const auto is_trusted = [&](std::string_view address)
+    {
+        return std::find(trusted.begin(), trusted.end(), address) != trusted.end();
+    };
+    if (!is_trusted(peer) || forwarded_for.empty()) {
+        return std::string{peer};
+    }
+    std::vector<std::string> chain;
+    for (const std::string& part: util::split(forwarded_for, ',')) {
+        const std::string_view entry = util::trim(part);
+        if (looks_like_address(entry)) {
+            chain.emplace_back(entry);
+        }
+    }
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        if (!is_trusted(*it)) {
+            return *it;
+        }
+    }
+    return chain.empty() ? std::string{peer} : chain.front();
 }
 
 ChunkedDecoder::State ChunkedDecoder::feed(std::string_view bytes)
@@ -325,7 +374,10 @@ Result<std::uint16_t> HttpServer::start(const std::string& address, std::uint16_
 void HttpServer::accept_loop()
 {
     while (m_running) {
-        const int client = ::accept(m_listen_fd, nullptr, nullptr);
+        sockaddr_storage peer_address{};
+        socklen_t peer_size = sizeof(peer_address);
+        const int client =
+            ::accept(m_listen_fd, reinterpret_cast<sockaddr*>(&peer_address), &peer_size);
         if (client < 0) {
             if (!m_running) {
                 break;
@@ -335,9 +387,25 @@ void HttpServer::accept_loop()
             }
             break;
         }
+        std::string peer;
+        {
+            char text[INET6_ADDRSTRLEN] = {};
+            if (peer_address.ss_family == AF_INET) {
+                const auto* v4 = reinterpret_cast<const sockaddr_in*>(&peer_address);
+                ::inet_ntop(AF_INET, &v4->sin_addr, text, sizeof(text));
+            } else if (peer_address.ss_family == AF_INET6) {
+                const auto* v6 = reinterpret_cast<const sockaddr_in6*>(&peer_address);
+                ::inet_ntop(AF_INET6, &v6->sin6_addr, text, sizeof(text));
+            }
+            peer = text;
+            // An IPv4 client of a dual stack socket shows as ::ffff:a.b.c.d.
+            if (util::starts_with(peer, "::ffff:") && peer.find('.') != std::string::npos) {
+                peer.erase(0, 7);
+            }
+        }
         ++m_active;
         std::thread{
-            [this, client]
+            [this, client, peer]
             {
                 ssl_st* tls = nullptr;
                 if (m_tls != nullptr) {
@@ -356,7 +424,7 @@ void HttpServer::accept_loop()
                         return;
                     }
                 }
-                serve(client, tls);
+                serve(client, tls, peer);
                 if (tls != nullptr) {
                     SSL_shutdown(tls);
                     SSL_free(tls);
@@ -368,7 +436,7 @@ void HttpServer::accept_loop()
     }
 }
 
-void HttpServer::serve(int client, ssl_st* tls)
+void HttpServer::serve(int client, ssl_st* tls, const std::string& peer)
 {
     const Channel channel{client, tls};
     timeval timeout{};
@@ -487,7 +555,18 @@ void HttpServer::serve(int client, ssl_st* tls)
         }
     }
 
-    http::Request request = request_from_head(*head, std::move(body));
+    std::string forwarded;
+    for (const http::Header& header: head->headers) {
+        if (util::equals_ignore_case(header.first, "X-Forwarded-For")) {
+            forwarded += forwarded.empty() ? "" : ",";
+            forwarded += header.second;
+        }
+    }
+    http::Request request = request_from_head(
+        *head,
+        std::move(body),
+        resolve_remote(peer, forwarded, m_trusted_proxies)
+    );
     if (!spool_path.empty()) {
         request.set_body_file(std::string{spool_path});
     }

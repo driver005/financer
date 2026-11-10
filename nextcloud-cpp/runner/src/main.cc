@@ -1,5 +1,6 @@
 #include "nextcloud/runner/http_server.h"
 #include "nextcloud/runner/kernel.h"
+#include "nextcloud/util/text.h"
 
 #include <atomic>
 #include <chrono>
@@ -120,6 +121,17 @@ int main(int argc, char** argv)
         kernel.get_config().get("data_dir", "data") + "/.upload-spool",
         static_cast<std::size_t>(kernel.get_config().get_integer("upload_spool_kb", 1'024)) * 1'024U
     );
+    // Proxies whose X-Forwarded-For is believed (exact addresses, comma separated).
+    {
+        std::vector<std::string> proxies;
+        for (const std::string& address:
+             nc::util::split(kernel.get_config().get("trusted_proxies", ""), ',')) {
+            if (!nc::util::trim(address).empty()) {
+                proxies.emplace_back(nc::util::trim(address));
+            }
+        }
+        server.set_trusted_proxies(std::move(proxies));
+    }
     const std::string tls_cert = kernel.get_config().get("tls_cert", "");
     const std::string tls_key = kernel.get_config().get("tls_key", "");
     if (!tls_cert.empty() || !tls_key.empty()) {

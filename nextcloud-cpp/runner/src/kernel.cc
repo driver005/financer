@@ -490,7 +490,11 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
         rejected = true;
         m_events.publish(
             "auth.failed",
-            util::form_encode({{"user", "(access token)"}, {"reason", "token"}})
+            util::form_encode(
+                {{"user", "(access token)"},
+                 {"reason", "token"},
+                 {"ip", std::string{request.header("X-NC-Remote-Addr")}}}
+            )
         );
         return {};
     }
@@ -508,7 +512,9 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
         m_events.publish(
             "auth.failed",
             util::form_encode(
-                {{"user", decoded->substr(0, decoded->find(':'))}, {"reason", std::string{reason}}}
+                {{"user", decoded->substr(0, decoded->find(':'))},
+                 {"reason", std::string{reason}},
+                 {"ip", std::string{request.header("X-NC-Remote-Addr")}}}
             )
         );
     };
@@ -551,6 +557,14 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
             return {};
         }
     }
+    // A good password clears what this address got wrong for this account (and only for it: a
+    // sign-in to one's own account must not wipe the guesses at another).
+    if (m_services.contains("auth.throttle_reset")) {
+        (void)m_services.call(
+            "auth.throttle_reset",
+            std::string{request.header("X-NC-Remote-Addr")} + "\n" + user
+        );
+    }
     return user;
 }
 
@@ -558,6 +572,17 @@ http::Response Kernel::handle(http::Request&& request) const
 {
     // The user comes from authentication only, never from the wire.
     request.set_user(std::string{});
+    // An address that has guessed too often waits, whatever it sends now. Only requests that carry
+    // credentials are held back, and not the public share endpoints (their "password" is a token).
+    if (!request.header("Authorization").empty() && !request.header("X-NC-Remote-Addr").empty() &&
+        !util::starts_with(request.get_path(), "/public.php/") &&
+        m_services.contains("auth.throttle")) {
+        http::Response verdict =
+            m_services.call("auth.throttle", std::string{request.header("X-NC-Remote-Addr")});
+        if (verdict.get_status() == 429) {
+            return verdict;
+        }
+    }
     bool rejected = false;
     bool second_factor = false;
     std::string user = authenticate(request, rejected, second_factor);

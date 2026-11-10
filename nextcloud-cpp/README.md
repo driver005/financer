@@ -33,6 +33,7 @@ plugins/groups/    groups and membership
 plugins/tokens/    app passwords
 plugins/twofactor/ TOTP second factor with backup codes
 plugins/admin_audit/ audit log of sign-ins, files, shares, accounts and groups
+plugins/bruteforce/ makes an address wait after too many wrong passwords
 plugins/webauthn/  passkeys and security keys (WebAuthn): registration and passwordless sign-in
 plugins/cloud/     file storage, WebDAV, shares by user and public link
 plugins/trashbin/  deleted files can be restored
@@ -99,6 +100,8 @@ reads `[its-name] key` first and the top level `key` second.
 | `[cloud] quota_bytes`, `overwrite_url` | per-user quota, public URL for share links | unlimited, from `Host` |
 | `[cloud] encryption_key` or `encryption_key_file` | 64 hex digits: files are stored encrypted | off |
 | `[cloud] external_webdav`, `external_webdav_allow_http`, `external_webdav_allow_local`, `external_webdav_ca_file`, `external_webdav_timeout_seconds`, `external_webdav_max_mb` | WebDAV servers shown as folders: `Name=URL|user|password-file[|rw][|group]; ...` | none |
+| `[bruteforce] max_attempts`, `window_seconds`, `whitelist` | failed sign-ins of one address before it has to wait (the wait doubles with each further failure), the time they count for, addresses and CIDR ranges that are never held | 10, 1800, none |
+| `trusted_proxies` (top level) | proxies whose `X-Forwarded-For` is believed when working out the client's address (comma separated, exact addresses) | none |
 | `[admin_audit] logfile` | where the audit log goes | `<data_dir>/audit.log` |
 | `[webauthn] rp_id`, `origins`, `rp_name` | passkey sign-in: the host name pages are served from (the `Host` header without port when empty), the allowed origins (comma separated, `https://<rp_id>` when empty), the name shown to the person | Nextcloud |
 | `[cloud] archive_max_mb` | folders downloaded as `?accept=zip` / `tar`: the most the files of one archive may add up to; 0 turns archives off | 4096 |

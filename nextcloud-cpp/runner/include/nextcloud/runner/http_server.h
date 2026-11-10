@@ -80,7 +80,21 @@ struct RequestHead
 /// @brief Parses the head of an HTTP/1.1 request out of `raw`. Pure, so it is tested without a
 /// socket. `Content-Length` bodies only; `Transfer-Encoding` is refused.
 [[nodiscard]] Result<RequestHead> parse_request_head(std::string_view raw);
-[[nodiscard]] http::Request request_from_head(const RequestHead& head, std::string&& body);
+/// @brief The request a parsed head and body make. `remote` is the client's address: it becomes the
+/// `X-NC-Remote-Addr` header, and any such header the client sent is dropped first, so the
+/// kernel can trust it.
+[[nodiscard]] http::Request
+request_from_head(const RequestHead& head, std::string&& body, std::string_view remote = {});
+
+/// @brief The client's address: the peer of the connection, unless the peer is one of the
+/// `trusted` proxies and sent `X-Forwarded-For`; then the first address of that list, read from
+/// the right, that is not a trusted proxy itself (the one a proxy of ours saw), so a client cannot
+/// choose its address by sending the header. Entries that are not addresses are ignored.
+[[nodiscard]] std::string resolve_remote(
+    std::string_view peer,
+    std::string_view forwarded_for,
+    const std::vector<std::string>& trusted
+);
 [[nodiscard]] std::string serialize_response(const http::Response& response);
 
 /// @brief A small HTTP/1.1 server over POSIX sockets: one thread per connection, `Connection:
@@ -114,6 +128,12 @@ public:
     /// directory every body stays in memory. Call before `start`.
     void set_spool(std::string directory, std::size_t threshold = 1U << 20U);
 
+    /// @brief Proxies (exact addresses) whose `X-Forwarded-For` is believed. Call before `start`.
+    void set_trusted_proxies(std::vector<std::string> addresses)
+    {
+        m_trusted_proxies = std::move(addresses);
+    }
+
     /// @brief Listens on `address:port` (port 0 picks a free one) and returns the port.
     Result<std::uint16_t> start(const std::string& address, std::uint16_t port);
 
@@ -122,10 +142,11 @@ public:
 
 private:
     void accept_loop();
-    void serve(int client, ssl_st* tls);
+    void serve(int client, ssl_st* tls, const std::string& peer);
 
     const Kernel* m_kernel{nullptr};
     std::size_t m_max_body{0};
+    std::vector<std::string> m_trusted_proxies{};
     std::string m_spool_directory{};
     std::size_t m_spool_threshold{1U << 20U};
     ssl_ctx_st* m_tls{nullptr};
