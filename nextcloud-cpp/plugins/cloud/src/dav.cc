@@ -306,17 +306,24 @@ namespace {
         }
         return [&hooks, user](const Node& node)
         {
+            std::vector<Prop> out;
             const std::int64_t id = hooks.file_id(user, node.get_path());
             if (id <= 0) {
-                return std::string{};
+                return out;
             }
-            std::string digits = std::to_string(id);
-            std::string out = "    <oc:fileid>" + digits + "</oc:fileid>\n";
-            out += "    <oc:id>" + std::string(digits.size() < 8 ? 8 - digits.size() : 0, '0') +
-                   digits + util::xml_escape(hooks.instance_id) + "</oc:id>\n";
-            out += std::string{"    <oc:favorite>"} +
-                   (hooks.is_favorite && hooks.is_favorite(user, node.get_path()) ? "1" : "0") +
-                   "</oc:favorite>\n";
+            const std::string digits = std::to_string(id);
+            out.push_back({"oc", "fileid", digits});
+            out.push_back(
+                {"oc",
+                 "id",
+                 std::string(digits.size() < 8 ? 8 - digits.size() : 0, '0') + digits +
+                     util::xml_escape(hooks.instance_id)}
+            );
+            out.push_back(
+                {"oc",
+                 "favorite",
+                 hooks.is_favorite && hooks.is_favorite(user, node.get_path()) ? "1" : "0"}
+            );
             return out;
         };
     }
@@ -438,6 +445,10 @@ namespace {
         if (depth == "infinity") {
             return Response::text(403, "Depth infinity is not supported");
         }
+        const auto wanted = parse_prop_request(request.get_body());
+        if (!wanted) {
+            return Response::text(400, "The body is not a propfind");
+        }
         auto node = storage.stat(path);
         if (!node) {
             return failure(node.error());
@@ -457,7 +468,8 @@ namespace {
                 target.get_base_href(),
                 target.get_user(),
                 storage,
-                extra_props(hooks, target.get_user())
+                extra_props(hooks, target.get_user()),
+                *wanted
             )
         );
     }
@@ -559,53 +571,182 @@ int http_status(const StorageError& error) noexcept
     return 500;
 }
 
+bool PropRequest::asked(std::string_view ns, std::string_view wanted_name) const
+{
+    return kind == Kind::LIST && std::any_of(
+                                     list.begin(),
+                                     list.end(),
+                                     [&](const Name& entry)
+                                     {
+                                         return entry.ns == ns && entry.name == wanted_name;
+                                     }
+                                 );
+}
+
+std::optional<PropRequest> parse_prop_request(std::string_view body)
+{
+    PropRequest out;
+    if (util::trim(body).empty()) {
+        return out; // no body: everything
+    }
+    const auto xml = util::Xml::parse(body);
+    if (!xml || xml->name() != "propfind") {
+        return std::nullopt;
+    }
+    if (xml->find("propname") != nullptr) {
+        out.kind = PropRequest::Kind::NAMES;
+        return out;
+    }
+    if (const util::Xml* prop = xml->find("prop")) {
+        out.kind = PropRequest::Kind::LIST;
+        for (const util::Xml& entry: prop->children()) {
+            if (out.list.size() >= 200) {
+                return std::nullopt; // nobody asks for that many
+            }
+            out.list.push_back({entry.ns(), entry.name()});
+        }
+        return out;
+    }
+    return out; // allprop, or neither: everything
+}
+
+std::string_view namespace_of(std::string_view prefix) noexcept
+{
+    return prefix == "d"    ? "DAV:"
+           : prefix == "oc" ? "http://owncloud.org/ns"
+                            : "http://nextcloud.org/ns";
+}
+
+namespace {
+
+    /// Previews exist for the kinds of picture the previews plugin reads.
+    bool has_preview(std::string_view name)
+    {
+        const std::string_view type = util::mime_type_for(name);
+        return type == "image/png" || type == "image/jpeg" || type == "image/gif" ||
+               type == "image/bmp" || type == "image/webp" || type == "image/svg+xml" ||
+               type == "image/tiff" || type == "image/heic" || type == "image/heif";
+    }
+
+} // namespace
+
 std::string multistatus(
     const std::vector<Node>& nodes,
     std::string_view base_href,
     std::string_view owner,
     const Storage& storage,
-    const ExtraProps& extra
+    const ExtraProps& extra,
+    const PropRequest& wanted
 )
 {
     std::string xml = "<?xml version=\"1.0\"?>\n"
                       "<d:multistatus xmlns:d=\"DAV:\" xmlns:oc=\"http://owncloud.org/ns\" "
                       "xmlns:nc=\"http://nextcloud.org/ns\">\n";
+    // What costs a walk of the whole tree is worked out once, and only when it was asked for.
+    std::optional<std::pair<std::uint64_t, std::int64_t>> quota; // used, available
+    const bool wants_quota =
+        wanted.asked("DAV:", "quota-used-bytes") || wanted.asked("DAV:", "quota-available-bytes");
+    if (wants_quota) {
+        const std::uint64_t used = storage.used_bytes();
+        const std::uint64_t limit = storage.get_quota();
+        // -3 is "unlimited" in the DAV quota properties.
+        quota = {
+            used,
+            limit == 0 ? -3 : static_cast<std::int64_t>(limit > used ? limit - used : 0)
+        };
+    }
     for (const Node& node: nodes) {
         std::string href = std::string{base_href} +
                            util::url_encode_path(node.get_path() == "/" ? "" : node.get_path());
         if (node.is_directory()) {
             href += "/";
         }
+        // Everything this node has, in the order clients have always seen.
+        std::vector<Prop> props;
+        props.push_back(
+            {"d",
+             "getlastmodified",
+             util::http_date(
+                 std::chrono::system_clock::from_time_t(static_cast<std::time_t>(node.get_mtime()))
+             )}
+        );
+        props.push_back({"d", "resourcetype", node.is_directory() ? "<d:collection/>" : ""});
+        if (!node.is_directory()) {
+            props.push_back({"d", "getcontentlength", std::to_string(node.get_size())});
+            props.push_back(
+                {"d", "getcontenttype", util::xml_escape(util::mime_type_for(node.name()))}
+            );
+        }
+        props.push_back({"d", "getetag", util::xml_escape(quote(node.get_etag()))});
         // A folder that arrives with a size (a mounted share) keeps it; any other is measured.
         const std::uint64_t size = node.is_directory() && node.get_size() == 0
                                        ? storage.size_of(node.get_path()).value_or(0)
                                        : node.get_size();
-        xml += " <d:response>\n  <d:href>" + util::xml_escape(href) +
-               "</d:href>\n  <d:propstat>\n   <d:prop>\n";
-        xml +=
-            "    <d:getlastmodified>" +
-            util::http_date(
-                std::chrono::system_clock::from_time_t(static_cast<std::time_t>(node.get_mtime()))
-            ) +
-            "</d:getlastmodified>\n";
-        xml += node.is_directory() ? "    <d:resourcetype><d:collection/></d:resourcetype>\n"
-                                   : "    <d:resourcetype/>\n";
-        if (!node.is_directory()) {
-            xml += "    <d:getcontentlength>" + std::to_string(node.get_size()) +
-                   "</d:getcontentlength>\n";
-            xml += "    <d:getcontenttype>" + util::xml_escape(util::mime_type_for(node.name())) +
-                   "</d:getcontenttype>\n";
-        }
-        xml += "    <d:getetag>" + util::xml_escape(quote(node.get_etag())) + "</d:getetag>\n";
-        xml += "    <oc:size>" + std::to_string(size) + "</oc:size>\n";
-        xml += std::string{"    <oc:permissions>"} + (node.is_directory() ? "RGDNVCK" : "RGDNVW") +
-               "</oc:permissions>\n";
-        xml += "    <oc:owner-id>" + util::xml_escape(owner) + "</oc:owner-id>\n";
+        props.push_back({"oc", "size", std::to_string(size)});
+        props.push_back({"oc", "permissions", node.is_directory() ? "RGDNVCK" : "RGDNVW"});
+        props.push_back({"oc", "owner-id", util::xml_escape(owner)});
         if (extra) {
-            xml += extra(node);
+            for (Prop& more: extra(node)) {
+                props.push_back(std::move(more));
+            }
         }
-        xml += "   </d:prop>\n   <d:status>HTTP/1.1 200 OK</d:status>\n  </d:propstat>\n "
-               "</d:response>\n";
+        // Only on request: they cost something, or only fit some of the nodes.
+        if (wanted.kind == PropRequest::Kind::LIST) {
+            props.push_back({"d", "displayname", util::xml_escape(node.name())});
+            props.push_back(
+                {"nc",
+                 "has-preview",
+                 !node.is_directory() && has_preview(node.name()) ? "true" : "false"}
+            );
+            props.push_back({"nc", "is-encrypted", "0"});
+            if (quota) {
+                props.push_back({"d", "quota-used-bytes", std::to_string(quota->first)});
+                props.push_back({"d", "quota-available-bytes", std::to_string(quota->second)});
+            }
+        }
+
+        std::string found;
+        std::string missing;
+        const auto emit = [&](const Prop& prop)
+        {
+            const std::string tag = prop.prefix + ":" + prop.name;
+            found += wanted.kind == PropRequest::Kind::NAMES || prop.value.empty()
+                         ? "    <" + tag + "/>\n"
+                         : "    <" + tag + ">" + prop.value + "</" + tag + ">\n";
+        };
+        if (wanted.kind == PropRequest::Kind::LIST) {
+            for (const PropRequest::Name& name: wanted.list) {
+                const auto have = std::find_if(
+                    props.begin(),
+                    props.end(),
+                    [&](const Prop& prop)
+                    {
+                        return prop.name == name.name && namespace_of(prop.prefix) == name.ns;
+                    }
+                );
+                if (have != props.end()) {
+                    emit(*have);
+                } else {
+                    missing += "    <x:" + util::xml_escape(name.name) + " xmlns:x=\"" +
+                               util::xml_escape(name.ns) + "\"/>\n";
+                }
+            }
+        } else {
+            for (const Prop& prop: props) {
+                emit(prop);
+            }
+        }
+        xml += " <d:response>\n  <d:href>" + util::xml_escape(href) + "</d:href>\n";
+        if (!found.empty() || missing.empty()) {
+            xml += "  <d:propstat>\n   <d:prop>\n" + found +
+                   "   </d:prop>\n   <d:status>HTTP/1.1 200 OK</d:status>\n  </d:propstat>\n";
+        }
+        if (!missing.empty()) {
+            xml +=
+                "  <d:propstat>\n   <d:prop>\n" + missing +
+                "   </d:prop>\n   <d:status>HTTP/1.1 404 Not Found</d:status>\n  </d:propstat>\n";
+        }
+        xml += " </d:response>\n";
     }
     return xml + "</d:multistatus>\n";
 }

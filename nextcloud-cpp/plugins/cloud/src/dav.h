@@ -134,16 +134,58 @@ private:
     bool default_zip = false
 );
 
-/// @brief More properties for a node, as XML lines to go inside `<d:prop>`.
-using ExtraProps = std::function<std::string(const Node& node)>;
+/// @brief One property of a node: `prefix` is `d` (DAV:), `oc` (owncloud.org/ns) or `nc`
+/// (nextcloud.org/ns), `value` the XML inside the element.
+struct Prop
+{
+    std::string prefix{};
+    std::string name{};
+    std::string value{};
+};
 
-/// @brief The `207 Multi-Status` XML for a PROPFIND answer.
+/// @brief More properties for a node (the ones only some files have, like the number).
+using ExtraProps = std::function<std::vector<Prop>(const Node& node)>;
+
+/// @brief What a PROPFIND asked for: everything (`allprop`, or no body), the names only
+/// (`propname`), or a list of properties; those a node does not have come back in a 404 part.
+struct PropRequest
+{
+    enum class Kind
+    {
+        ALL,
+        NAMES,
+        LIST
+    };
+
+    struct Name
+    {
+        std::string ns{};
+        std::string name{};
+    };
+
+    Kind kind{Kind::ALL};
+    std::vector<Name> list{};
+
+    /// @brief True when this property was asked for by name (a list), so that properties that
+    /// cost something are worked out only then.
+    [[nodiscard]] bool asked(std::string_view ns, std::string_view name) const;
+};
+
+/// @brief Reads the body of a PROPFIND; nullopt when it is not one.
+[[nodiscard]] std::optional<PropRequest> parse_prop_request(std::string_view body);
+
+/// @brief The namespace URI of a property prefix (`d`, `oc`, `nc`).
+[[nodiscard]] std::string_view namespace_of(std::string_view prefix) noexcept;
+
+/// @brief The `207 Multi-Status` XML for a PROPFIND answer. The quota properties
+/// (`quota-used-bytes`, `quota-available-bytes`) are worked out only when asked for by name.
 [[nodiscard]] std::string multistatus(
     const std::vector<Node>& nodes,
     std::string_view base_href,
     std::string_view owner,
     const Storage& storage,
-    const ExtraProps& extra = {}
+    const ExtraProps& extra = {},
+    const PropRequest& wanted = {}
 );
 
 /// @brief ETag, Last-Modified and the headers that make a browser download the file instead of

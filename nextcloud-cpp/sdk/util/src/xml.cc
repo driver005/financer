@@ -49,6 +49,7 @@ public:
             return false;
         }
         out.m_name = text_of(node->name);
+        out.m_ns = node->ns == nullptr ? std::string{} : text_of(node->ns->href);
         for (const xmlAttr* attribute = node->properties; attribute != nullptr;
              attribute = attribute->next) {
             xmlChar* value = xmlNodeListGetString(node->doc, attribute->children, 1);

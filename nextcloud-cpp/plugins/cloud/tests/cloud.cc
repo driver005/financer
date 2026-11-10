@@ -4166,6 +4166,129 @@ void test_file_ids_and_favorites()
     fs::remove_all(dir);
 }
 
+// ---- PROPFIND with a list of properties --------------------------------------------------------
+
+void test_propfind_requests()
+{
+    const std::string dir = temp_dir("propfind");
+    nc::Kernel kernel{nc::Config::parse(
+                          "data_dir = " + dir +
+                          "\n[users]\npbkdf2_iterations = 3\n[cloud]\nquota_bytes = 1000000\n"
+    )
+                          .value()};
+    kernel.get_logger().set_sink({});
+    NC_CHECK(kernel.add_plugin_library("plugins/users/libusers.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/cloud/libcloud.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/db/libdb.so").has_value());
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    ::setenv("OC_PASS", "alice password", 1);
+    NC_CHECK_EQ(kernel.run_command("user:add", {"alice"}, out), 0);
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string a = "/remote.php/dav/files/alice";
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/pic.png", std::string(1'234, 'x'), alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(kernel.handle(user_req("PUT", a + "/note.txt", "hello", alice)).get_status(), 201);
+    const auto propfind =
+        [&](const std::string& path, const std::string& body, const char* depth = "0")
+    {
+        Request request = user_req("PROPFIND", a + path, body, alice);
+        request.add_header("Depth", depth);
+        return kernel.handle(std::move(request));
+    };
+    const auto has = [](const Response& response, const std::string& text)
+    {
+        return response.get_body().find(text) != std::string::npos;
+    };
+    const std::string head =
+        R"(<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">)";
+
+    // No body, allprop: everything there always was.
+    for (const std::string& body: {std::string{}, head + "<d:allprop/></d:propfind>"}) {
+        const Response all = propfind("/note.txt", body);
+        NC_CHECK_EQ(all.get_status(), 207);
+        NC_CHECK(has(all, "<d:getetag>"));
+        NC_CHECK(has(all, "<oc:fileid>"));
+        NC_CHECK(has(all, "<d:getcontentlength>5</d:getcontentlength>"));
+        NC_CHECK(!has(all, "404 Not Found"));
+        NC_CHECK(!has(all, "quota-used-bytes")); // costs a walk: only on request
+    }
+    // A list: those and no others; what the node has not is in a 404 part, with its namespace.
+    const Response some = propfind(
+        "/note.txt",
+        head + "<d:prop><d:getetag/><oc:fileid/><oc:size/><oc:checksums/><nc:rich-workspace/>"
+               "</d:prop></d:propfind>"
+    );
+    NC_CHECK_EQ(some.get_status(), 207);
+    NC_CHECK(has(some, "<d:getetag>"));
+    NC_CHECK(has(some, "<oc:fileid>"));
+    NC_CHECK(has(some, "<oc:size>5</oc:size>"));
+    NC_CHECK(!has(some, "getlastmodified"));
+    NC_CHECK(!has(some, "getcontentlength"));
+    NC_CHECK(has(some, "HTTP/1.1 404 Not Found"));
+    NC_CHECK(has(some, "<x:checksums xmlns:x=\"http://owncloud.org/ns\"/>"));
+    NC_CHECK(has(some, "<x:rich-workspace xmlns:x=\"http://nextcloud.org/ns\"/>"));
+    // Only names: elements without content.
+    const Response names = propfind("/note.txt", head + "<d:propname/></d:propfind>");
+    NC_CHECK(has(names, "<d:getetag/>"));
+    NC_CHECK(has(names, "<oc:fileid/>"));
+    NC_CHECK(!has(names, "hello"));
+    NC_CHECK(!has(names, "<d:getcontentlength>5"));
+    // A property of another namespace with the same local name is not ours.
+    const Response wrong =
+        propfind("/note.txt", head + "<d:prop><nc:getetag/></d:prop></d:propfind>");
+    NC_CHECK(has(wrong, "404 Not Found"));
+    NC_CHECK(!has(wrong, "<d:getetag>"));
+    // On request only: quota (a limit of a million bytes here, 1239 used), name, preview, E2EE.
+    const Response asked = propfind(
+        "/",
+        head + "<d:prop><d:quota-used-bytes/><d:quota-available-bytes/><d:displayname/></d:prop></"
+               "d:propfind>"
+    );
+    NC_CHECK(has(asked, "<d:quota-used-bytes>1239</d:quota-used-bytes>"));
+    NC_CHECK(has(asked, "<d:quota-available-bytes>998761</d:quota-available-bytes>"));
+    const Response flags = propfind(
+        "/",
+        head + "<d:prop><nc:has-preview/><nc:is-encrypted/><d:displayname/></d:prop></d:propfind>",
+        "1"
+    );
+    NC_CHECK(has(flags, "<d:href>" + a + "/pic.png</d:href>"));
+    NC_CHECK(has(flags, "<nc:has-preview>true</nc:has-preview>"));
+    NC_CHECK(has(flags, "<nc:has-preview>false</nc:has-preview>"));
+    NC_CHECK(has(flags, "<d:displayname>pic.png</d:displayname>"));
+    NC_CHECK(has(flags, "<nc:is-encrypted>0</nc:is-encrypted>"));
+    // Odd bodies: not a propfind, not XML, too many properties, a DTD.
+    NC_CHECK_EQ(propfind("/note.txt", "<x/>").get_status(), 400);
+    NC_CHECK_EQ(propfind("/note.txt", "not xml").get_status(), 400);
+    {
+        std::string many = head + "<d:prop>";
+        for (int index = 0; index < 250; ++index) {
+            many += "<oc:p" + std::to_string(index) + "/>";
+        }
+        NC_CHECK_EQ(propfind("/note.txt", many + "</d:prop></d:propfind>").get_status(), 400);
+    }
+    NC_CHECK_EQ(
+        propfind(
+            "/note.txt",
+            "<!DOCTYPE d [<!ENTITY e SYSTEM \"file:///etc/passwd\">]><d:propfind "
+            "xmlns:d=\"DAV:\"><d:prop><d:getetag/></d:prop></d:propfind>"
+        )
+            .get_status(),
+        400
+    );
+    // A folder with children, listed with a list of properties.
+    NC_CHECK_EQ(kernel.handle(user_req("MKCOL", a + "/Dir", "", alice)).get_status(), 201);
+    const Response folder =
+        propfind("/", head + "<d:prop><d:resourcetype/><d:getetag/></d:prop></d:propfind>", "1");
+    NC_CHECK(has(folder, "<d:resourcetype><d:collection/></d:resourcetype>"));
+    NC_CHECK(has(folder, "<d:resourcetype/>"));
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 int main()
 {
     test_normalize();
@@ -4189,6 +4312,7 @@ int main()
     test_external_ftps();
     test_external_sftp();
     test_file_ids_and_favorites();
+    test_propfind_requests();
     test_folder_archives();
     test_external_storage();
     test_encryption();

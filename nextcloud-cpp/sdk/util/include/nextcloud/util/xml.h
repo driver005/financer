@@ -29,6 +29,12 @@ public:
         return m_name;
     }
 
+    /// @brief The namespace URI of the element, "" when it has none.
+    [[nodiscard]] const std::string& ns() const noexcept
+    {
+        return m_ns;
+    }
+
     /// @brief The text directly inside this element (not inside its children), trimmed.
     [[nodiscard]] const std::string& text() const noexcept
     {
@@ -63,6 +69,7 @@ private:
     friend class XmlBuilder;
 
     std::string m_name{};
+    std::string m_ns{};
     std::string m_text{};
     std::string m_raw{};
     std::vector<std::pair<std::string, std::string>> m_attributes{};
