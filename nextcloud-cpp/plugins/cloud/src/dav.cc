@@ -433,20 +433,48 @@ namespace {
             return Response::text(400, "Only filter-files reports are supported");
         }
         const util::Xml* rules = body->find("filter-rules");
-        if (rules == nullptr || rules->children().size() != 1 ||
-            rules->children().front().name() != "favorite" || !hooks.favorites || !hooks.file_id) {
-            return Response::text(400, "Only the favorite rule is supported");
+        if (rules == nullptr || rules->children().empty() || rules->children().size() > 20 ||
+            !hooks.file_id) {
+            return Response::text(400, "A filter needs rules");
         }
-        if (rules->children().front().text() != "1") {
-            return Response::text(400, "Only favorite=1 is supported");
+        // Every rule narrows the set (they are all to hold): the favorites, and the files that
+        // have each of the tags named.
+        std::optional<std::set<std::string>> matching;
+        const auto narrow = [&matching](const std::vector<std::string>& paths)
+        {
+            std::set<std::string> now{paths.begin(), paths.end()};
+            if (matching) {
+                std::erase_if(
+                    now,
+                    [&](const std::string& path)
+                    {
+                        return !matching->contains(path);
+                    }
+                );
+            }
+            matching = std::move(now);
+        };
+        for (const util::Xml& rule: rules->children()) {
+            if (rule.name() == "favorite" && hooks.favorites && rule.text() == "1") {
+                narrow(hooks.favorites(target.get_user()));
+            } else if (rule.name() == "systemtag" && hooks.paths_with_tag && !rule.text().empty() &&
+                       rule.text().size() <= 18 &&
+                       rule.text().find_first_not_of("0123456789") == std::string::npos) {
+                narrow(hooks.paths_with_tag(target.get_user(), rule.text()));
+            } else {
+                return Response::text(400, "Only the favorite and systemtag rules are supported");
+            }
+        }
+        if (!matching) {
+            return Response::text(400, "A filter needs rules");
         }
         std::vector<Node> nodes;
         const std::string below = path == "/" ? "/" : path + "/";
-        for (const std::string& favorite: hooks.favorites(target.get_user())) {
-            if (!util::starts_with(favorite, below) && favorite != path) {
+        for (const std::string& found: *matching) {
+            if (!util::starts_with(found, below) && found != path) {
                 continue;
             }
-            if (auto node = storage.stat(favorite)) {
+            if (auto node = storage.stat(found)) {
                 nodes.push_back(std::move(*node));
             }
         }

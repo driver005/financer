@@ -60,6 +60,7 @@ nc_cc_test(
         "//plugins/db:libdb.so",
         "//plugins/groups:libgroups.so",
         "//plugins/mail:libmail.so",
+        "//plugins/systemtags:libsystemtags.so",
         "//plugins/users:libusers.so",
     ],
     deps = [

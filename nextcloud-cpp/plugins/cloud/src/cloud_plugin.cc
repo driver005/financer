@@ -502,6 +502,20 @@ private:
             m_meta->removed(user, path);
         };
         hooks.instance_id = m_instance_id;
+        hooks.paths_with_tag = [this](const std::string& user, const std::string& tag)
+        {
+            std::vector<std::string> out;
+            const Response answer =
+                m_host->call_service("systemtags.paths_with", user + "\n" + tag);
+            if (answer.get_status() == 200) {
+                for (const std::string& line: nc::util::split(answer.get_body(), '\n')) {
+                    if (!line.empty()) {
+                        out.push_back(line);
+                    }
+                }
+            }
+            return out;
+        };
         hooks.share_types = [this](const std::string& user)
         {
             std::vector<std::pair<std::string, int>> out;
@@ -2760,6 +2774,7 @@ private:
         hooks.after_delete = nullptr;
         hooks.share_types = nullptr;
         hooks.display_name = nullptr;
+        hooks.paths_with_tag = nullptr;
         hooks.before_delete =
             [this, owner = share.get_owner(), prefix](const std::string&, const std::string& path)
         {

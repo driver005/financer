@@ -4012,6 +4012,7 @@ void test_file_ids_and_favorites()
     NC_CHECK(kernel.add_plugin_library("plugins/users/libusers.so").has_value());
     NC_CHECK(kernel.add_plugin_library("plugins/cloud/libcloud.so").has_value());
     NC_CHECK(kernel.add_plugin_library("plugins/db/libdb.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/systemtags/libsystemtags.so").has_value());
     NC_CHECK(kernel.start().has_value());
     std::string out;
     for (const char* name: {"alice", "bob"}) {
@@ -4151,15 +4152,73 @@ void test_file_ids_and_favorites()
     NC_CHECK(contains_text(refused, "403 Forbidden"));
     NC_CHECK_EQ(call("PROPPATCH", a + "/Papers/eins.txt", "not xml").get_status(), 400);
     NC_CHECK_EQ(call("REPORT", a + "/", R"(<x:other xmlns:x="urn:x"/>)").get_status(), 400);
-    NC_CHECK_EQ(
-        call(
+    const auto rule_report = [&](const std::string& rules,
+                                 const std::string& who = "alice:alice password",
+                                 const std::string& folder = "/")
+    {
+        return call(
             "REPORT",
-            a + "/",
-            R"(<oc:filter-files xmlns:oc="http://owncloud.org/ns"><oc:filter-rules><oc:systemtag>1</oc:systemtag></oc:filter-rules></oc:filter-files>)"
-        )
-            .get_status(),
-        400
+            (who == bob ? std::string{"/remote.php/dav/files/bob"} : a) + folder,
+            R"(<oc:filter-files xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop><oc:filter-rules>)" +
+                rules + "</oc:filter-rules></oc:filter-files>",
+            who
+        );
+    };
+    // Rules this server does not know are refused; a tag nobody used gives an empty answer.
+    NC_CHECK_EQ(rule_report("").get_status(), 400);
+    NC_CHECK_EQ(rule_report("<oc:size>1</oc:size>").get_status(), 400);
+    NC_CHECK_EQ(rule_report("<oc:systemtag>x</oc:systemtag>").get_status(), 400);
+    NC_CHECK_EQ(rule_report("<oc:systemtag>1</oc:systemtag>").get_status(), 207);
+    NC_CHECK(!contains_text(rule_report("<oc:systemtag>1</oc:systemtag>"), "eins.txt"));
+    // With system tags: the rule picks the tagged files; with the favorite rule, only those that
+    // are both (the rules add up).
+    const auto tag = [&](const std::string& owner, const std::string& name, const std::string& path)
+    {
+        return kernel.get_services().call(
+            "systemtags.assign",
+            "name=" + name + "&owner=" + owner + "&path=" + path
+        );
+    };
+    // The first use of a name makes the tag: red is 1, blue is 2.
+    NC_CHECK_EQ(tag("alice", "red", "/Papers/eins.txt").get_status(), 200);
+    NC_CHECK_EQ(tag("alice", "blue", "/Papers/copy.txt").get_status(), 200);
+    NC_CHECK_EQ(tag("alice", "red", "/Papers/Sub/deep.txt").get_status(), 200);
+    // Bob has a file at the same path, untagged: alice's tag must not reach it.
+    NC_CHECK_EQ(call("MKCOL", "/remote.php/dav/files/bob/Papers", {}, bob).get_status(), 201);
+    NC_CHECK_EQ(
+        call("PUT", "/remote.php/dav/files/bob/Papers/eins.txt", "b", bob).get_status(),
+        201
     );
+    const Response reds = rule_report("<oc:systemtag>1</oc:systemtag>");
+    NC_CHECK_EQ(reds.get_status(), 207);
+    NC_CHECK(contains_text(reds, a + "/Papers/eins.txt"));
+    NC_CHECK(!contains_text(reds, "copy.txt"));
+    const Response blues = rule_report("<oc:systemtag>2</oc:systemtag>");
+    NC_CHECK(contains_text(blues, "copy.txt"));
+    NC_CHECK(!contains_text(blues, "eins.txt"));
+    // eins.txt is not a favorite any more (unset above); mark it, and copy.txt too.
+    NC_CHECK_EQ(call("PROPPATCH", a + "/Papers/eins.txt", set).get_status(), 207);
+    NC_CHECK_EQ(call("PROPPATCH", a + "/Papers/copy.txt", set).get_status(), 207);
+    const Response both = rule_report("<oc:favorite>1</oc:favorite><oc:systemtag>1</oc:systemtag>");
+    NC_CHECK(contains_text(both, "eins.txt"));
+    NC_CHECK(!contains_text(both, "copy.txt"));
+    // Whatever the order of the rules.
+    const Response reversed =
+        rule_report("<oc:systemtag>1</oc:systemtag><oc:favorite>1</oc:favorite>");
+    NC_CHECK(contains_text(reversed, "eins.txt"));
+    NC_CHECK(!contains_text(reversed, "copy.txt"));
+    const Response blue_favorites =
+        rule_report("<oc:systemtag>2</oc:systemtag><oc:favorite>1</oc:favorite>");
+    NC_CHECK(contains_text(blue_favorites, "copy.txt"));
+    NC_CHECK(!contains_text(blue_favorites, "eins.txt"));
+    // Only below the folder asked about; only the asker's own tagged files.
+    NC_CHECK(
+        !contains_text(rule_report("<oc:systemtag>1</oc:systemtag>", alice, "/Docs"), "eins.txt")
+    );
+    NC_CHECK(
+        contains_text(rule_report("<oc:systemtag>1</oc:systemtag>", alice, "/Papers"), "eins.txt")
+    );
+    NC_CHECK(!contains_text(rule_report("<oc:systemtag>1</oc:systemtag>", bob), "eins.txt"));
     // Others cannot reach these.
     NC_CHECK_EQ(call("PROPPATCH", a + "/Papers/eins.txt", set, bob).get_status() >= 400 ? 1 : 0, 1);
     kernel.stop();

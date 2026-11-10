@@ -114,6 +114,28 @@ public:
             }
         );
 
+        // "owner\ntag id": the owner's paths that have the tag, one per line.
+        host.add_service(
+            "systemtags.paths_with",
+            [this](std::string_view args)
+            {
+                const std::size_t newline = args.find('\n');
+                if (newline == std::string_view::npos) {
+                    return Response::text(400, "owner and tag are required");
+                }
+                std::string out;
+                for (const nc::db::Row& row: nc::db::Client{m_host}.query(
+                         "SELECT path FROM nc_tag_objects WHERE tag_id = ? AND owner = ? ORDER BY "
+                         "path",
+                         {std::string{args.substr(newline + 1)},
+                          std::string{args.substr(0, newline)}}
+                     )) {
+                    out += nc::db::value_of(row, "path") + "\n";
+                }
+                return Response::text(200, out);
+            }
+        );
+
         constexpr std::string_view BASE = "/ocs/v2.php/apps/systemtags/api/v1";
         m_app->route(
             "GET",

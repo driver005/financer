@@ -42,6 +42,10 @@ struct Hooks
     std::string instance_id{};
     /// The user's own shares as (path, share type) pairs, for `oc:share-types`; unset: none shown.
     std::function<std::vector<std::pair<std::string, int>>(const std::string& user)> share_types{};
+    /// The user's own paths that have a system tag (by its number), for the `oc:systemtag` rule of
+    /// a `filter-files` report; unset: the rule is refused.
+    std::function<std::vector<std::string>(const std::string& user, const std::string& tag)>
+        paths_with_tag{};
     /// The name to show for a user, for `oc:owner-display-name`.
     std::function<std::string(const std::string& user)> display_name{};
 };
