@@ -61,6 +61,12 @@ int main()
     // A failed sign-in is logged with the name, never with the password.
     NC_CHECK_EQ(call("GET", files + "/", {}, "alice:guess-123456").get_status(), 401);
     NC_CHECK_EQ(call("GET", files + "/", {}, "mallory:hunter2-hunter2").get_status(), 401);
+    // An access token nobody knows: logged without the token.
+    {
+        Request token{"GET", files + "/"};
+        token.add_header("Authorization", "Bearer not-a-token-123456");
+        NC_CHECK_EQ(kernel.handle(std::move(token)).get_status(), 401);
+    }
     // Files.
     NC_CHECK_EQ(call("PUT", files + "/a.txt", "one").get_status(), 201);
     NC_CHECK_EQ(call("PUT", files + "/a.txt", "two").get_status(), 204);
@@ -95,6 +101,8 @@ int main()
     };
     NC_CHECK(has("Login failed: \\\"alice\\\" (password)"));
     NC_CHECK(has("Login failed: \\\"mallory\\\" (password)"));
+    NC_CHECK(has("Login failed: \\\"(access token)\\\" (token)"));
+    NC_CHECK(text.find("not-a-token") == std::string::npos);
     NC_CHECK(has("Account created: \\\"alice\\\""));
     NC_CHECK(has("Group created: \\\"staff\\\""));
     NC_CHECK(has("File created: \\\"/a.txt\\\""));

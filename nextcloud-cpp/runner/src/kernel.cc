@@ -488,6 +488,10 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
             }
         }
         rejected = true;
+        m_events.publish(
+            "auth.failed",
+            util::form_encode({{"user", "(access token)"}, {"reason", "token"}})
+        );
         return {};
     }
     if (header.size() < 6 || !util::equals_ignore_case(header.substr(0, 6), "Basic ")) {
