@@ -36,13 +36,15 @@ public:
 
     /// @brief Connects, checks the host key against `host_key_sha256` (base64 as `ssh-keygen -lf`
     /// prints it, without the "SHA256:" prefix, padding optional) and signs in with a
-    /// password.
+    /// password, or with a private key when `private_key_file` is given (`password` is then the
+    /// key's passphrase, which may be empty).
     [[nodiscard]] static Result<Session> open(
         const std::string& host,
         const std::string& port,
         const std::string& user,
         const std::string& password,
         const std::string& host_key_sha256,
+        const std::string& private_key_file,
         const Settings& settings
     );
 

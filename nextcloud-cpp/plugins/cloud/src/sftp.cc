@@ -3,9 +3,14 @@
 #include "http_client.h"
 #include "nextcloud/util/crypto.h"
 #include "nextcloud/util/text.h"
+#include "ssh_key.h"
 
 #include <algorithm>
 #include <arpa/inet.h>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <iterator>
 #include <libssh2.h>
 #include <libssh2_sftp.h>
 #include <mutex>
@@ -33,6 +38,33 @@ namespace {
                 libssh2_init(0);
             }
         );
+    }
+
+    /// libssh2 asks for the signature; the key signs with BoringSSL. The result is allocated the
+    /// way libssh2 frees it (`libssh2_session_init` without allocators: malloc and free).
+    int sign_with_key(
+        LIBSSH2_SESSION* /*session*/,
+        unsigned char** signature,
+        std::size_t* length,
+        const unsigned char* data,
+        std::size_t data_length,
+        void** abstract
+    )
+    {
+        const auto& key = *static_cast<const SshKey*>(*abstract);
+        const auto signed_data =
+            key.sign(std::string_view{reinterpret_cast<const char*>(data), data_length});
+        if (!signed_data) {
+            return -1;
+        }
+        auto* copy = static_cast<unsigned char*>(std::malloc(signed_data->size()));
+        if (copy == nullptr) {
+            return -1;
+        }
+        std::memcpy(copy, signed_data->data(), signed_data->size());
+        *signature = copy;
+        *length = signed_data->size();
+        return 0;
     }
 
     /// A path that cannot confuse the server.
@@ -174,11 +206,13 @@ Result<Session> Session::open(
     const std::string& user,
     const std::string& password,
     const std::string& host_key_sha256,
+    const std::string& private_key_file,
     const Settings& settings
 )
 {
     initialise_library();
-    if (!clean(user) || password.find('\0') != std::string::npos || host_key_sha256.empty()) {
+    if (!clean(user) || password.find('\0') != std::string::npos || host_key_sha256.empty() ||
+        private_key_file.find('\0') != std::string::npos) {
         return failure("the account or the host key is missing");
     }
     Session session;
@@ -207,7 +241,29 @@ Result<Session> Session::open(
     if (seen != strip_padding(host_key_sha256)) {
         return failure("the host key of " + host + " is not the pinned one (SHA256:" + seen + ")");
     }
-    if (libssh2_userauth_password(ssh, user.c_str(), password.c_str()) != 0) {
+    // Only after the host key matched: neither the password nor a signature goes to a stranger.
+    int signed_in = 0;
+    if (private_key_file.empty()) {
+        signed_in = libssh2_userauth_password(ssh, user.c_str(), password.c_str());
+    } else {
+        std::ifstream file{private_key_file, std::ios::binary};
+        const std::string text{std::istreambuf_iterator<char>{file}, {}};
+        auto key = SshKey::parse(text, password);
+        if (!key) {
+            return failure(key.error());
+        }
+        const std::string blob = key->public_blob();
+        void* abstract = &*key;
+        signed_in = libssh2_userauth_publickey(
+            ssh,
+            user.c_str(),
+            reinterpret_cast<const unsigned char*>(blob.data()),
+            blob.size(),
+            &sign_with_key,
+            &abstract
+        );
+    }
+    if (signed_in != 0) {
         return failure(describe(session.m_session, "the account was refused"));
     }
     session.m_sftp = libssh2_sftp_init(ssh);

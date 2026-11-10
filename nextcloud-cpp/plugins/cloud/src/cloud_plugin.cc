@@ -1582,10 +1582,18 @@ private:
                     server.base = *normalized == "/" ? std::string{} : *normalized;
                 }
             }
-            if (equals == std::string::npos || parts.size() < 3 || !good || password.empty() ||
-                name.empty() || name.find('/') != std::string::npos ||
-                !Storage::normalize("/" + name) || name == "." || name == ".." ||
-                nc::util::trim(parts[1]).empty() ||
+            const bool has_key = std::any_of(
+                parts.begin() + std::min<std::size_t>(3, parts.size()),
+                parts.end(),
+                [](const std::string& option)
+                {
+                    return nc::util::starts_with(nc::util::trim(option), "key=");
+                }
+            );
+            if (equals == std::string::npos || parts.size() < 3 || !good ||
+                (password.empty() && !has_key) || name.empty() ||
+                name.find('/') != std::string::npos || !Storage::normalize("/" + name) ||
+                name == "." || name == ".." || nc::util::trim(parts[1]).empty() ||
                 password.find_first_of("\r\n") != std::string::npos) {
                 m_host->log(nc::LogLevel::WARNING, "ignoring external FTP storage: " + name);
                 continue;
@@ -1602,9 +1610,18 @@ private:
                     if (server.host_key.rfind("SHA256:", 0) == 0) {
                         server.host_key.erase(0, 7);
                     }
+                } else if (nc::util::starts_with(option, "key=")) {
+                    server.private_key = std::string{option.substr(4)};
                 } else if (option != "ro") {
                     server.group = std::string{option};
                 }
+            }
+            if (!server.private_key.empty() && !server.secure_shell) {
+                m_host->log(
+                    nc::LogLevel::WARNING,
+                    "ignoring external storage: key= is for sftp:// only: " + name
+                );
+                continue;
             }
             if (server.secure_shell && server.host_key.empty()) {
                 m_host->log(
@@ -1634,6 +1651,7 @@ private:
                 server.user,
                 server.password,
                 server.host_key,
+                server.private_key,
                 settings
             );
             if (!opened) {
@@ -3524,9 +3542,10 @@ private:
         std::string password{};
         bool writable{false};
         std::string group{};
-        bool secure_shell{false}; // sftp:// instead of ftp://
-        bool tls{false};          // ftps://: FTP over explicit TLS
-        std::string host_key{};   // SHA-256 of the server's host key (base64), required for sftp
+        bool secure_shell{false};  // sftp:// instead of ftp://
+        bool tls{false};           // ftps://: FTP over explicit TLS
+        std::string private_key{}; // sftp: file with the private key (password is its passphrase)
+        std::string host_key{};    // SHA-256 of the server's host key (base64), required for sftp
     };
 
     struct External

@@ -6,6 +6,7 @@
 #include "nextcloud/util/crypto.h"
 #include "s3.h"
 #include "share_store.h"
+#include "ssh_key.h"
 #include "storage.h"
 
 #include <algorithm>
@@ -3504,6 +3505,30 @@ void test_external_sftp()
     {
         std::ofstream secret{dir + "/sftp.secret"};
         secret << "sftp-secret\n";
+        std::ofstream phrase{dir + "/phrase.secret"};
+        phrase << "correct horse\n";
+        std::ofstream nothing{dir + "/empty.secret"};
+    }
+    // Keys the account signs in with: one of each kind, one with a passphrase, one the server does
+    // not know.
+    NC_CHECK_EQ(run("ssh-keygen -q -t rsa -b 2048 -m PEM -N '' -f " + dir + "/id_rsa"), 0);
+    NC_CHECK_EQ(run("ssh-keygen -q -t ecdsa -b 256 -m PEM -N '' -f " + dir + "/id_ecdsa"), 0);
+    NC_CHECK_EQ(run("ssh-keygen -q -t ed25519 -N '' -f " + dir + "/id_ed25519"), 0);
+    NC_CHECK_EQ(
+        run("ssh-keygen -q -t ecdsa -b 256 -m PEM -N 'correct horse' -f " + dir + "/id_phrase"),
+        0
+    );
+    NC_CHECK_EQ(run("ssh-keygen -q -t rsa -b 2048 -m PEM -N '' -f " + dir + "/id_stranger"), 0);
+    NC_CHECK_EQ(run("ssh-keygen -q -t ed25519 -m PKCS8 -N '' -f " + dir + "/id_pkcs8"), 0);
+    NC_CHECK_EQ(run("ssh-keygen -q -t ed25519 -N 'secret words' -f " + dir + "/id_locked"), 0);
+    NC_CHECK_EQ(run("ssh-keygen -q -t ecdsa -b 384 -m PEM -N '' -f " + dir + "/id_p384"), 0);
+    NC_CHECK_EQ(run("ssh-keygen -q -t ecdsa -b 521 -m PEM -N '' -f " + dir + "/id_p521"), 0);
+    {
+        std::ofstream authorized{dir + "/authorized_keys"};
+        for (const char* key:
+             {"id_rsa", "id_ecdsa", "id_ed25519", "id_phrase", "id_pkcs8", "id_p384", "id_p521"}) {
+            authorized << slurp(dir + "/" + key + ".pub");
+        }
     }
     NC_CHECK_EQ(run(privileged + "/usr/sbin/useradd -M -s /bin/sh " + account), 0);
     NC_CHECK_EQ(
@@ -3527,7 +3552,10 @@ void test_external_sftp()
         std::ofstream config{dir + "/sshd_config"};
         config << "Port " << port << "\nListenAddress 127.0.0.1\nHostKey " << dir
                << "/host\nPidFile " << dir
-               << "/sshd.pid\nUsePAM no\nPasswordAuthentication yes\nPubkeyAuthentication no\n"
+               << "/sshd.pid\nUsePAM no\nPasswordAuthentication yes\nPubkeyAuthentication "
+                  "yes\nAuthorizedKeysFile "
+               << dir
+               << "/authorized_keys\n"
                   "StrictModes no\nSubsystem sftp internal-sftp\n";
     }
     ::chmod((dir + "/host").c_str(), 0600);
@@ -3537,6 +3565,12 @@ void test_external_sftp()
         std::this_thread::sleep_for(std::chrono::milliseconds{100});
     }
     const std::string where = "sftp://127.0.0.1:" + std::to_string(port) + served;
+    const auto keyed =
+        [&](const std::string& name, const std::string& key, const std::string& phrase)
+    {
+        return ";" + name + "=" + where + "/pub|" + account + "|" + dir + "/" + phrase +
+               "|rw|hostkey=" + fingerprint + "|key=" + dir + "/" + key;
+    };
     nc::Kernel kernel{
         nc::Config::parse(
             "data_dir = " + dir +
@@ -3545,7 +3579,16 @@ void test_external_sftp()
             "/pub|" + account + "|" + dir + "/sftp.secret|ro|hostkey=" + fingerprint +
             ";Forged=" + where + "/pub|" + account + "|" + dir +
             "/sftp.secret|rw|hostkey=" + other_fingerprint + ";NoKey=" + where + "/pub|" + account +
-            "|" + dir + "/sftp.secret|rw\nexternal_ftp_allow_local = true\n"
+            "|" + dir + "/sftp.secret|rw" + keyed("KeyRsa", "id_rsa", "empty.secret") +
+            keyed("KeyEcdsa", "id_ecdsa", "empty.secret") +
+            keyed("KeyEd25519", "id_ed25519", "empty.secret") +
+            keyed("KeyPhrase", "id_phrase", "phrase.secret") +
+            keyed("KeyWrongPhrase", "id_phrase", "sftp.secret") +
+            keyed("KeyStranger", "id_stranger", "empty.secret") +
+            keyed("KeyPkcs8", "id_pkcs8", "empty.secret") +
+            keyed("KeyP384", "id_p384", "empty.secret") +
+            keyed("KeyP521", "id_p521", "empty.secret") +
+            keyed("KeyLocked", "id_locked", "empty.secret") + "\nexternal_ftp_allow_local = true\n"
         )
             .value()
     };
@@ -3608,6 +3651,55 @@ void test_external_sftp()
         403
     );
     NC_CHECK_EQ(kernel.handle(user_req("GET", a + "/Forged/a.txt", "", alice)).get_status(), 502);
+
+    // Signing in with a key. The key's own password is the passphrase file.
+    for (const char* name:
+         {"KeyRsa", "KeyEcdsa", "KeyEd25519", "KeyPhrase", "KeyPkcs8", "KeyP384", "KeyP521"}) {
+        const Response listed =
+            kernel.handle(with_depth(user_req("PROPFIND", a + "/" + name, "", alice), "1"));
+        NC_CHECK_EQ(listed.get_status(), 207);
+        NC_CHECK(has(listed, a + "/" + name + "/a.txt"));
+    }
+    NC_CHECK_EQ(
+        kernel.handle(user_req("PUT", a + "/KeyRsa/by-key.txt", "key", alice)).get_status(),
+        201
+    );
+    NC_CHECK_EQ(slurp(served + "/pub/by-key.txt"), "key");
+    // An OpenSSH-format key with a passphrase is not read (and says how to convert it).
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/KeyLocked/a.txt", "", alice)).get_status(),
+        502
+    );
+    NC_CHECK(
+        has(kernel.handle(user_req("GET", a + "/KeyLocked/a.txt", "", alice)),
+            "ssh-keygen -p -m PKCS8")
+    );
+    // The public part derived from each private key is what ssh-keygen wrote.
+    for (const char* key:
+         {"id_rsa", "id_ecdsa", "id_ed25519", "id_phrase", "id_pkcs8", "id_p384", "id_p521"}) {
+        const std::string pub = slurp(dir + "/" + key + ".pub");
+        const std::size_t first = pub.find(' ');
+        const std::string expected = pub.substr(first + 1, pub.find(' ', first + 1) - first - 1);
+        const auto parsed = nc::cloud::SshKey::parse(
+            slurp(dir + "/" + key),
+            std::string{key} == "id_phrase" ? "correct horse" : ""
+        );
+        NC_CHECK(parsed.has_value());
+        if (parsed) {
+            NC_CHECK_EQ(nc::util::base64_encode(parsed->public_blob()), expected);
+        }
+    }
+    NC_CHECK(!nc::cloud::SshKey::parse(slurp(dir + "/id_phrase"), "wrong").has_value());
+    NC_CHECK(!nc::cloud::SshKey::parse("not a key", "").has_value());
+    // A key the server does not know, and a wrong passphrase, are refused.
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/KeyStranger/a.txt", "", alice)).get_status(),
+        502
+    );
+    NC_CHECK_EQ(
+        kernel.handle(user_req("GET", a + "/KeyWrongPhrase/a.txt", "", alice)).get_status(),
+        502
+    );
 
     kernel.stop();
     const std::string pid = slurp(dir + "/sshd.pid");

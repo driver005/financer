@@ -11,6 +11,7 @@ nc_cc_library(
         "src/ftp.cc",
         "src/s3.cc",
         "src/sftp.cc",
+        "src/ssh_key.cc",
         "src/share_store.cc",
         "src/storage.cc",
     ],
@@ -21,6 +22,7 @@ nc_cc_library(
         "src/remote_files.h",
         "src/s3.h",
         "src/sftp.h",
+        "src/ssh_key.h",
         "src/share.h",
         "src/share_store.h",
         "src/storage.h",
@@ -30,6 +32,7 @@ nc_cc_library(
         "//plugins/federation:lib",
         "//sdk/plugin:http",
         "//sdk/util",
+        "@boringssl//:crypto",
         "@libssh2",
     ],
 )

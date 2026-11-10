@@ -52,7 +52,6 @@ style (`CODESTYLE.md`).
 - [ ] Still not ported, with the reason (details in `docs/porting-map.md`):
     * SMB external storage: `libsmb2` is not in the registry and is LGPL, so linking it is a licensing
       decision for the owner, not a build detail.
-    * SFTP sign-in with a key: libssh2's mbedTLS backend does not read the key formats reliably.
     * Per-user encryption keys derived from passwords and a recovery key: needs a design for sign-in
       with app passwords (no password at hand) and for sharing between users.
     * Federation: re-share chains across servers, and Nextcloud's trusted-server hand-shake with the

@@ -25,7 +25,7 @@ have to be vendored by hand (see `third_party/`).
 | `ext-zlib` | `zlib` (BCR) where needed | |
 | `ext-posix`, `ext-session`, `ext-apcu` | libc, own session/cache | |
 | `icewind/smb` (SMB storage) | — | `libsmb2` is not in BCR |
-| SFTP (`phpseclib`) | `libssh2` (BCR) with the mbedTLS backend | done |
+| SFTP (`phpseclib`) | `libssh2` (BCR) with the mbedTLS backend; sign-in with a key is signed by BoringSSL (`ssh_key.cc`) because the mbedTLS backend reads RSA keys only | done |
 
 ## Looked at and kept hand-written
 
