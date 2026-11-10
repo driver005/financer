@@ -11,6 +11,7 @@
 #include "transport.h"
 
 #include <cstdlib>
+#include <fstream>
 #include <memory>
 
 namespace {
@@ -74,11 +75,39 @@ public:
                 host.config("sendmail_path", "/usr/sbin/sendmail")
             );
         } else if (mode == "smtp") {
-            m_transport = std::make_unique<nc::mail::SmtpTransport>(
-                host.config("smtp_host", "127.0.0.1"),
-                host.config("smtp_port", "25"),
-                host.config("smtp_helo", "localhost")
+            nc::mail::SmtpSettings settings;
+            settings.host = host.config("smtp_host", "127.0.0.1");
+            const std::string security = host.config("smtp_security", "none");
+            if (security == "starttls") {
+                settings.security = nc::mail::SmtpSecurity::STARTTLS;
+            } else if (security == "tls") {
+                settings.security = nc::mail::SmtpSecurity::TLS;
+            } else if (security != "none") {
+                throw std::runtime_error(
+                    "unknown smtp_security \"" + security + "\" (none, starttls or tls)"
+                );
+            }
+            settings.port = host.config(
+                "smtp_port",
+                settings.security == nc::mail::SmtpSecurity::TLS        ? "465"
+                : settings.security == nc::mail::SmtpSecurity::STARTTLS ? "587"
+                                                                        : "25"
             );
+            settings.helo_name = host.config("smtp_helo", "localhost");
+            settings.username = host.config("smtp_user", "");
+            settings.ca_file = host.config("smtp_ca_file", "");
+            // The password is kept in a file of its own, not in the configuration.
+            if (const std::string file = host.config("smtp_password_file", ""); !file.empty()) {
+                std::ifstream stream{file};
+                std::getline(stream, settings.password);
+                if (!stream && settings.password.empty()) {
+                    throw std::runtime_error("cannot read smtp_password_file " + file);
+                }
+            }
+            if (settings.username.empty() != settings.password.empty()) {
+                throw std::runtime_error("smtp_user and smtp_password_file go together");
+            }
+            m_transport = std::make_unique<nc::mail::SmtpTransport>(std::move(settings));
         } else if (mode == "null") {
             m_transport = std::make_unique<nc::mail::NullTransport>();
         } else {

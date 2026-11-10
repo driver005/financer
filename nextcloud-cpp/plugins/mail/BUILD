@@ -15,7 +15,10 @@ nc_cc_library(
         "src/transport.h",
     ],
     includes = ["src"],
-    deps = ["//sdk/util"],
+    deps = [
+        "//sdk/util",
+        "@boringssl//:ssl",
+    ],
 )
 
 nc_plugin(
@@ -35,5 +38,6 @@ nc_cc_test(
         ":lib",
         "//runner:kernel",
         "//sdk/testing",
+        "@boringssl//:ssl",
     ],
 )

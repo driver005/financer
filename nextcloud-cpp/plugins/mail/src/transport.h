@@ -137,15 +137,46 @@ private:
     std::string m_program{};
 };
 
-/// @brief Plain SMTP to a relay (RFC 5321): EHLO, MAIL, RCPT, DATA. No TLS and no authentication,
-/// so use it towards a relay on localhost or a trusted network, or use sendmail.
+/// @brief How the connection to the relay is protected.
+enum class SmtpSecurity
+{
+    NONE,     ///< plain text (a relay on localhost or a trusted network)
+    STARTTLS, ///< plain first, then TLS (RFC 3207, port 587); a relay that does not offer it is
+              ///< refused
+    TLS       ///< TLS from the first byte (RFC 8314, port 465)
+};
+
+/// @brief Everything an SMTP relay connection needs.
+struct SmtpSettings
+{
+    std::string host{};
+    std::string port{"25"};
+    std::string helo_name{"localhost"};
+    SmtpSecurity security{SmtpSecurity::NONE};
+    std::string username{}; ///< empty: no authentication
+    std::string password{};
+    std::string ca_file{}; ///< trusted certificates (PEM); empty: the system's
+};
+
+/// @brief SMTP to a relay (RFC 5321): EHLO, MAIL, RCPT, DATA, with TLS (implicit or STARTTLS; the
+/// certificate and the host name are checked) and AUTH PLAIN or LOGIN (RFC 4954). A password is
+/// only sent over TLS, or to a relay on this machine; a relay that cannot be reached safely is
+/// refused, not used in the clear.
 class SmtpTransport final : public Transport
 {
 public:
-    SmtpTransport(std::string&& host, std::string&& port, std::string&& helo_name) noexcept :
-        m_host{std::move(host)},
-        m_port{std::move(port)},
-        m_helo_name{std::move(helo_name)}
+    explicit SmtpTransport(SmtpSettings&& settings) noexcept :
+        m_settings{std::move(settings)}
+    {
+    }
+
+    /// @brief A relay without TLS and authentication.
+    SmtpTransport(std::string&& host, std::string&& port, std::string&& helo_name) :
+        m_settings{
+            .host = std::move(host),
+            .port = std::move(port),
+            .helo_name = std::move(helo_name)
+        }
     {
     }
 
@@ -158,9 +189,7 @@ public:
     }
 
 private:
-    std::string m_host{};
-    std::string m_port{"25"};
-    std::string m_helo_name{"localhost"};
+    SmtpSettings m_settings{};
 };
 
 } // namespace nc::mail
