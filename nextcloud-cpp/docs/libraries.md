@@ -27,6 +27,17 @@ have to be vendored by hand (see `third_party/`).
 | `icewind/smb` (SMB storage) | — | `libsmb2` is not in BCR |
 | SFTP (`phpseclib`) | `libssh2` (BCR) with the mbedTLS backend | done |
 
+## Looked at and kept hand-written
+
+| Code | Library considered | Why it stays |
+|---|---|---|
+| `plugins/federation/src/http_client.cc` (HTTP/1.1 client), `plugins/cloud/src/ftp.cc` (FTP/FTPS), the SMTP part of `plugins/mail/src/transport.cc` | `curl` (BCR 8.22: HTTP, FTP, SMTP in one) | The BCR module depends on `mbedtls`, `nghttp2`, `openssl` 4 and a newer `boringssl` than the one this tree builds with, so the resolver would move BoringSSL for everything. The three clients are where the security rules live and are tested (no local addresses after name resolution, no redirects, certificate and host name checked, bodies streamed through the plugin interface, a password only over TLS); with curl each of those becomes a callback or an option to get right again. Worth doing only if curl is wanted for HTTP/2 or proxies |
+| `runner/src/http_server.cc` (HTTP/1.1 server) | `civetweb`, `libmicrohttpd`, `boost.beast` | Streamed bodies in both directions, uploads spooled to a file, TLS on the same socket and the kernel's one-call-per-request model are what the server is for; none of the libraries gives that without the same amount of glue |
+| `plugins/ldap/src/ber.cc`, `ldap_client.cc` | `openldap` | not in the registry |
+| `plugins/mail/src/mime.cc` | `vmime`, `mimetic` | not in the registry |
+| `plugins/cloud/src/ftp.cc` for SFTP-like needs | `libssh2` | already used for SFTP; FTP is another protocol |
+| SMB storage | `libsmb2` | not in the registry, and it is LGPL: linking it statically is a licensing decision for the project, not a build detail |
+
 ## To use (in BCR)
 
 | Nextcloud uses | C++ library (BCR) | For |
