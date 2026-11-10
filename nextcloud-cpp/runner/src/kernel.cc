@@ -498,6 +498,16 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
         rejected = true;
         return {};
     }
+    // Who tried (the login name only, never the password), for plugins that watch sign-ins.
+    const auto failed = [&](std::string_view reason)
+    {
+        m_events.publish(
+            "auth.failed",
+            util::form_encode(
+                {{"user", decoded->substr(0, decoded->find(':'))}, {"reason", std::string{reason}}}
+            )
+        );
+    };
     // 1. An app password (token) stands for the whole sign-in: it is what clients keep, and it is
     // not
     //    asked for a second factor.
@@ -520,6 +530,7 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
     }
     if (user.empty()) {
         rejected = true;
+        failed("password");
         return {};
     }
     // 3. The second factor, when a plugin offers one and the account uses it. The code comes in a
@@ -532,6 +543,7 @@ Kernel::authenticate(const http::Request& request, bool& rejected, bool& second_
         if (factor.get_status() != 200) {
             rejected = true;
             second_factor = true;
+            failed("second factor");
             return {};
         }
     }

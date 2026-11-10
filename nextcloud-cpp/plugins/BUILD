@@ -2,6 +2,7 @@ test_suite(
     name = "all_tests",
     tests = [
         "//plugins/activity:activity_test",
+        "//plugins/admin_audit:admin_audit_test",
         "//plugins/calendar:calendar_test",
         "//plugins/cloud:cloud_test",
         "//plugins/comments:comments_test",
