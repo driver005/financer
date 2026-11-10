@@ -6,6 +6,7 @@
  * `apps/files_sharing`.
  */
 #include "dav.h"
+#include "dav_locks.h"
 #include "file_meta.h"
 #include "ftp.h"
 #include "http_client.h"
@@ -335,6 +336,8 @@ public:
         add_storage_services(host);
         m_meta = std::make_unique<nc::cloud::FileMeta>(&host);
         m_meta->migrate();
+        m_locks = std::make_unique<nc::cloud::DavLocks>(&host);
+        m_locks->migrate();
         m_instance_id = host.config("instance_id", "");
         if (m_instance_id.empty()) {
             m_instance_id = "oc" + nc::util::to_hex(nc::util::sha256(m_data_dir)).substr(0, 10);
@@ -402,6 +405,7 @@ public:
                 const std::string deleted =
                     nc::util::form_value(nc::util::parse_form(payload), "id");
                 m_meta->forget(deleted);
+                m_locks->forget(deleted);
                 const std::size_t removed = m_shares->remove_user(deleted);
                 m_host->log(
                     nc::LogLevel::INFO,
@@ -496,10 +500,31 @@ private:
             [this](const std::string& user, const std::string& from, const std::string& to)
         {
             m_meta->moved(user, from, to);
+            // A lock stays where the file was.
+            m_locks->removed(user, from);
         };
         hooks.after_delete = [this](const std::string& user, const std::string& path)
         {
             m_meta->removed(user, path);
+            m_locks->removed(user, path);
+        };
+        hooks.locks = [this](const std::string& user)
+        {
+            return m_locks->of(user, static_cast<std::int64_t>(std::time(nullptr)));
+        };
+        hooks.add_lock = [this](const std::string& user, const nc::cloud::DavLock& lock)
+        {
+            m_locks->add(user, lock);
+        };
+        hooks.refresh_lock =
+            [this](const std::string& user, const std::string& token, std::int64_t expires)
+        {
+            return m_locks
+                ->refresh(user, token, expires, static_cast<std::int64_t>(std::time(nullptr)));
+        };
+        hooks.remove_lock = [this](const std::string& user, const std::string& token)
+        {
+            return m_locks->remove(user, token);
         };
         hooks.set_checksum = [this](
                                  const std::string& user,
@@ -1060,8 +1085,30 @@ private:
 
     void add_dav_routes(nc::Host& host)
     {
-        static constexpr std::string_view METHODS[] =
-            {"GET", "PUT", "DELETE", "MKCOL", "MOVE", "COPY", "PROPFIND", "PROPPATCH", "REPORT"};
+        for (const std::string_view path:
+             {"/remote.php/dav/files/{user}/{*path}", "/remote.php/webdav/{*path}"}) {
+            host.add_route(
+                "OPTIONS",
+                path,
+                [](const Request&)
+                {
+                    return dav_options();
+                }
+            );
+        }
+        static constexpr std::string_view METHODS[] = {
+            "GET",
+            "PUT",
+            "DELETE",
+            "MKCOL",
+            "MOVE",
+            "COPY",
+            "PROPFIND",
+            "PROPPATCH",
+            "REPORT",
+            "LOCK",
+            "UNLOCK"
+        };
         for (const std::string_view method: METHODS) {
             host.add_route(
                 method,
@@ -1080,6 +1127,19 @@ private:
                 }
             );
         }
+    }
+
+    /// What a client learns before it relies on locks: class 2 is "locks are supported".
+    [[nodiscard]] static Response dav_options()
+    {
+        Response response{200};
+        response.add_header("DAV", "1, 2, 3, extended-mkcol");
+        response.add_header(
+            "Allow",
+            "OPTIONS, GET, HEAD, PUT, DELETE, MKCOL, MOVE, COPY, PROPFIND, PROPPATCH, REPORT, "
+            "LOCK, UNLOCK"
+        );
+        return response;
     }
 
     [[nodiscard]] Response serve_dav(const Request& request, bool legacy) const
@@ -2797,6 +2857,33 @@ private:
         // The file belongs to the owner: a checksum is theirs to keep, and an upload through the
         // share clears the one they had.
         hooks.checksum_of = nullptr;
+        // The owner's locks keep a recipient from changing what is locked; locking through a share
+        // is not offered.
+        hooks.add_lock = nullptr;
+        hooks.refresh_lock = nullptr;
+        hooks.remove_lock = nullptr;
+        hooks.locks = [this,
+                       owner = share.get_owner(),
+                       root = prefix == "/" ? std::string{} : prefix](const std::string&)
+        {
+            const std::string& prefix = root;
+            std::vector<nc::cloud::DavLock> inside;
+            for (nc::cloud::DavLock lock:
+                 m_locks->of(owner, static_cast<std::int64_t>(std::time(nullptr)))) {
+                if (lock.path == prefix || nc::util::starts_with(lock.path, prefix + "/")) {
+                    lock.path =
+                        lock.path.size() == prefix.size() ? "/" : lock.path.substr(prefix.size());
+                    inside.push_back(std::move(lock));
+                } else if (lock.infinite && nc::util::starts_with(
+                                                prefix,
+                                                lock.path == "/" ? "/" : lock.path + "/"
+                                            )) {
+                    lock.path = "/";
+                    inside.push_back(std::move(lock));
+                }
+            }
+            return inside;
+        };
         hooks.set_checksum = [this, owner = share.get_owner(), prefix](
                                  const std::string&,
                                  const std::string& path,
@@ -3672,6 +3759,7 @@ private:
 
     std::string m_data_dir{"data"};
     std::unique_ptr<nc::cloud::FileMeta> m_meta{};
+    std::unique_ptr<nc::cloud::DavLocks> m_locks{};
     std::string m_instance_id{};
     std::uint64_t m_quota{0};
     std::string m_public_url{};

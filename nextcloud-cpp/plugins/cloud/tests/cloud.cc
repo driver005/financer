@@ -4604,6 +4604,278 @@ void test_checksums()
     fs::remove_all(dir);
 }
 
+// ---- locks -------------------------------------------------------------------------------------
+
+void test_locks()
+{
+    const std::string dir = temp_dir("locks");
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "groups", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    for (const char* name: {"alice", "bob"}) {
+        ::setenv("OC_PASS", (std::string{name} + " password").c_str(), 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {name}, out), 0);
+    }
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string bob = "bob:bob password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const std::string b = "/remote.php/dav/files/bob";
+    using Headers = std::vector<std::pair<std::string, std::string>>;
+    const auto call = [&](const std::string& method,
+                          const std::string& path,
+                          const std::string& body = {},
+                          const std::string& who = "alice:alice password",
+                          const Headers& headers = {})
+    {
+        Request request = user_req(method, path, body, who);
+        for (const auto& [key, value]: headers) {
+            request.add_header(std::string{key}, std::string{value});
+        }
+        return kernel.handle(std::move(request));
+    };
+    const std::string info =
+        R"(<?xml version="1.0"?><d:lockinfo xmlns:d="DAV:"><d:lockscope><d:exclusive/></d:lockscope><d:locktype><d:write/></d:locktype><d:owner><d:href>mailto:alice@example.org</d:href></d:owner></d:lockinfo>)";
+    const auto lock = [&](const std::string& path,
+                          const Headers& headers = {},
+                          const std::string& body = "<info>",
+                          const std::string& who = "alice:alice password")
+    {
+        return call("LOCK", path, body == "<info>" ? info : body, who, headers);
+    };
+    const auto token_of = [](const Response& response)
+    {
+        std::string token{response.header("Lock-Token")};
+        if (token.size() > 2) {
+            token = token.substr(1, token.size() - 2);
+        }
+        return token;
+    };
+    const auto holding = [](const std::string& token) -> Headers
+    {
+        return {{"If", "(<" + token + ">)"}};
+    };
+
+    NC_CHECK_EQ(call("PUT", a + "/f.txt", "one").get_status(), 201);
+
+    // Clients learn about locks from OPTIONS.
+    const Response options = call("OPTIONS", a + "/f.txt");
+    NC_CHECK_EQ(options.get_status(), 200);
+    NC_CHECK(options.header("DAV").find("2") != std::string_view::npos);
+    NC_CHECK(options.header("Allow").find("LOCK") != std::string_view::npos);
+
+    // Locking a file: a token comes back, with the owner and the time.
+    const Response first = lock(a + "/f.txt", {{"Timeout", "Second-600"}});
+    NC_CHECK_EQ(first.get_status(), 200);
+    const std::string token = token_of(first);
+    NC_CHECK(token.rfind("opaquelocktoken:", 0) == 0);
+    NC_CHECK(contains_text(first, "<d:exclusive/>"));
+    NC_CHECK(contains_text(first, "mailto:alice@example.org"));
+    NC_CHECK(contains_text(first, "<d:timeout>Second-600</d:timeout>"));
+    NC_CHECK(contains_text(first, "<d:depth>0</d:depth>"));
+    NC_CHECK(contains_text(first, token));
+
+    // Nothing changes it without the token; with it, things go on.
+    NC_CHECK_EQ(call("PUT", a + "/f.txt", "two").get_status(), 423);
+    NC_CHECK_EQ(call("GET", a + "/f.txt").get_body(), "one");
+    NC_CHECK_EQ(call("DELETE", a + "/f.txt").get_status(), 423);
+    NC_CHECK_EQ(
+        call("MOVE", a + "/f.txt", {}, alice, {{"Destination", a + "/g.txt"}}).get_status(),
+        423
+    );
+    NC_CHECK_EQ(
+        call("PUT", a + "/f.txt", "two", alice, {{"If", "(<opaquelocktoken:other>)"}}).get_status(),
+        423
+    );
+    NC_CHECK_EQ(call("PUT", a + "/h.txt", "h").get_status(), 201);
+    NC_CHECK_EQ(
+        call("COPY", a + "/h.txt", {}, alice, {{"Destination", a + "/f.txt"}}).get_status(),
+        423
+    );
+    NC_CHECK_EQ(
+        call("MOVE", a + "/h.txt", {}, alice, {{"Destination", a + "/f.txt"}}).get_status(),
+        423
+    );
+    // Reading and copying out of it are fine.
+    NC_CHECK_EQ(
+        call("COPY", a + "/f.txt", {}, alice, {{"Destination", a + "/copy.txt"}}).get_status(),
+        201
+    );
+    NC_CHECK_EQ(call("PUT", a + "/f.txt", "two", alice, holding(token)).get_status(), 204);
+    NC_CHECK_EQ(call("GET", a + "/f.txt").get_body(), "two");
+
+    // A second lock on the same item is refused, and so is one on its folder.
+    NC_CHECK_EQ(lock(a + "/f.txt").get_status(), 423);
+    NC_CHECK_EQ(lock(a + "/f.txt", holding(token)).get_status(), 423);
+
+    // More time: a request without a body that shows the token.
+    const Response renewed = call(
+        "LOCK",
+        a + "/f.txt",
+        {},
+        alice,
+        {{"If", "(<" + token + ">)"}, {"Timeout", "Second-5000"}}
+    );
+    NC_CHECK_EQ(renewed.get_status(), 200);
+    NC_CHECK(contains_text(renewed, "<d:timeout>Second-5000</d:timeout>"));
+    NC_CHECK_EQ(call("LOCK", a + "/f.txt").get_status(), 412);
+    NC_CHECK_EQ(
+        call("LOCK", a + "/f.txt", {}, alice, holding("opaquelocktoken:nope")).get_status(),
+        412
+    );
+
+    // Properties.
+    const Response props = call(
+        "PROPFIND",
+        a + "/f.txt",
+        R"(<d:propfind xmlns:d="DAV:"><d:prop><d:lockdiscovery/><d:supportedlock/></d:prop></d:propfind>)",
+        alice,
+        {{"Depth", "0"}}
+    );
+    NC_CHECK(contains_text(props, "<d:activelock>"));
+    NC_CHECK(contains_text(props, token));
+    NC_CHECK(contains_text(props, "<d:lockentry>"));
+    NC_CHECK(!contains_text(
+        call(
+            "PROPFIND",
+            a + "/copy.txt",
+            R"(<d:propfind xmlns:d="DAV:"><d:prop><d:lockdiscovery/></d:prop></d:propfind>)",
+            alice,
+            {{"Depth", "0"}}
+        ),
+        "<d:activelock>"
+    ));
+
+    // Ending it: the wrong token and none are refused.
+    NC_CHECK_EQ(
+        call("UNLOCK", a + "/f.txt", {}, alice, {{"Lock-Token", "<opaquelocktoken:nope>"}})
+            .get_status(),
+        409
+    );
+    NC_CHECK_EQ(call("UNLOCK", a + "/f.txt").get_status(), 409);
+    NC_CHECK_EQ(
+        call("UNLOCK", a + "/copy.txt", {}, alice, {{"Lock-Token", "<" + token + ">"}})
+            .get_status(),
+        409
+    );
+    NC_CHECK_EQ(
+        call("UNLOCK", a + "/f.txt", {}, alice, {{"Lock-Token", "<" + token + ">"}}).get_status(),
+        204
+    );
+    NC_CHECK_EQ(call("PUT", a + "/f.txt", "three").get_status(), 204);
+    NC_CHECK_EQ(
+        call("UNLOCK", a + "/f.txt", {}, alice, {{"Lock-Token", "<" + token + ">"}}).get_status(),
+        409
+    );
+
+    // A lock that ran out is gone.
+    const Response brief = lock(a + "/f.txt", {{"Timeout", "Second-1"}});
+    NC_CHECK_EQ(brief.get_status(), 200);
+    NC_CHECK_EQ(call("PUT", a + "/f.txt", "four").get_status(), 423);
+    std::this_thread::sleep_for(std::chrono::milliseconds{2'200});
+    NC_CHECK_EQ(call("PUT", a + "/f.txt", "four").get_status(), 204);
+
+    // A folder lock reaches what is inside; with Depth 0 it does not.
+    NC_CHECK_EQ(call("MKCOL", a + "/Dir").get_status(), 201);
+    NC_CHECK_EQ(call("PUT", a + "/Dir/in.txt", "in").get_status(), 201);
+    const std::string folder = token_of(lock(a + "/Dir"));
+    NC_CHECK(!folder.empty());
+    NC_CHECK_EQ(call("PUT", a + "/Dir/in.txt", "x").get_status(), 423);
+    NC_CHECK_EQ(call("PUT", a + "/Dir/new.txt", "x").get_status(), 423);
+    NC_CHECK_EQ(call("MKCOL", a + "/Dir/Sub").get_status(), 423);
+    NC_CHECK_EQ(call("DELETE", a + "/Dir").get_status(), 423);
+    NC_CHECK_EQ(call("PUT", a + "/Dir/new.txt", "x", alice, holding(folder)).get_status(), 201);
+    NC_CHECK_EQ(lock(a + "/Dir/in.txt").get_status(), 423);
+    NC_CHECK_EQ(
+        call("UNLOCK", a + "/Dir", {}, alice, {{"Lock-Token", "<" + folder + ">"}}).get_status(),
+        204
+    );
+    const std::string shallow = token_of(lock(a + "/Dir", {{"Depth", "0"}}));
+    NC_CHECK_EQ(call("PUT", a + "/Dir/new2.txt", "x").get_status(), 201);
+    NC_CHECK_EQ(call("PUT", a + "/Dir/in.txt", "y").get_status(), 204);
+    NC_CHECK_EQ(
+        call("UNLOCK", a + "/Dir", {}, alice, {{"Lock-Token", "<" + shallow + ">"}}).get_status(),
+        204
+    );
+
+    // A lock inside stops the folder from being deleted or replaced, and from being locked.
+    const std::string inner = token_of(lock(a + "/Dir/in.txt"));
+    NC_CHECK_EQ(call("DELETE", a + "/Dir").get_status(), 423);
+    NC_CHECK_EQ(
+        call("MOVE", a + "/Dir", {}, alice, {{"Destination", a + "/Other"}}).get_status(),
+        423
+    );
+    NC_CHECK_EQ(lock(a + "/Dir").get_status(), 423);
+    NC_CHECK_EQ(call("PUT", a + "/Dir/new.txt", "z").get_status(), 204);
+
+    // Through a share: the owner's lock holds for the person it is shared with.
+    NC_CHECK_EQ(
+        call(
+            "POST",
+            "/ocs/v2.php/apps/files_sharing/api/v1/shares",
+            "path=%2FDir&shareType=0&shareWith=bob&permissions=31"
+        )
+            .get_status(),
+        200
+    );
+    NC_CHECK_EQ(call("PUT", b + "/Dir/in.txt", "bob", bob).get_status(), 423);
+    NC_CHECK_EQ(call("PUT", b + "/Dir/in.txt", "bob", bob, holding(inner)).get_status(), 204);
+    NC_CHECK_EQ(call("PUT", b + "/Dir/new.txt", "bob", bob).get_status(), 204);
+    NC_CHECK_EQ(lock(b + "/Dir/new.txt", {}, "<info>", bob).get_status(), 405);
+
+    // Removing the file ends its lock; a move leaves the lock behind.
+    NC_CHECK_EQ(call("DELETE", a + "/Dir/in.txt", {}, alice, holding(inner)).get_status(), 204);
+    NC_CHECK_EQ(call("PUT", a + "/Dir/in.txt", "back").get_status(), 201);
+    const std::string moving = token_of(lock(a + "/Dir/in.txt"));
+    NC_CHECK_EQ(
+        call(
+            "MOVE",
+            a + "/Dir/in.txt",
+            {},
+            alice,
+            {{"Destination", a + "/Dir/away.txt"}, {"If", "(<" + moving + ">)"}}
+        ).get_status(),
+        201
+    );
+    NC_CHECK_EQ(call("PUT", a + "/Dir/away.txt", "free").get_status(), 204);
+    NC_CHECK_EQ(call("PUT", a + "/Dir/in.txt", "free").get_status(), 201);
+
+    // Deleting a folder ends the locks inside it.
+    NC_CHECK_EQ(call("MKCOL", a + "/Gone").get_status(), 201);
+    NC_CHECK_EQ(call("PUT", a + "/Gone/x.txt", "x").get_status(), 201);
+    const std::string deep = token_of(lock(a + "/Gone/x.txt"));
+    NC_CHECK_EQ(call("DELETE", a + "/Gone", {}, alice, holding(deep)).get_status(), 204);
+    NC_CHECK_EQ(call("MKCOL", a + "/Gone").get_status(), 201);
+    NC_CHECK_EQ(call("PUT", a + "/Gone/x.txt", "x").get_status(), 201);
+
+    // Bodies that are not a lock request, and a parent that is not there.
+    NC_CHECK_EQ(lock(a + "/f.txt", {}, "not xml").get_status(), 400);
+    NC_CHECK_EQ(
+        lock(
+            a + "/f.txt",
+            {},
+            R"(<d:lockinfo xmlns:d="DAV:"><d:lockscope><d:shared/></d:lockscope><d:locktype><d:write/></d:locktype></d:lockinfo>)"
+        )
+            .get_status(),
+        400
+    );
+    NC_CHECK_EQ(lock(a + "/nothing/here.txt").get_status(), 409);
+    // A path that does not exist becomes an empty file.
+    const Response fresh = lock(a + "/fresh.txt");
+    NC_CHECK_EQ(fresh.get_status(), 201);
+    NC_CHECK_EQ(call("GET", a + "/fresh.txt").get_body(), "");
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 int main()
 {
     test_normalize();
@@ -4629,6 +4901,7 @@ int main()
     test_file_ids_and_favorites();
     test_propfind_requests();
     test_checksums();
+    test_locks();
     test_folder_archives();
     test_external_storage();
     test_encryption();

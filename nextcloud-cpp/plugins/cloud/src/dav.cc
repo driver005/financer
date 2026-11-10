@@ -340,9 +340,215 @@ namespace {
         return actual == wanted ? algorithm + ":" + actual : std::string{};
     }
 
+    /// The lock tokens a request presents (`If: (<opaquelocktoken:...>)`).
+    std::vector<std::string> presented_tokens(const Request& request)
+    {
+        std::vector<std::string> out;
+        const std::string_view header = request.header("If");
+        std::size_t at = 0;
+        while ((at = header.find('<', at)) != std::string_view::npos) {
+            const std::size_t end = header.find('>', at);
+            if (end == std::string_view::npos) {
+                break;
+            }
+            out.emplace_back(header.substr(at + 1, end - at - 1));
+            at = end + 1;
+        }
+        return out;
+    }
+
+    /// Whether a lock reaches `path`: it is the locked item, below a folder locked with infinite
+    /// depth, or (with `below`, for deleting or replacing a folder) somewhere inside `path`.
+    bool lock_reaches(const DavLock& lock, const std::string& path, bool below)
+    {
+        const auto inside = [](const std::string& outer, const std::string& inner)
+        {
+            return util::starts_with(inner, outer == "/" ? std::string{"/"} : outer + "/");
+        };
+        return lock.path == path || (lock.infinite && inside(lock.path, path)) ||
+               (below && inside(path, lock.path));
+    }
+
+    std::string lock_timeout(const DavLock& lock, std::int64_t now)
+    {
+        return "Second-" + std::to_string(std::max<std::int64_t>(lock.expires - now, 0));
+    }
+
+    std::string active_lock_xml(const DavLock& lock, std::string_view base_href, std::int64_t now)
+    {
+        return "<d:activelock><d:locktype><d:write/></d:locktype><d:lockscope><d:exclusive/>"
+               "</d:lockscope><d:depth>" +
+               std::string{lock.infinite ? "infinity" : "0"} + "</d:depth><d:owner>" +
+               util::xml_escape(lock.owner) + "</d:owner><d:timeout>" + lock_timeout(lock, now) +
+               "</d:timeout><d:locktoken><d:href>" + util::xml_escape(lock.token) +
+               "</d:href></d:locktoken><d:lockroot><d:href>" +
+               util::xml_escape(
+                   std::string{base_href} + util::url_encode_path(lock.path == "/" ? "" : lock.path)
+               ) +
+               "</d:href></d:lockroot></d:activelock>";
+    }
+
+    std::int64_t now_seconds()
+    {
+        return static_cast<std::int64_t>(std::time(nullptr));
+    }
+
+    /// 423 when somebody's lock reaches `path` and the request does not present its token.
+    std::optional<Response> refuse_if_locked(
+        const Request& request,
+        const Hooks& hooks,
+        const std::string& user,
+        const std::string& path,
+        bool below
+    )
+    {
+        if (!hooks.locks) {
+            return std::nullopt;
+        }
+        const std::vector<std::string> tokens = presented_tokens(request);
+        for (const DavLock& lock: hooks.locks(user)) {
+            if (lock_reaches(lock, path, below) &&
+                std::find(tokens.begin(), tokens.end(), lock.token) == tokens.end()) {
+                return Response::xml(
+                    423,
+                    "<?xml version=\"1.0\"?>\n<d:error xmlns:d=\"DAV:\"><d:lock-token-submitted>"
+                    "<d:href>" +
+                        util::xml_escape(lock.path) + "</d:href></d:lock-token-submitted></d:error>"
+                );
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// `LOCK`: an exclusive write lock on a file or folder (a path that does not exist yet becomes
+    /// an empty file), or, without a body, more time for the lock whose token is presented.
+    Response lock_item(
+        const Request& request,
+        const Storage& storage,
+        const DavTarget& target,
+        const std::string& path,
+        const Hooks& hooks
+    )
+    {
+        if (!hooks.locks || !hooks.add_lock || !hooks.refresh_lock) {
+            return Response::text(405, "Locking is not available here");
+        }
+        const std::string& user = target.get_user();
+        const std::int64_t now = now_seconds();
+        std::int64_t seconds = 3'600;
+        const std::string_view timeout = request.header("Timeout");
+        if (util::starts_with(std::string{timeout}, "Second-")) {
+            seconds = std::strtoll(std::string{timeout.substr(7)}.c_str(), nullptr, 10);
+        }
+        seconds = std::clamp<std::int64_t>(seconds, 1, 86'400);
+        const std::vector<DavLock> existing = hooks.locks(user);
+
+        if (request.get_body().empty()) {
+            const std::vector<std::string> tokens = presented_tokens(request);
+            for (const DavLock& lock: existing) {
+                if (lock_reaches(lock, path, false) &&
+                    std::find(tokens.begin(), tokens.end(), lock.token) != tokens.end()) {
+                    if (!hooks.refresh_lock(user, lock.token, now + seconds)) {
+                        break;
+                    }
+                    DavLock renewed = lock;
+                    renewed.expires = now + seconds;
+                    Response response = Response::xml(
+                        200,
+                        "<?xml version=\"1.0\"?>\n<d:prop xmlns:d=\"DAV:\"><d:lockdiscovery>" +
+                            active_lock_xml(renewed, target.get_base_href(), now) +
+                            "</d:lockdiscovery></d:prop>"
+                    );
+                    response.add_header("Lock-Token", "<" + lock.token + ">");
+                    return response;
+                }
+            }
+            return Response::text(412, "No lock with that token");
+        }
+
+        const auto body = util::Xml::parse(request.get_body());
+        if (!body || body->name() != "lockinfo") {
+            return Response::text(400, "Not a lockinfo");
+        }
+        const util::Xml* scope = body->find("lockscope");
+        const util::Xml* type = body->find("locktype");
+        if (scope == nullptr || scope->find("exclusive") == nullptr || type == nullptr ||
+            type->find("write") == nullptr) {
+            return Response::text(400, "Only exclusive write locks are supported");
+        }
+        for (const DavLock& lock: existing) {
+            if (lock_reaches(lock, path, true)) {
+                return Response::xml(
+                    423,
+                    "<?xml version=\"1.0\"?>\n<d:error xmlns:d=\"DAV:\"><d:no-conflicting-lock>"
+                    "<d:href>" +
+                        util::xml_escape(lock.path) + "</d:href></d:no-conflicting-lock></d:error>"
+                );
+            }
+        }
+        bool created = false;
+        auto node = storage.stat(path);
+        if (!node) {
+            if (node.error().get_code() != StorageCode::NOT_FOUND) {
+                return failure(node.error());
+            }
+            const auto made = storage.write(path, "");
+            if (!made) {
+                return failure(made.error());
+            }
+            created = true;
+            node = storage.stat(path);
+            if (!node) {
+                return failure(node.error());
+            }
+        }
+        DavLock lock;
+        lock.token = "opaquelocktoken:" + util::random_hex(16);
+        lock.path = path;
+        lock.infinite = node->is_directory() && request.header("Depth") != "0";
+        if (const util::Xml* owner = body->find("owner")) {
+            const util::Xml* href = owner->find("href");
+            lock.owner = (href != nullptr ? href->text() : owner->text()).substr(0, 512);
+        }
+        lock.expires = now + seconds;
+        hooks.add_lock(user, lock);
+        Response response = Response::xml(
+            created ? 201 : 200,
+            "<?xml version=\"1.0\"?>\n<d:prop xmlns:d=\"DAV:\"><d:lockdiscovery>" +
+                active_lock_xml(lock, target.get_base_href(), now) + "</d:lockdiscovery></d:prop>"
+        );
+        response.add_header("Lock-Token", "<" + lock.token + ">");
+        return response;
+    }
+
+    /// `UNLOCK`: `Lock-Token: <token>` ends that lock, when it is on this item or above it.
+    Response unlock_item(
+        const Request& request,
+        const DavTarget& target,
+        const std::string& path,
+        const Hooks& hooks
+    )
+    {
+        if (!hooks.locks || !hooks.remove_lock) {
+            return Response::text(405, "Locking is not available here");
+        }
+        std::string token{request.header("Lock-Token")};
+        if (token.size() >= 2 && token.front() == '<' && token.back() == '>') {
+            token = token.substr(1, token.size() - 2);
+        }
+        for (const DavLock& lock: hooks.locks(target.get_user())) {
+            if (lock.token == token && lock_reaches(lock, path, false)) {
+                return hooks.remove_lock(target.get_user(), token) ? Response{204}
+                                                                   : Response::text(409, "Gone");
+            }
+        }
+        return Response::text(409, "No such lock on this item");
+    }
+
     /// The properties that only a user's own files have: the number, `oc:id`, the favorite mark,
     /// and, when asked for, the share types and the owner's name.
-    ExtraProps extra_props(const Hooks& hooks, const std::string& user)
+    ExtraProps
+    extra_props(const Hooks& hooks, const std::string& user, const std::string& base_href)
     {
         if (!hooks.file_id) {
             return {};
@@ -350,7 +556,7 @@ namespace {
         // Worked out once per answer, the first time a node needs it.
         auto shares = std::make_shared<std::optional<std::vector<std::pair<std::string, int>>>>();
         auto name = std::make_shared<std::optional<std::string>>();
-        return [&hooks, user, shares, name](const Node& node, const PropRequest& wanted)
+        return [&hooks, user, base_href, shares, name](const Node& node, const PropRequest& wanted)
         {
             std::vector<Prop> out;
             const std::int64_t id = hooks.file_id(user, node.get_path());
@@ -381,6 +587,24 @@ namespace {
                          "<oc:checksum>" + util::xml_escape(sum) + "</oc:checksum>"}
                     );
                 }
+            }
+            if (hooks.locks && wanted.asked("DAV:", "supportedlock")) {
+                out.push_back(
+                    {"d",
+                     "supportedlock",
+                     "<d:lockentry><d:lockscope><d:exclusive/></d:lockscope><d:locktype><d:write/>"
+                     "</d:locktype></d:lockentry>"}
+                );
+            }
+            if (hooks.locks && wanted.asked("DAV:", "lockdiscovery")) {
+                const std::int64_t now = now_seconds();
+                std::string value;
+                for (const DavLock& lock: hooks.locks(user)) {
+                    if (lock_reaches(lock, node.get_path(), false)) {
+                        value += active_lock_xml(lock, base_href, now);
+                    }
+                }
+                out.push_back({"d", "lockdiscovery", value});
             }
             if (hooks.share_types && wanted.asked("http://owncloud.org/ns", "share-types")) {
                 if (!shares->has_value()) {
@@ -537,7 +761,7 @@ namespace {
                 target.get_base_href(),
                 target.get_user(),
                 storage,
-                extra_props(hooks, target.get_user())
+                extra_props(hooks, target.get_user(), target.get_base_href())
             )
         );
     }
@@ -577,7 +801,7 @@ namespace {
                 target.get_base_href(),
                 target.get_user(),
                 storage,
-                extra_props(hooks, target.get_user()),
+                extra_props(hooks, target.get_user(), target.get_base_href()),
                 *wanted
             )
         );
@@ -905,6 +1129,35 @@ Response dav_handle(
 
     if (method == "PROPFIND") {
         return propfind(request, storage, target, path, hooks);
+    }
+
+    if (method == "LOCK") {
+        return lock_item(request, storage, target, path, hooks);
+    }
+
+    if (method == "UNLOCK") {
+        return unlock_item(request, target, path, hooks);
+    }
+
+    // Somebody else's lock keeps a file or folder from being changed, moved or replaced.
+    if (method == "PUT" || method == "MKCOL" || method == "DELETE" || method == "PROPPATCH" ||
+        method == "MOVE" || method == "COPY") {
+        const bool whole = method == "DELETE" || method == "MOVE";
+        if (method != "COPY") {
+            if (auto refused = refuse_if_locked(request, hooks, user, path, whole)) {
+                return std::move(*refused);
+            }
+        }
+        if (method == "MOVE" || method == "COPY") {
+            const std::string destination =
+                destination_path(request.header("Destination"), target.get_base_href());
+            if (const auto inside = Storage::normalize(destination);
+                inside && !destination.empty()) {
+                if (auto refused = refuse_if_locked(request, hooks, user, *inside, true)) {
+                    return std::move(*refused);
+                }
+            }
+        }
     }
 
     if (method == "PROPPATCH") {

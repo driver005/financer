@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dav_locks.h"
 #include "nextcloud/http.h"
 #include "storage.h"
 
@@ -56,6 +57,14 @@ struct Hooks
         std::int64_t mtime
     )>
         checksum_of{};
+    /// Write locks (`LOCK`, `UNLOCK`) on the user's own files; unset: the verbs are refused. The
+    /// locks that have not run out; a new one; more time for one (false when it is not there); the
+    /// end of one (false when it is not there).
+    std::function<std::vector<DavLock>(const std::string& user)> locks{};
+    std::function<void(const std::string& user, const DavLock& lock)> add_lock{};
+    std::function<bool(const std::string& user, const std::string& token, std::int64_t expires)>
+        refresh_lock{};
+    std::function<bool(const std::string& user, const std::string& token)> remove_lock{};
     /// This server's id, the tail of `oc:id`.
     std::string instance_id{};
     /// The user's own shares as (path, share type) pairs, for `oc:share-types`; unset: none shown.

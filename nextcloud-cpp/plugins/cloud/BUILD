@@ -8,6 +8,7 @@ nc_cc_library(
     srcs = [
         "src/folder_archive.cc",
         "src/dav.cc",
+        "src/dav_locks.cc",
         "src/file_meta.cc",
         "src/file_cipher.cc",
         "src/ftp.cc",
@@ -20,6 +21,7 @@ nc_cc_library(
     hdrs = [
         "src/folder_archive.h",
         "src/dav.h",
+        "src/dav_locks.h",
         "src/file_meta.h",
         "src/file_cipher.h",
         "src/ftp.h",
