@@ -230,6 +230,33 @@ int main()
     NC_CHECK_EQ(base64_encode("Aladdin:open sesame"), "QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
     NC_CHECK_EQ(base64_decode("QWxhZGRpbjpvcGVuIHNlc2FtZQ==").value_or("?"), "Aladdin:open sesame");
     NC_CHECK(!base64_decode("a$b").has_value());
+    // RFC 4648 section 10, with and without the padding; and what is not base64.
+    for (const auto& [plain, encoded]: std::vector<std::pair<std::string, std::string>>{
+             {"", ""},
+             {"f", "Zg=="},
+             {"fo", "Zm8="},
+             {"foo", "Zm9v"},
+             {"foob", "Zm9vYg=="},
+             {"fooba", "Zm9vYmE="},
+             {"foobar", "Zm9vYmFy"}
+         }) {
+        NC_CHECK_EQ(base64_encode(plain), encoded);
+        NC_CHECK_EQ(base64_decode(encoded).value_or("?"), plain);
+        std::string bare = encoded;
+        while (!bare.empty() && bare.back() == '=') {
+            bare.pop_back();
+        }
+        NC_CHECK_EQ(base64_decode(bare).value_or("?"), plain); // padding is optional
+    }
+    std::string every_byte;
+    for (int byte = 0; byte < 256; ++byte) {
+        every_byte.push_back(static_cast<char>(byte));
+    }
+    NC_CHECK_EQ(base64_decode(base64_encode(every_byte)).value_or("?"), every_byte);
+    for (const char* bad:
+         {"Z", "Zm9vY", "Zg=a", "=Zg", "Z===", "Zm 9v", "Zm9v\n", "Zm9v!", "Z\xC3\xA4g="}) {
+        NC_CHECK(!base64_decode(bad).has_value());
+    }
 
     NC_CHECK_EQ(url_decode("a%20b%2Fc+d"), "a b/c+d");
     NC_CHECK_EQ(url_decode("a+b", true), "a b");

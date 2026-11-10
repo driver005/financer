@@ -14,7 +14,7 @@ have to be vendored by hand (see `third_party/`).
 | `symfony/event-dispatcher`, `psr/event-dispatcher`, `psr/container`, `pimple/pimple` | `EventBus`, `ServiceRegistry` | |
 | `doctrine/dbal`, `ext-pdo` | `db` plugin on SQLite (`sqlite3`, BCR) | no PostgreSQL/MySQL (see below) |
 | `guzzlehttp/guzzle`, `psr/http-client`, `ext-curl` | `plugins/federation/src/http_client` (BoringSSL) | `curl` (BCR) would add redirects/HTTP2 |
-| `phpseclib/phpseclib`, `ext-openssl` | BoringSSL (`boringssl`, BCR), mbedTLS via libssh2 | hashes, HMAC, PBKDF2, random bytes and the ChaCha20-Poly1305 of the at-rest encryption in `sdk/util` are BoringSSL calls too (the hand-written SHA-1/SHA-256 and the hand-written cipher are gone; the RFC 8439 example and the old digests of sealed data are tests) |
+| `phpseclib/phpseclib`, `ext-openssl` | BoringSSL (`boringssl`, BCR), mbedTLS via libssh2 | hashes, HMAC, PBKDF2, random bytes, base64 and the ChaCha20-Poly1305 of the at-rest encryption in `sdk/util` are BoringSSL calls too (the hand-written SHA-1/SHA-256 and the hand-written cipher are gone; the RFC 8439 example and the old digests of sealed data are tests) |
 | `ext-json` | `nlohmann_json` (BCR, **in use**) | `util::Json` is built from its SAX events, with the depth and size limits; the hand-written parser is gone |
 | `icewind/streams` | `http::Response` streams, spooled uploads | |
 | `aws/aws-sdk-php` | own AWS SigV4 (`s3.cc`) | `aws-sdk-cpp` is not in BCR |

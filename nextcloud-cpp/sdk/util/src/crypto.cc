@@ -1,6 +1,7 @@
 #include "nextcloud/util/crypto.h"
 
 #include <algorithm>
+#include <openssl/base64.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
@@ -203,56 +204,42 @@ std::optional<std::string> from_hex(std::string_view hex)
 
 std::string base64_encode(std::string_view bytes)
 {
-    static constexpr std::string_view ALPHABET =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string out;
-    for (std::size_t index = 0; index < bytes.size(); index += 3) {
-        const std::size_t left = bytes.size() - index;
-        std::uint32_t chunk = static_cast<unsigned char>(bytes[index]) << 16U;
-        if (left > 1) {
-            chunk |= static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[index + 1])) << 8U;
-        }
-        if (left > 2) {
-            chunk |= static_cast<unsigned char>(bytes[index + 2]);
-        }
-        out.push_back(ALPHABET[(chunk >> 18U) & 63U]);
-        out.push_back(ALPHABET[(chunk >> 12U) & 63U]);
-        out.push_back(left > 1 ? ALPHABET[(chunk >> 6U) & 63U] : '=');
-        out.push_back(left > 2 ? ALPHABET[chunk & 63U] : '=');
-    }
+    // EVP_EncodeBlock writes the standard alphabet with padding and no line breaks, and a final 0.
+    std::string out(4 * ((bytes.size() + 2) / 3) + 1, '\0');
+    const int length = EVP_EncodeBlock(
+        reinterpret_cast<unsigned char*>(out.data()),
+        reinterpret_cast<const unsigned char*>(bytes.data()),
+        bytes.size()
+    );
+    out.resize(static_cast<std::size_t>(length));
     return out;
 }
 
 std::optional<std::string> base64_decode(std::string_view text)
 {
-    std::string out;
-    std::uint32_t buffer = 0;
-    int bits = 0;
-    for (const char letter: text) {
-        if (letter == '=') {
-            break;
-        }
-        std::uint32_t value = 0;
-        if (letter >= 'A' && letter <= 'Z') {
-            value = static_cast<std::uint32_t>(letter - 'A');
-        } else if (letter >= 'a' && letter <= 'z') {
-            value = static_cast<std::uint32_t>(letter - 'a' + 26);
-        } else if (letter >= '0' && letter <= '9') {
-            value = static_cast<std::uint32_t>(letter - '0' + 52);
-        } else if (letter == '+') {
-            value = 62;
-        } else if (letter == '/') {
-            value = 63;
-        } else {
-            return std::nullopt;
-        }
-        buffer = (buffer << 6U) | value;
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out.push_back(static_cast<char>((buffer >> static_cast<unsigned>(bits)) & 0xFFU));
-        }
+    // Padding is optional here (BoringSSL wants it): up to two '=' at the end are dropped, and the
+    // rest has to be the alphabet, and not 1 more than a multiple of 4.
+    std::size_t padding = 0;
+    while (padding < 2 && padding < text.size() && text[text.size() - 1 - padding] == '=') {
+        ++padding;
     }
+    std::string padded{text.substr(0, text.size() - padding)};
+    if (padded.find('=') != std::string::npos || padded.size() % 4 == 1) {
+        return std::nullopt;
+    }
+    padded.append((4 - padded.size() % 4) % 4, '=');
+    std::string out(padded.size() / 4 * 3, '\0');
+    std::size_t length = 0;
+    if (!padded.empty() && EVP_DecodeBase64(
+                               reinterpret_cast<unsigned char*>(out.data()),
+                               &length,
+                               out.size(),
+                               reinterpret_cast<const unsigned char*>(padded.data()),
+                               padded.size()
+                           ) != 1) {
+        return std::nullopt;
+    }
+    out.resize(length);
     return out;
 }
 
