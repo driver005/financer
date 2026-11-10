@@ -373,15 +373,30 @@ private:
             nc::util::form_value(form, "SAMLRequest").empty()) {
             return page(200, "Signed out", "<p>You are signed out.</p>");
         }
-        if (request.get_method() == "GET") {
-            return page(400, "Sign-out failed", "<p>A logout request must be posted.</p>");
-        }
-        const auto xml = nc::util::base64_decode(nc::util::form_value(form, "SAMLRequest"));
-        if (!xml) {
-            return page(400, "Sign-out failed", "<p>The request is not valid.</p>");
+        // By POST the request carries its own signature; by redirect (GET) the query is signed.
+        const bool by_redirect = request.get_method() == "GET";
+        std::string xml;
+        if (by_redirect) {
+            const auto opened =
+                nc::saml::open_redirect_message(request.get_query(), "SAMLRequest", m_settings);
+            if (!opened) {
+                m_host->log(
+                    nc::LogLevel::WARNING,
+                    "SAML logout request refused: " + opened.error()
+                );
+                return page(403, "Sign-out failed", "<p>The request was refused.</p>");
+            }
+            xml = *opened;
+        } else {
+            const auto decoded = nc::util::base64_decode(nc::util::form_value(form, "SAMLRequest"));
+            if (!decoded) {
+                return page(400, "Sign-out failed", "<p>The request is not valid.</p>");
+            }
+            xml = *decoded;
         }
         const std::int64_t now = now_seconds();
-        const auto logout_request = nc::saml::validate_logout_request(*xml, m_settings, now);
+        const auto logout_request =
+            nc::saml::validate_logout_request(xml, m_settings, now, by_redirect);
         if (!logout_request) {
             m_host->log(
                 nc::LogLevel::WARNING,

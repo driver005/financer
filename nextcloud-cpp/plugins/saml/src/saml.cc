@@ -4,6 +4,7 @@
 #include "nextcloud/util/text.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstring>
 #include <ctime>
@@ -14,8 +15,14 @@
 #include <memory>
 #include <openssl/aead.h>
 #include <openssl/bio.h>
+#include <openssl/bn.h>
 #include <openssl/cipher.h>
+#include <openssl/ec.h>
+#include <openssl/ec_key.h>
+#include <openssl/ecdsa.h>
 #include <openssl/evp.h>
+#include <openssl/mem.h>
+#include <openssl/nid.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
@@ -238,15 +245,74 @@ namespace {
         return nullptr;
     }
 
-    const EVP_MD* signature_hash_for(std::string_view algorithm)
+    /// What a SignatureMethod stands for: the hash, and whether the key is an ECDSA one (the
+    /// signature value is then the two numbers r and s side by side, not a DER sequence).
+    struct SignatureKind
     {
-        if (algorithm == "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256") {
-            return EVP_sha256();
+        const EVP_MD* hash{nullptr};
+        bool ecdsa{false};
+    };
+
+    SignatureKind signature_kind_for(std::string_view algorithm)
+    {
+        constexpr std::string_view MORE = "http://www.w3.org/2001/04/xmldsig-more#";
+        if (!algorithm.starts_with(MORE)) {
+            return {};
         }
-        if (algorithm == "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512") {
-            return EVP_sha512();
+        const std::string_view name = algorithm.substr(MORE.size());
+        if (name == "rsa-sha256") {
+            return {EVP_sha256(), false};
         }
-        return nullptr;
+        if (name == "rsa-sha384") {
+            return {EVP_sha384(), false};
+        }
+        if (name == "rsa-sha512") {
+            return {EVP_sha512(), false};
+        }
+        if (name == "ecdsa-sha256") {
+            return {EVP_sha256(), true};
+        }
+        if (name == "ecdsa-sha384") {
+            return {EVP_sha384(), true};
+        }
+        if (name == "ecdsa-sha512") {
+            return {EVP_sha512(), true};
+        }
+        return {};
+    }
+
+    /// The signature value of an ECDSA signature in XML-DSig (r and s, each as wide as the curve's
+    /// order, one after the other) as the DER sequence BoringSSL checks; empty when it is not that.
+    std::string ecdsa_der_from_xmldsig(const EVP_PKEY* key, std::string_view raw)
+    {
+        const EC_KEY* ec = EVP_PKEY_get0_EC_KEY(key);
+        const std::size_t width =
+            (EC_GROUP_get_degree(EC_KEY_get0_group(ec)) + 7) / 8; // bytes of r and of s
+        if (raw.size() != 2 * width) {
+            return {};
+        }
+        const std::unique_ptr<ECDSA_SIG, decltype(&ECDSA_SIG_free)> signature{
+            ECDSA_SIG_new(),
+            &ECDSA_SIG_free
+        };
+        if (signature == nullptr ||
+            BN_bin2bn(reinterpret_cast<const std::uint8_t*>(raw.data()), width, signature->r) ==
+                nullptr ||
+            BN_bin2bn(
+                reinterpret_cast<const std::uint8_t*>(raw.data()) + width,
+                width,
+                signature->s
+            ) == nullptr) {
+            return {};
+        }
+        std::uint8_t* der = nullptr;
+        std::size_t length = 0;
+        if (ECDSA_SIG_to_bytes(&der, &length, signature.get()) != 1) {
+            return {};
+        }
+        std::string out{reinterpret_cast<const char*>(der), length};
+        OPENSSL_free(der);
+        return out;
     }
 
     std::vector<std::string> inclusive_prefixes(xmlNode* method)
@@ -261,6 +327,71 @@ namespace {
             }
         }
         return out;
+    }
+
+    /// Checks that `raw` is the signature of the identity provider's certificate (not the key the
+    /// message names) over `signed_text` with the algorithm `kind`.
+    Result<void> check_signature(
+        const std::string& certificate_pem,
+        const SignatureKind& kind,
+        std::string_view raw,
+        std::string_view signed_text
+    )
+    {
+        std::unique_ptr<BIO, decltype(&BIO_free)> bio{
+            BIO_new_mem_buf(certificate_pem.data(), static_cast<int>(certificate_pem.size())),
+            &BIO_free
+        };
+        std::unique_ptr<X509, decltype(&X509_free)> certificate{
+            bio ? PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr) : nullptr,
+            &X509_free
+        };
+        std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key{
+            certificate ? X509_get_pubkey(certificate.get()) : nullptr,
+            &EVP_PKEY_free
+        };
+        // The algorithm the message names has to be the one of the configured key: the key decides,
+        // the message does not.
+        const bool key_is_rsa = key != nullptr && EVP_PKEY_id(key.get()) == EVP_PKEY_RSA;
+        const bool key_is_ec = key != nullptr && EVP_PKEY_id(key.get()) == EVP_PKEY_EC;
+        if (key_is_ec) {
+            const int curve =
+                EC_GROUP_get_curve_name(EC_KEY_get0_group(EVP_PKEY_get0_EC_KEY(key.get())));
+            if (curve != NID_X9_62_prime256v1 && curve != NID_secp384r1 && curve != NID_secp521r1) {
+                return failure("the identity provider's certificate has an unaccepted curve");
+            }
+        }
+        if (!(key_is_rsa && !kind.ecdsa && EVP_PKEY_bits(key.get()) >= 2'048) &&
+            !(key_is_ec && kind.ecdsa)) {
+            return failure(
+                "the identity provider's certificate is not an RSA key of 2048 bits or more, or an "
+                "elliptic curve key (P-256, P-384, P-521) matching the signature algorithm"
+            );
+        }
+        std::string converted;
+        if (kind.ecdsa) {
+            converted = ecdsa_der_from_xmldsig(key.get(), raw);
+            if (converted.empty()) {
+                return failure("the signature value is malformed");
+            }
+        }
+        const std::string_view signature_bytes = kind.ecdsa ? std::string_view{converted} : raw;
+        std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> context{
+            EVP_MD_CTX_new(),
+            &EVP_MD_CTX_free
+        };
+        if (context == nullptr ||
+            EVP_DigestVerifyInit(context.get(), nullptr, kind.hash, nullptr, key.get()) != 1 ||
+            EVP_DigestVerify(
+                context.get(),
+                reinterpret_cast<const std::uint8_t*>(signature_bytes.data()),
+                signature_bytes.size(),
+                reinterpret_cast<const std::uint8_t*>(signed_text.data()),
+                signed_text.size()
+            ) != 1) {
+            return failure("the signature is wrong");
+        }
+        return {};
     }
 
     /// Verifies the enveloped `signature` that sits directly inside `target`: the single reference
@@ -290,7 +421,8 @@ namespace {
             signature_method == nullptr) {
             return failure("the signature uses a canonicalization that is not accepted");
         }
-        const EVP_MD* hash = signature_hash_for(attribute(signature_method, "Algorithm"));
+        const SignatureKind kind = signature_kind_for(attribute(signature_method, "Algorithm"));
+        const EVP_MD* hash = kind.hash;
         if (hash == nullptr) {
             return failure("the signature algorithm is not accepted");
         }
@@ -365,40 +497,7 @@ namespace {
         if (!signed_text || !raw || raw->empty()) {
             return failure("the signature value is malformed");
         }
-        std::unique_ptr<BIO, decltype(&BIO_free)> bio{
-            BIO_new_mem_buf(certificate_pem.data(), static_cast<int>(certificate_pem.size())),
-            &BIO_free
-        };
-        std::unique_ptr<X509, decltype(&X509_free)> certificate{
-            bio ? PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr) : nullptr,
-            &X509_free
-        };
-        std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key{
-            certificate ? X509_get_pubkey(certificate.get()) : nullptr,
-            &EVP_PKEY_free
-        };
-        if (key == nullptr || EVP_PKEY_id(key.get()) != EVP_PKEY_RSA ||
-            EVP_PKEY_bits(key.get()) < 2'048) {
-            return failure(
-                "the identity provider's certificate is not an RSA one of 2048 bits or more"
-            );
-        }
-        std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> context{
-            EVP_MD_CTX_new(),
-            &EVP_MD_CTX_free
-        };
-        if (context == nullptr ||
-            EVP_DigestVerifyInit(context.get(), nullptr, hash, nullptr, key.get()) != 1 ||
-            EVP_DigestVerify(
-                context.get(),
-                reinterpret_cast<const std::uint8_t*>(raw->data()),
-                raw->size(),
-                reinterpret_cast<const std::uint8_t*>(signed_text->data()),
-                signed_text->size()
-            ) != 1) {
-            return failure("the signature is wrong");
-        }
-        return {};
+        return check_signature(certificate_pem, kind, *raw, *signed_text);
     }
 
     /// The base64 between the lines of a PEM certificate, on one line.
@@ -993,8 +1092,96 @@ Result<Assertion> validate_response(
     return out;
 }
 
-Result<LogoutRequest>
-validate_logout_request(std::string_view xml, const Settings& settings, std::int64_t now)
+Result<std::string> open_redirect_message(
+    std::string_view raw_query,
+    std::string_view parameter,
+    const Settings& settings
+)
+{
+    // The pieces as sent: the signature covers their escaped text, in this order.
+    struct Piece
+    {
+        std::string value{};
+        bool seen{false};
+    };
+
+    Piece message;
+    Piece relay;
+    Piece algorithm;
+    Piece signature;
+    for (const std::string& text: util::split(raw_query, '&')) {
+        const std::size_t equals = text.find('=');
+        const std::string_view name = std::string_view{text}.substr(0, equals);
+        Piece* target = name == parameter      ? &message
+                        : name == "RelayState" ? &relay
+                        : name == "SigAlg"     ? &algorithm
+                        : name == "Signature"  ? &signature
+                                               : nullptr;
+        if (target == nullptr) {
+            continue;
+        }
+        if (target->seen) {
+            return failure("a parameter of the message is repeated");
+        }
+        target->seen = true;
+        target->value = equals == std::string::npos ? std::string{} : text.substr(equals + 1);
+    }
+    if (message.value.empty() || algorithm.value.empty() || signature.value.empty()) {
+        return failure("the message is not signed");
+    }
+    std::string signed_text{parameter};
+    signed_text += "=" + std::string{message.value};
+    if (relay.seen) {
+        signed_text += "&RelayState=" + std::string{relay.value};
+    }
+    signed_text += "&SigAlg=" + std::string{algorithm.value};
+    const SignatureKind kind = signature_kind_for(util::url_decode(algorithm.value));
+    const auto raw = util::base64_decode(util::url_decode(signature.value));
+    if (kind.hash == nullptr || !raw || raw->empty()) {
+        return failure("the signature algorithm is not accepted");
+    }
+    if (const auto checked = check_signature(settings.idp_certificate_pem, kind, *raw, signed_text);
+        !checked) {
+        return failure(checked.error());
+    }
+    const auto packed = util::base64_decode(util::url_decode(message.value));
+    if (!packed || packed->empty()) {
+        return failure("the message is not valid");
+    }
+    // Raw DEFLATE; the size is capped so that a small message cannot grow without bound.
+    constexpr std::size_t MAX_INFLATED = 256U * 1'024U;
+    z_stream stream{};
+    if (inflateInit2(&stream, -15) != Z_OK) {
+        return failure("the message cannot be read");
+    }
+    stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(packed->data()));
+    stream.avail_in = static_cast<uInt>(packed->size());
+    std::string out;
+    std::array<char, 16'384> buffer{};
+    int status = Z_OK;
+    while (status == Z_OK) {
+        stream.next_out = reinterpret_cast<Bytef*>(buffer.data());
+        stream.avail_out = static_cast<uInt>(buffer.size());
+        status = inflate(&stream, Z_NO_FLUSH);
+        out.append(buffer.data(), buffer.size() - stream.avail_out);
+        if (out.size() > MAX_INFLATED) {
+            inflateEnd(&stream);
+            return failure("the message is too large");
+        }
+    }
+    inflateEnd(&stream);
+    if (status != Z_STREAM_END) {
+        return failure("the message cannot be read");
+    }
+    return out;
+}
+
+Result<LogoutRequest> validate_logout_request(
+    std::string_view xml,
+    const Settings& settings,
+    std::int64_t now,
+    bool signed_outside
+)
 {
     std::string problem;
     Doc doc = parse_message(xml, problem);
@@ -1005,9 +1192,12 @@ validate_logout_request(std::string_view xml, const Settings& settings, std::int
     if (!is_element(request, NS_PROTOCOL, "LogoutRequest")) {
         return failure("not a SAML logout request");
     }
-    // Only the identity provider may end sessions, so the message has to be signed by it.
-    if (const auto signature = verify_own_signature(doc, request, settings); !signature) {
-        return failure(signature.error());
+    // Only the identity provider may end sessions, so the message has to be signed by it (inside,
+    // or around it, in the query of the redirect binding).
+    if (!signed_outside) {
+        if (const auto signature = verify_own_signature(doc, request, settings); !signature) {
+            return failure(signature.error());
+        }
     }
     if (text_of(child(request, NS_ASSERTION, "Issuer")) != settings.idp_entity_id) {
         return failure("the logout request is from another identity provider");

@@ -59,13 +59,17 @@ struct Idp
     std::string dir{};
     std::string certificate{};
 
-    explicit Idp(const std::string& name)
+    /// `curve` (P-256, P-384, P-521) makes an elliptic curve key instead of an RSA one.
+    explicit Idp(const std::string& name, const std::string& curve = {})
     {
         dir = (fs::temp_directory_path() / ("nc-saml-" + name + "-" + nc::util::random_hex(4)))
                   .string();
         fs::create_directories(dir);
         NC_CHECK_EQ(
-            std::system(("openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=idp.example "
+            std::system(("openssl req -x509 -newkey " +
+                         (curve.empty() ? std::string{"rsa:2048"}
+                                        : "ec -pkeyopt ec_paramgen_curve:" + curve) +
+                         " -nodes -days 1 -subj /CN=idp.example "
                          "-keyout " +
                          dir + "/key.pem -out " + dir + "/cert.pem >/dev/null 2>&1")
                             .c_str()),
@@ -631,6 +635,210 @@ void test_validation()
     NC_CHECK_EQ(nc::saml::parse_time("1970-01-02T00:00:00.250Z").value_or(0), std::int64_t{86'400});
     NC_CHECK(!nc::saml::parse_time("1970-01-02 00:00:00").has_value());
     NC_CHECK(!nc::saml::parse_time("garbage").has_value());
+}
+
+void test_ecdsa_signatures()
+{
+    struct Curve
+    {
+        const char* name;
+        const char* algorithm;
+    };
+
+    const Curve curves[] = {
+        {"P-256", "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"},
+        {"P-384", "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha384"},
+        {"P-521", "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512"},
+    };
+    for (const Curve& curve: curves) {
+        const Idp idp{"ec", curve.name};
+        const nc::saml::Settings settings = settings_for(idp);
+        const auto check = [&](const std::string& xml)
+        {
+            return nc::saml::validate_response(xml, settings, "_req0123456789abcdef", now());
+        };
+        Options options;
+        options.signature_method = curve.algorithm;
+        const std::string good = make_response(idp, options);
+        // xmlsec1 signed with ECDSA: the response is read, on the assertion and on the response.
+        NC_CHECK(good.find("ecdsa-sha") != std::string::npos);
+        NC_CHECK(check(good).has_value());
+        Options on_response = options;
+        on_response.sign_assertion = false;
+        on_response.sign_response = true;
+        NC_CHECK(check(make_response(idp, on_response)).has_value());
+        // Changed after signing, or signed by another key of the same kind.
+        std::string changed = good;
+        const std::size_t at = changed.find(">alice<");
+        NC_CHECK(at != std::string::npos);
+        if (at != std::string::npos) {
+            changed.replace(at, 7, ">admin<");
+            NC_CHECK(!check(changed).has_value());
+        }
+        const Idp other{"ec-other", curve.name};
+        NC_CHECK(!check(make_response(other, options)).has_value());
+        // The algorithm in the message does not pick the key kind: an RSA algorithm with this
+        // certificate is refused (the signature is rewritten to claim RSA).
+        std::string claims_rsa = good;
+        const std::size_t method = claims_rsa.find(curve.algorithm);
+        NC_CHECK(method != std::string::npos);
+        if (method != std::string::npos) {
+            claims_rsa.replace(
+                method,
+                std::string_view{curve.algorithm}.size(),
+                "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+            );
+            NC_CHECK(!check(claims_rsa).has_value());
+        }
+        // A truncated signature value (r and s must fill the curve's width) is refused.
+        std::string cut = good;
+        const std::size_t value = cut.find("<ds:SignatureValue>");
+        NC_CHECK(value != std::string::npos);
+        if (value != std::string::npos) {
+            cut.insert(value + 19, "AAAA");
+            NC_CHECK(!check(cut).has_value());
+        }
+    }
+    // An RSA certificate with an ECDSA algorithm is refused as well.
+    {
+        const Idp rsa{"rsa-key"};
+        const nc::saml::Settings settings = settings_for(rsa);
+        const Idp ec{"ec-key", "P-256"};
+        Options options;
+        options.signature_method = curves[0].algorithm;
+        NC_CHECK(!nc::saml::validate_response(
+                      make_response(ec, options),
+                      settings,
+                      "_req0123456789abcdef",
+                      now()
+        )
+                      .has_value());
+    }
+}
+
+/// `text` with the first `from` replaced by `to` (the text itself when `from` is not there).
+std::string replaced(std::string text, const std::string& from, const std::string& to)
+{
+    const std::size_t at = text.find(from);
+    NC_CHECK(at != std::string::npos);
+    if (at != std::string::npos) {
+        text.replace(at, from.size(), to);
+    }
+    return text;
+}
+
+/// A logout request as the identity provider sends it by the HTTP-Redirect binding: the query
+/// string, signed over `SAMLRequest[&RelayState]&SigAlg` by `openssl dgst` (not this code).
+std::string signed_redirect_query(
+    const Idp& idp,
+    const std::string& xml,
+    const std::string& relay = "back",
+    const std::string& algorithm = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
+    const std::string& digest = "sha256"
+)
+{
+    const std::string url = nc::saml::redirect_url("https://sp.example/", xml, relay);
+    std::string query = url.substr(url.find('?') + 1);
+    query += "&" + nc::util::form_encode({{"SigAlg", algorithm}});
+    {
+        std::ofstream{idp.dir + "/q.txt", std::ios::binary} << query;
+    }
+    const int status = std::system(("openssl dgst -" + digest + " -sign " + idp.dir +
+                                    "/key.pem -out " + idp.dir + "/q.sig " + idp.dir + "/q.txt")
+                                       .c_str());
+    NC_CHECK_EQ(status, 0);
+    return query + "&" +
+           nc::util::form_encode({{"Signature", nc::util::base64_encode(slurp(idp.dir + "/q.sig"))}}
+           );
+}
+
+void test_redirect_logout()
+{
+    const Idp idp{"redirect"};
+    const nc::saml::Settings settings = settings_for(idp);
+    const std::int64_t at = now();
+    const std::string xml = make_logout(idp, {.sign = false});
+    const std::string good = signed_redirect_query(idp, xml);
+
+    // The signed query opens, and the request inside is the identity provider's.
+    const auto opened = nc::saml::open_redirect_message(good, "SAMLRequest", settings);
+    NC_CHECK(opened.has_value());
+    if (opened) {
+        NC_CHECK_EQ(*opened, xml);
+        const auto request = nc::saml::validate_logout_request(*opened, settings, at, true);
+        NC_CHECK(request.has_value());
+        if (request) {
+            NC_CHECK_EQ(request->name_id, "alice");
+        }
+        // Without a signature around it, an unsigned request is not enough.
+        NC_CHECK(!nc::saml::validate_logout_request(*opened, settings, at).has_value());
+    }
+    // Without the relay state, and with the stronger hashes.
+    NC_CHECK(nc::saml::open_redirect_message(
+                 signed_redirect_query(idp, xml, ""),
+                 "SAMLRequest",
+                 settings
+    )
+                 .has_value());
+    NC_CHECK(nc::saml::open_redirect_message(
+                 signed_redirect_query(
+                     idp,
+                     xml,
+                     "back",
+                     "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512",
+                     "sha512"
+                 ),
+                 "SAMLRequest",
+                 settings
+    )
+                 .has_value());
+
+    // Anything changed, taken away or added after the signing is refused.
+    const auto refused = [&](const std::string& query)
+    {
+        return !nc::saml::open_redirect_message(query, "SAMLRequest", settings).has_value();
+    };
+    {
+        std::string changed = good;
+        const std::size_t message = changed.find("SAMLRequest=") + 12;
+        changed[message + 4] = changed[message + 4] == 'A' ? 'B' : 'A';
+        NC_CHECK(refused(changed));
+    }
+    NC_CHECK(refused(replaced(good, "RelayState=back", "RelayState=other")));
+    // SigAlg changed to another hash (the key is the same); not signed at all; signed by someone
+    // else.
+    NC_CHECK(refused(replaced(good, "rsa-sha256", "rsa-sha512")));
+    NC_CHECK(refused(good.substr(0, good.find("&Signature="))));
+    NC_CHECK(refused(signed_redirect_query(Idp{"redirect-stranger"}, xml)));
+    // The signed text is built in the order the binding fixes (so the order of the parts as sent
+    // does not matter); a part twice is refused.
+    {
+        const auto parts = nc::util::split(good, '&');
+        NC_CHECK(refused(good + "&" + parts.at(1)));
+        NC_CHECK(refused(good + "&" + parts.at(0)));
+    }
+    // An elliptic curve algorithm does not fit this RSA certificate.
+    NC_CHECK(refused(replaced(good, "rsa-sha256", "ecdsa-sha256")));
+    // A message that inflates to more than it may is refused although it is signed: 4 MiB of
+    // zeros compress to a few kilobytes.
+    {
+        const std::string bomb =
+            "<samlp:LogoutRequest xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\">" +
+            std::string(4U * 1'024U * 1'024U, ' ') + "</samlp:LogoutRequest>";
+        NC_CHECK(refused(signed_redirect_query(idp, bomb)));
+    }
+    // A request that is not a logout request: the message opens (it is signed) but is not valid.
+    {
+        const auto other = nc::saml::open_redirect_message(
+            signed_redirect_query(idp, "<a/>"),
+            "SAMLRequest",
+            settings
+        );
+        NC_CHECK(other.has_value());
+        if (other) {
+            NC_CHECK(!nc::saml::validate_logout_request(*other, settings, at, true).has_value());
+        }
+    }
 }
 
 void test_logout_validation()
@@ -1259,6 +1467,61 @@ void test_login_flow()
         ));
     }
     NC_CHECK_EQ(token_status(), 401);
+    // The identity provider ends a session by redirect: the query is signed (not the XML), the
+    // person's app password stops working, and the answer is a signed redirect back.
+    {
+        (void)call("GET", base + "/login");
+        Options third;
+        third.request_id = pending();
+        third.assertion_id = "_assertion_" + nc::util::random_hex(6);
+        third.not_on_or_after = now() + 300;
+        const Response third_answer = call(
+            "POST",
+            base + "/acs",
+            nc::util::form_encode(
+                {{"SAMLResponse", nc::util::base64_encode(make_response(idp, third))}}
+            )
+        );
+        NC_CHECK_EQ(third_answer.get_status(), 200);
+        const std::string page_body = third_answer.get_body();
+        const std::size_t code_at = page_body.find("<code>");
+        NC_CHECK(code_at != std::string::npos);
+        if (code_at != std::string::npos) {
+            token = page_body.substr(code_at + 6, page_body.find("</code>") - code_at - 6);
+        }
+        NC_CHECK_EQ(token_status(), 200);
+        const auto by_redirect = [&](const std::string& query)
+        {
+            Request request{"GET", base + "/logout"};
+            request.get_query() = query;
+            return kernel.handle(std::move(request));
+        };
+        LogoutOptions unsigned_xml;
+        unsigned_xml.id = "_lo_redirect";
+        unsigned_xml.sign = false;
+        const std::string xml = make_logout(idp, unsigned_xml);
+        // Signed by someone else, or not signed: nothing happens.
+        NC_CHECK_EQ(
+            by_redirect(signed_redirect_query(Idp{"flow-stranger2"}, xml)).get_status(),
+            403
+        );
+        NC_CHECK_EQ(
+            by_redirect(signed_redirect_query(idp, xml)
+                            .substr(0, signed_redirect_query(idp, xml).find("&Signature=")))
+                .get_status(),
+            403
+        );
+        NC_CHECK_EQ(token_status(), 200);
+        const Response ended_by_redirect = by_redirect(signed_redirect_query(idp, xml));
+        NC_CHECK_EQ(ended_by_redirect.get_status(), 302);
+        NC_CHECK(
+            std::string{ended_by_redirect.header("Location")}
+                .rfind("https://idp.example/slo?SAMLResponse=", 0) == 0
+        );
+        NC_CHECK_EQ(token_status(), 401);
+        // Used once.
+        NC_CHECK_EQ(by_redirect(signed_redirect_query(idp, xml)).get_status(), 403);
+    }
     // The metadata offers the key; the identity provider's answer is a page, a request by redirect
     // is not accepted.
     NC_CHECK(call("GET", base + "/metadata").get_body().find("KeyDescriptor") != std::string::npos);
@@ -1269,7 +1532,7 @@ void test_login_flow()
         return kernel.handle(std::move(request)).get_status();
     };
     NC_CHECK_EQ(logout_query("SAMLResponse=abc"), 200);
-    NC_CHECK_EQ(logout_query("SAMLRequest=abc"), 400);
+    NC_CHECK_EQ(logout_query("SAMLRequest=abc"), 403); // not signed
     kernel.stop();
     fs::remove_all(dir);
 }
@@ -1279,6 +1542,8 @@ void test_login_flow()
 int main()
 {
     test_validation();
+    test_ecdsa_signatures();
+    test_redirect_logout();
     test_logout_validation();
     test_signed_requests();
     test_encrypted_assertions();

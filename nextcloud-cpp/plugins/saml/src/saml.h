@@ -62,11 +62,27 @@ struct LogoutRequest
 
 /// @brief Checks a logout request of the identity provider (the decoded XML). Accepted only if: the
 /// XML has no DTD, the root is a LogoutRequest signed by the configured certificate (the signature
-/// directly inside it, the same rules as for assertions), issued by the configured identity
-/// provider to `slo_url`, current (issued recently, not expired), and naming exactly one
-/// unencrypted NameID.
-[[nodiscard]] Result<LogoutRequest>
-validate_logout_request(std::string_view xml, const Settings& settings, std::int64_t now);
+/// directly inside it, the same rules as for assertions; with `signed_outside` the signature is
+/// the one over the query of the HTTP-Redirect binding, which `open_redirect_message` has
+/// checked), issued by the configured identity provider to `slo_url`, current (issued recently,
+/// not expired), and naming exactly one unencrypted NameID.
+[[nodiscard]] Result<LogoutRequest> validate_logout_request(
+    std::string_view xml,
+    const Settings& settings,
+    std::int64_t now,
+    bool signed_outside = false
+);
+
+/// @brief A message of the HTTP-Redirect binding as received (`raw_query` is the query string as
+/// it came, still escaped): the signature over `parameter=...&RelayState=...&SigAlg=...` must
+/// verify with the identity provider's certificate (RSA or ECDSA; an unsigned message is refused,
+/// and so is an algorithm that does not fit the certificate), and the message is inflated (at
+/// most 256 KiB) and returned.
+[[nodiscard]] Result<std::string> open_redirect_message(
+    std::string_view raw_query,
+    std::string_view parameter,
+    const Settings& settings
+);
 
 /// @brief The LogoutResponse XML that answers the request `in_response_to`.
 [[nodiscard]] std::string build_logout_response(

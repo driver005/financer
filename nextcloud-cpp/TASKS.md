@@ -57,7 +57,7 @@ style (`CODESTYLE.md`).
     * Federation: re-share chains across servers, and Nextcloud's trusted-server hand-shake with the
       CardDAV pull of the system address books (people on trusted servers are found through
       `[lookup] servers` instead). Not checked against a real Nextcloud server.
-    * SAML: ECDSA, ECDH key agreement, logout requests by redirect binding.
+    * SAML: ECDH key agreement for encrypted assertions (signatures are RSA and ECDSA, logout works by POST and by redirect).
     * The web front end and the viewer: Nextcloud renders them with PHP templates.
     * C++26 modules: this tree builds with plain headers (`docs/architecture.md`, "Toolchain").
 
