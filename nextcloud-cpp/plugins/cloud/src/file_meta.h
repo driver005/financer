@@ -42,6 +42,25 @@ public:
     /// @brief The path with this number, empty when there is none.
     [[nodiscard]] std::string path_of(const std::string& user, std::int64_t id) const;
 
+    /// @brief Keeps the checksum a client sent with an upload (`SHA1:<hex>`), for the file as it
+    /// was then (size and modification time). An empty `checksum` forgets it.
+    void set_checksum(
+        const std::string& user,
+        const std::string& path,
+        const std::string& checksum,
+        std::uint64_t size,
+        std::int64_t mtime
+    ) const;
+
+    /// @brief The kept checksum, but only while the file still has that size and modification
+    /// time (a file changed some other way has none); empty when there is none.
+    [[nodiscard]] std::string checksum_of(
+        const std::string& user,
+        const std::string& path,
+        std::uint64_t size,
+        std::int64_t mtime
+    ) const;
+
     /// @brief The favorite paths of a user.
     [[nodiscard]] std::vector<std::string> favorites(const std::string& user) const;
 

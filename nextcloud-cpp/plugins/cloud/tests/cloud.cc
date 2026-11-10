@@ -4396,6 +4396,214 @@ void test_propfind_requests()
     fs::remove_all(dir);
 }
 
+// ---- checksums ---------------------------------------------------------------------------------
+
+void test_checksums()
+{
+    const std::string dir = temp_dir("checksums");
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    for (const char* plugin: {"cloud", "groups", "users", "db"}) {
+        NC_CHECK(kernel
+                     .add_plugin_library(std::string{"plugins/"} + plugin + "/lib" + plugin + ".so")
+                     .has_value());
+    }
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    for (const char* name: {"alice", "bob"}) {
+        ::setenv("OC_PASS", (std::string{name} + " password").c_str(), 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {name}, out), 0);
+    }
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string bob = "bob:bob password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const std::string b = "/remote.php/dav/files/bob";
+    const auto call = [&](const std::string& method,
+                          const std::string& path,
+                          const std::string& body = {},
+                          const std::string& who = "alice:alice password",
+                          const std::vector<std::pair<std::string, std::string>>& headers = {})
+    {
+        Request request = user_req(method, path, body, who);
+        for (const auto& [key, value]: headers) {
+            request.add_header(std::string{key}, std::string{value});
+        }
+        return kernel.handle(std::move(request));
+    };
+    const std::string ask =
+        R"(<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:checksums/></d:prop></d:propfind>)";
+    const auto checksums =
+        [&](const std::string& path, const std::string& who = "alice:alice password")
+    {
+        const Response answer = call("PROPFIND", path, ask, who, {{"Depth", "0"}});
+        const std::string& body = answer.get_body();
+        const std::size_t open = body.find("<oc:checksum>");
+        if (open == std::string::npos) {
+            return std::string{};
+        }
+        const std::size_t from = open + 13;
+        return body.substr(from, body.find("</oc:checksum>", from) - from);
+    };
+    const auto put = [&](const std::string& path, const std::string& body, const std::string& sum)
+    {
+        return call(
+            "PUT",
+            path,
+            body,
+            alice,
+            sum.empty() ? std::vector<std::pair<std::string, std::string>>{}
+                        : std::vector<std::pair<std::string, std::string>>{{"OC-Checksum", sum}}
+        );
+    };
+    // Values from python's hashlib and zlib: hello world
+    const std::string sha1 = "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed";
+    const std::string md5 = "5eb63bbbe01eeed093cb22bb8f5acdc3";
+    const std::string sha256 = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+    const std::string adler = "1a0b045d";
+
+    // A right checksum is kept and shown, in every algorithm and with the name in any case.
+    NC_CHECK_EQ(put(a + "/f.txt", "hello world", "SHA1:" + sha1).get_status(), 201);
+    NC_CHECK_EQ(checksums(a + "/f.txt"), "SHA1:" + sha1);
+    NC_CHECK_EQ(put(a + "/f.txt", "hello world", "md5:" + md5).get_status(), 204);
+    NC_CHECK_EQ(checksums(a + "/f.txt"), "MD5:" + md5);
+    NC_CHECK_EQ(put(a + "/f.txt", "hello world", "SHA256:" + sha256).get_status(), 204);
+    NC_CHECK_EQ(checksums(a + "/f.txt"), "SHA256:" + sha256);
+    NC_CHECK_EQ(put(a + "/f.txt", "hello world", "ADLER32:" + adler).get_status(), 204);
+    NC_CHECK_EQ(checksums(a + "/f.txt"), "ADLER32:" + adler);
+    NC_CHECK_EQ(
+        put(a + "/f.txt",
+            "hello world",
+            "SHA1:" + std::string{"2AAE6C35C94FCFB415DBE95F408B9CE91EE846ED"})
+            .get_status(),
+        204
+    );
+    NC_CHECK_EQ(checksums(a + "/f.txt"), "SHA1:" + sha1);
+
+    // A wrong one is refused and the old content stays.
+    NC_CHECK_EQ(put(a + "/f.txt", "other", "SHA1:" + sha1).get_status(), 400);
+    NC_CHECK_EQ(call("GET", a + "/f.txt").get_body(), "hello world");
+    NC_CHECK_EQ(checksums(a + "/f.txt"), "SHA1:" + sha1);
+    NC_CHECK_EQ(put(a + "/new.txt", "other", "ADLER32:" + adler).get_status(), 400);
+    NC_CHECK_EQ(call("GET", a + "/new.txt").get_status(), 404);
+
+    // An algorithm or a form that is not known is ignored; no checksum is shown then.
+    NC_CHECK_EQ(put(a + "/g.txt", "hello world", "CRC32:abcdef").get_status(), 201);
+    NC_CHECK_EQ(checksums(a + "/g.txt"), "");
+    NC_CHECK_EQ(put(a + "/g.txt", "hello world", "nonsense").get_status(), 204);
+    NC_CHECK_EQ(checksums(a + "/g.txt"), "");
+
+    // An upload without one clears the old.
+    NC_CHECK_EQ(put(a + "/f.txt", "hello world", "").get_status(), 204);
+    NC_CHECK_EQ(checksums(a + "/f.txt"), "");
+
+    // Follows a move, not a copy, and a folder has none.
+    NC_CHECK_EQ(put(a + "/f.txt", "hello world", "SHA1:" + sha1).get_status(), 204);
+    NC_CHECK_EQ(call("MKCOL", a + "/Dir").get_status(), 201);
+    NC_CHECK_EQ(checksums(a + "/Dir"), "");
+    NC_CHECK_EQ(
+        call("COPY", a + "/f.txt", {}, alice, {{"Destination", a + "/Dir/copy.txt"}}).get_status(),
+        201
+    );
+    NC_CHECK_EQ(checksums(a + "/Dir/copy.txt"), "");
+    NC_CHECK_EQ(
+        call("MOVE", a + "/f.txt", {}, alice, {{"Destination", a + "/Dir/moved.txt"}}).get_status(),
+        201
+    );
+    NC_CHECK_EQ(checksums(a + "/Dir/moved.txt"), "SHA1:" + sha1);
+    NC_CHECK_EQ(call("DELETE", a + "/Dir/moved.txt").get_status(), 204);
+    NC_CHECK_EQ(put(a + "/Dir/moved.txt", "hello world", "").get_status(), 201);
+    NC_CHECK_EQ(checksums(a + "/Dir/moved.txt"), "");
+
+    // Only when asked for by name; other people's files give nothing.
+    NC_CHECK_EQ(put(a + "/h.txt", "hello world", "SHA1:" + sha1).get_status(), 201);
+    NC_CHECK(!contains_text(call("PROPFIND", a + "/h.txt", {}, alice, {{"Depth", "0"}}), "checksum")
+    );
+    NC_CHECK(call("PROPFIND", a + "/h.txt", ask, bob, {{"Depth", "0"}}).get_status() >= 400);
+
+    // A file changed some other way than a PUT with a checksum does not keep an old one.
+    NC_CHECK_EQ(put(a + "/s.txt", "hello world", "SHA1:" + sha1).get_status(), 201);
+    NC_CHECK_EQ(checksums(a + "/s.txt"), "SHA1:" + sha1);
+    {
+        std::ofstream{dir + "/alice/files/s.txt", std::ios::binary | std::ios::trunc}
+            << "hello  world";
+    }
+    NC_CHECK_EQ(checksums(a + "/s.txt"), "");
+    // Either of the two is enough: a different size with the same time, the same size with
+    // another time.
+    {
+        const std::string file = dir + "/alice/files/s.txt";
+        NC_CHECK_EQ(put(a + "/s.txt", "hello world", "SHA1:" + sha1).get_status(), 204);
+        const auto written = fs::last_write_time(file);
+        {
+            std::ofstream{file, std::ios::binary | std::ios::trunc} << "hello  world";
+        }
+        fs::last_write_time(file, written);
+        NC_CHECK_EQ(checksums(a + "/s.txt"), "");
+        NC_CHECK_EQ(put(a + "/s.txt", "hello world", "SHA1:" + sha1).get_status(), 204);
+        const auto again = fs::last_write_time(file);
+        {
+            std::ofstream{file, std::ios::binary | std::ios::trunc} << "hellp world";
+        }
+        fs::last_write_time(file, again + std::chrono::seconds{10});
+        NC_CHECK_EQ(checksums(a + "/s.txt"), "");
+        // Put back as it was, the checksum is good again.
+        {
+            std::ofstream{file, std::ios::binary | std::ios::trunc} << "hello world";
+        }
+        fs::last_write_time(file, again);
+        NC_CHECK_EQ(checksums(a + "/s.txt"), "SHA1:" + sha1);
+    }
+
+    // An upload that the server spooled to disk is checked from the file.
+    {
+        std::string big(300'000, 'x');
+        for (std::size_t at = 0; at < big.size(); at += 7) {
+            big[at] = static_cast<char>('a' + (at % 26));
+        }
+        const std::string spooled = dir + "/spooled.bin";
+        {
+            std::ofstream{spooled, std::ios::binary} << big;
+        }
+        auto sum = nc::util::Checksum::create("SHA1");
+        NC_CHECK(sum.has_value());
+        sum->update(big);
+        const std::string right = "SHA1:" + sum->hex();
+        const auto spool = [&](const std::string& header)
+        {
+            Request request = user_req("PUT", a + "/spooled.bin", "", alice);
+            request.set_body_file(std::string{spooled});
+            request.add_header("OC-Checksum", std::string{header});
+            return kernel.handle(std::move(request));
+        };
+        NC_CHECK_EQ(spool(right).get_status(), 201);
+        NC_CHECK_EQ(checksums(a + "/spooled.bin"), right);
+        NC_CHECK_EQ(spool("SHA1:" + sha1).get_status(), 400);
+        NC_CHECK_EQ(checksums(a + "/spooled.bin"), right);
+    }
+
+    // Through a share with write access: an upload there clears what the owner had.
+    NC_CHECK_EQ(call("MKCOL", a + "/Shared").get_status(), 201);
+    NC_CHECK_EQ(put(a + "/Shared/x.txt", "hello world", "SHA1:" + sha1).get_status(), 201);
+    NC_CHECK_EQ(
+        call(
+            "POST",
+            "/ocs/v2.php/apps/files_sharing/api/v1/shares",
+            "path=%2FShared&shareType=0&shareWith=bob&permissions=31"
+        )
+            .get_status(),
+        200
+    );
+    NC_CHECK_EQ(checksums(a + "/Shared/x.txt"), "SHA1:" + sha1);
+    NC_CHECK(call("PUT", b + "/Shared/x.txt", "changed!!!!", bob).get_status() < 300);
+    NC_CHECK_EQ(call("GET", a + "/Shared/x.txt").get_body(), "changed!!!!");
+    NC_CHECK_EQ(checksums(a + "/Shared/x.txt"), "");
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 int main()
 {
     test_normalize();
@@ -4420,6 +4628,7 @@ int main()
     test_external_sftp();
     test_file_ids_and_favorites();
     test_propfind_requests();
+    test_checksums();
     test_folder_archives();
     test_external_storage();
     test_encryption();

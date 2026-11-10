@@ -30,6 +30,13 @@ void FileMeta::migrate() const
         "TEXT NOT NULL, favorite INTEGER NOT NULL DEFAULT 0);"
         "CREATE UNIQUE INDEX nc_file_meta_path ON nc_file_meta (uid, path);"
     );
+    nc::db::Client{m_host}.migrate(
+        "cloud_meta",
+        2,
+        "ALTER TABLE nc_file_meta ADD COLUMN checksum TEXT NOT NULL DEFAULT '';"
+        "ALTER TABLE nc_file_meta ADD COLUMN checksum_size INTEGER NOT NULL DEFAULT 0;"
+        "ALTER TABLE nc_file_meta ADD COLUMN checksum_mtime INTEGER NOT NULL DEFAULT 0;"
+    );
 }
 
 std::int64_t FileMeta::id_of(const std::string& user, const std::string& path) const
@@ -100,6 +107,40 @@ std::string FileMeta::path_of(const std::string& user, std::int64_t id) const
         {user, std::to_string(id)}
     );
     return rows.empty() ? std::string{} : nc::db::value_of(rows.front(), "path");
+}
+
+void FileMeta::set_checksum(
+    const std::string& user,
+    const std::string& path,
+    const std::string& checksum,
+    std::uint64_t size,
+    std::int64_t mtime
+) const
+{
+    if (!checksum.empty()) {
+        (void)id_of(user, path);
+    }
+    // Without a value nothing is created: only a row that is there is cleared.
+    nc::db::Client{m_host}.exec(
+        "UPDATE nc_file_meta SET checksum = ?, checksum_size = ?, checksum_mtime = ? WHERE uid = ? "
+        "AND path = ?",
+        {checksum, std::to_string(size), std::to_string(mtime), user, path}
+    );
+}
+
+std::string FileMeta::checksum_of(
+    const std::string& user,
+    const std::string& path,
+    std::uint64_t size,
+    std::int64_t mtime
+) const
+{
+    const auto rows = nc::db::Client{m_host}.query(
+        "SELECT checksum FROM nc_file_meta WHERE uid = ? AND path = ? AND checksum_size = ? AND "
+        "checksum_mtime = ?",
+        {user, path, std::to_string(size), std::to_string(mtime)}
+    );
+    return rows.empty() ? std::string{} : nc::db::value_of(rows.front(), "checksum");
 }
 
 std::vector<std::string> FileMeta::favorites(const std::string& user) const

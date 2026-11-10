@@ -501,6 +501,25 @@ private:
         {
             m_meta->removed(user, path);
         };
+        hooks.set_checksum = [this](
+                                 const std::string& user,
+                                 const std::string& path,
+                                 const std::string& checksum,
+                                 std::uint64_t size,
+                                 std::int64_t mtime
+                             )
+        {
+            m_meta->set_checksum(user, path, checksum, size, mtime);
+        };
+        hooks.checksum_of = [this](
+                                const std::string& user,
+                                const std::string& path,
+                                std::uint64_t size,
+                                std::int64_t mtime
+                            )
+        {
+            return m_meta->checksum_of(user, path, size, mtime);
+        };
         hooks.instance_id = m_instance_id;
         hooks.paths_with_tag = [this](const std::string& user, const std::string& tag)
         {
@@ -2775,6 +2794,19 @@ private:
         hooks.share_types = nullptr;
         hooks.display_name = nullptr;
         hooks.paths_with_tag = nullptr;
+        // The file belongs to the owner: a checksum is theirs to keep, and an upload through the
+        // share clears the one they had.
+        hooks.checksum_of = nullptr;
+        hooks.set_checksum = [this, owner = share.get_owner(), prefix](
+                                 const std::string&,
+                                 const std::string& path,
+                                 const std::string& checksum,
+                                 std::uint64_t size,
+                                 std::int64_t mtime
+                             )
+        {
+            m_meta->set_checksum(owner, prefix + path, checksum, size, mtime);
+        };
         hooks.before_delete =
             [this, owner = share.get_owner(), prefix](const std::string&, const std::string& path)
         {

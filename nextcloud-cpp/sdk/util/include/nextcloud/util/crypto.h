@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -45,5 +46,31 @@ pbkdf2_sha256(std::string_view password, std::string_view salt, std::uint32_t it
 
 /// @brief Compares two byte strings in time that depends only on their length.
 [[nodiscard]] bool constant_time_equals(std::string_view left, std::string_view right) noexcept;
+
+/// @brief A running content checksum, as sync clients send and check them (`OC-Checksum:
+/// SHA1:<hex>`): SHA1, SHA256, MD5 or ADLER32. Fed in pieces, so a big file is never held whole.
+class Checksum
+{
+public:
+    /// @brief nullopt for an algorithm name (any case) that is not one of the four.
+    [[nodiscard]] static std::optional<Checksum> create(std::string_view algorithm);
+
+    Checksum(Checksum&&) noexcept;
+    Checksum& operator=(Checksum&&) noexcept;
+    Checksum(const Checksum&) = delete;
+    Checksum& operator=(const Checksum&) = delete;
+    ~Checksum();
+
+    void update(std::string_view data);
+
+    /// @brief The value in lower case hexadecimal (ADLER32: eight digits); ends the run.
+    [[nodiscard]] std::string hex();
+
+private:
+    struct State;
+    explicit Checksum(std::unique_ptr<State> state) noexcept;
+
+    std::unique_ptr<State> m_state;
+};
 
 } // namespace nc::util

@@ -28,6 +28,47 @@ int main()
         "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc"
     );
 
+    // Checksums as sync clients send them; the expected values come from python's hashlib/zlib.
+    {
+        const std::string fox = std::string{"The quick brown fox jumps over the lazy dog"} +
+                                "The quick brown fox jumps over the lazy dog" +
+                                "The quick brown fox jumps over the lazy dog";
+        const auto hex_of =
+            [](std::string_view algorithm, const std::string& data, std::size_t piece)
+        {
+            auto sum = Checksum::create(algorithm);
+            NC_CHECK(sum.has_value());
+            if (!sum) {
+                return std::string{};
+            }
+            for (std::size_t at = 0; at < data.size(); at += piece) {
+                sum->update(std::string_view{data}.substr(at, piece));
+            }
+            return sum->hex();
+        };
+        NC_CHECK_EQ(hex_of("SHA1", fox, fox.size()), "d42f858ad812fd986fd8dc7216af5f88bcaa1463");
+        NC_CHECK_EQ(hex_of("sha1", fox, 7), "d42f858ad812fd986fd8dc7216af5f88bcaa1463");
+        NC_CHECK_EQ(hex_of("MD5", fox, 5), "4e67db4a7a406b0cfdadd887cde7888e");
+        NC_CHECK_EQ(
+            hex_of("SHA256", fox, 11),
+            "5cfa2bf023f22ac82b00cd883ea96852677ff2ecd777f656146bd22004eb75f2"
+        );
+        NC_CHECK_EQ(hex_of("Adler32", fox, 3), "10742f8c");
+        NC_CHECK_EQ(hex_of("ADLER32", "", 1), "00000001");
+        NC_CHECK_EQ(hex_of("ADLER32", "Wikipedia", 4), "11e60398");
+        std::string big;
+        for (int round = 0; round < 40'000; ++round) {
+            for (int byte = 0; byte < 256; ++byte) {
+                big.push_back(static_cast<char>(byte));
+            }
+        }
+        NC_CHECK_EQ(hex_of("SHA1", big, 65'536), "c783d8c71cbaed5400b944f3649331cf37007d09");
+        NC_CHECK_EQ(hex_of("ADLER32", big, 65'536), "c9f96f8b");
+        NC_CHECK(!Checksum::create("CRC32").has_value());
+        NC_CHECK(!Checksum::create("").has_value());
+        NC_CHECK(!Checksum::create("SHA 1").has_value());
+    }
+
     // RFC 3174 / RFC 2202 (SHA-1, HMAC-SHA-1), RFC 4648 (base32), RFC 4226 / RFC 6238 (HOTP, TOTP).
     NC_CHECK_EQ(to_hex(sha1("abc")), "a9993e364706816aba3e25717850c26c9cd0d89d");
     NC_CHECK_EQ(to_hex(sha1("")), "da39a3ee5e6b4b0d3255bfef95601890afd80709");

@@ -14,6 +14,7 @@ nc_cc_library(
         "@boringssl//:crypto",
         "@libxml2",
         "@nlohmann_json//:json",
+        "@zlib",
     ],
 )
 

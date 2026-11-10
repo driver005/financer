@@ -1,12 +1,14 @@
 #include "nextcloud/util/crypto.h"
 
 #include <algorithm>
+#include <cctype>
 #include <openssl/base64.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <stdexcept>
+#include <zlib.h>
 
 namespace {
 
@@ -262,6 +264,85 @@ bool constant_time_equals(std::string_view left, std::string_view right) noexcep
         difference |= static_cast<unsigned char>(left[index] ^ right[index]);
     }
     return difference == 0;
+}
+
+struct Checksum::State
+{
+    const EVP_MD* digest{nullptr};
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> context{nullptr, &EVP_MD_CTX_free};
+    uLong adler{0};
+};
+
+std::optional<Checksum> Checksum::create(std::string_view algorithm)
+{
+    std::string name;
+    for (const char letter: algorithm) {
+        name.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(letter))));
+    }
+    auto state = std::make_unique<State>();
+    if (name == "ADLER32") {
+        state->adler = adler32(0L, Z_NULL, 0);
+        return Checksum{std::move(state)};
+    }
+    if (name == "SHA1") {
+        state->digest = EVP_sha1();
+    } else if (name == "SHA256") {
+        state->digest = EVP_sha256();
+    } else if (name == "MD5") {
+        state->digest = EVP_md5();
+    } else {
+        return std::nullopt;
+    }
+    state->context.reset(EVP_MD_CTX_new());
+    if (!state->context || EVP_DigestInit_ex(state->context.get(), state->digest, nullptr) != 1) {
+        return std::nullopt;
+    }
+    return Checksum{std::move(state)};
+}
+
+Checksum::Checksum(std::unique_ptr<State> state) noexcept :
+    m_state{std::move(state)}
+{
+}
+
+Checksum::Checksum(Checksum&&) noexcept = default;
+Checksum& Checksum::operator=(Checksum&&) noexcept = default;
+Checksum::~Checksum() = default;
+
+void Checksum::update(std::string_view data)
+{
+    if (m_state->digest == nullptr) {
+        // zlib takes an unsigned int of bytes at a time.
+        while (!data.empty()) {
+            const std::size_t piece = std::min<std::size_t>(data.size(), 1U << 30U);
+            m_state->adler = adler32(
+                m_state->adler,
+                reinterpret_cast<const Bytef*>(data.data()),
+                static_cast<uInt>(piece)
+            );
+            data.remove_prefix(piece);
+        }
+        return;
+    }
+    EVP_DigestUpdate(m_state->context.get(), data.data(), data.size());
+}
+
+std::string Checksum::hex()
+{
+    if (m_state->digest == nullptr) {
+        std::string out(4, '\0');
+        for (int index = 0; index < 4; ++index) {
+            out[static_cast<std::size_t>(index)] = static_cast<char>(
+                (m_state->adler >> (24U - 8U * static_cast<unsigned>(index))) & 0xFFU
+            );
+        }
+        return to_hex(out);
+    }
+    std::string out(EVP_MAX_MD_SIZE, '\0');
+    unsigned size = 0;
+    EVP_DigestFinal_ex(m_state->context.get(), reinterpret_cast<unsigned char*>(out.data()), &size);
+    out.resize(size);
+    return to_hex(out);
 }
 
 } // namespace nc::util

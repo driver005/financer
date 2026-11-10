@@ -38,6 +38,24 @@ struct Hooks
     std::function<void(const std::string& user, const std::string& from, const std::string& to)>
         after_move{};
     std::function<void(const std::string& user, const std::string& path)> after_delete{};
+    /// The checksum a client sent with an upload is kept for the file as it was written (size and
+    /// modification time) and given back as `oc:checksums` while the file is still that; an upload
+    /// without one clears it. Unset: no such property, and a sent checksum is only verified.
+    std::function<void(
+        const std::string& user,
+        const std::string& path,
+        const std::string& checksum,
+        std::uint64_t size,
+        std::int64_t mtime
+    )>
+        set_checksum{};
+    std::function<std::string(
+        const std::string& user,
+        const std::string& path,
+        std::uint64_t size,
+        std::int64_t mtime
+    )>
+        checksum_of{};
     /// This server's id, the tail of `oc:id`.
     std::string instance_id{};
     /// The user's own shares as (path, share type) pairs, for `oc:share-types`; unset: none shown.

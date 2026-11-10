@@ -1,6 +1,7 @@
 #include "dav.h"
 
 #include "folder_archive.h"
+#include "nextcloud/util/crypto.h"
 #include "nextcloud/util/json.h"
 #include "nextcloud/util/text.h"
 #include "nextcloud/util/time.h"
@@ -10,6 +11,7 @@
 #include <cctype>
 #include <chrono>
 #include <ctime>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <optional>
@@ -300,6 +302,44 @@ namespace {
         return decoded.substr(base_href.size());
     }
 
+    /// Checks the upload against the `OC-Checksum` header. nullopt: no usable checksum (none, or an
+    /// algorithm that is not known); empty: it does not match; else the checksum to keep
+    /// (`SHA1:<hex>`). A spooled body is read from its file in pieces.
+    std::optional<std::string> verify_checksum(std::string_view header, const Request& request)
+    {
+        const std::size_t colon = header.find(':');
+        if (colon == std::string_view::npos) {
+            return std::nullopt;
+        }
+        auto sum = util::Checksum::create(header.substr(0, colon));
+        if (!sum) {
+            return std::nullopt;
+        }
+        std::string algorithm;
+        for (const char letter: header.substr(0, colon)) {
+            algorithm.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(letter)))
+            );
+        }
+        std::string wanted;
+        for (const char letter: header.substr(colon + 1)) {
+            wanted.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(letter))));
+        }
+        if (request.get_body_file().empty()) {
+            sum->update(request.get_body());
+        } else {
+            std::ifstream file{request.get_body_file(), std::ios::binary};
+            std::string piece(1U << 16U, '\0');
+            while (file) {
+                file.read(piece.data(), static_cast<std::streamsize>(piece.size()));
+                sum->update(
+                    std::string_view{piece}.substr(0, static_cast<std::size_t>(file.gcount()))
+                );
+            }
+        }
+        const std::string actual = sum->hex();
+        return actual == wanted ? algorithm + ":" + actual : std::string{};
+    }
+
     /// The properties that only a user's own files have: the number, `oc:id`, the favorite mark,
     /// and, when asked for, the share types and the owner's name.
     ExtraProps extra_props(const Hooks& hooks, const std::string& user)
@@ -330,6 +370,18 @@ namespace {
                  "favorite",
                  hooks.is_favorite && hooks.is_favorite(user, node.get_path()) ? "1" : "0"}
             );
+            if (hooks.checksum_of && !node.is_directory() &&
+                wanted.asked("http://owncloud.org/ns", "checksums")) {
+                const std::string sum =
+                    hooks.checksum_of(user, node.get_path(), node.get_size(), node.get_mtime());
+                if (!sum.empty()) {
+                    out.push_back(
+                        {"oc",
+                         "checksums",
+                         "<oc:checksum>" + util::xml_escape(sum) + "</oc:checksum>"}
+                    );
+                }
+            }
             if (hooks.share_types && wanted.asked("http://owncloud.org/ns", "share-types")) {
                 if (!shares->has_value()) {
                     *shares = hooks.share_types(user);
@@ -944,6 +996,18 @@ Response dav_handle(
         if (!asked.empty()) {
             mtime = std::strtoll(std::string{asked}.c_str(), nullptr, 10);
         }
+        // A checksum sent with the upload (`OC-Checksum: SHA1:<hex>`) has to match the content;
+        // one with an algorithm that is not known is ignored.
+        std::string checksum;
+        if (const auto verdict = verify_checksum(request.header("OC-Checksum"), request)) {
+            if (verdict->empty()) {
+                return Response::text(
+                    400,
+                    "The computed checksum does not match the one received from the client"
+                );
+            }
+            checksum = *verdict;
+        }
         if (hooks.before_overwrite) {
             const auto existing = storage.stat(path);
             if (existing && !existing->is_directory()) {
@@ -962,6 +1026,9 @@ Response dav_handle(
         Response response{*created ? 201 : 204};
         if (auto node = storage.stat(path)) {
             add_file_headers(response, *node);
+            if (hooks.set_checksum) {
+                hooks.set_checksum(user, path, checksum, node->get_size(), node->get_mtime());
+            }
         }
         if (mtime > 0) {
             response.add_header("X-OC-Mtime", "accepted");
