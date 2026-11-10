@@ -8,6 +8,7 @@ nc_cc_library(
     srcs = [
         "src/folder_archive.cc",
         "src/dav.cc",
+        "src/file_meta.cc",
         "src/file_cipher.cc",
         "src/ftp.cc",
         "src/s3.cc",
@@ -19,6 +20,7 @@ nc_cc_library(
     hdrs = [
         "src/folder_archive.h",
         "src/dav.h",
+        "src/file_meta.h",
         "src/file_cipher.h",
         "src/ftp.h",
         "src/remote_files.h",
@@ -33,6 +35,7 @@ nc_cc_library(
     deps = [
         "//plugins/federation:lib",
         "//sdk/plugin:http",
+        "//sdk/plugin:sdk",
         "//sdk/util",
         "@boringssl//:crypto",
         "@libarchive//libarchive",

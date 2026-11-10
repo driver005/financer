@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace nc::cloud {
 
@@ -26,6 +27,19 @@ struct Hooks
     /// What the files of one downloaded archive (a folder as zip or tar) may add up to; 0 turns
     /// archives off.
     std::uint64_t archive_max_bytes{4ULL * 1'024U * 1'024U * 1'024U};
+    /// File numbers and favorites (a user's own files only; unset: no such properties). The number
+    /// of a path, made on first ask; `0` means none.
+    std::function<std::int64_t(const std::string& user, const std::string& path)> file_id{};
+    std::function<bool(const std::string& user, const std::string& path)> is_favorite{};
+    std::function<void(const std::string& user, const std::string& path, bool favorite)>
+        set_favorite{};
+    std::function<std::vector<std::string>(const std::string& user)> favorites{};
+    /// Told after a rename or delete through WebDAV, so the numbers follow.
+    std::function<void(const std::string& user, const std::string& from, const std::string& to)>
+        after_move{};
+    std::function<void(const std::string& user, const std::string& path)> after_delete{};
+    /// This server's id, the tail of `oc:id`.
+    std::string instance_id{};
 };
 
 /// @brief Where a DAV request lands: whose files, under which URL, and which path inside them.
@@ -120,12 +134,16 @@ private:
     bool default_zip = false
 );
 
+/// @brief More properties for a node, as XML lines to go inside `<d:prop>`.
+using ExtraProps = std::function<std::string(const Node& node)>;
+
 /// @brief The `207 Multi-Status` XML for a PROPFIND answer.
 [[nodiscard]] std::string multistatus(
     const std::vector<Node>& nodes,
     std::string_view base_href,
     std::string_view owner,
-    const Storage& storage
+    const Storage& storage,
+    const ExtraProps& extra = {}
 );
 
 /// @brief ETag, Last-Modified and the headers that make a browser download the file instead of

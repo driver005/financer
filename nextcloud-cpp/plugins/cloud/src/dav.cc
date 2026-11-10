@@ -4,6 +4,7 @@
 #include "nextcloud/util/json.h"
 #include "nextcloud/util/text.h"
 #include "nextcloud/util/time.h"
+#include "nextcloud/util/xml.h"
 
 #include <algorithm>
 #include <cctype>
@@ -297,11 +298,140 @@ namespace {
         return decoded.substr(base_href.size());
     }
 
+    /// The properties that only a user's own files have: the number, `oc:id` and the favorite mark.
+    ExtraProps extra_props(const Hooks& hooks, const std::string& user)
+    {
+        if (!hooks.file_id) {
+            return {};
+        }
+        return [&hooks, user](const Node& node)
+        {
+            const std::int64_t id = hooks.file_id(user, node.get_path());
+            if (id <= 0) {
+                return std::string{};
+            }
+            std::string digits = std::to_string(id);
+            std::string out = "    <oc:fileid>" + digits + "</oc:fileid>\n";
+            out += "    <oc:id>" + std::string(digits.size() < 8 ? 8 - digits.size() : 0, '0') +
+                   digits + util::xml_escape(hooks.instance_id) + "</oc:id>\n";
+            out += std::string{"    <oc:favorite>"} +
+                   (hooks.is_favorite && hooks.is_favorite(user, node.get_path()) ? "1" : "0") +
+                   "</oc:favorite>\n";
+            return out;
+        };
+    }
+
+    /// `PROPPATCH`: the only property a client may set here is the favorite mark. Every property
+    /// gets its own answer, so a client that sets a time as well still hears about the mark.
+    Response proppatch(
+        const Request& request,
+        const Storage& storage,
+        const DavTarget& target,
+        const std::string& path,
+        const Hooks& hooks
+    )
+    {
+        const auto node = storage.stat(path);
+        if (!node) {
+            return failure(node.error());
+        }
+        const auto body = util::Xml::parse(request.get_body());
+        if (!body || body->name() != "propertyupdate") {
+            return Response::text(400, "Not a propertyupdate");
+        }
+        std::string good;
+        std::string refused;
+        const auto handle = [&](const util::Xml& block, bool set)
+        {
+            for (const util::Xml* property: block.find_all("prop")) {
+                for (const util::Xml& entry: property->children()) {
+                    const std::string tag = "<" +
+                                            std::string{entry.name() == "favorite" ? "oc:" : "d:"} +
+                                            entry.name() + "/>";
+                    if (entry.name() == "favorite" && hooks.set_favorite && hooks.file_id) {
+                        hooks.set_favorite(target.get_user(), path, set && entry.text() == "1");
+                        good += "    " + tag + "\n";
+                    } else {
+                        refused +=
+                            "    <x:" + entry.name() + " xmlns:x=\"http://nextcloud.org/ns\"/>\n";
+                    }
+                }
+            }
+        };
+        for (const util::Xml* block: body->find_all("set")) {
+            handle(*block, true);
+        }
+        for (const util::Xml* block: body->find_all("remove")) {
+            handle(*block, false);
+        }
+        std::string href = target.get_base_href() + util::url_encode_path(path == "/" ? "" : path) +
+                           (node->is_directory() ? "/" : "");
+        std::string xml =
+            "<?xml version=\"1.0\"?>\n<d:multistatus xmlns:d=\"DAV:\" "
+            "xmlns:oc=\"http://owncloud.org/ns\" xmlns:nc=\"http://nextcloud.org/ns\">\n"
+            " <d:response>\n  <d:href>" +
+            util::xml_escape(href) + "</d:href>\n";
+        if (!good.empty()) {
+            xml += "  <d:propstat>\n   <d:prop>\n" + good +
+                   "   </d:prop>\n   <d:status>HTTP/1.1 200 OK</d:status>\n  </d:propstat>\n";
+        }
+        if (!refused.empty()) {
+            xml +=
+                "  <d:propstat>\n   <d:prop>\n" + refused +
+                "   </d:prop>\n   <d:status>HTTP/1.1 403 Forbidden</d:status>\n  </d:propstat>\n";
+        }
+        return Response::xml(207, xml + " </d:response>\n</d:multistatus>\n");
+    }
+
+    /// `REPORT` `oc:filter-files` with the favorite rule: the user's favorites below the folder.
+    Response filter_files(
+        const Request& request,
+        const Storage& storage,
+        const DavTarget& target,
+        const std::string& path,
+        const Hooks& hooks
+    )
+    {
+        const auto body = util::Xml::parse(request.get_body());
+        if (!body || body->name() != "filter-files") {
+            return Response::text(400, "Only filter-files reports are supported");
+        }
+        const util::Xml* rules = body->find("filter-rules");
+        if (rules == nullptr || rules->children().size() != 1 ||
+            rules->children().front().name() != "favorite" || !hooks.favorites || !hooks.file_id) {
+            return Response::text(400, "Only the favorite rule is supported");
+        }
+        if (rules->children().front().text() != "1") {
+            return Response::text(400, "Only favorite=1 is supported");
+        }
+        std::vector<Node> nodes;
+        const std::string below = path == "/" ? "/" : path + "/";
+        for (const std::string& favorite: hooks.favorites(target.get_user())) {
+            if (!util::starts_with(favorite, below) && favorite != path) {
+                continue;
+            }
+            if (auto node = storage.stat(favorite)) {
+                nodes.push_back(std::move(*node));
+            }
+        }
+        return Response::xml(
+            207,
+            multistatus(
+                nodes,
+                target.get_base_href(),
+                target.get_user(),
+                storage,
+                extra_props(hooks, target.get_user())
+            )
+        );
+    }
+
     Response propfind(
         const Request& request,
         const Storage& storage,
         const DavTarget& target,
-        const std::string& path
+        const std::string& path,
+        const Hooks& hooks
     )
     {
         const std::string_view depth = request.header("Depth");
@@ -322,7 +452,13 @@ namespace {
         }
         return Response::xml(
             207,
-            multistatus(nodes, target.get_base_href(), target.get_user(), storage)
+            multistatus(
+                nodes,
+                target.get_base_href(),
+                target.get_user(),
+                storage,
+                extra_props(hooks, target.get_user())
+            )
         );
     }
 
@@ -427,7 +563,8 @@ std::string multistatus(
     const std::vector<Node>& nodes,
     std::string_view base_href,
     std::string_view owner,
-    const Storage& storage
+    const Storage& storage,
+    const ExtraProps& extra
 )
 {
     std::string xml = "<?xml version=\"1.0\"?>\n"
@@ -464,6 +601,9 @@ std::string multistatus(
         xml += std::string{"    <oc:permissions>"} + (node.is_directory() ? "RGDNVCK" : "RGDNVW") +
                "</oc:permissions>\n";
         xml += "    <oc:owner-id>" + util::xml_escape(owner) + "</oc:owner-id>\n";
+        if (extra) {
+            xml += extra(node);
+        }
         xml += "   </d:prop>\n   <d:status>HTTP/1.1 200 OK</d:status>\n  </d:propstat>\n "
                "</d:response>\n";
     }
@@ -514,7 +654,15 @@ Response dav_handle(
     }
 
     if (method == "PROPFIND") {
-        return propfind(request, storage, target, path);
+        return propfind(request, storage, target, path, hooks);
+    }
+
+    if (method == "PROPPATCH") {
+        return proppatch(request, storage, target, path, hooks);
+    }
+
+    if (method == "REPORT") {
+        return filter_files(request, storage, target, path, hooks);
     }
 
     if (method == "GET") {
@@ -637,12 +785,18 @@ Response dav_handle(
 
     if (method == "DELETE") {
         if (hooks.before_delete && storage.stat(path) && hooks.before_delete(user, path)) {
+            if (hooks.after_delete) {
+                hooks.after_delete(user, path);
+            }
             publish("file.deleted", event_payload(user, path));
             return Response{204};
         }
         auto removed = storage.remove(path);
         if (!removed) {
             return failure(removed.error());
+        }
+        if (hooks.after_delete) {
+            hooks.after_delete(user, path);
         }
         publish("file.deleted", event_payload(user, path));
         return Response{204};
@@ -663,6 +817,12 @@ Response dav_handle(
                                      : storage.copy(path, *target_path, overwrite);
         if (!done) {
             return failure(done.error());
+        }
+        if (method == "MOVE" && hooks.after_move) {
+            hooks.after_move(user, path, *target_path);
+        } else if (method == "COPY" && hooks.after_delete && *done) {
+            // The copy replaced what was at the target: that file's number is gone.
+            hooks.after_delete(user, *target_path);
         }
         publish(
             method == "MOVE" ? "file.moved" : "file.copied",

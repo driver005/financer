@@ -6,6 +6,7 @@
  * `apps/files_sharing`.
  */
 #include "dav.h"
+#include "file_meta.h"
 #include "ftp.h"
 #include "http_client.h"
 #include "nextcloud/app.h"
@@ -331,6 +332,12 @@ public:
             }
         );
         add_storage_services(host);
+        m_meta = std::make_unique<nc::cloud::FileMeta>(&host);
+        m_meta->migrate();
+        m_instance_id = host.config("instance_id", "");
+        if (m_instance_id.empty()) {
+            m_instance_id = "oc" + nc::util::to_hex(nc::util::sha256(m_data_dir)).substr(0, 10);
+        }
         add_dav_routes(host);
         add_upload_routes(host);
         add_share_routes(host);
@@ -367,9 +374,10 @@ public:
             {
                 // The files stay on disk until an administrator removes them; the shares go at
                 // once.
-                const std::size_t removed =
-                    m_shares->remove_user(nc::util::form_value(nc::util::parse_form(payload), "id")
-                    );
+                const std::string deleted =
+                    nc::util::form_value(nc::util::parse_form(payload), "id");
+                m_meta->forget(deleted);
+                const std::size_t removed = m_shares->remove_user(deleted);
                 m_host->log(
                     nc::LogLevel::INFO,
                     "removed " + std::to_string(removed) + " share(s) of a deleted account"
@@ -442,6 +450,33 @@ private:
             );
         };
         hooks.archive_max_bytes = m_archive_max_bytes;
+        // Numbers and favorites of the user's own files.
+        hooks.file_id = [this](const std::string& user, const std::string& path)
+        {
+            return m_meta->id_of(user, path);
+        };
+        hooks.is_favorite = [this](const std::string& user, const std::string& path)
+        {
+            return m_meta->is_favorite(user, path);
+        };
+        hooks.set_favorite = [this](const std::string& user, const std::string& path, bool favorite)
+        {
+            m_meta->set_favorite(user, path, favorite);
+        };
+        hooks.favorites = [this](const std::string& user)
+        {
+            return m_meta->favorites(user);
+        };
+        hooks.after_move =
+            [this](const std::string& user, const std::string& from, const std::string& to)
+        {
+            m_meta->moved(user, from, to);
+        };
+        hooks.after_delete = [this](const std::string& user, const std::string& path)
+        {
+            m_meta->removed(user, path);
+        };
+        hooks.instance_id = m_instance_id;
         return hooks;
     }
 
@@ -953,7 +988,7 @@ private:
     void add_dav_routes(nc::Host& host)
     {
         static constexpr std::string_view METHODS[] =
-            {"GET", "PUT", "DELETE", "MKCOL", "MOVE", "COPY", "PROPFIND"};
+            {"GET", "PUT", "DELETE", "MKCOL", "MOVE", "COPY", "PROPFIND", "PROPPATCH", "REPORT"};
         for (const std::string_view method: METHODS) {
             host.add_route(
                 method,
@@ -2676,6 +2711,13 @@ private:
             m_host->publish(topic, nc::util::form_encode(form));
         };
         nc::cloud::Hooks hooks = this->hooks();
+        // A received share is the owner's tree under another path: no numbers or favorites there.
+        hooks.file_id = nullptr;
+        hooks.is_favorite = nullptr;
+        hooks.set_favorite = nullptr;
+        hooks.favorites = nullptr;
+        hooks.after_move = nullptr;
+        hooks.after_delete = nullptr;
         hooks.before_delete =
             [this, owner = share.get_owner(), prefix](const std::string&, const std::string& path)
         {
@@ -3540,6 +3582,8 @@ private:
     }
 
     std::string m_data_dir{"data"};
+    std::unique_ptr<nc::cloud::FileMeta> m_meta{};
+    std::string m_instance_id{};
     std::uint64_t m_quota{0};
     std::string m_public_url{};
     std::string m_encryption_key{};

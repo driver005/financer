@@ -3979,6 +3979,193 @@ void test_folder_archives()
     }
 }
 
+// ---- file numbers and favorites -------------------------------------------------------------
+
+bool contains_text(const Response& response, const std::string& text)
+{
+    return response.get_body().find(text) != std::string::npos;
+}
+
+/// The text between `<oc:tag>` and `</oc:tag>` in the response for `href`.
+std::string property_of(const std::string& xml, const std::string& href, const std::string& tag)
+{
+    const std::size_t entry = xml.find("<d:href>" + href + "</d:href>");
+    if (entry == std::string::npos) {
+        return {};
+    }
+    const std::size_t open = xml.find("<oc:" + tag + ">", entry);
+    const std::size_t next = xml.find("</d:response>", entry);
+    if (open == std::string::npos || open > next) {
+        return {};
+    }
+    const std::size_t from = open + tag.size() + 5;
+    return xml.substr(from, xml.find("</oc:" + tag + ">", from) - from);
+}
+
+void test_file_ids_and_favorites()
+{
+    const std::string dir = temp_dir("fileids");
+    nc::Kernel kernel{
+        nc::Config::parse("data_dir = " + dir + "\n[users]\npbkdf2_iterations = 3\n").value()
+    };
+    kernel.get_logger().set_sink({});
+    NC_CHECK(kernel.add_plugin_library("plugins/users/libusers.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/cloud/libcloud.so").has_value());
+    NC_CHECK(kernel.add_plugin_library("plugins/db/libdb.so").has_value());
+    NC_CHECK(kernel.start().has_value());
+    std::string out;
+    for (const char* name: {"alice", "bob"}) {
+        ::setenv("OC_PASS", (std::string{name} + " password").c_str(), 1);
+        NC_CHECK_EQ(kernel.run_command("user:add", {name}, out), 0);
+    }
+    ::unsetenv("OC_PASS");
+    const std::string alice = "alice:alice password";
+    const std::string bob = "bob:bob password";
+    const std::string a = "/remote.php/dav/files/alice";
+    const auto call = [&](const std::string& method,
+                          const std::string& path,
+                          const std::string& body = {},
+                          const std::string& who = "alice:alice password",
+                          const std::vector<std::pair<std::string, std::string>>& headers = {})
+    {
+        Request request = user_req(method, path, body, who);
+        for (const auto& [key, value]: headers) {
+            request.add_header(std::string{key}, std::string{value});
+        }
+        return kernel.handle(std::move(request));
+    };
+    const auto listing = [&](const std::string& path, const char* depth = "1")
+    {
+        return call("PROPFIND", a + path, {}, alice, {{"Depth", depth}}).get_body();
+    };
+    NC_CHECK_EQ(call("MKCOL", a + "/Docs").get_status(), 201);
+    NC_CHECK_EQ(call("PUT", a + "/Docs/one.txt", "1").get_status(), 201);
+    NC_CHECK_EQ(call("PUT", a + "/Docs/two.txt", "2").get_status(), 201);
+    NC_CHECK_EQ(call("MKCOL", a + "/Docs/Sub").get_status(), 201);
+    NC_CHECK_EQ(call("PUT", a + "/Docs/Sub/deep.txt", "d").get_status(), 201);
+
+    // Every file and folder has a number, and oc:id carries it padded, with the server's id.
+    const std::string first = listing("/Docs");
+    const std::string one = property_of(first, a + "/Docs/one.txt", "fileid");
+    const std::string two = property_of(first, a + "/Docs/two.txt", "fileid");
+    const std::string docs = property_of(first, a + "/Docs/", "fileid");
+    NC_CHECK(!one.empty() && !two.empty() && !docs.empty());
+    NC_CHECK(one != two && one != docs);
+    const std::string long_id = property_of(first, a + "/Docs/one.txt", "id");
+    NC_CHECK_EQ(long_id.substr(0, 8), std::string(8 - one.size(), '0') + one);
+    NC_CHECK(long_id.size() > 8 && long_id.substr(8).rfind("oc", 0) == 0);
+    // The same number the next time, and for depth 0.
+    NC_CHECK_EQ(property_of(listing("/Docs"), a + "/Docs/one.txt", "fileid"), one);
+    NC_CHECK_EQ(property_of(listing("/Docs/one.txt", "0"), a + "/Docs/one.txt", "fileid"), one);
+    // Another account has numbers of its own, for its own files.
+    NC_CHECK_EQ(call("PUT", "/remote.php/dav/files/bob/b.txt", "b", bob).get_status(), 201);
+    NC_CHECK(
+        !property_of(
+             call("PROPFIND", "/remote.php/dav/files/bob/", {}, bob, {{"Depth", "1"}}).get_body(),
+             "/remote.php/dav/files/bob/b.txt",
+             "fileid"
+        )
+             .empty()
+    );
+
+    // A rename keeps the number, of the file and of everything below a renamed folder; a copy is
+    // a new file with a new number; replacing a file by moving over it drops the old number.
+    NC_CHECK_EQ(
+        call("MOVE", a + "/Docs/one.txt", {}, alice, {{"Destination", a + "/Docs/uno.txt"}})
+            .get_status(),
+        201
+    );
+    NC_CHECK_EQ(property_of(listing("/Docs"), a + "/Docs/uno.txt", "fileid"), one);
+    const std::string deep = property_of(listing("/Docs/Sub"), a + "/Docs/Sub/deep.txt", "fileid");
+    NC_CHECK_EQ(
+        call("MOVE", a + "/Docs", {}, alice, {{"Destination", a + "/Papers"}}).get_status(),
+        201
+    );
+    NC_CHECK_EQ(property_of(listing("/Papers"), a + "/Papers/", "fileid"), docs);
+    NC_CHECK_EQ(property_of(listing("/Papers"), a + "/Papers/uno.txt", "fileid"), one);
+    NC_CHECK_EQ(property_of(listing("/Papers/Sub"), a + "/Papers/Sub/deep.txt", "fileid"), deep);
+    NC_CHECK_EQ(
+        call("COPY", a + "/Papers/uno.txt", {}, alice, {{"Destination", a + "/Papers/copy.txt"}})
+            .get_status(),
+        201
+    );
+    const std::string copied = property_of(listing("/Papers"), a + "/Papers/copy.txt", "fileid");
+    NC_CHECK(!copied.empty() && copied != one);
+    NC_CHECK_EQ(
+        call("MOVE", a + "/Papers/two.txt", {}, alice, {{"Destination", a + "/Papers/copy.txt"}})
+            .get_status(),
+        204
+    );
+    NC_CHECK_EQ(property_of(listing("/Papers"), a + "/Papers/copy.txt", "fileid"), two);
+    // A deleted file's number is not given to the next file at the same place.
+    NC_CHECK_EQ(call("DELETE", a + "/Papers/Sub").get_status(), 204);
+    NC_CHECK_EQ(call("MKCOL", a + "/Papers/Sub").get_status(), 201);
+    const std::string again = property_of(listing("/Papers"), a + "/Papers/Sub/", "fileid");
+    NC_CHECK(!again.empty());
+    NC_CHECK(again != property_of(first, a + "/Docs/Sub/", "fileid"));
+
+    // Favorites: none at first; PROPPATCH sets and clears the mark; REPORT lists them.
+    NC_CHECK_EQ(property_of(listing("/Papers"), a + "/Papers/uno.txt", "favorite"), "0");
+    const std::string set =
+        R"(<?xml version="1.0"?><d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:set><d:prop><oc:favorite>1</oc:favorite></d:prop></d:set></d:propertyupdate>)";
+    const Response marked = call("PROPPATCH", a + "/Papers/uno.txt", set);
+    NC_CHECK_EQ(marked.get_status(), 207);
+    NC_CHECK(contains_text(marked, "<oc:favorite/>"));
+    NC_CHECK(contains_text(marked, "200 OK"));
+    NC_CHECK_EQ(property_of(listing("/Papers"), a + "/Papers/uno.txt", "favorite"), "1");
+    NC_CHECK_EQ(call("PROPPATCH", a + "/Papers/Sub", set).get_status(), 207);
+    NC_CHECK_EQ(call("PROPPATCH", a + "/nothing", set).get_status(), 404);
+    const std::string report =
+        R"(<?xml version="1.0"?><oc:filter-files xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/><d:getetag/></d:prop><oc:filter-rules><oc:favorite>1</oc:favorite></oc:filter-rules></oc:filter-files>)";
+    const Response favorites = call("REPORT", a + "/", report);
+    NC_CHECK_EQ(favorites.get_status(), 207);
+    NC_CHECK(contains_text(favorites, a + "/Papers/uno.txt"));
+    NC_CHECK(contains_text(favorites, a + "/Papers/Sub/"));
+    NC_CHECK(!contains_text(favorites, "copy.txt"));
+    NC_CHECK_EQ(property_of(favorites.get_body(), a + "/Papers/uno.txt", "fileid"), one);
+    // Only below the folder asked about, and only for the person asking.
+    NC_CHECK(!contains_text(call("REPORT", a + "/Papers/Sub", report), "uno.txt"));
+    NC_CHECK(!contains_text(call("REPORT", "/remote.php/dav/files/bob/", report, bob), "uno.txt"));
+    // The mark follows a rename and goes with a delete.
+    NC_CHECK_EQ(
+        call("MOVE", a + "/Papers/uno.txt", {}, alice, {{"Destination", a + "/Papers/eins.txt"}})
+            .get_status(),
+        201
+    );
+    NC_CHECK_EQ(property_of(listing("/Papers"), a + "/Papers/eins.txt", "favorite"), "1");
+    NC_CHECK(contains_text(call("REPORT", a + "/", report), "eins.txt"));
+    const std::string unset =
+        R"(<?xml version="1.0"?><d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:set><d:prop><oc:favorite>0</oc:favorite></d:prop></d:set></d:propertyupdate>)";
+    NC_CHECK_EQ(call("PROPPATCH", a + "/Papers/eins.txt", unset).get_status(), 207);
+    NC_CHECK(!contains_text(call("REPORT", a + "/", report), "eins.txt"));
+    NC_CHECK_EQ(call("DELETE", a + "/Papers/Sub").get_status(), 204);
+    NC_CHECK(!contains_text(call("REPORT", a + "/", report), "/Sub/"));
+    // Properties that cannot be set are refused (per property), and so are other reports.
+    const Response refused = call(
+        "PROPPATCH",
+        a + "/Papers/eins.txt",
+        R"(<?xml version="1.0"?><d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:set><d:prop><oc:favorite>1</oc:favorite><oc:owner-id>x</oc:owner-id></d:prop></d:set></d:propertyupdate>)"
+    );
+    NC_CHECK_EQ(refused.get_status(), 207);
+    NC_CHECK(contains_text(refused, "200 OK"));
+    NC_CHECK(contains_text(refused, "403 Forbidden"));
+    NC_CHECK_EQ(call("PROPPATCH", a + "/Papers/eins.txt", "not xml").get_status(), 400);
+    NC_CHECK_EQ(call("REPORT", a + "/", R"(<x:other xmlns:x="urn:x"/>)").get_status(), 400);
+    NC_CHECK_EQ(
+        call(
+            "REPORT",
+            a + "/",
+            R"(<oc:filter-files xmlns:oc="http://owncloud.org/ns"><oc:filter-rules><oc:systemtag>1</oc:systemtag></oc:filter-rules></oc:filter-files>)"
+        )
+            .get_status(),
+        400
+    );
+    // Others cannot reach these.
+    NC_CHECK_EQ(call("PROPPATCH", a + "/Papers/eins.txt", set, bob).get_status() >= 400 ? 1 : 0, 1);
+    kernel.stop();
+    fs::remove_all(dir);
+}
+
 int main()
 {
     test_normalize();
@@ -4001,6 +4188,7 @@ int main()
     test_external_ftp();
     test_external_ftps();
     test_external_sftp();
+    test_file_ids_and_favorites();
     test_folder_archives();
     test_external_storage();
     test_encryption();
