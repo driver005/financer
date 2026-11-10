@@ -51,7 +51,7 @@ have to be vendored by hand (see `third_party/`).
 | `pear/archive_tar`, `deepdiver/zipstreamer`, `deepdiver1975/tarstreamer`, `ext-zip` | `libarchive` (BCR, **in use**: `plugins/cloud/src/folder_archive.cc`) | download of a folder as zip/tar |
 | `ext-fileinfo` | `libmagic` | content-based MIME types |
 | `justinrainbow/json-schema` | `jsoncons` (jsonschema) | schema validation |
-| `web-auth/webauthn-lib` | `jsoncons` (CBOR) + BoringSSL (COSE, ES256) | WebAuthn |
+| `web-auth/webauthn-lib`, `web-auth/cose-lib` | BoringSSL (ES256, RS256, EdDSA) **in use** (`plugins/webauthn`); the CBOR subset (about 100 lines) is read by hand | `jsoncons` (BCR) has a CBOR reader, but its source archive is on GitHub, which the build environment here cannot download from, so it could not be built and tested; the reader accepts definite lengths, no tags or floats, with depth, size and item limits |
 | `symfony/mailer` | `curl` (SMTP) | outgoing mail (the `mail` plugin has its own SMTP client) |
 | `fusonic/opengraph` | `lexbor` (HTML parser) | link previews |
 | `egulias/email-validator` | `re2` | address checks |

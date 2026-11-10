@@ -32,6 +32,7 @@ plugins/workflowengine/ flows: when an event matches, notify or tag
 plugins/groups/    groups and membership
 plugins/tokens/    app passwords
 plugins/twofactor/ TOTP second factor with backup codes
+plugins/webauthn/  passkeys and security keys (WebAuthn): registration and passwordless sign-in
 plugins/cloud/     file storage, WebDAV, shares by user and public link
 plugins/trashbin/  deleted files can be restored
 plugins/versions/  older versions of files
@@ -97,6 +98,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `[cloud] quota_bytes`, `overwrite_url` | per-user quota, public URL for share links | unlimited, from `Host` |
 | `[cloud] encryption_key` or `encryption_key_file` | 64 hex digits: files are stored encrypted | off |
 | `[cloud] external_webdav`, `external_webdav_allow_http`, `external_webdav_allow_local`, `external_webdav_ca_file`, `external_webdav_timeout_seconds`, `external_webdav_max_mb` | WebDAV servers shown as folders: `Name=URL|user|password-file[|rw][|group]; ...` | none |
+| `[webauthn] rp_id`, `origins`, `rp_name` | passkey sign-in: the host name pages are served from (the `Host` header without port when empty), the allowed origins (comma separated, `https://<rp_id>` when empty), the name shown to the person | Nextcloud |
 | `[cloud] archive_max_mb` | folders downloaded as `?accept=zip` / `tar`: the most the files of one archive may add up to; 0 turns archives off | 4096 |
 | `[cloud] external_ftp`, `external_ftp_allow_local`, `external_ftp_ca_file`, `external_ftp_timeout_seconds`, `external_ftp_max_mb` | FTP, FTPS and SFTP servers shown as folders: `Name=ftp://host[:port][/folder]|user|password-file[|rw][|group]; ...`, `ftps://` for FTP over explicit TLS (certificate and host name checked against `external_ftp_ca_file` or the system's; nothing is sent before the TLS handshake succeeds), and `Name=sftp://host[:port][/folder]|user|password-file|hostkey=SHA256:...[|rw][|group]` (the server's host key fingerprint, from `ssh-keygen -lf`, is required: a server with another key is refused; sign in with the password, or with a private key by adding `|key=/path/to/key` (the third field is then the key's passphrase file, which may be empty): RSA, ECDSA P-256/384/521 and Ed25519 keys in PEM or PKCS#8, and unencrypted OpenSSH Ed25519, signed with BoringSSL) | none |
 | `[cloud] external_s3`, `external_s3_allow_http`, `external_s3_allow_local`, `external_s3_ca_file`, `external_s3_timeout_seconds`, `external_s3_max_mb` | S3 buckets shown as folders: `Name=URL|bucket|ACCESSKEY|secret-file[|rw][|prefix=dir/][|region=r][|group]; ...` | none |

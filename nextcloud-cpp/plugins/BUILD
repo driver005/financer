@@ -25,6 +25,7 @@ test_suite(
         "//plugins/user_status:user_status_test",
         "//plugins/users:users_test",
         "//plugins/versions:versions_test",
+        "//plugins/webauthn:webauthn_test",
         "//plugins/weather_status:weather_status_test",
         "//plugins/webhook_listeners:webhook_listeners_test",
         "//plugins/workflowengine:workflowengine_test",
