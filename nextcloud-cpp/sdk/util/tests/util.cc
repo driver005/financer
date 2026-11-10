@@ -81,6 +81,30 @@ int main()
             to_hex(chacha20_poly1305_seal(key, nonce, "header", "")),
             "5231046b7ee4f7309dc582601cebd40c"
         );
+        // The example of RFC 8439, section 2.8.2.
+        {
+            std::string rfc_key;
+            for (int byte = 0x80; byte <= 0x9f; ++byte) {
+                rfc_key.push_back(static_cast<char>(byte));
+            }
+            const std::string rfc_nonce = from_hex("070000004041424344454647").value();
+            const std::string rfc_aad = from_hex("50515253c0c1c2c3c4c5c6c7").value();
+            const std::string rfc_text =
+                "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for "
+                "the future, sunscreen would be it.";
+            const std::string rfc_sealed =
+                chacha20_poly1305_seal(rfc_key, rfc_nonce, rfc_aad, rfc_text);
+            NC_CHECK_EQ(rfc_sealed.size(), rfc_text.size() + 16);
+            NC_CHECK_EQ(to_hex(rfc_sealed.substr(0, 16)), "d31a8d34648e60db7b86afbc53ef7ec2");
+            NC_CHECK_EQ(
+                to_hex(rfc_sealed.substr(rfc_text.size())),
+                "1ae10b594f09e26a7e902ecbd0600691"
+            );
+            NC_CHECK_EQ(
+                chacha20_poly1305_open(rfc_key, rfc_nonce, rfc_aad, rfc_sealed).value_or("?"),
+                rfc_text
+            );
+        }
         // Any change is noticed: the data, the tag, the associated data, the nonce, the key.
         std::string sealed = chacha20_poly1305_seal(key, nonce, "header", plain(100));
         NC_CHECK(chacha20_poly1305_open(key, nonce, "header", sealed).has_value());
