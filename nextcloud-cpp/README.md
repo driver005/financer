@@ -108,7 +108,7 @@ reads `[its-name] key` first and the top level `key` second.
 | `[webhook_listeners] allow_http`, `allow_local`, `timeout_seconds` | outgoing webhook requests | `false`, `false`, 10 |
 | `[updatenotification] url`, `allow_http`, `allow_local` | where to ask for the newest version | none (plugin idle) |
 | `[weather_status] url`, `allow_http`, `allow_local` | the weather service | Open-Meteo |
-| `[lookup] server`, `url`, `allow_http`, `allow_local`, `timeout_seconds` | the directory to ask for people on other servers, this server's own address for published entries | none, from `Host`, `false`, `false`, 10 |
+| `[lookup] server`, `servers`, `url`, `allow_http`, `allow_local`, `timeout_seconds` | the directory (and a comma separated list of more, at most 8 in all) to ask for people on other servers, this server's own address for published entries | none, from `Host`, `false`, `false`, 10 |
 | `[db] file` | SQLite file | `<data_dir>/nextcloud.db` |
 | `[twofactor] issuer` | name shown in authenticator apps | `Nextcloud` |
 | `[trashbin] retention_days`, `[versions] max_versions`, `retention_days`, `[activity] retention_days` | how long things are kept | 30; 10, 365; 365 |

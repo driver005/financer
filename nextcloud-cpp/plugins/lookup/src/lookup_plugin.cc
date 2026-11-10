@@ -22,6 +22,8 @@
 #include <algorithm>
 #include <chrono>
 #include <memory>
+#include <optional>
+#include <set>
 
 namespace {
 
@@ -75,9 +77,18 @@ public:
         while (!m_public_url.empty() && m_public_url.back() == '/') {
             m_public_url.pop_back();
         }
-        m_directory = host.config("server", "");
-        while (!m_directory.empty() && m_directory.back() == '/') {
-            m_directory.pop_back();
+        // The directories to ask: `server`, and a comma separated list in `servers` (for instance
+        // the trusted servers). Each is asked, what they answer is merged.
+        for (const std::string& entry:
+             nc::util::split(host.config("server", "") + "," + host.config("servers", ""), ',')) {
+            std::string directory{nc::util::trim(entry)};
+            while (!directory.empty() && directory.back() == '/') {
+                directory.pop_back();
+            }
+            if (!directory.empty() && m_directories.size() < MAX_DIRECTORIES &&
+                std::ranges::find(m_directories, directory) == m_directories.end()) {
+                m_directories.push_back(std::move(directory));
+            }
         }
         m_client.set_allow_http(host.config("allow_http", "false") == "true");
         m_client.set_allow_local(host.config("allow_local", "false") == "true");
@@ -174,52 +185,48 @@ public:
             }
         );
 
-        // For other plugins: ask the configured directory. Answers "cloud id<TAB>name" lines.
+        // For other plugins: ask the configured directories. Answers "cloud id<TAB>name" lines. A
+        // directory that is down only costs its own answers; when none could be reached it is an
+        // error.
         host.add_service(
             "lookup.search",
             [this](std::string_view args)
             {
-                if (m_directory.empty()) {
+                if (m_directories.empty()) {
                     return Response::text(404, "no directory is configured");
                 }
                 const std::string search{args};
                 if (search.size() < 3 || search.size() > 100) {
                     return Response::text(200, "");
                 }
-                const auto answer = nc::federation::request(
-                    m_client,
-                    "GET",
-                    m_directory +
-                        "/index.php/lookup/users?search=" + nc::util::url_encode_path(search),
-                    {},
-                    ""
-                );
-                if (!answer || answer->get_status() != 200) {
-                    return Response::text(502, "the directory could not be reached");
+                std::vector<std::vector<std::pair<std::string, std::string>>> answers;
+                for (const std::string& directory: m_directories) {
+                    if (auto people = ask(directory, search)) {
+                        answers.push_back(std::move(*people));
+                    }
                 }
-                const auto json = nc::util::Json::parse(answer->get_body());
-                if (!json || !json->is_array()) {
-                    return Response::text(502, "the directory answered something unexpected");
+                if (answers.empty()) {
+                    return Response::text(502, "no directory could be reached");
                 }
+                // One from each directory in turn, the same person only once, ten at most.
                 std::string out;
+                std::set<std::string> seen;
                 std::size_t count = 0;
-                for (const nc::util::Json& item: json->items()) {
-                    const std::string& id = item["federationId"].string();
-                    const std::size_t at = id.rfind('@');
-                    // Only addresses that could be shared with, no control characters.
-                    if (count < 10 && at != std::string::npos && at > 0 && id.size() < 320 &&
-                        id.find_first_of(" \t\r\n/\\") == std::string::npos) {
-                        std::string name = item["name"].string();
-                        std::ranges::replace_if(
-                            name,
-                            [](char letter)
-                            {
-                                return static_cast<unsigned char>(letter) < 0x20;
-                            },
-                            ' '
-                        );
-                        out += id + "\t" + name + "\n";
-                        ++count;
+                for (std::size_t round = 0; count < MAX_RESULTS; ++round) {
+                    bool any = false;
+                    for (const auto& people: answers) {
+                        if (round >= people.size()) {
+                            continue;
+                        }
+                        any = true;
+                        const auto& [id, name] = people[round];
+                        if (count < MAX_RESULTS && seen.insert(nc::util::to_lower(id)).second) {
+                            out += id + "\t" + name + "\n";
+                            ++count;
+                        }
+                    }
+                    if (!any) {
+                        break;
                     }
                 }
                 return Response::text(200, out);
@@ -239,9 +246,53 @@ public:
     }
 
 private:
+    static constexpr std::size_t MAX_DIRECTORIES = 8;
+    static constexpr std::size_t MAX_RESULTS = 10;
+
+    /// What one directory answers to a search: (cloud id, name) pairs that could be shared with;
+    /// nullopt when it could not be reached or answered something unexpected.
+    [[nodiscard]] std::optional<std::vector<std::pair<std::string, std::string>>>
+    ask(const std::string& directory, const std::string& search) const
+    {
+        const auto answer = nc::federation::request(
+            m_client,
+            "GET",
+            directory + "/index.php/lookup/users?search=" + nc::util::url_encode_path(search),
+            {},
+            ""
+        );
+        if (!answer || answer->get_status() != 200) {
+            return std::nullopt;
+        }
+        const auto json = nc::util::Json::parse(answer->get_body());
+        if (!json || !json->is_array()) {
+            return std::nullopt;
+        }
+        std::vector<std::pair<std::string, std::string>> people;
+        for (const nc::util::Json& item: json->items()) {
+            const std::string& id = item["federationId"].string();
+            const std::size_t at = id.rfind('@');
+            // Only addresses that could be shared with, no control characters.
+            if (people.size() < MAX_RESULTS && at != std::string::npos && at > 0 &&
+                id.size() < 320 && id.find_first_of(" \t\r\n/\\") == std::string::npos) {
+                std::string name = item["name"].string();
+                std::ranges::replace_if(
+                    name,
+                    [](char letter)
+                    {
+                        return static_cast<unsigned char>(letter) < 0x20;
+                    },
+                    ' '
+                );
+                people.emplace_back(id, std::move(name));
+            }
+        }
+        return people;
+    }
+
     nc::federation::ClientSettings m_client{};
     std::string m_public_url{};
-    std::string m_directory{};
+    std::vector<std::string> m_directories{};
     nc::Host* m_host{nullptr};
     std::unique_ptr<nc::app::App> m_app{};
 };

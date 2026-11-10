@@ -3,6 +3,7 @@
 #include "nextcloud/test.h"
 #include "nextcloud/util/crypto.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -163,6 +164,60 @@ int main()
     NC_CHECK_EQ(suggestions.get_status(), 200);
     NC_CHECK(contains(suggestions, "\"shareWith\":\"" + address + "\""));
     NC_CHECK(contains(suggestions, "\"shareType\":6"));
+    // Several directories (for instance the trusted servers): each is asked, the answers are merged
+    // one by one, nobody is listed twice, and one that is down costs only its own answers.
+    {
+        Node second{"second", "", {"lookup", "users", "db"}};
+        second.add_user("dorian");
+        second.add_user("doris");
+        NC_CHECK_EQ(second.call("POST", publish, "dorian").get_status(), 200);
+        NC_CHECK_EQ(second.call("POST", publish, "doris").get_status(), 200);
+        Node third{"third", "", {"lookup", "users", "db"}};
+        third.add_user("dorothy");
+        NC_CHECK_EQ(third.call("POST", publish, "dorothy").get_status(), 200);
+        const auto url = [](const Node& node)
+        {
+            return "http://127.0.0.1:" + std::to_string(node.port);
+        };
+        const std::string dead = "http://127.0.0.1:1"; // nobody listens there
+        Node many{
+            "many",
+            "[lookup]\nserver = " + url(directory) + "\nservers = " + url(second) + ", " + dead +
+                ", " + url(third) + "/, " + url(second) +
+                "\nallow_http = true\nallow_local = true\ntimeout_seconds = 3\n",
+            {"cloud", "lookup", "users", "db"}
+        };
+        const std::string found_many =
+            many.kernel->get_services().call("lookup.search", "dor").get_body();
+        const auto at_of = [&](const Node& node, const std::string& user)
+        {
+            return found_many.find(user + "@127.0.0.1:" + std::to_string(node.port) + "\t");
+        };
+        // One from each directory in turn: dora, dorian, dorothy, then doris.
+        NC_CHECK(at_of(directory, "dora") != std::string::npos);
+        NC_CHECK(at_of(directory, "dora") < at_of(second, "dorian"));
+        NC_CHECK(at_of(second, "dorian") < at_of(third, "dorothy"));
+        NC_CHECK(at_of(third, "dorothy") < at_of(second, "doris"));
+        NC_CHECK_EQ(
+            std::ranges::count(found_many, '\n'),
+            4
+        ); // each once, though `second` is named twice
+        // The sharing dialog offers all of them.
+        many.add_user("erin");
+        const Response offered =
+            many.call("GET", "/ocs/v2.php/apps/files_sharing/api/v1/sharees?search=dor", "erin");
+        NC_CHECK(contains(offered, "dorothy@127.0.0.1:" + std::to_string(third.port)));
+        NC_CHECK(contains(offered, "dorian@127.0.0.1:" + std::to_string(second.port)));
+        // With every directory down it is an error; with only dead ones configured as well.
+        Node down{
+            "down",
+            "[lookup]\nservers = " + dead +
+                ", http://127.0.0.1:2\nallow_http = true\n"
+                "allow_local = true\ntimeout_seconds = 3\n",
+            {"cloud", "lookup", "users", "db"}
+        };
+        NC_CHECK_EQ(down.kernel->get_services().call("lookup.search", "dor").get_status(), 502);
+    }
     // Without a directory the service says so, and the share dialog still works.
     Node alone{"alone", "", {"cloud", "lookup", "users", "db"}};
     NC_CHECK_EQ(alone.kernel->get_services().call("lookup.search", "dora").get_status(), 404);
