@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
-    "@ubjs/core": "^0.31.0-6",
+    "@ubjs/core": "^0.31.0-7",
     "@ubjs/wasm": "^0.31.0-6",
     "typescript": "~7.0.2"
   }
