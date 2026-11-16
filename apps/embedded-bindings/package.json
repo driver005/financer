@@ -12,7 +12,7 @@
   "types": "src/index.tsx",
   "dependencies": {
     "@ubjs/core": "0.31.0-6",
-    "uniffi-bindgen-react-native": "0.31.0-6"
+    "uniffi-bindgen-react-native": "0.31.0-7"
   },
   "peerDependencies": {
     "@ubjs/react-native": "0.31.0-6"
