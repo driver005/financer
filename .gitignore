@@ -38,3 +38,10 @@ deploy/config/sources.json
 
 # Your own server configuration (may hold secrets; see financer.example.toml)
 financer.toml
+
+# Generated native builds and local artifacts
+apps/mobile/android/
+apps/mobile/ios/
+apps/mobile/dist/
+apps/mobile/.test-build/
+.playwright-mcp/

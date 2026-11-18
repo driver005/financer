@@ -1,0 +1,48 @@
+# Local throwaway Supabase stack for demo data / screenshots (see docs/DEMO-DATA.md).
+# Started with `npm run db:up` (npx supabase start). Only the services the app needs are on:
+# Postgres + PostgREST (api) + Storage (receipts bucket) + Kong. Local keys are public demo keys.
+project_id = "fintrack-dev"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.migrations]
+enabled = false
+
+[db.seed]
+enabled = false
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[local_smtp]
+enabled = false
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[storage.vector]
+enabled = false
+
+[auth]
+enabled = true
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false

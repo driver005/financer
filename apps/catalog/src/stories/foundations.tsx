@@ -1,5 +1,5 @@
 import {
-  Badge, Box, Row, Stack, Text, breakpoints, contrast, fontSize, lineHeight, radius, shadows, space, textVariants, tones, useColors, useLayout,
+  Badge, Box, MedusaIcon, Row, Stack, Text, breakpoints, contrast, fontSize, lineHeight, radius, shadows, space, textVariants, tones, useColors, useLayout,
   type Radius, type Shadow, type Space, type TextVariant, type Tone,
 } from "@financer/ui";
 
@@ -110,11 +110,27 @@ function Window() {
   );
 }
 
+const SHOWN_ICONS = ["arrow-down", "bell-alert", "check-circle", "cog-six-tooth", "credit-card", "magnifying-glass", "plus", "trash", "user", "x-mark"] as const;
+
+function MedusaIcons() {
+  return (
+    <Stack gap="md">
+      <Row gap="lg" wrap>
+        {SHOWN_ICONS.map((n) => <MedusaIcon key={n} name={n} size="lg" />)}
+      </Row>
+      <Row gap="lg" wrap>
+        {(["xs", "sm", "md", "lg", "xl"] as const).map((s) => <MedusaIcon key={s} name="bell-alert" size={s} tone="accent" />)}
+      </Row>
+    </Stack>
+  );
+}
+
 export const foundations: StoryDef[] = [
   { id: "colors", title: "Colours", note: "Roles, not shades. The ratio is the WCAG contrast of the text on that fill (4.5 and up is AA).", render: () => <Swatches /> },
   { id: "spacing", title: "Spacing", note: "Tailwind's scale on a grid of 4. Screens say `p=\"md\"`, never a number.", render: () => <Spacing /> },
   { id: "radius", title: "Corners", render: () => <Corners /> },
   { id: "shadows", title: "Elevation", render: () => <Elevation /> },
   { id: "type", title: "Type", note: "Tailwind's sizes and line heights, as named roles.", render: () => <Type /> },
+  { id: "medusa-icons", title: "Icons (Medusa)", note: "465 icons converted from Medusa by crates/uiconv: one MedusaIcon, a name, a token size and a tone.", render: () => <MedusaIcons /> },
   { id: "window", title: "This window", note: "What the layout classes see right now. Use the device switch above to preview others.", render: () => <Window /> },
 ];

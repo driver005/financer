@@ -1,72 +1,121 @@
-import { ShareIntentProvider } from "expo-share-intent";
-import { Tabs } from "expo-router";
-import { Platform } from "react-native";
+import React, { useEffect } from "react";
+import { Pressable, StyleSheet, Text as RNText, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { ThemeProvider, fill } from "@financer/ui";
+import { useFonts } from "expo-font";
+import { Fraunces_600SemiBold } from "@expo-google-fonts/fraunces";
+import { PlusJakartaSans_400Regular, PlusJakartaSans_600SemiBold } from "@expo-google-fonts/plus-jakarta-sans";
+import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold } from "@expo-google-fonts/montserrat";
+import { Urbanist_600SemiBold } from "@expo-google-fonts/urbanist";
+import { Tabs, usePathname, useRouter } from "expo-router";
+import * as Linking from "expo-linking";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { IconButton, type IconName } from "../ui/primitives";
+import { LockGate } from "../components/LockGate";
+import { tokens, useTheme } from "../ui/theme";
 
-import { ApiProvider } from "@/api/config";
-import { AppLockOverlay } from "@/components/AppLockOverlay";
-import { AppFrame } from "@/components/AppFrame";
-import { SdkGate } from "@/components/SdkGate";
-import { BackupOnOpen } from "@/components/BackupOnOpen";
-import "@/native/background"; // defines the background task at startup
-import { NotificationSync } from "@/components/NotificationSync";
-import { OnboardingGate } from "@/components/OnboardingGate";
-import { ShareRedirect } from "@/components/ShareRedirect";
+const TABS: { route: string; label: string; icon: IconName }[] = [
+  { route: "/", label: "Recipes", icon: "silverware-fork-knife" },
+  { route: "/favorites", label: "Saved", icon: "heart" },
+  { route: "/list", label: "List", icon: "format-list-checks" },
+  { route: "/shops", label: "Shops", icon: "store" },
+  { route: "/money", label: "Money", icon: "cash" },
+];
+
+function BottomBar() {
+  const router = useRouter();
+  const path = usePathname();
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  if (path === "/showcase") return null;
+  return (
+    <View style={[styles.outer, { paddingBottom: Math.max(insets.bottom, 10) }]} pointerEvents="box-none">
+      <View style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {TABS.map((tab) => {
+          const active = path === tab.route || (tab.route !== "/" && path.startsWith(`${tab.route}/`));
+          return (
+            <Pressable
+              key={tab.route}
+              accessibilityRole="button"
+              accessibilityLabel={tab.label}
+              onPress={() => router.push(tab.route as never)}
+              style={styles.tab}
+            >
+              <View style={[styles.iconWrap, active && { backgroundColor: colors.accentSoft }]}>
+                <MaterialCommunityIcons name={tab.icon} size={20} color={active ? colors.accent : colors.subtle} />
+              </View>
+              <RNText style={[styles.tabLabel, { color: active ? colors.accent : colors.subtle }]}>{tab.label}</RNText>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  outer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 8 },
+  bar: {
+    flexDirection: "row", borderWidth: 1, borderRadius: tokens.radius.card, paddingVertical: 8,
+    shadowColor: "#2F7D5D", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 6,
+  },
+  tab: { flex: 1, minHeight: 52, alignItems: "center", justifyContent: "center", gap: 3 },
+  iconWrap: { width: 40, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  tabLabel: { fontSize: 10, fontFamily: tokens.sans, fontWeight: "600" },
+});
 
 export default function RootLayout() {
+  const router = useRouter();
+  const pathname = usePathname();
+  useEffect(() => {
+    const open = (url: string | null) => {
+      if (!url || !url.startsWith("pantry://")) return;
+      if (!/quickadd/i.test(url) || pathname === "/quickadd") return;
+      router.push("/quickadd");
+    };
+    void Linking.getInitialURL().then(open);
+    const subscription = Linking.addEventListener("url", ({ url }) => open(url));
+    return () => subscription.remove();
+  }, [router, pathname]);
+  const [fontsLoaded] = useFonts({
+    Fraunces: Fraunces_600SemiBold,
+    "Plus Jakarta Sans": PlusJakartaSans_400Regular,
+    "Plus Jakarta Sans SemiBold": PlusJakartaSans_600SemiBold,
+    Montserrat: Montserrat_600SemiBold,
+    "Montserrat Regular": Montserrat_400Regular,
+    "Montserrat Bold": Montserrat_700Bold,
+    Urbanist: Urbanist_600SemiBold,
+  });
+  if (!fontsLoaded) return null;
   return (
-    <GestureHandlerRootView {...fill}>
-      <ShareIntentProvider options={{ disabled: Platform.OS === "web" }}>
-      <ThemeProvider>
-      <SdkGate>
-      <ApiProvider>
-        {/* dark icons on the light theme, light icons on the dark one (the default left white ones on white) */}
-        <StatusBar style="auto" />
-        <NotificationSync />
-        <ShareRedirect />
-        <OnboardingGate />
-        <AppFrame>
-        <Tabs screenOptions={{ headerShown: false }} tabBar={() => null}>
-          {/* the bottom bar (AppFrame) lists three tabs; every route below stays reachable by link */}
-          <Tabs.Screen name="index" options={{ title: "Today" }} />
-          <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
-          <Tabs.Screen name="spending" options={{ title: "Spending" }} />
-          <Tabs.Screen name="budget" options={{ title: "Budget" }} />
-          <Tabs.Screen name="prices" options={{ title: "Prices" }} />
-          <Tabs.Screen name="recipes" options={{ title: "Recipes" }} />
-          <Tabs.Screen name="settings" options={{ title: "Settings" }} />
-          <Tabs.Screen name="recipe" options={{ title: "Recipe" }} />
-          <Tabs.Screen name="mealplan" options={{ title: "Meal plan" }} />
-          <Tabs.Screen name="basket" options={{ title: "Usual items" }} />
-          <Tabs.Screen name="receipts" options={{ title: "Receipts" }} />
-          <Tabs.Screen name="receipt-sources" options={{ title: "Receipt sources" }} />
-          <Tabs.Screen name="rewe-sync" options={{ title: "REWE receipts" }} />
-          <Tabs.Screen name="orders-import" options={{ title: "Online orders" }} />
-          <Tabs.Screen name="share" options={{ title: "Shared with Financer" }} />
-          <Tabs.Screen name="server-config" options={{ title: "Server settings" }} />
-          <Tabs.Screen name="sync" options={{ title: "Sync with Sparkasse" }} />
-          <Tabs.Screen name="rules" options={{ title: "Rules" }} />
-          <Tabs.Screen name="subscriptions" options={{ title: "Subscriptions" }} />
-          <Tabs.Screen name="alerts" options={{ title: "Alerts" }} />
-          <Tabs.Screen name="trophies" options={{ title: "Trophies" }} />
-          <Tabs.Screen name="scan" options={{ title: "Scan a product" }} />
-          <Tabs.Screen name="stores" options={{ title: "Stores" }} />
-          {/* the shopping assistant, a second app of this project (see modules.ts): draws its own chrome */}
-          <Tabs.Screen name="shop" options={{ title: "Shopping assistant" }} />
-          {/* the mail client: chats per person and topic, a calendar and templates; draws its own chrome */}
-          <Tabs.Screen name="mail" options={{ title: "Mail" }} />
-          {/* first-run setup: full screen, no tab bar */}
-          <Tabs.Screen name="onboarding" options={{ title: "Setup" }} />
-        </Tabs>
-        </AppFrame>
-        <BackupOnOpen />
-        <AppLockOverlay />
-      </ApiProvider>
-      </SdkGate>
-      </ThemeProvider>
-      </ShareIntentProvider>
-    </GestureHandlerRootView>
+    <View style={{ flex: 1 }}>
+      <StatusBar style="auto" />
+      <LockGate>
+      <Tabs screenOptions={{ headerShown: false }} tabBar={() => <BottomBar />}>
+        <Tabs.Screen name="index" options={{ title: "Recipes" }} />
+        <Tabs.Screen name="favorites" options={{ title: "Saved" }} />
+        <Tabs.Screen name="list" options={{ title: "List" }} />
+        <Tabs.Screen name="shops" options={{ title: "Shops" }} />
+        <Tabs.Screen name="money" options={{ title: "Money" }} />
+        <Tabs.Screen name="recipe" options={{ title: "Recipe" }} />
+        <Tabs.Screen name="settings" options={{ title: "Settings" }} />
+        <Tabs.Screen name="item" options={{ title: "Item prices" }} />
+        <Tabs.Screen name="optimize" options={{ title: "Best prices" }} />
+        <Tabs.Screen name="quickadd" options={{ title: "Add transaction" }} />
+        <Tabs.Screen name="export" options={{ title: "Export CSV" }} />
+        <Tabs.Screen name="moneytools" options={{ title: "Money tools" }} />
+        <Tabs.Screen name="reports" options={{ title: "Reports" }} />
+        <Tabs.Screen name="pc" options={{ title: "PC editor" }} />
+        <Tabs.Screen name="ask" options={{ title: "Ask your money" }} />
+        <Tabs.Screen name="showcase" options={{ title: "UI kit" }} />
+        <Tabs.Screen name="finance" options={{ title: "Finance suite" }} />
+        <Tabs.Screen name="upstream" options={{ title: "Upstream features" }} />
+        <Tabs.Screen name="gaps" options={{ title: "Parity gaps" }} />
+      </Tabs>
+      </LockGate>
+      <View style={{ position: "absolute", top: 8, right: tokens.md, zIndex: 10 }}>
+        <IconButton icon="cog-outline" label="Settings" onPress={() => router.push("/settings")} />
+      </View>
+    </View>
   );
 }

@@ -1,103 +1,50 @@
 {
   "expo": {
-    "name": "Financer",
-    "slug": "financer",
+    "name": "Pantry",
+    "slug": "pantry",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FAFAFA"
+    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.financer.mobile"
+      "bundleIdentifier": "app.pantry.mobile"
     },
     "android": {
+      "package": "app.pantry.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false,
-      "package": "app.financer.mobile",
-      "intentFilters": [
-        {
-          "action": "VIEW",
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ],
-          "data": [
-            {
-              "scheme": "com.lidlplus.app",
-              "host": "callback"
-            },
-            {
-              "scheme": "com.kaufland.kaufland",
-              "host": "oauth"
-            }
-          ]
-        }
-      ]
+        "backgroundColor": "#FAFAFA",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "financer",
+    "scheme": "pantry",
     "plugins": [
-      "./plugins/withAndroidRelease",
-      "expo-router",
-      "expo-secure-store",
-      "expo-web-browser",
       [
-        "expo-local-authentication",
+        "expo-router",
         {
-          "faceIDPermission": "Financer uses Face ID to unlock the app when you have turned on the app lock."
+          "headers": {
+            "Cross-Origin-Embedder-Policy": "credentialless",
+            "Cross-Origin-Opener-Policy": "same-origin"
+          }
         }
       ],
-      [
-        "expo-image-picker",
-        {
-          "cameraPermission": "Financer uses the camera to photograph receipts so it can learn what you usually buy.",
-          "photosPermission": "Financer reads receipt photos you choose so it can learn what you usually buy."
-        }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Financer uses the camera to scan product barcodes in the store.",
-          "recordAudioAndroid": false
-        }
-      ],
-      [
-        "expo-local-authentication",
-        {
-          "faceIDPermission": "Financer uses Face ID to lock the app, which holds your bank data."
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "color": "#4f46e5"
-        }
-      ],
-      [
-        "expo-share-intent",
-        {
-          "iosActivationRules": {
-            "NSExtensionActivationSupportsFileWithMaxCount": 1,
-            "NSExtensionActivationSupportsImageWithMaxCount": 1,
-            "NSExtensionActivationSupportsText": true
-          },
-          "androidIntentFilters": [
-            "application/pdf",
-            "image/*",
-            "text/*"
-          ]
-        }
-      ]
+      "expo-font",
+      "expo-sharing",
+      "expo-notifications",
+      "expo-image-picker",
+      ["expo-local-authentication", { "faceIDPermission": "Pantry uses Face ID to unlock your local data." }],
+      ["./plugins/withQuickAddShortcut.js"]
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": false
     }
   }
 }

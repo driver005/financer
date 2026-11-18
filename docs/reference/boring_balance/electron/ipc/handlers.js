@@ -1,0 +1,127 @@
+const {
+  accountsController,
+  accountValuationsController,
+  categoriesController,
+  budgetsController,
+  analyticsController,
+  planItemsController,
+  backupController,
+  syncController,
+  dataExportController,
+  importExcelController,
+  transactionsController,
+  transfersController,
+  resetController,
+  settingsController,
+  updateController,
+  windowController,
+} = require('../controllers');
+const { CHANNELS } = require('./channels');
+
+const IPC_HANDLERS = Object.freeze({
+  [CHANNELS.accountValuations.create]: accountValuationsController.create,
+  [CHANNELS.accountValuations.get]: accountValuationsController.get,
+  [CHANNELS.accountValuations.list]: accountValuationsController.list,
+  [CHANNELS.accountValuations.update]: accountValuationsController.update,
+  [CHANNELS.accountValuations.remove]: accountValuationsController.remove,
+  [CHANNELS.accountValuations.getLatestByAccount]: accountValuationsController.getLatestByAccount,
+
+  [CHANNELS.accounts.create]: accountsController.create,
+  [CHANNELS.accounts.get]: accountsController.get,
+  [CHANNELS.accounts.list]: accountsController.list,
+  [CHANNELS.accounts.update]: accountsController.update,
+  [CHANNELS.accounts.remove]: accountsController.remove,
+
+  [CHANNELS.categories.create]: categoriesController.create,
+  [CHANNELS.categories.get]: categoriesController.get,
+  [CHANNELS.categories.list]: categoriesController.list,
+  [CHANNELS.categories.update]: categoriesController.update,
+  [CHANNELS.categories.remove]: categoriesController.remove,
+
+  [CHANNELS.budgets.create]: budgetsController.create,
+  [CHANNELS.budgets.get]: budgetsController.get,
+  [CHANNELS.budgets.list]: budgetsController.list,
+  [CHANNELS.budgets.update]: budgetsController.update,
+  [CHANNELS.budgets.remove]: budgetsController.remove,
+
+  [CHANNELS.analytics.availableYears]: analyticsController.availableYears,
+  [CHANNELS.analytics.budgetVsExpensesByCategoryByYear]:
+    analyticsController.budgetVsExpensesByCategoryByYear,
+  [CHANNELS.analytics.compareMonths]: analyticsController.compareMonths,
+  [CHANNELS.analytics.expensesIncomesNetCashflowByMonth]:
+    analyticsController.expensesIncomesNetCashflowByMonth,
+  [CHANNELS.analytics.receivablesPayables]: analyticsController.receivablesPayables,
+  [CHANNELS.analytics.netWorthByAccount]: analyticsController.netWorthByAccount,
+  [CHANNELS.analytics.expensesByCategoryByMonth]: analyticsController.expensesByCategoryByMonth,
+  [CHANNELS.analytics.incomesByCategoryByMonth]: analyticsController.incomesByCategoryByMonth,
+  [CHANNELS.analytics.moneyFlowSankeyByMonth]: analyticsController.moneyFlowSankeyByMonth,
+
+  [CHANNELS.planItems.create]: planItemsController.create,
+  [CHANNELS.planItems.get]: planItemsController.get,
+  [CHANNELS.planItems.list]: planItemsController.list,
+  [CHANNELS.planItems.update]: planItemsController.update,
+  [CHANNELS.planItems.remove]: planItemsController.remove,
+  [CHANNELS.planItems.run]: planItemsController.run,
+  [CHANNELS.planItems.deletePlannedItems]: planItemsController.deletePlannedItems,
+
+  [CHANNELS.transactions.create]: transactionsController.create,
+  [CHANNELS.transactions.createTransfer]: transfersController.create,
+  [CHANNELS.transactions.updateTransfer]: transfersController.update,
+  [CHANNELS.transactions.deleteTransfer]: transfersController.remove,
+  [CHANNELS.transactions.get]: transactionsController.get,
+  [CHANNELS.transactions.listTransactions]: transactionsController.list,
+  [CHANNELS.transactions.listTransfers]: transfersController.list,
+  [CHANNELS.transactions.update]: transactionsController.update,
+  [CHANNELS.transactions.remove]: transactionsController.remove,
+
+  [CHANNELS.backup.getSettings]: backupController.getSettings,
+  [CHANNELS.backup.updateSettings]: backupController.updateSettings,
+  [CHANNELS.backup.getState]: backupController.getState,
+  [CHANNELS.backup.selectFolder]: backupController.selectFolder,
+  [CHANNELS.backup.selectRestoreFile]: backupController.selectRestoreFile,
+  [CHANNELS.backup.list]: backupController.list,
+  [CHANNELS.backup.runNow]: backupController.runNow,
+  [CHANNELS.backup.remove]: backupController.remove,
+  [CHANNELS.backup.restore]: backupController.restore,
+
+  [CHANNELS.dataExport.exportXlsx]: dataExportController.exportXlsx,
+  [CHANNELS.dataExport.downloadImportTemplate]: dataExportController.downloadImportTemplate,
+
+  [CHANNELS.importExcel.selectFile]: importExcelController.selectFile,
+  [CHANNELS.importExcel.validate]: importExcelController.validate,
+  [CHANNELS.importExcel.commit]: importExcelController.commit,
+
+  [CHANNELS.sync.getSettings]: syncController.getSettings,
+  [CHANNELS.sync.updateSettings]: syncController.updateSettings,
+  [CHANNELS.sync.getState]: syncController.getState,
+  [CHANNELS.sync.checkAvailability]: syncController.checkAvailability,
+  [CHANNELS.sync.selectFolder]: syncController.selectFolder,
+  [CHANNELS.sync.enable]: syncController.enable,
+  [CHANNELS.sync.repoStatus]: syncController.repoStatus,
+  [CHANNELS.sync.enableCreateRepo]: syncController.enableCreateRepo,
+  [CHANNELS.sync.enableAttachRepo]: syncController.enableAttachRepo,
+  [CHANNELS.sync.disable]: syncController.disable,
+  [CHANNELS.sync.syncNow]: syncController.syncNow,
+  [CHANNELS.sync.pullNow]: syncController.pullNow,
+  [CHANNELS.sync.pushNow]: syncController.pushNow,
+  [CHANNELS.sync.listSnapshots]: syncController.listSnapshots,
+  [CHANNELS.sync.setDefaultSnapshot]: syncController.setDefaultSnapshot,
+  [CHANNELS.sync.removeSnapshot]: syncController.removeSnapshot,
+
+  [CHANNELS.reset.clearFinancialData]: resetController.clearFinancialData,
+  [CHANNELS.reset.factoryReset]: resetController.factoryReset,
+
+  [CHANNELS.settings.getProblem]: settingsController.getProblem,
+  [CHANNELS.settings.acknowledgeProblem]: settingsController.acknowledgeProblem,
+
+  [CHANNELS.update.check]: updateController.check,
+  [CHANNELS.update.forceCheck]: updateController.forceCheck,
+  [CHANNELS.update.openRelease]: updateController.openRelease,
+  [CHANNELS.update.ignoreVersion]: updateController.ignoreVersion,
+
+  [CHANNELS.window.reload]: windowController.reload,
+});
+
+module.exports = {
+  IPC_HANDLERS,
+};

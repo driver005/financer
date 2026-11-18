@@ -1,0 +1,137 @@
+import { Key, PencilSquare, Trash } from "@medusajs/icons"
+import { HttpTypes } from "@medusajs/types"
+import { Container, Heading, toast } from "@medusajs/ui"
+import { useMemo } from "react"
+import { useTranslation } from "react-i18next"
+import { useNavigate } from "react-router-dom"
+
+import {
+  ActionGroup,
+  ActionMenu,
+} from "../../../../../components/common/action-menu"
+import { ListSummary } from "../../../../../components/common/list-summary"
+import { SectionRow } from "../../../../../components/common/section"
+import {
+  useDeleteRbacRole,
+  useRbacRoleUsers,
+} from "../../../../../hooks/api/rbac-roles"
+import {
+  useRbacPolicyPermissions,
+  useRbacRolePermissions,
+} from "../../../../../hooks/use-resource-permissions"
+import { usePermissions } from "../../../../../providers/permissions-provider"
+import { SUPER_ADMIN_ROLE_ID } from "../../../common/constants"
+import { useConfirmDeleteRole } from "../../../common/hooks"
+
+type RoleGeneralSectionProps = {
+  role: HttpTypes.AdminRbacRole
+}
+
+export const RoleGeneralSection = ({ role }: RoleGeneralSectionProps) => {
+  const { t } = useTranslation()
+  const { canUpdate, canDelete } = useRbacRolePermissions()
+  const { hasAllPermissions } = usePermissions()
+  const canReadUsers = hasAllPermissions([
+    "user:read",
+    "rbac_role_assignment:read",
+  ])
+  const { canRead: canReadPolicies } = useRbacPolicyPermissions()
+  const confirmDelete = useConfirmDeleteRole()
+  const navigate = useNavigate()
+
+  const canManagePolicies = canUpdate && canReadPolicies
+
+  const { mutateAsync: deleteRole, isPending: isDeleting } = useDeleteRbacRole(
+    role.id
+  )
+
+  const handleDelete = async () => {
+    const confirmed = await confirmDelete(role)
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await deleteRole()
+      toast.success(t("roles.delete.successToast", { name: role.name }))
+      navigate("/settings/roles", { replace: true })
+    } catch (error) {
+      toast.error((error as Error).message)
+    }
+  }
+
+  const { users = [] } = useRbacRoleUsers(
+    role.id,
+    {},
+    { enabled: canReadUsers }
+  )
+
+  const userLabels = useMemo(() => {
+    return users.map((user) => {
+      const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim()
+      return fullName || user.email || user.id
+    })
+  }, [users])
+
+  const groups: ActionGroup[] = []
+
+  if (canUpdate) {
+    groups.push({
+      actions: [
+        {
+          icon: <PencilSquare />,
+          label: t("actions.edit"),
+          to: `edit`,
+        },
+        ...(canManagePolicies
+          ? [
+              {
+                icon: <Key />,
+                label: t("roles.actions.managePermissions"),
+                to: `permissions`,
+              },
+            ]
+          : []),
+      ],
+    })
+  }
+
+  // The super admin role can't be deleted, the backend rejects it.
+  if (canDelete && role.id !== SUPER_ADMIN_ROLE_ID) {
+    groups.push({
+      actions: [
+        {
+          icon: <Trash />,
+          label: t("actions.delete"),
+          onClick: handleDelete,
+          disabled: isDeleting,
+        },
+      ],
+    })
+  }
+
+  return (
+    <Container className="divide-y p-0">
+      <div className="flex items-center justify-between px-6 py-4">
+        <Heading>{role.name}</Heading>
+        {groups.length > 0 && <ActionMenu groups={groups} />}
+      </div>
+      <SectionRow title={t("fields.description")} value={role.description} />
+      {canReadUsers && (
+        <SectionRow
+          title={t("users.domain")}
+          value={
+            userLabels.length ? (
+              <div className="inline-flex">
+                <ListSummary list={userLabels} />
+              </div>
+            ) : (
+              "-"
+            )
+          }
+        />
+      )}
+    </Container>
+  )
+}

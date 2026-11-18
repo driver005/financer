@@ -1,0 +1,149 @@
+export const metadata = {
+  title: `Custom Order Display ID`,
+}
+
+# {metadata.title}
+
+In this guide, you'll learn how to customize the display ID of orders in Medusa.
+
+<Note>
+
+This feature is available since [Medusa v2.12.0](https://github.com/medusajs/medusa/releases/tag/v2.12.0).
+
+</Note>
+
+## Default Display ID
+
+By default, Medusa stores the display ID of orders in the `display_id` property of the [Order data model](/references/order/models/Order). The display ID is a serial integer that starts at 1 and increments with each new order.
+
+For example:
+
+```json
+{
+  "id": "order_123",
+  "display_id": 1,
+  // other properties...
+}
+```
+
+---
+
+## Custom Display ID
+
+In some cases, you might want to use a custom display ID for orders. This is useful for integrating with external systems or providing a more user-friendly order identifier.
+
+The `Order` data model has a `custom_display_id` property that stores a custom display ID you generate.
+
+You can define the logic for generating this ID in the `generateCustomDisplayId` module option set in `medusa-config.ts`.
+
+For example:
+
+```ts title="medusa-config.ts"
+// other imports...
+import { Modules } from "@medusajs/framework/utils"
+import { OrderTypes, Context } from "@medusajs/framework/types"
+
+module.exports = defineConfig({
+  modules: [
+    {
+      key: Modules.ORDER,
+      options: {
+        generateCustomDisplayId: async function (
+          order: OrderTypes.CreateOrderDTO,
+          sharedContext: Context
+        ): Promise<string> {
+          // Return your custom display ID
+          return `${order.email}-${Date.now()}`
+        },
+      },
+    },
+    // other modules...
+  ],
+  // other configurations...
+})
+```
+
+In the example above, the `generateCustomDisplayId` function generates a custom display ID by combining the order's email with the current timestamp.
+
+You can implement any logic to generate a unique and meaningful display ID for your orders.
+
+---
+
+## View Custom Display ID in Medusa Admin
+
+By default, Medusa Admin displays the `display_id` in the table on the Orders page. To view the custom display ID in the table, you can enable the `view_configurations` experimental feature.
+
+To enable this feature, add the following to `medusa-config.ts`:
+
+```ts title="medusa-config.ts"
+module.exports = defineConfig({
+  // other configurations...
+  featureFlags: {
+    view_configurations: true,
+  },
+})
+```
+
+This enables the feature's flag.
+
+Next, run the necessary migrations:
+
+```bash npx2yarn
+npx medusa db:migrate
+```
+
+Then, start the Medusa application:
+
+```bash npm2yarn
+npm run dev
+```
+
+Finally, customize the Order view in Medusa Admin to display the `custom_display_id` property.
+
+---
+
+## Search Orders by Display ID
+
+The `display_id` and `custom_display_id` properties are searchable fields of the `Order` data model. So, you can search orders by either display ID without any customizations.
+
+The Order Module also defines database indexes on both properties. The index on `custom_display_id` is unique, so each custom display ID must be unique among orders that aren't deleted.
+
+### Search in Medusa Admin
+
+The search box on the Orders page of Medusa Admin searches the order's searchable fields, including `display_id` and `custom_display_id`. So, you can enter an order's display ID or custom display ID in the search box to find it.
+
+### Search with the Admin API
+
+To search orders by display ID with the [List Orders API route](!api!/admin/orders/list-orders), pass the display ID or custom display ID in the `q` query parameter.
+
+For example, using the [JS SDK](../../../js-sdk/page.mdx):
+
+```ts
+const { orders } = await sdk.admin.order.list({
+  q: "ORD-1234",
+})
+```
+
+The `q` parameter performs a case-insensitive partial match on the order's searchable fields, which also include the email and the shipping and billing addresses. For example, searching for `12` returns orders whose display ID is `12`, `120`, or `1234`.
+
+<Note>
+
+The List Orders API route doesn't accept `display_id` or `custom_display_id` as dedicated filter parameters. Use the `q` parameter instead.
+
+</Note>
+
+### Filter with Query in Customizations
+
+To retrieve an order by its exact display ID or custom display ID in your customizations, such as an API route or workflow step, use [Query](!docs!/learn/fundamentals/query) and pass the property in `filters`.
+
+For example:
+
+```ts
+const { data: orders } = await query.graph({
+  entity: "order",
+  fields: ["id", "display_id", "custom_display_id"],
+  filters: {
+    custom_display_id: "ORD-1234",
+  },
+})
+```

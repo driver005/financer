@@ -1,0 +1,16 @@
+{
+  "name": "pantry-core",
+  "type": "module",
+  "description": "Local business logic for Pantry: periods, money, CSV, stores, offers, recipes.",
+  "version": "0.1.0",
+  "files": [
+    "pantry_bg.wasm",
+    "pantry.js",
+    "pantry.d.ts"
+  ],
+  "main": "pantry.js",
+  "types": "pantry.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

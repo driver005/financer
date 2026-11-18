@@ -1,0 +1,105 @@
+<form
+  class="grid gap-4 sm:grid-cols-2"
+  [formGroup]="form"
+  novalidate
+  (submit)="$event.preventDefault()"
+>
+  <div class="sm:col-span-2">
+    <label class="mb-1.5 block text-sm font-medium" for="account-name">
+      {{ 'common.labels.name' | translate }}
+      <span class="text-destructive">*</span>
+    </label>
+    <input
+      id="account-name"
+      z-input
+      type="text"
+      formControlName="name"
+      maxlength="64"
+      aria-required="true"
+      [attr.aria-invalid]="visibleNameErrorKey() ? 'true' : null"
+      [attr.placeholder]="'accounts.dialog.add.placeholders.name' | translate"
+    />
+    @if (visibleNameErrorKey(); as currentError) {
+      <p role="alert" class="mt-1 text-xs text-destructive">{{ currentError | translate }}</p>
+    }
+  </div>
+
+  <div class="sm:col-span-2">
+    <label class="mb-1.5 block text-sm font-medium" for="account-description">
+      {{ 'common.labels.description' | translate }}
+    </label>
+    <textarea
+      id="account-description"
+      z-input
+      formControlName="description"
+      rows="3"
+      class="max-h-32 resize-y"
+      [attr.maxlength]="descriptionMaxLength"
+      [attr.aria-invalid]="visibleDescriptionErrorKey() ? 'true' : null"
+      [attr.placeholder]="'accounts.dialog.add.placeholders.description' | translate"
+    ></textarea>
+    <p class="mt-1 text-xs text-muted-foreground">
+      {{ descriptionLength() }}/{{ descriptionMaxLength }}
+    </p>
+    @if (visibleDescriptionErrorKey(); as currentError) {
+      <p role="alert" class="mt-1 text-xs text-destructive">{{ currentError | translate }}</p>
+    }
+  </div>
+
+  <div>
+    <label for="account-type" class="mb-1.5 block text-sm font-medium">
+      {{ 'common.labels.type' | translate }}
+      <span class="text-destructive">*</span>
+    </label>
+    <z-select
+      id="account-type"
+      formControlName="type"
+      [zPlaceholder]="'common.placeholders.selectType' | translate"
+    >
+      @for (option of typeOptions; track option.value) {
+        <z-select-item [zValue]="option.value" [zLabel]="option.label | translate" />
+      }
+    </z-select>
+    @if (visibleTypeErrorKey(); as currentError) {
+      <p role="alert" class="mt-1 text-xs text-destructive">{{ currentError | translate }}</p>
+    }
+  </div>
+
+  <div>
+    <label for="account-color" class="mb-1.5 block text-sm font-medium">{{
+      'common.labels.color' | translate
+    }}</label>
+    <z-select
+      id="account-color"
+      formControlName="colorKey"
+      [zPlaceholder]="'common.placeholders.selectColor' | translate"
+    >
+      @for (option of colorOptions; track option.value) {
+        <z-select-item
+          [zValue]="option.value"
+          [zLabel]="option.label | translate"
+          [zColorHex]="option.colorHex ?? null"
+        />
+      }
+    </z-select>
+  </div>
+
+  <div>
+    <label class="mb-1.5 block text-sm font-medium" for="account-icon">{{
+      'common.labels.icon' | translate
+    }}</label>
+    <z-combobox
+      zId="account-icon"
+      zWidth="full"
+      formControlName="icon"
+      [placeholder]="'common.placeholders.selectIcon' | translate"
+      [options]="getIconComboboxOptions()"
+    />
+  </div>
+
+  @if (errorKey(); as currentError) {
+    <p role="alert" class="sm:col-span-2 text-sm text-destructive">
+      {{ currentError | translate }}
+    </p>
+  }
+</form>

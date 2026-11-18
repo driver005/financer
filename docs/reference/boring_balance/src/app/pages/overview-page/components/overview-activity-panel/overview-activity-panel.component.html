@@ -1,0 +1,124 @@
+<ng-template #titleTpl>
+  <div class="flex w-full items-center justify-between gap-2">
+    <span>{{ titleKey | translate }}</span>
+    @if (activeTab() === 'transactions') {
+      <a
+        z-button
+        zType="link"
+        zSize="sm"
+        [routerLink]="['/transactions']"
+        [queryParams]="{ view: 'common' }"
+        class="h-auto p-0 text-xs font-normal"
+      >
+        {{ 'overview.cards.recentTransactions.actions.goToTransactionsPage' | translate }}
+      </a>
+    } @else {
+      <a
+        z-button
+        zType="link"
+        zSize="sm"
+        [routerLink]="['/transactions']"
+        [queryParams]="{ view: 'transfers' }"
+        class="h-auto p-0 text-xs font-normal"
+      >
+        {{ 'overview.cards.recentTransactions.actions.goToTransfersPage' | translate }}
+      </a>
+    }
+  </div>
+</ng-template>
+
+<app-base-card
+  [style.height.%]="100"
+  [style.minHeight.%]="100"
+  [zTitle]="cardTitleTpl()"
+  [zDescription]="descriptionKey() | translate: { count: activityItemLimit() }"
+  [zBodyFill]="true"
+>
+  @if (isLoading()) {
+    <div class="flex h-full min-h-64 items-center justify-center">
+      <z-loader zSize="default" />
+    </div>
+  } @else if (loadError()) {
+    <div
+      role="alert"
+      class="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+    >
+      {{ 'overview.cards.activity.loadFailed' | translate }}
+    </div>
+  } @else {
+    <div class="flex h-full min-h-0 flex-col gap-4">
+      <div class="shrink-0 space-y-3">
+        <z-segmented
+          zSize="sm"
+          [zFull]="true"
+          [zDefaultValue]="activeTab()"
+          (zChange)="onTabChange($event)"
+        >
+          <z-segmented-item
+            value="transactions"
+            [label]="'nav.items.transactions' | translate"
+          ></z-segmented-item>
+          <z-segmented-item
+            value="transfers"
+            [label]="'transactions.view.transfers' | translate"
+          ></z-segmented-item>
+        </z-segmented>
+
+        <button
+          z-button
+          zType="secondary"
+          zSize="sm"
+          class="w-full justify-center"
+          [zDisabled]="isLoading()"
+          (click)="onQuickAction()"
+        >
+          + {{ quickActionLabelKey() | translate }}
+        </button>
+      </div>
+
+      @if (activeTab() === 'transactions') {
+        @if (transactionRows().length === 0) {
+          <div
+            class="flex flex-1 flex-col items-center justify-center gap-3 rounded-md border border-border/50 bg-muted/20 px-4 py-8 text-center"
+          >
+            <p class="text-sm text-muted-foreground">{{ emptyMessageKey() | translate }}</p>
+            <button z-button zType="outline" zSize="sm" (click)="onQuickAction()">
+              + {{ quickActionLabelKey() | translate }}
+            </button>
+          </div>
+        } @else {
+          <div class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
+            @for (row of transactionRows(); track row.id) {
+              <app-activity-transaction-row
+                [row]="row"
+                [isPending]="isTransactionSettledUpdatePending(row.id)"
+                (settledChange)="onTransactionSettledChange(row.id, $event)"
+              />
+            }
+          </div>
+        }
+      } @else {
+        @if (transferRows().length === 0) {
+          <div
+            class="flex flex-1 flex-col items-center justify-center gap-3 rounded-md border border-border/50 bg-muted/20 px-4 py-8 text-center"
+          >
+            <p class="text-sm text-muted-foreground">{{ emptyMessageKey() | translate }}</p>
+            <button z-button zType="outline" zSize="sm" (click)="onQuickAction()">
+              + {{ quickActionLabelKey() | translate }}
+            </button>
+          </div>
+        } @else {
+          <div class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
+            @for (row of transferRows(); track row.transferId) {
+              <app-activity-transfer-row
+                [row]="row"
+                [isPending]="isTransferSettledUpdatePending(row.transferId)"
+                (settledChange)="onTransferSettledChange(row.transferId, $event)"
+              />
+            }
+          </div>
+        }
+      }
+    </div>
+  }
+</app-base-card>

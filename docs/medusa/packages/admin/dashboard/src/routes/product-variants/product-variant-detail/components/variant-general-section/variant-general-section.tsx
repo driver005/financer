@@ -1,0 +1,133 @@
+import { Component, GlobeEurope, PencilSquare, Trash } from "@medusajs/icons"
+import { Badge, Container, Heading, usePrompt } from "@medusajs/ui"
+import { useTranslation } from "react-i18next"
+import { useNavigate } from "react-router-dom"
+
+import {
+  ActionGroup,
+  ActionMenu,
+} from "../../../../../components/common/action-menu"
+import { SectionRow } from "../../../../../components/common/section"
+import { useDeleteVariant } from "../../../../../hooks/api/products"
+import { usePermissions } from "../../../../../providers/permissions-provider"
+import { useCanOpenTranslations } from "../../../../../hooks/use-resource-permissions"
+import { ExtendedVariant } from "../../constants"
+
+type VariantGeneralSectionProps = {
+  variant: ExtendedVariant
+}
+
+export function VariantGeneralSection({ variant }: VariantGeneralSectionProps) {
+  const { t } = useTranslation()
+  const prompt = usePrompt()
+  const navigate = useNavigate()
+  const { hasAllPermissions } = usePermissions()
+  const canOpenTranslations = useCanOpenTranslations()
+
+  const canUpdate = hasAllPermissions([
+    "product:update",
+    "product_variant:update",
+  ])
+  const canDelete = hasAllPermissions([
+    "product:update",
+    "product_variant:delete",
+  ])
+  const canManageTranslations = canOpenTranslations
+
+  const hasInventoryKit = (variant.inventory?.length ?? 0) > 1
+
+  const { mutateAsync } = useDeleteVariant(variant.product_id!, variant.id)
+
+  const handleDelete = async () => {
+    const res = await prompt({
+      title: t("general.areYouSure"),
+      description: t("products.variant.deleteWarning", {
+        title: variant.title,
+      }),
+      confirmText: t("actions.delete"),
+      cancelText: t("actions.cancel"),
+    })
+
+    if (!res) {
+      return
+    }
+
+    await mutateAsync(undefined, {
+      onSuccess: () => {
+        navigate("..", { replace: true })
+      },
+    })
+  }
+
+  return (
+    <Container className="divide-y p-0">
+      <div className="flex items-center justify-between px-6 py-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <Heading>{variant.title}</Heading>
+            {hasInventoryKit && (
+              <span className="font-normal text-ui-fg-muted">
+                <Component />
+              </span>
+            )}
+          </div>
+          <span className="txt-small mt-2 text-ui-fg-subtle">
+            {t("labels.productVariant")}
+          </span>
+        </div>
+        <div className="flex items-center gap-x-4">
+          {(() => {
+            const groups: ActionGroup[] = []
+
+            if (canUpdate) {
+              groups.push({
+                actions: [
+                  {
+                    label: t("actions.edit"),
+                    to: "edit",
+                    icon: <PencilSquare />,
+                  },
+                ],
+              })
+            }
+
+            if (canManageTranslations) {
+              groups.push({
+                actions: [
+                  {
+                    label: t("translations.actions.manage"),
+                    to: `/settings/translations/edit?reference=product_variant&reference_id=${variant.id}`,
+                    icon: <GlobeEurope />,
+                  },
+                ],
+              })
+            }
+
+            if (canDelete) {
+              groups.push({
+                actions: [
+                  {
+                    label: t("actions.delete"),
+                    onClick: handleDelete,
+                    icon: <Trash />,
+                  },
+                ],
+              })
+            }
+
+            return groups.length > 0 ? <ActionMenu groups={groups} /> : null
+          })()}
+        </div>
+      </div>
+
+      <SectionRow title={t("fields.sku")} value={variant.sku} />
+      {variant.options?.map((o) => (
+        <SectionRow
+          key={o.id}
+          title={o.option?.title!}
+          value={<Badge size="2xsmall">{o.value}</Badge>}
+        />
+      ))}
+    </Container>
+  )
+}

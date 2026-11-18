@@ -1,0 +1,178 @@
+{
+  "name": "Dompetku – Backup Mingguan",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 💾 Dompetku — Weekly backup\nEvery Sunday 02:00 (Asia/Jakarta): `GET /api/public/n8n/backup` → save the JSON file to **Google Drive**. File name = the server's Content-Disposition filename (`dompetku-cadangan-yyyy-MM-dd.json`), fallback `dompetku-backup-yyyy-MM-dd.json`.\n\nEnv: `FINTRACK_URL`. Credentials: Header Auth `x-api-key` (= `N8N_API_KEY`) + Google Drive OAuth2.\nReplace `REPLACE_ME_FOLDER_ID` in *Upload ke Google Drive* with your folder ID (the part after `/folders/` in the Drive URL).\n\n**Email instead of / in addition to Drive:** select the *Kirim via email* node and press **D** (or right-click → Activate). Create an **SMTP** credential:\n• Gmail: host `smtp.gmail.com`, port 465 + SSL on (or 587 + SSL off), user = your Gmail, password = a 16-char App Password.\n• Resend: host `smtp.resend.com`, user `resend`, password = API key, port 465/2465 + SSL on (or 587/2587 + SSL off).\nSet env `BACKUP_EMAIL_FROM` (must be your Gmail / an address on your verified Resend domain) and `BACKUP_EMAIL_TO`, then restart n8n. Disable the Drive node if you don't use it.\nRestore in the web app: Settings → **Restore from backup**. Guide: docs/N8N.md",
+        "height": 460,
+        "width": 720,
+        "color": "6"
+      },
+      "id": "d5803101-14ac-4f5f-9032-4e1de3fdcf87",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -500
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                0
+              ],
+              "triggerAtHour": 2
+            }
+          ]
+        }
+      },
+      "id": "f5e43082-5f44-4bfa-84af-c65fb31110d7",
+      "name": "Tiap Minggu 02:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FINTRACK_URL }}/api/public/n8n/backup",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "eb73a686-048f-4696-ac83-d6f36a65a0e7",
+      "name": "Ambil backup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Fintrack x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "={{ String(($binary.data && $binary.data.fileName) || \"\").startsWith(\"dompetku-\") ? $binary.data.fileName : \"dompetku-backup-\" + $now.setZone(\"Asia/Jakarta\").toFormat(\"yyyy-MM-dd\") + \".json\" }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_ME_FOLDER_ID"
+        },
+        "options": {}
+      },
+      "id": "499beb48-35d9-4a86-8fa5-cbcf159632b7",
+      "name": "Upload ke Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        480,
+        -100
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.BACKUP_EMAIL_FROM }}",
+        "toEmail": "={{ $env.BACKUP_EMAIL_TO }}",
+        "subject": "=Backup Dompetku {{ $now.setZone('Asia/Jakarta').toFormat('yyyy-MM-dd') }}",
+        "emailFormat": "text",
+        "text": "Your weekly Dompetku backup is attached. Restore it in the web app: Settings → Restore from backup.",
+        "options": {
+          "attachments": "data"
+        }
+      },
+      "id": "4d273b44-89f5-4240-a524-7e1599c403d7",
+      "name": "Kirim via email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        100
+      ],
+      "disabled": true,
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_ME",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Tiap Minggu 02:00": {
+      "main": [
+        [
+          {
+            "node": "Ambil backup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ambil backup": {
+      "main": [
+        [
+          {
+            "node": "Upload ke Google Drive",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Kirim via email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Jakarta",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "pinData": {},
+  "active": false,
+  "tags": []
+}

@@ -1,0 +1,94 @@
+"use server";
+
+import { actionError, PublicActionError } from "@/lib/action-error";
+import { lockAllocationOwner } from "@/features/allocations/server";
+
+
+import { loadFinancialConfiguration } from "@/features/financial-settings/server";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { calendarDateSchema } from "@/lib/date-schema";
+import { format } from "date-fns";
+import { getUserToday } from "@/lib/user-timezone";
+import { syncInvestmentCash } from "@/features/investments/cash-sync";
+
+import { db, schema } from "@/lib/db";
+import { getAppAuthUser } from "@/lib/supabase/app-user";
+
+import { linkFixedExpensePayment } from "./payment-ledger";
+
+type MutateResult = { ok: true } | { ok: false; error: string };
+
+const isoDate = calendarDateSchema;
+const confirmPaymentSchema = z.object({
+  fixedExpenseId: z.string().uuid(),
+  dueDate: isoDate,
+  paidDate: isoDate,
+  actualCents: z.number().int().nonnegative(),
+});
+
+async function requireUserId(): Promise<string | null> {
+  const user = await getAppAuthUser();
+  return user?.id ?? null;
+}
+
+export async function confirmFixedExpensePayment(
+  input: unknown,
+): Promise<MutateResult> {
+  const parsed = confirmPaymentSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues.map((issue) => issue.message).join("; "),
+    };
+  }
+  const userId = await requireUserId();
+  if (!userId) return { ok: false, error: "Not signed in" };
+
+  const { fixedExpenseId, dueDate, paidDate, actualCents } = parsed.data;
+  try {
+    await db.transaction(async (tx) => {
+      await lockAllocationOwner(tx, userId);
+      const configuration = await loadFinancialConfiguration(userId, tx);
+      const expense = configuration.at(dueDate).fixedExpenses.find(e => e.id === fixedExpenseId);
+      if (!expense) throw new PublicActionError("Unknown fixed expense");
+      const [transaction] = await tx
+        .insert(schema.transactions)
+        .values({
+          userId,
+          date: paidDate,
+          amountCents: -Math.abs(actualCents),
+          category: "fixed",
+          fixedExpenseId,
+          fixedExpenseDueDate: dueDate,
+          paymentMethod: "cash",
+          note: actualCents === 0 ? `${expense.name}: skipped, $0 charged` : expense.name,
+        })
+        .returning({ id: schema.transactions.id });
+
+      await linkFixedExpensePayment(tx, {
+        userId,
+        transactionId: transaction.id,
+        fixedExpenseId,
+        dueDate,
+        paidDate,
+        actualCents,
+        note: actualCents === 0
+          ? `Skipped ${expense.name} for this occurrence; $0 charged`
+          : `Confirmed ${expense.name} from Log`,
+      });
+      await syncInvestmentCash(userId, format(await getUserToday(userId, tx), "yyyy-MM-dd"), tx);
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: actionError(error, "Could not log the bill"),
+    };
+  }
+
+  revalidatePath("/log");
+  revalidatePath("/paycheck");
+  revalidatePath("/settings");
+  revalidatePath("/goals");
+  return { ok: true };
+}

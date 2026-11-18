@@ -14,6 +14,7 @@ export { Box, Row, Spacer, Stack, type BoxProps } from "./primitives/Box";
 export type { BgToken, Dim, MaxWidth, Share } from "./primitives/boxStyle";
 export { Text, type TextProps, type TextTone } from "./primitives/Text";
 export { Icon, type IconName } from "./primitives/Icon";
+export { MedusaIcon, type MedusaIconName } from "./primitives/MedusaIcon";
 export { Dot } from "./primitives/Dot";
 export { Touchable } from "./primitives/Touchable";
 
@@ -41,6 +42,8 @@ export { Spinner } from "./components/Spinner";
 export { Switch, SwitchRow } from "./components/Switch";
 export { SearchBar, TextField, type TextFieldProps } from "./components/TextField";
 export { Thumbnail } from "./components/Thumbnail";
+
+export * from "./medusa";
 
 export { Grid } from "./layout/Grid";
 export { AppShell, NavRail, Sidebar, TabBar, type NavItem } from "./layout/navigation";

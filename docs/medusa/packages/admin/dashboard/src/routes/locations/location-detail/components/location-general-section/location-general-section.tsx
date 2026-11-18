@@ -1,0 +1,757 @@
+import {
+  ArchiveBox,
+  CurrencyDollar,
+  Map,
+  PencilSquare,
+  Plus,
+  Trash,
+  TriangleDownMini,
+} from "@medusajs/icons"
+import { HttpTypes } from "@medusajs/types"
+import {
+  Badge,
+  Container,
+  Divider,
+  Heading,
+  IconButton,
+  StatusBadge,
+  Text,
+  toast,
+  usePrompt,
+} from "@medusajs/ui"
+import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { useNavigate } from "react-router-dom"
+
+import {
+  ActionGroup,
+  ActionMenu,
+} from "../../../../../components/common/action-menu"
+import { NoRecords } from "../../../../../components/common/empty-table-content"
+import { IconAvatar } from "../../../../../components/common/icon-avatar"
+import { LinkButton } from "../../../../../components/common/link-button"
+import { ListSummary } from "../../../../../components/common/list-summary"
+import {
+  useDeleteFulfillmentServiceZone,
+  useDeleteFulfillmentSet,
+} from "../../../../../hooks/api/fulfillment-sets"
+import { useDeleteShippingOption } from "../../../../../hooks/api/shipping-options"
+import {
+  useCreateStockLocationFulfillmentSet,
+  useDeleteStockLocation,
+} from "../../../../../hooks/api/stock-locations"
+import { getFormattedAddress } from "../../../../../lib/addresses"
+import {
+  StaticCountry,
+  countries as staticCountries,
+} from "../../../../../lib/data/countries"
+import { formatProvider } from "../../../../../lib/format-provider"
+import {
+  isOptionEnabledInStore,
+  isReturnOption,
+} from "../../../../../lib/shipping-options"
+import {
+  useFulfillmentProviderPermissions,
+  useFulfillmentSetPermissions,
+  useInventoryItemPermissions,
+  useServiceZonePermissions,
+  useShippingOptionPermissions,
+  useShippingProfilePermissions,
+  useStockLocationPermissions,
+} from "../../../../../hooks/use-resource-permissions"
+import {
+  FulfillmentSetType,
+  ShippingOptionPriceType,
+} from "../../../common/constants"
+import { PermissionGuard } from "../../../../../components/common/permission-guard"
+
+type LocationGeneralSectionProps = {
+  location: HttpTypes.AdminStockLocation
+}
+
+export const LocationGeneralSection = ({
+  location,
+}: LocationGeneralSectionProps) => {
+  return (
+    <>
+      <Container className="p-0">
+        <div className="flex items-center justify-between px-6 py-4">
+          <div>
+            <Heading>{location.name}</Heading>
+            <Text className="txt-small text-ui-fg-subtle">
+              {getFormattedAddress({
+                address: location.address as
+                  HttpTypes.AdminOrderAddress | undefined,
+              }).join(", ")}
+            </Text>
+          </div>
+          <Actions location={location} />
+        </div>
+      </Container>
+
+      <PermissionGuard permission="fulfillment_set:read">
+        <FulfillmentSet
+          locationId={location.id}
+          locationName={location.name}
+          type={FulfillmentSetType.Pickup}
+          fulfillmentSet={location.fulfillment_sets?.find(
+            (f) => f.type === FulfillmentSetType.Pickup
+          )}
+        />
+      </PermissionGuard>
+
+      <PermissionGuard permission="fulfillment_set:read">
+        <FulfillmentSet
+          locationId={location.id}
+          locationName={location.name}
+          type={FulfillmentSetType.Shipping}
+          fulfillmentSet={location.fulfillment_sets?.find(
+            (f) => f.type === FulfillmentSetType.Shipping
+          )}
+        />
+      </PermissionGuard>
+    </>
+  )
+}
+
+type ShippingOptionProps = {
+  option: HttpTypes.AdminShippingOption
+  fulfillmentSetId: string
+  locationId: string
+}
+
+function ShippingOption({
+  option,
+  fulfillmentSetId,
+  locationId,
+}: ShippingOptionProps) {
+  const prompt = usePrompt()
+  const { t } = useTranslation()
+  const { canUpdate: canUpdateLocation } = useStockLocationPermissions()
+  const {
+    canUpdate: canUpdateShippingOption,
+    canDelete: canDeleteShippingOption,
+  } = useShippingOptionPermissions()
+  const { canRead: canReadShippingProfiles } = useShippingProfilePermissions()
+  const { canRead: canReadFulfillmentProviders } =
+    useFulfillmentProviderPermissions()
+
+  const canUpdate = canUpdateLocation && canUpdateShippingOption
+  const canDelete = canUpdateLocation && canDeleteShippingOption
+
+  const isStoreOption = isOptionEnabledInStore(option)
+
+  const { mutateAsync } = useDeleteShippingOption(option.id)
+
+  const handleDelete = async () => {
+    const res = await prompt({
+      title: t("general.areYouSure"),
+      description: t("stockLocations.shippingOptions.delete.confirmation", {
+        name: option.name,
+      }),
+      verificationInstruction: t("general.typeToConfirm"),
+      verificationText: option.name,
+      confirmText: t("actions.delete"),
+      cancelText: t("actions.cancel"),
+    })
+
+    if (!res) {
+      return
+    }
+
+    await mutateAsync(undefined, {
+      onSuccess: () => {
+        toast.success(
+          t("stockLocations.shippingOptions.delete.successToast", {
+            name: option.name,
+          })
+        )
+      },
+      onError: (e) => {
+        toast.error(e.message)
+      },
+    })
+  }
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2">
+      <div className="flex-1">
+        <Text size="small" weight="plus">
+          {option.name}{" "}
+          {canReadShippingProfiles && `- ${option.shipping_profile.name}`} (
+          {canReadFulfillmentProviders && formatProvider(option.provider_id)})
+        </Text>
+      </div>
+      <Badge
+        className="mr-4"
+        color={isStoreOption ? "grey" : "purple"}
+        size="2xsmall"
+        rounded="full"
+      >
+        {isStoreOption ? t("general.store") : t("general.admin")}
+      </Badge>
+      {(() => {
+        const groups: ActionGroup[] = []
+
+        if (canUpdate) {
+          groups.push({
+            actions: [
+              {
+                icon: <PencilSquare />,
+                label: t("stockLocations.shippingOptions.edit.action"),
+                to: `/settings/locations/${locationId}/fulfillment-set/${fulfillmentSetId}/service-zone/${option.service_zone_id}/shipping-option/${option.id}/edit`,
+              },
+              {
+                label: t("stockLocations.shippingOptions.pricing.action"),
+                icon: <CurrencyDollar />,
+                disabled:
+                  option.price_type === ShippingOptionPriceType.Calculated,
+                to: `/settings/locations/${locationId}/fulfillment-set/${fulfillmentSetId}/service-zone/${option.service_zone_id}/shipping-option/${option.id}/pricing`,
+              },
+            ],
+          })
+        }
+
+        if (canDelete) {
+          groups.push({
+            actions: [
+              {
+                label: t("actions.delete"),
+                icon: <Trash />,
+                onClick: handleDelete,
+              },
+            ],
+          })
+        }
+
+        return groups.length > 0 ? <ActionMenu groups={groups} /> : null
+      })()}
+    </div>
+  )
+}
+
+type ServiceZoneOptionsProps = {
+  zone: HttpTypes.AdminServiceZone
+  locationId: string
+  fulfillmentSetId: string
+  type: FulfillmentSetType
+}
+
+function ServiceZoneOptions({
+  zone,
+  locationId,
+  fulfillmentSetId,
+  type,
+}: ServiceZoneOptionsProps) {
+  const { t } = useTranslation()
+  const { canUpdate: canUpdateLocation } = useStockLocationPermissions()
+  const { canCreate: canCreateShippingOption } = useShippingOptionPermissions()
+  const canCreateOption = canUpdateLocation && canCreateShippingOption
+
+  const shippingOptions = zone.shipping_options.filter(
+    (o) => !isReturnOption(o)
+  )
+
+  const returnOptions = zone.shipping_options.filter((o) => isReturnOption(o))
+
+  return (
+    <div>
+      <Divider variant="dashed" />
+      <div className="flex flex-col gap-y-4 px-6 py-4">
+        <div className="item-center flex justify-between">
+          <span className="txt-small self-center font-medium text-ui-fg-subtle">
+            {t(`stockLocations.shippingOptions.create.${type}.label`)}
+          </span>
+          {canCreateOption && (
+            <LinkButton
+              to={`/settings/locations/${locationId}/fulfillment-set/${fulfillmentSetId}/service-zone/${zone.id}/shipping-option/create`}
+            >
+              {t("stockLocations.shippingOptions.create.action")}
+            </LinkButton>
+          )}
+        </div>
+
+        {!!shippingOptions.length && (
+          <div className="grid divide-y rounded-md bg-ui-bg-subtle shadow-elevation-card-rest">
+            {shippingOptions.map((o) => (
+              <ShippingOption
+                key={o.id}
+                option={o}
+                locationId={locationId}
+                fulfillmentSetId={fulfillmentSetId}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Divider variant="dashed" />
+
+      <div className="flex flex-col gap-y-4 px-6 py-4">
+        <div className="item-center flex justify-between">
+          <span className="txt-small self-center font-medium text-ui-fg-subtle">
+            {t("stockLocations.shippingOptions.create.returns.label")}
+          </span>
+          {canCreateOption && (
+            <LinkButton
+              to={`/settings/locations/${locationId}/fulfillment-set/${fulfillmentSetId}/service-zone/${zone.id}/shipping-option/create?is_return`}
+            >
+              {t("stockLocations.shippingOptions.create.action")}
+            </LinkButton>
+          )}
+        </div>
+
+        {!!returnOptions.length && (
+          <div className="grid divide-y rounded-md bg-ui-bg-subtle shadow-elevation-card-rest">
+            {returnOptions.map((o) => (
+              <ShippingOption
+                key={o.id}
+                option={o}
+                locationId={locationId}
+                fulfillmentSetId={fulfillmentSetId}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type ServiceZoneProps = {
+  zone: HttpTypes.AdminServiceZone
+  locationId: string
+  fulfillmentSetId: string
+  type: FulfillmentSetType
+}
+
+function ServiceZone({
+  zone,
+  locationId,
+  fulfillmentSetId,
+  type,
+}: ServiceZoneProps) {
+  const { t } = useTranslation()
+  const prompt = usePrompt()
+  const [open, setOpen] = useState(true)
+  const { canUpdate: canUpdateLocation } = useStockLocationPermissions()
+  const { canUpdate: canUpdateFulfillmentSet } = useFulfillmentSetPermissions()
+  const { canUpdate: canUpdateServiceZone, canDelete: canDeleteServiceZone } =
+    useServiceZonePermissions()
+  const { canRead: canReadShippingOptions } = useShippingOptionPermissions()
+
+  const canEditZone =
+    canUpdateLocation && canUpdateFulfillmentSet && canUpdateServiceZone
+  const canDeleteZone =
+    canUpdateLocation && canUpdateFulfillmentSet && canDeleteServiceZone
+
+  const { mutateAsync: deleteZone } = useDeleteFulfillmentServiceZone(
+    fulfillmentSetId,
+    zone.id
+  )
+
+  const handleDelete = async () => {
+    const res = await prompt({
+      title: t("general.areYouSure"),
+      description: t("stockLocations.serviceZones.delete.confirmation", {
+        name: zone.name,
+      }),
+      confirmText: t("actions.delete"),
+      cancelText: t("actions.cancel"),
+    })
+
+    if (!res) {
+      return
+    }
+
+    await deleteZone(undefined, {
+      onError: (e) => {
+        toast.error(e.message)
+      },
+      onSuccess: () => {
+        toast.success(
+          t("stockLocations.serviceZones.delete.successToast", {
+            name: zone.name,
+          })
+        )
+      },
+    })
+  }
+
+  const countries = useMemo(() => {
+    const countryGeoZones = zone.geo_zones.filter((g) => g.type === "country")
+
+    const countries = countryGeoZones
+      .map(({ country_code }) =>
+        staticCountries.find((c) => c.iso_2 === country_code)
+      )
+      .filter((c) => !!c) as StaticCountry[]
+
+    if (
+      process.env.NODE_ENV === "development" &&
+      countryGeoZones.length !== countries.length
+    ) {
+      console.warn(
+        "Some countries are missing in the static countries list",
+        countryGeoZones
+          .filter((g) => !countries.find((c) => c.iso_2 === g.country_code))
+          .map((g) => g.country_code)
+      )
+    }
+
+    return countries.sort((c1, c2) => c1.name.localeCompare(c2.name))
+  }, [zone.geo_zones])
+
+  const [shippingOptionsCount, returnOptionsCount] = useMemo(() => {
+    const options = zone.shipping_options
+
+    const optionsCount = options.filter((o) => !isReturnOption(o)).length
+
+    const returnOptionsCount = options.filter(isReturnOption).length
+
+    return [optionsCount, returnOptionsCount]
+  }, [zone.shipping_options])
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex flex-row items-center justify-between gap-x-4 px-6 py-4">
+        <IconAvatar>
+          <Map />
+        </IconAvatar>
+
+        <div className="grow-1 flex flex-1 flex-col">
+          <Text size="small" leading="compact" weight="plus">
+            {zone.name}
+          </Text>
+          <div className="flex items-center gap-2">
+            <ListSummary
+              variant="base"
+              list={countries.map((c) => c.display_name)}
+              inline
+              n={1}
+            />
+            {canReadShippingOptions && (
+              <>
+                <span>·</span>
+                <Text className="txt-small text-ui-fg-subtle">
+                  {t(`stockLocations.shippingOptions.fields.count.${type}`, {
+                    count: shippingOptionsCount,
+                  })}
+                </Text>
+                <span>·</span>
+                <Text className="txt-small text-ui-fg-subtle">
+                  {t("stockLocations.shippingOptions.fields.count.returns", {
+                    count: returnOptionsCount,
+                  })}
+                </Text>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex grow-0 items-center gap-4">
+          {canReadShippingOptions && (
+            <IconButton
+              size="small"
+              onClick={() => setOpen((s) => !s)}
+              variant="transparent"
+            >
+              <TriangleDownMini
+                style={{
+                  transform: `rotate(${!open ? 0 : 180}deg)`,
+                  transition: ".2s transform ease-in-out",
+                }}
+              />
+            </IconButton>
+          )}
+          {(() => {
+            const groups: ActionGroup[] = []
+
+            if (canEditZone) {
+              groups.push({
+                actions: [
+                  {
+                    label: t("actions.edit"),
+                    icon: <PencilSquare />,
+                    to: `/settings/locations/${locationId}/fulfillment-set/${fulfillmentSetId}/service-zone/${zone.id}/edit`,
+                  },
+                  {
+                    label: t("stockLocations.serviceZones.manageAreas.action"),
+                    icon: <Map />,
+                    to: `/settings/locations/${locationId}/fulfillment-set/${fulfillmentSetId}/service-zone/${zone.id}/areas`,
+                  },
+                ],
+              })
+            }
+
+            if (canDeleteZone) {
+              groups.push({
+                actions: [
+                  {
+                    label: t("actions.delete"),
+                    icon: <Trash />,
+                    onClick: handleDelete,
+                  },
+                ],
+              })
+            }
+
+            return groups.length > 0 ? <ActionMenu groups={groups} /> : null
+          })()}
+        </div>
+      </div>
+      {open && canReadShippingOptions && (
+        <ServiceZoneOptions
+          fulfillmentSetId={fulfillmentSetId}
+          locationId={locationId}
+          type={type}
+          zone={zone}
+        />
+      )}
+    </div>
+  )
+}
+
+type FulfillmentSetProps = {
+  fulfillmentSet?: HttpTypes.AdminFulfillmentSet
+  locationName: string
+  locationId: string
+  type: FulfillmentSetType
+}
+
+function FulfillmentSet(props: FulfillmentSetProps) {
+  const { t } = useTranslation()
+  const prompt = usePrompt()
+  const { canUpdate: canUpdateLocation } = useStockLocationPermissions()
+  const {
+    canCreate: canCreateFulfillmentSet,
+    canDelete: canDeleteFulfillmentSet,
+  } = useFulfillmentSetPermissions()
+  const { canCreate: canCreateServiceZone, canRead: canReadServiceZones } =
+    useServiceZonePermissions()
+
+  const canEnable = canUpdateLocation && canCreateFulfillmentSet
+  const canDisable = canUpdateLocation && canDeleteFulfillmentSet
+
+  const canCreateZone = canUpdateLocation && canCreateServiceZone
+
+  const { fulfillmentSet, locationName, locationId, type } = props
+
+  const fulfillmentSetExists = !!fulfillmentSet
+
+  const hasServiceZones =
+    !!fulfillmentSet?.service_zones.length && canReadServiceZones
+
+  const { mutateAsync: createFulfillmentSet } =
+    useCreateStockLocationFulfillmentSet(locationId)
+
+  const { mutateAsync: deleteFulfillmentSet } = useDeleteFulfillmentSet(
+    fulfillmentSet?.id!
+  )
+
+  const handleCreate = async () => {
+    await createFulfillmentSet(
+      {
+        name: `${locationName} ${
+          type === FulfillmentSetType.Pickup ? "pick up" : type
+        }`,
+        type,
+      },
+      {
+        onSuccess: () => {
+          toast.success(t(`stockLocations.fulfillmentSets.enable.${type}`))
+        },
+        onError: (e) => {
+          toast.error(e.message)
+        },
+      }
+    )
+  }
+
+  const handleDelete = async () => {
+    const res = await prompt({
+      title: t("general.areYouSure"),
+      description: t(`stockLocations.fulfillmentSets.disable.confirmation`, {
+        name: fulfillmentSet?.name,
+      }),
+      confirmText: t("actions.disable"),
+      cancelText: t("actions.cancel"),
+    })
+
+    if (!res) {
+      return
+    }
+
+    await deleteFulfillmentSet(undefined, {
+      onSuccess: () => {
+        toast.success(t(`stockLocations.fulfillmentSets.disable.${type}`))
+      },
+      onError: (e) => {
+        toast.error(e.message)
+      },
+    })
+  }
+
+  const groups: ActionGroup[] = []
+
+  if (fulfillmentSet) {
+    if (canCreateZone) {
+      groups.push({
+        actions: [
+          {
+            icon: <Plus />,
+            label: t("stockLocations.serviceZones.create.action"),
+            to: `/settings/locations/${locationId}/fulfillment-set/${fulfillmentSet.id}/service-zones/create`,
+          },
+        ],
+      })
+    }
+
+    if (canDisable) {
+      groups.push({
+        actions: [
+          {
+            icon: <Trash />,
+            label: t("actions.disable"),
+            onClick: handleDelete,
+          },
+        ],
+      })
+    }
+  } else if (canEnable) {
+    groups.push({
+      actions: [
+        {
+          icon: <Plus />,
+          label: t("actions.enable"),
+          onClick: handleCreate,
+        },
+      ],
+    })
+  }
+
+  return (
+    <Container className="p-0">
+      <div className="flex flex-col divide-y">
+        <div className="flex items-center justify-between px-6 py-4">
+          <Heading level="h2">
+            {t(`stockLocations.fulfillmentSets.${type}.header`)}
+          </Heading>
+          <div className="flex items-center gap-4">
+            <StatusBadge color={fulfillmentSetExists ? "green" : "grey"}>
+              {t(
+                fulfillmentSetExists ? "statuses.enabled" : "statuses.disabled"
+              )}
+            </StatusBadge>
+
+            {groups.length > 0 && <ActionMenu groups={groups} />}
+          </div>
+        </div>
+
+        {fulfillmentSetExists && !hasServiceZones && (
+          <div className="flex items-center justify-center py-8 pt-6">
+            <NoRecords
+              message={t("stockLocations.serviceZones.fields.noRecords")}
+              className="h-fit"
+              action={
+                canCreateZone
+                  ? {
+                      to: `/settings/locations/${locationId}/fulfillment-set/${fulfillmentSet.id}/service-zones/create`,
+                      label: t("stockLocations.serviceZones.create.action"),
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        )}
+
+        {hasServiceZones && (
+          <div className="flex flex-col divide-y">
+            {fulfillmentSet?.service_zones.map((zone) => (
+              <ServiceZone
+                zone={zone}
+                type={type}
+                key={zone.id}
+                locationId={locationId}
+                fulfillmentSetId={fulfillmentSet.id}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </Container>
+  )
+}
+
+const Actions = ({ location }: { location: HttpTypes.AdminStockLocation }) => {
+  const navigate = useNavigate()
+  const { t } = useTranslation()
+  const { canUpdate, canDelete } = useStockLocationPermissions()
+  const { canRead: canReadInventory } = useInventoryItemPermissions()
+  const { mutateAsync } = useDeleteStockLocation(location.id)
+  const prompt = usePrompt()
+
+  const handleDelete = async () => {
+    const res = await prompt({
+      title: t("general.areYouSure"),
+      description: t("stockLocations.delete.confirmation", {
+        name: location.name,
+      }),
+      verificationText: location.name,
+      verificationInstruction: t("general.typeToConfirm"),
+      confirmText: t("actions.delete"),
+      cancelText: t("actions.cancel"),
+    })
+
+    if (!res) {
+      return
+    }
+
+    await mutateAsync(undefined, {
+      onSuccess: () => {
+        toast.success(
+          t("stockLocations.create.successToast", {
+            name: location.name,
+          })
+        )
+        navigate("/settings/locations", { replace: true })
+      },
+      onError: (e) => {
+        toast.error(e.message)
+      },
+    })
+  }
+
+  const firstGroupActions = [
+    canUpdate
+      ? {
+          icon: <PencilSquare />,
+          label: t("actions.edit"),
+          to: `edit`,
+        }
+      : null,
+    canReadInventory
+      ? {
+          icon: <ArchiveBox />,
+          label: t("stockLocations.edit.viewInventory"),
+          to: `/inventory?location_id=${location.id}`,
+        }
+      : null,
+  ].filter(Boolean) as ActionGroup["actions"]
+
+  const groups: ActionGroup[] = [{ actions: firstGroupActions }]
+
+  if (canDelete) {
+    groups.push({
+      actions: [
+        {
+          icon: <Trash />,
+          label: t("actions.delete"),
+          onClick: handleDelete,
+        },
+      ],
+    })
+  }
+
+  return <ActionMenu groups={groups} />
+}

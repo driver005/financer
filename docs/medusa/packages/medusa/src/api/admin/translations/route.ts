@@ -1,0 +1,39 @@
+import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { HttpTypes } from "@medusajs/framework/types"
+import {
+  ContainerRegistrationKeys,
+  TRANSLATION_LIST_CACHE_TAG,
+} from "@medusajs/framework/utils"
+
+/**
+ * @since 2.12.3
+ */
+export const GET = async (
+  req: MedusaRequest<HttpTypes.AdminTranslationsListParams>,
+  res: MedusaResponse<HttpTypes.AdminTranslationsListResponse>
+) => {
+  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+
+  const { data: translations, metadata } = await query.graph(
+    {
+      entity: "translation",
+      fields: req.queryConfig.fields,
+      filters: req.filterableFields,
+      pagination: req.queryConfig.pagination,
+    },
+    {
+      cache: {
+        enable: true,
+        tags: [TRANSLATION_LIST_CACHE_TAG],
+        computeAutomaticTags: true,
+      },
+    }
+  )
+
+  return res.status(200).json({
+    translations,
+    count: metadata?.count ?? 0,
+    offset: metadata?.skip ?? 0,
+    limit: metadata?.take ?? 0,
+  })
+}

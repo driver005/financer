@@ -1,0 +1,44 @@
+{
+  "name": "typedoc-plugin-custom",
+  "private": true,
+  "version": "0.0.0",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "A plugin that holds all necessary changes to generate a module reference",
+  "main": "./dist/index.js",
+  "exports": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "author": "Shahed Nasser",
+  "type": "module",
+  "scripts": {
+    "build": "yarn run -T tsc",
+    "watch": "yarn run -T tsc --watch",
+    "lint": "eslint --ext .ts src"
+  },
+  "peerDependencies": {
+    "typedoc": "0.28.x"
+  },
+  "devDependencies": {
+    "@types/eslint": "^9.6.1",
+    "@types/node": "^20.12.10",
+    "types": "*",
+    "typescript": "^6.0.3"
+  },
+  "keywords": [
+    "typedocplugin",
+    "packages",
+    "monorepo",
+    "typedoc"
+  ],
+  "dependencies": {
+    "eslint": "^9.13.0",
+    "glob": "14.0.2",
+    "minimatch": "^11.0.1",
+    "utils": "*",
+    "yaml": "^2.3.3"
+  }
+}

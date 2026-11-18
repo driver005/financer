@@ -1,0 +1,86 @@
+import { z } from "@medusajs/framework/zod"
+import {
+  createFindParams,
+  createOperatorMap,
+  createSelectParams,
+} from "../../utils/validators"
+import { applyAndAndOrOperators } from "../../utils/common-validators"
+import {
+  assignmentScopeFields,
+  requireScopePair,
+  scopePairError,
+} from "../../rbac/roles/validators"
+
+export const AdminGetUserParams = createSelectParams()
+
+export type AdminGetUsersParamsType = z.infer<typeof AdminGetUsersParams>
+export const AdminGetUsersParams = createFindParams({
+  offset: 0,
+  limit: 50,
+}).merge(
+  z.object({
+    q: z.string().optional(),
+    id: z.union([z.string(), z.array(z.string())]).optional(),
+    created_at: createOperatorMap().optional(),
+    updated_at: createOperatorMap().optional(),
+    deleted_at: createOperatorMap().optional(),
+    email: z.string().nullish(),
+    first_name: z.string().nullish(),
+    last_name: z.string().nullish(),
+  })
+)
+
+export type AdminCreateUserType = z.infer<typeof AdminCreateUser>
+export const AdminCreateUser = z.object({
+  email: z.string(),
+  first_name: z.string().nullish(),
+  last_name: z.string().nullish(),
+  avatar_url: z.string().nullish(),
+})
+
+export type AdminUpdateUserType = z.infer<typeof AdminUpdateUser>
+export const AdminUpdateUser = z.object({
+  first_name: z.string().nullish(),
+  last_name: z.string().nullish(),
+  avatar_url: z.string().nullish(),
+  metadata: z.record(z.string(), z.unknown()).nullish().optional(),
+})
+
+const UserRoleAssignment = z
+  .object({
+    role_id: z.string().min(1),
+    ...assignmentScopeFields,
+  })
+  .refine(requireScopePair, scopePairError)
+
+export type AdminAssignUserRoleType = z.infer<typeof AdminAssignUserRole>
+export const AdminAssignUserRole = z.object({
+  assignments: z.array(UserRoleAssignment).min(1),
+})
+
+export type AdminUnassignUserRolesType = z.infer<typeof AdminUnassignUserRoles>
+export const AdminUnassignUserRoles = z.object({
+  assignments: z.array(UserRoleAssignment).min(1),
+})
+
+export const AdminGetUserRolesParamsFields = z.object({
+  role_id: z.union([z.string(), z.array(z.string())]).optional(),
+  scope: z.union([z.string(), z.array(z.string())]).optional(),
+  scope_id: z.union([z.string(), z.array(z.string())]).optional(),
+})
+
+export type AdminGetUserRolesParamsType = z.infer<
+  typeof AdminGetUserRolesParams
+>
+export const AdminGetUserRolesParams = createFindParams({
+  limit: 50,
+  offset: 0,
+})
+  .extend(AdminGetUserRolesParamsFields.shape)
+  .extend(applyAndAndOrOperators(AdminGetUserRolesParamsFields).shape)
+
+export type AdminUnassignUserRoleType = z.infer<typeof AdminUnassignUserRole>
+export const AdminUnassignUserRole = z
+  .object(assignmentScopeFields)
+  .refine(requireScopePair, scopePairError)
+  .optional()

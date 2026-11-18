@@ -1,0 +1,103 @@
+name: Build apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install app packages
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Link the local UI package for typechecking
+        run: ln -sfn ../../apps/mobile/node_modules ../../packages/finance-ui/node_modules
+
+      - name: Generate native Android project
+        working-directory: apps/mobile
+        run: CI=1 npx expo prebuild --platform android --clean
+
+      - name: Build release APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pantry-android-apk
+          path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  ios:
+    name: iOS simulator app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install app packages
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Link the local UI package for typechecking
+        run: ln -sfn ../../apps/mobile/node_modules ../../packages/finance-ui/node_modules
+
+      - name: Generate native iOS project
+        working-directory: apps/mobile
+        run: CI=1 npx expo prebuild --platform ios --clean
+
+      - name: Install CocoaPods
+        working-directory: apps/mobile/ios
+        run: pod install
+
+      - name: Build simulator app without signing
+        working-directory: apps/mobile/ios
+        run: |
+          xcodebuild \
+            -workspace Pantry.xcworkspace \
+            -scheme Pantry \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Zip the app
+        run: |
+          cd apps/mobile/ios/build/Build/Products/Release-iphonesimulator
+          ditto -c -k --sequesterRsrc --keepParent Pantry.app Pantry-ios-simulator.zip
+
+      - name: Upload iOS app
+        uses: actions/upload-artifact@v4
+        with:
+          name: pantry-ios-simulator-app
+          path: apps/mobile/ios/build/Build/Products/Release-iphonesimulator/Pantry-ios-simulator.zip
+          if-no-files-found: error
+          retention-days: 30

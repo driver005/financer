@@ -1,0 +1,388 @@
+{
+  "name": "Dompetku – Jadwal Laporan & Pengingat",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## ⏰ Dompetku — Schedules\nAll times use the workflow time zone **Asia/Jakarta** (change it in workflow Settings). Disable the triggers you don't need.\n\nEnv: `FINTRACK_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_CHAT_ID`.\nCredential: Header Auth `x-api-key` (replace `REPLACE_ME` on all 4 HTTP nodes).\nReminders are only sent when something is due (≤3 days / overdue / budget almost used up). Reports use no AI tokens.",
+        "height": 220,
+        "width": 640,
+        "color": "6"
+      },
+      "id": "dd231322-03fb-4048-9469-1d69c151f691",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "10939022-7de0-469f-8d72-4ea2b63ff5a9",
+      "name": "Tiap hari 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FINTRACK_URL }}/api/public/n8n/reminders?days=3",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "2698668c-82f4-452f-819b-90f1a50e39de",
+      "name": "Tagihan ≤ 3 hari",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Fintrack x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1877f40-d908-4826-8f5b-9e4d9fc680e7",
+              "leftValue": "={{ $json.count }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 0
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7c298d44-0542-4be0-8687-2b7b9d4205a0",
+      "name": "Ada tagihan?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 21
+            }
+          ]
+        }
+      },
+      "id": "c4b84536-7bf0-4ee8-8e6f-1933ced68a7d",
+      "name": "Tiap hari 21:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FINTRACK_URL }}/api/public/n8n/report?period=today",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "8222a432-b171-4a65-b74c-73263d7cc213",
+      "name": "Rekap hari ini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Fintrack x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 7,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "a7910d51-5c96-4692-b924-05de435141a8",
+      "name": "Senin 07:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FINTRACK_URL }}/api/public/n8n/report?period=lastweek",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "efba057e-ce78-44bf-bf56-a41983b36836",
+      "name": "Laporan minggu lalu",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        400
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Fintrack x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "monthsInterval": 1,
+              "triggerAtDayOfMonth": 1,
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "90dda822-695d-4a6b-b74b-3e07a31a9e6f",
+      "name": "Tanggal 1 07:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FINTRACK_URL }}/api/public/n8n/report?period=lastmonth",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "bd4e680a-7eb6-4c78-8712-dd1411833cc6",
+      "name": "Laporan bulan lalu",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        600
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Fintrack x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $env.TELEGRAM_ADMIN_CHAT_ID, text: String($json.message || '').slice(0, 4000), disable_web_page_preview: true }) }}"
+      },
+      "id": "7de1820b-afde-4520-9853-39a59506f7fa",
+      "name": "Kirim ke Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Tiap hari 08:00": {
+      "main": [
+        [
+          {
+            "node": "Tagihan ≤ 3 hari",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tagihan ≤ 3 hari": {
+      "main": [
+        [
+          {
+            "node": "Ada tagihan?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ada tagihan?": {
+      "main": [
+        [
+          {
+            "node": "Kirim ke Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Tiap hari 21:00": {
+      "main": [
+        [
+          {
+            "node": "Rekap hari ini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rekap hari ini": {
+      "main": [
+        [
+          {
+            "node": "Kirim ke Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Senin 07:30": {
+      "main": [
+        [
+          {
+            "node": "Laporan minggu lalu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Laporan minggu lalu": {
+      "main": [
+        [
+          {
+            "node": "Kirim ke Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tanggal 1 07:00": {
+      "main": [
+        [
+          {
+            "node": "Laporan bulan lalu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Laporan bulan lalu": {
+      "main": [
+        [
+          {
+            "node": "Kirim ke Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Jakarta",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "pinData": {},
+  "active": false,
+  "tags": []
+}

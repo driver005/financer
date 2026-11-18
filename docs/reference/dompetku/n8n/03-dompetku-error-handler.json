@@ -1,0 +1,96 @@
+{
+  "name": "Dompetku – Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "5999c8a7-c67f-4291-8188-3e8324935976",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $json;\nconst wf = e.workflow?.name ?? '-';\nconst node = e.execution?.lastNodeExecuted ?? e.trigger?.error?.node?.name ?? '-';\nconst msg = String(e.execution?.error?.message ?? e.trigger?.error?.message ?? 'Unknown error').slice(0, 600);\nconst url = e.execution?.url ? `\\n🔗 ${e.execution.url}` : '';\nreturn [{ json: { text: `🚨 n8n error\\nWorkflow: ${wf}\\nNode: ${node}\\nPesan: ${msg}${url}` } }];"
+      },
+      "id": "d0874a4b-dde7-4e87-83e1-5a0d28d76a3b",
+      "name": "Format pesan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "options": {
+          "timeout": 10000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $env.TELEGRAM_ADMIN_CHAT_ID, text: $json.text, disable_web_page_preview: true }) }}"
+      },
+      "id": "24ff6c2a-1562-4e6e-94e6-0908f0f644a3",
+      "name": "Kirim ke admin",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 🚨 Error handler\nSet this workflow as the **Error Workflow** in the Settings of workflows 01, 02 and 05. Notifications go to `TELEGRAM_ADMIN_CHAT_ID` (env: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_CHAT_ID`).",
+        "height": 180,
+        "width": 520,
+        "color": "3"
+      },
+      "id": "89f8664a-026f-4935-9482-c91f964986b9",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -220
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format pesan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format pesan": {
+      "main": [
+        [
+          {
+            "node": "Kirim ke admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Jakarta"
+  },
+  "pinData": {},
+  "active": false,
+  "tags": []
+}

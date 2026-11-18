@@ -1,0 +1,72 @@
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
+
+function normalizeDateFormat(value) {
+  if (value === undefined) {
+    return 'DD-MM-YYYY';
+  }
+
+  if (value === 'DD-MM-YYYY' || value === 'YYYY-MM-DD') {
+    return value;
+  }
+
+  throw new Error('format must be "DD-MM-YYYY" or "YYYY-MM-DD".');
+}
+
+function formatUnixTimestampMillisecondsToDate(unixTimestampMilliseconds, options = {}) {
+  const normalizedTimestamp = Number(unixTimestampMilliseconds);
+  if (!Number.isFinite(normalizedTimestamp)) {
+    throw new Error('unixTimestampMilliseconds must be a finite number.');
+  }
+
+  const date = new Date(normalizedTimestamp);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error('unixTimestampMilliseconds must be a valid Unix timestamp in milliseconds.');
+  }
+
+  const normalizedFormat = normalizeDateFormat(options.format);
+  const year = date.getFullYear();
+  const month = pad2(date.getMonth() + 1);
+  const day = pad2(date.getDate());
+
+  if (normalizedFormat === 'YYYY-MM-DD') {
+    return `${year}-${month}-${day}`;
+  }
+
+  return `${day}-${month}-${year}`;
+}
+
+function elapsedDaysBetweenUnixTimestampMilliseconds(
+  startUnixTimestampMilliseconds,
+  endUnixTimestampMilliseconds,
+) {
+  const normalizedStart = Number(startUnixTimestampMilliseconds);
+  const normalizedEnd = Number(endUnixTimestampMilliseconds);
+  if (!Number.isFinite(normalizedStart) || !Number.isFinite(normalizedEnd)) {
+    throw new Error(
+      'startUnixTimestampMilliseconds and endUnixTimestampMilliseconds must be finite numbers.',
+    );
+  }
+
+  const startDate = new Date(normalizedStart);
+  const endDate = new Date(normalizedEnd);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    throw new Error(
+      'startUnixTimestampMilliseconds and endUnixTimestampMilliseconds must be valid Unix timestamps in milliseconds.',
+    );
+  }
+
+  const startDay = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endDay = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+  return Math.floor((endDay - startDay) / MILLISECONDS_PER_DAY);
+}
+
+module.exports = {
+  pad2,
+  elapsedDaysBetweenUnixTimestampMilliseconds,
+  formatUnixTimestampMillisecondsToDate,
+};

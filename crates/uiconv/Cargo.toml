@@ -1,0 +1,17 @@
+[package]
+name = "uiconv"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Converts the Medusa design system (React DOM) to the Expo design system in packages/ui."
+
+# Its own workspace: the parser dependencies stay out of the app's Cargo.lock and CI build.
+[workspace]
+
+[dependencies]
+oxc_allocator = "0.146.0"
+oxc_ast = "0.146.0"
+oxc_ast_visit = "0.146.0"
+oxc_parser = "0.146.0"
+oxc_span = "0.146.0"
+serde_json = "1.0.154"

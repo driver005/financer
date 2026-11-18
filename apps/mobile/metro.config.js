@@ -1,18 +1,21 @@
+/** @type {import('expo/metro-config').MetroConfig} */
 const path = require("node:path");
-const { getDefaultConfig } = require("expo/metro-config");
+const config = require("expo/metro-config").getDefaultConfig(__dirname);
 
-const config = getDefaultConfig(__dirname);
-
-// The shopping assistant (packages/shopping) is bundled as source from outside this folder: Metro
-// has to watch it, and its imports of react, react-native and the expo packages must resolve to
-// THIS app's copies (one React, one native module registry).
-config.watchFolders = [...(config.watchFolders ?? []), path.resolve(__dirname, "../../packages"), path.resolve(__dirname, "../sdk-bindings")];
-// The Rust SDK as WebAssembly (apps/sdk-bindings, docs/SDK.md) is loaded as an asset.
-config.resolver.assetExts = [...config.resolver.assetExts, "wasm"];
-config.resolver.nodeModulesPaths = [path.resolve(__dirname, "node_modules")];
+config.watchFolders = [...(config.watchFolders ?? []), path.resolve(__dirname, "../../packages/finance-ui")];
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules ?? {}),
-  "@financer/ui": path.resolve(__dirname, "../../packages/ui"),
+  "@finance/ui": path.resolve(__dirname, "../../packages/finance-ui/src/index.ts"),
+};
+
+// expo-sqlite on web loads a WebAssembly build of SQLite.
+config.resolver.assetExts.push("wasm");
+
+// SharedArrayBuffer is required by the web SQLite build.
+config.server.enhanceMiddleware = (middleware) => (req, res, next) => {
+  res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  middleware(req, res, next);
 };
 
 module.exports = config;

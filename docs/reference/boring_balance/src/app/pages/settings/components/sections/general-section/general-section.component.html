@@ -1,0 +1,141 @@
+<div class="space-y-5">
+  <section class="rounded-lg border border-border/60 bg-card p-4 md:p-5">
+    <h3 class="sr-only">{{ 'settings.general.appearanceGroupTitle' | translate }}</h3>
+    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="settings-theme">
+          {{ 'settings.general.cards.theme.fieldLabel' | translate }}
+        </label>
+        <z-select
+          id="settings-theme"
+          [zValue]="selectedTheme()"
+          (zSelectionChange)="onThemeChange($event)"
+        >
+          @for (theme of themeOptions; track theme) {
+            <z-select-item
+              [zValue]="theme"
+              [zLabel]="themeOptionLabelKey(theme) | translate"
+              [zIcon]="themeOptionIcon(theme)"
+            />
+          }
+        </z-select>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="settings-language">
+          {{ 'settings.general.cards.language.fieldLabel' | translate }}
+        </label>
+        <z-select
+          id="settings-language"
+          [zValue]="selectedLanguage()"
+          (zSelectionChange)="onLanguageChange($event)"
+        >
+          @for (language of languages; track language) {
+            <z-select-item
+              [zValue]="language"
+              [zLabel]="getLanguageLabelKey(language) | translate"
+            />
+          }
+        </z-select>
+      </div>
+
+      <div class="lg:col-span-2">
+        <label class="mb-1 block text-sm font-medium" for="settings-dashboard-valuation-mode">
+          {{ 'settings.general.cards.dashboardValuationMode.fieldLabel' | translate }}
+        </label>
+        <z-select
+          id="settings-dashboard-valuation-mode"
+          [zValue]="selectedDashboardValuationMode()"
+          (zSelectionChange)="onDashboardValuationModeChange($event)"
+        >
+          @for (mode of dashboardValuationModeValues; track mode) {
+            <z-select-item
+              [zValue]="mode"
+              [zLabel]="dashboardValuationModeLabelKey(mode) | translate"
+            />
+          }
+        </z-select>
+        <p class="mt-2 text-xs text-muted-foreground">
+          {{ 'settings.general.cards.dashboardValuationMode.description' | translate }}
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="rounded-lg border border-border/60 bg-card p-4 md:p-5">
+    <div>
+      <h3 class="text-sm font-semibold tracking-tight">
+        {{ 'settings.general.currencyGroupTitle' | translate }}
+      </h3>
+    </div>
+
+    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="settings-currency">
+          {{ 'settings.general.cards.currency.fieldLabel' | translate }}
+        </label>
+        <z-select
+          id="settings-currency"
+          [zValue]="selectedCurrencyOption()"
+          (zSelectionChange)="onCurrencyOptionChange($event)"
+        >
+          @for (symbol of commonCurrencySymbols; track symbol) {
+            <z-select-item [zValue]="symbol" [zLabel]="symbol" />
+          }
+          <z-select-item
+            [zValue]="customCurrencyValue"
+            [zLabel]="'settings.general.cards.currency.options.custom' | translate"
+          />
+        </z-select>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="settings-number-format">
+          {{ 'settings.general.cards.numberFormat.fieldLabel' | translate }}
+        </label>
+        <z-select
+          id="settings-number-format"
+          [zValue]="selectedCurrencyFormatStyle()"
+          (zSelectionChange)="onCurrencyFormatStyleChange($event)"
+        >
+          @for (style of currencyFormatStyleValues; track style) {
+            <z-select-item
+              [zValue]="style"
+              [zLabel]="currencyFormatStyleLabelKey(style) | translate"
+            />
+          }
+        </z-select>
+      </div>
+    </div>
+
+    @if (selectedCurrencyOption() === customCurrencyValue) {
+      <div class="mt-4 max-w-sm border-t border-border/60 pt-4">
+        <label class="mb-1 block text-sm font-medium" for="settings-currency-custom">
+          {{ 'settings.general.cards.currency.customLabel' | translate }}
+        </label>
+        <input
+          id="settings-currency-custom"
+          z-input
+          type="text"
+          maxlength="3"
+          [value]="selectedCurrencySymbol()"
+          [attr.placeholder]="'settings.general.cards.currency.customPlaceholder' | translate"
+          (input)="onCustomCurrencyInput($any($event.target).value)"
+          (blur)="onCustomCurrencyBlur($any($event.target).value)"
+        />
+      </div>
+    }
+
+    <div class="mt-4 border-t border-border/60 pt-4">
+      <p class="text-xs uppercase tracking-wide text-muted-foreground">
+        {{ 'settings.general.cards.numberFormat.previewLabel' | translate }}
+      </p>
+      <app-currency-preview
+        class="mt-3"
+        [symbol]="selectedCurrencySymbol()"
+        [displayStyle]="selectedCurrencyFormatStyle()"
+        [sampleValue]="1234567.89"
+      />
+    </div>
+  </section>
+</div>

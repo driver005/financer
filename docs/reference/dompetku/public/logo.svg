@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Dompetku">
+  <rect width="64" height="64" rx="15" fill="#1d3b2f"/>
+  <path d="M16 17.5h14a14.5 14.5 0 0 1 0 29H16z" fill="none" stroke="#f4ecdc" stroke-width="7" stroke-linejoin="round"/>
+  <rect x="31" y="26.5" width="22" height="11" rx="5.5" fill="#e8b84a"/>
+  <circle cx="46.5" cy="32" r="2.4" fill="#1d3b2f"/>
+</svg>

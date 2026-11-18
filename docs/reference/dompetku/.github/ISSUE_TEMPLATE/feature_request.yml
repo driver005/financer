@@ -1,0 +1,48 @@
+name: 💡 Feature request
+description: Suggest an idea or improvement for Dompetku.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Please check [existing issues](https://github.com/ilramdhan/dompetku/issues?q=is%3Aissue) first — if someone already suggested it, add a 👍 there instead.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the situation or frustration. "I'm always annoyed when…"
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like Dompetku to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways you've tried or thought about solving this.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part would it affect?
+      multiple: true
+      options:
+        - Web app
+        - Telegram bot
+        - n8n workflows (reminders, backup, email)
+        - Receipt OCR / AI
+        - Reports / dashboard
+        - Installation / self-hosting
+        - Documentation
+        - Other
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd be willing to help build this (see CONTRIBUTING.md).

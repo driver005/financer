@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@medusajs/ui-preset/theme.css";
+
+@source "./";
+
+@layer base {
+  :root {
+    @apply bg-ui-bg-subtle text-ui-fg-base antialiased;
+    text-rendering: optimizeLegibility;
+  }
+}

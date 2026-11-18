@@ -1,0 +1,60 @@
+import {
+  WorkflowData,
+  WorkflowResponse,
+  createWorkflow,
+  transform,
+  when,
+} from "@medusajs/framework/workflows-sdk"
+import { createRbacRolePoliciesStep } from "../steps"
+import {
+  validateActorPermissionsStep,
+  ValidateActorPermissionsStepInput,
+} from "../steps/validate-actor-permissions"
+
+/**
+ * @since 2.22.3
+ */
+export type CreateRbacRolePoliciesWorkflowInput = {
+  actor_id?: string
+  actor?: string
+  policies: {
+    role_id: string
+    policy_id: string
+  }[]
+}
+
+/**
+ * @since 2.22.3
+ */
+export const createRbacRolePoliciesWorkflowId = "create-rbac-role-policies"
+
+/**
+ * @since 2.22.3
+ */
+export const createRbacRolePoliciesWorkflow = createWorkflow(
+  createRbacRolePoliciesWorkflowId,
+  (input: WorkflowData<CreateRbacRolePoliciesWorkflowInput>) => {
+    const validationData = transform({ input }, ({ input }) => {
+      const policyIds = new Set<string>()
+      input.policies.forEach((rp) => policyIds.add(rp.policy_id))
+
+      return {
+        actor_id: input.actor_id,
+        actor: input.actor,
+        policy_ids: Array.from(policyIds),
+      } as ValidateActorPermissionsStepInput
+    })
+
+    when({ validationData }, ({ validationData }) => {
+      return !!validationData?.actor_id && !!validationData?.policy_ids?.length
+    }).then(() => {
+      validateActorPermissionsStep(validationData)
+    })
+
+    const rolePolicies = createRbacRolePoliciesStep({
+      policies: input.policies,
+    })
+
+    return new WorkflowResponse(rolePolicies)
+  }
+)

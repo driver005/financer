@@ -1,0 +1,172 @@
+/**
+ * Explicit access class of EVERY `createServerFn` (v18 RBAC). `src/test/server-fn-access.test.ts`
+ * parses all `src/lib/*.functions.ts` files and fails when a server fn is missing here, is listed
+ * here but gone, or uses a middleware that does not match its class:
+ *
+ * - `public`  — no middleware (login page, landing, version check). Must not return private data.
+ * - `session` — `requireSession`: any signed-in user, even one who still has to change a
+ *               temporary password (own profile / password only).
+ * - `member`  — `requireAuth`: owner and members. The handler MUST scope by `accountScope(context)`
+ *               or check wallet permissions (rbac.server.ts) — never return unscoped data.
+ * - `admin`   — `requireAdmin`: owner only. The default for anything new.
+ */
+export type FnAccess = "public" | "session" | "member" | "admin";
+
+export const SERVER_FN_ACCESS: Record<string, Record<string, FnAccess>> = {
+  "account-report.functions.ts": {
+    getAccountReport: "member",
+    getAccountBalanceAt: "member",
+    getReconcileTransactions: "member",
+    saveAccountReconciliation: "admin",
+  },
+  "app-settings.functions.ts": {
+    getPublicBranding: "public",
+    getAppSettingsFull: "admin",
+    saveAppSettingsFn: "admin",
+  },
+  "auth.functions.ts": {
+    getSession: "public",
+    login: "public",
+    logout: "public",
+    getTwoFactorStatus: "admin",
+    generateTwoFactorSecret: "admin",
+  },
+  "backup.functions.ts": { restoreBackup: "admin" },
+  "demo.functions.ts": { getDemoInfo: "public" },
+  "seo.functions.ts": { getSeoConfig: "public" },
+  "finance.functions.ts": {
+    listRows: "member",
+    saveTransaction: "member",
+    listTransactions: "member",
+    getTxCount: "member",
+    getDashboard: "member",
+    getBalances: "member",
+    getFxRate: "member",
+    exportTransactionsCsv: "member",
+    uploadReceiptImage: "member",
+    getReceiptUrl: "member",
+    getCategoryTrend: "member",
+    getYearlySummary: "member",
+    getNetWorth: "member",
+    saveRow: "admin",
+    deleteRow: "admin",
+    getReminders: "admin",
+    getDebts: "admin",
+    getBudgets: "admin",
+    payDebt: "admin",
+    paySubscription: "admin",
+    addGoalFunds: "admin",
+    scanReceipt: "admin",
+    getYearly: "admin",
+    importTransactionsCsv: "admin",
+    importCsvTransactions: "admin",
+    exportBackupJson: "admin",
+    getActivity: "admin",
+    getGold: "admin",
+    getReceivables: "admin",
+    saveReceivableFn: "admin",
+    payReceivableFn: "admin",
+    receivableActionFn: "admin",
+    getAssets: "admin",
+  },
+  "integrations.functions.ts": {
+    getIntegrationSettings: "admin",
+    saveIntegrationFn: "admin",
+    removeIntegrationFn: "admin",
+    testAiConnection: "admin",
+    telegramStatus: "admin",
+    setTelegramWebhook: "admin",
+    deleteTelegramWebhook: "admin",
+  },
+  "invoices.functions.ts": {
+    getInvoices: "admin",
+    getInvoiceFn: "admin",
+    saveInvoiceFn: "admin",
+    invoiceActionFn: "admin",
+    deleteInvoiceFn: "admin",
+    recordInvoicePaymentFn: "admin",
+    deleteInvoicePaymentFn: "admin",
+    getInvoiceShareFn: "admin",
+    createInvoiceShareFn: "admin",
+    revokeInvoiceShareFn: "admin",
+    sendInvoiceEmailFn: "admin",
+    // v24 (#94): payment methods and the proof verification queue.
+    getPaymentMethodsFn: "admin",
+    savePaymentMethodFn: "admin",
+    deletePaymentMethodFn: "admin",
+    getInvoiceProofsFn: "admin",
+    getProofUrlFn: "admin",
+    approveProofFn: "admin",
+    rejectProofFn: "admin",
+    // v25 (#97): Midtrans orders, status re-check and refunds.
+    getGatewayTransactionsFn: "admin",
+    syncGatewayFn: "admin",
+    refundGatewayFn: "admin",
+    releaseRefundHoldFn: "admin",
+  },
+  // v26 (#96): MacroDroid notification formats (Settings) and the bank-notification review queue.
+  "payment-signals.functions.ts": {
+    getNotifyFormatsFn: "admin",
+    saveNotifyFormatFn: "admin",
+    deleteNotifyFormatFn: "admin",
+    getPaymentSignalsFn: "admin",
+    confirmSignalFn: "admin",
+    ignoreSignalFn: "admin",
+  },
+  "invoice-report.functions.ts": {
+    getInvoiceReport: "admin",
+    getInvoicePayments: "admin",
+    getOpenInvoices: "admin",
+  },
+  "notify.functions.ts": {
+    getNotifySettingsFn: "admin",
+    saveNotifySettingsFn: "admin",
+    deleteNotifySettingsFn: "admin",
+    // #122: a member's OWN row only (user id from the session, wallets ⊆ fresh grants).
+    getMyNotifyFn: "member",
+    saveMyNotifyFn: "member",
+  },
+  // v23 (#93): customer view by share token; returns only the toPublicInvoice() whitelist.
+  // v24 (#94): proof upload by share token; demo-off, rate limited, answers only { ok }.
+  // v25 (#97): "Bayar sekarang" by share token; demo-off, rate limited, server-computed amount,
+  // answers only the Snap token/redirect URL + public client key.
+  "invoice-public.functions.ts": {
+    getPublicInvoice: "public",
+    submitInvoiceProof: "public",
+    createGatewayPayment: "public",
+  },
+  "pockets.functions.ts": {
+    getAccountPockets: "member",
+    getPocketOptions: "member",
+    getPocketWarnings: "member",
+    savePocketFn: "member",
+    deletePocketFn: "member",
+  },
+  "profile.functions.ts": {
+    getProfile: "session",
+    updateProfile: "session",
+    changePassword: "session",
+  },
+  "recurring.functions.ts": {
+    getRecurring: "admin",
+    postRecurring: "admin",
+    toggleRecurring: "admin",
+  },
+  "split.functions.ts": { saveSplitTransaction: "member", deleteTransaction: "member" },
+  "users.functions.ts": {
+    listUsersFn: "admin",
+    createMemberFn: "admin",
+    updateMemberFn: "admin",
+    resetMemberPasswordFn: "admin",
+    deleteMemberFn: "admin",
+    setMemberPermissionsFn: "admin",
+  },
+  "version.functions.ts": { getLatestRelease: "public" },
+};
+
+export const MIDDLEWARE_FOR: Record<FnAccess, string | null> = {
+  public: null,
+  session: "requireSession",
+  member: "requireAuth",
+  admin: "requireAdmin",
+};

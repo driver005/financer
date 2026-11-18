@@ -1,0 +1,555 @@
+import { IAuthModuleService, MedusaContainer } from "@medusajs/types"
+import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
+import {
+  ContainerRegistrationKeys,
+  generateJwtToken,
+  Modules,
+} from "@medusajs/framework/utils"
+import {
+  adminHeaders,
+  createAdminUser,
+  generatePublishableKey,
+  generateStoreHeaders,
+} from "../../../../helpers/create-admin-user"
+import { createAuthenticatedCustomer } from "../../../../modules/helpers/create-authenticated-customer"
+
+jest.setTimeout(50000)
+
+medusaIntegrationTestRunner({
+  testSuite: ({ dbConnection, api, getContainer, dbUtils }) => {
+    let appContainer: MedusaContainer
+    let storeHeaders
+
+    beforeAll(async () => {
+      appContainer = getContainer()
+      const publishableKey = await generatePublishableKey(appContainer)
+      storeHeaders = generateStoreHeaders({ publishableKey })
+      await createAdminUser(dbConnection, adminHeaders, appContainer)
+
+      await dbUtils.snapshot()
+    })
+
+    describe("POST /store/customers", () => {
+      it("should fails to create a customer without an identity", async () => {
+        const customer = await api
+          .post(
+            "/store/customers",
+            {
+              email: "newcustomer@medusa.js",
+              first_name: "John",
+              last_name: "Doe",
+            },
+            storeHeaders
+          )
+          .catch((e) => e)
+
+        expect(customer.response.status).toEqual(401)
+      })
+
+      it("should successfully create a customer with an identity", async () => {
+        const signup = await api.post("/auth/customer/emailpass/register", {
+          email: "newcustomer@medusa.js",
+          password: "secret_password",
+        })
+
+        expect(signup.status).toEqual(200)
+        expect(signup.data).toEqual({ token: expect.any(String) })
+
+        const customer = await api.post(
+          "/store/customers",
+          {
+            email: "newcustomer@medusa.js",
+            first_name: "John",
+            last_name: "Doe",
+            metadata: {
+              loyalty_level: "gold",
+              preferences: {
+                newsletter: true,
+              },
+            },
+          },
+          {
+            headers: {
+              authorization: `Bearer ${signup.data.token}`,
+              ...storeHeaders.headers,
+            },
+          }
+        )
+
+        expect(customer.status).toEqual(200)
+        expect(customer.data).toEqual({
+          customer: expect.objectContaining({
+            email: "newcustomer@medusa.js",
+            first_name: "John",
+            last_name: "Doe",
+            has_account: true,
+            metadata: {
+              loyalty_level: "gold",
+              preferences: {
+                newsletter: true,
+              },
+            },
+          }),
+        })
+      })
+
+      it("should successfully create a customer with an identity even if the email is already taken by a non-registered customer", async () => {
+        const nonRegisteredCustomer = await api.post(
+          "/admin/customers",
+          {
+            email: "newcustomer@medusa.js",
+            first_name: "John",
+            last_name: "Doe",
+          },
+          adminHeaders
+        )
+
+        expect(nonRegisteredCustomer.status).toEqual(200)
+        expect(nonRegisteredCustomer.data).toEqual({
+          customer: expect.objectContaining({
+            email: "newcustomer@medusa.js",
+            first_name: "John",
+            last_name: "Doe",
+            has_account: false,
+          }),
+        })
+
+        const signup = await api.post("/auth/customer/emailpass/register", {
+          email: "newcustomer@medusa.js",
+          password: "secret_password",
+        })
+
+        expect(signup.status).toEqual(200)
+        expect(signup.data).toEqual({ token: expect.any(String) })
+
+        const customer = await api.post(
+          "/store/customers",
+          {
+            email: "newcustomer@medusa.js",
+            first_name: "Jane",
+            last_name: "Doe",
+          },
+          {
+            headers: {
+              authorization: `Bearer ${signup.data.token}`,
+              ...storeHeaders.headers,
+            },
+          }
+        )
+
+        expect(customer.status).toEqual(200)
+        expect(customer.data).toEqual({
+          customer: expect.objectContaining({
+            email: "newcustomer@medusa.js",
+            first_name: "Jane",
+            last_name: "Doe",
+            has_account: true,
+          }),
+        })
+
+        // Check that customers co-exist
+        const customers = await api.get("/admin/customers", adminHeaders)
+
+        expect(customers.status).toEqual(200)
+        expect(customers.data.customers).toHaveLength(2)
+        expect(customers.data.customers).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              first_name: "Jane",
+              last_name: "Doe",
+              email: "newcustomer@medusa.js",
+              has_account: true,
+            }),
+            expect.objectContaining({
+              first_name: "John",
+              last_name: "Doe",
+              email: "newcustomer@medusa.js",
+              has_account: false,
+            }),
+          ])
+        )
+      })
+
+      it("should fail to create a customer with an identity when the email is already taken by a registered customer", async () => {
+        const firstSignup = await api.post(
+          "/auth/customer/emailpass/register",
+          {
+            email: "newcustomer@medusa.js",
+            password: "secret_password",
+          }
+        )
+
+        expect(firstSignup.status).toEqual(200)
+        expect(firstSignup.data).toEqual({ token: expect.any(String) })
+
+        await api.post(
+          "/store/customers",
+          {
+            email: "newcustomer@medusa.js",
+            first_name: "John",
+            last_name: "Doe",
+          },
+          {
+            headers: {
+              authorization: `Bearer ${firstSignup.data.token}`,
+              ...storeHeaders.headers,
+            },
+          }
+        )
+
+        const firstSignin = await api.post("/auth/customer/emailpass", {
+          email: "newcustomer@medusa.js",
+          password: "secret_password",
+        })
+
+        const customer = await api
+          .post(
+            "/store/customers",
+            {
+              email: "newcustomer@medusa.js",
+              first_name: "Jane",
+              last_name: "Doe",
+            },
+            {
+              headers: {
+                authorization: `Bearer ${firstSignin.data.token}`,
+                ...storeHeaders.headers,
+              },
+            }
+          )
+          .catch((e) => e)
+
+        expect(customer.response.status).toEqual(400)
+        expect(customer.response.data.message).toEqual(
+          "Request already authenticated as a customer."
+        )
+      })
+
+      describe("Email ownership", () => {
+        const generateCustomerRegistrationToken = async (providerIdentity: {
+          provider: string
+          entity_id: string
+          user_metadata?: Record<string, unknown>
+        }) => {
+          const authModule = appContainer.resolve<IAuthModuleService>(
+            Modules.AUTH
+          )
+          const authIdentity = await authModule.createAuthIdentities({
+            provider_identities: [providerIdentity],
+          })
+
+          const { jwtSecret, jwtOptions } = appContainer.resolve(
+            ContainerRegistrationKeys.CONFIG_MODULE
+          ).projectConfig.http
+
+          return generateJwtToken(
+            {
+              actor_id: "",
+              actor_type: "customer",
+              auth_identity_id: authIdentity.id,
+              auth_provider: providerIdentity.provider,
+              app_metadata: {},
+            },
+            { secret: jwtSecret, expiresIn: "1d", jwtOptions }
+          )
+        }
+
+        it("should fail to create a customer with an email that doesn't match the identity's email", async () => {
+          const signup = await api.post("/auth/customer/emailpass/register", {
+            email: "registered@medusa.js",
+            password: "secret_password",
+          })
+
+          const response = await api
+            .post(
+              "/store/customers",
+              {
+                email: "other@medusa.js",
+                first_name: "John",
+                last_name: "Doe",
+              },
+              {
+                headers: {
+                  authorization: `Bearer ${signup.data.token}`,
+                  ...storeHeaders.headers,
+                },
+              }
+            )
+            .catch((e) => e)
+
+          expect(response.response?.status).toEqual(401)
+          expect(response.response.data.message).toEqual(
+            "The customer's email must match the email of the authenticated identity"
+          )
+
+          const customers = await api.get(
+            "/admin/customers?email=other@medusa.js",
+            adminHeaders
+          )
+          expect(customers.data.customers).toHaveLength(0)
+        })
+
+        it("should create a customer when the email matches the identity's email case-insensitively", async () => {
+          const signup = await api.post("/auth/customer/emailpass/register", {
+            email: "Registered@Medusa.js",
+            password: "secret_password",
+          })
+
+          const response = await api.post(
+            "/store/customers",
+            {
+              email: "registered@medusa.js",
+              first_name: "John",
+              last_name: "Doe",
+            },
+            {
+              headers: {
+                authorization: `Bearer ${signup.data.token}`,
+                ...storeHeaders.headers,
+              },
+            }
+          )
+
+          expect(response.status).toEqual(200)
+          expect(response.data.customer).toEqual(
+            expect.objectContaining({
+              email: "registered@medusa.js",
+              has_account: true,
+            })
+          )
+        })
+
+        it("should create a customer with the email provided by a third-party identity", async () => {
+          const token = await generateCustomerRegistrationToken({
+            provider: "google",
+            entity_id: "google_user_1",
+            user_metadata: { email: "social@medusa.js" },
+          })
+
+          const response = await api.post(
+            "/store/customers",
+            {
+              email: "social@medusa.js",
+              first_name: "John",
+              last_name: "Doe",
+            },
+            {
+              headers: {
+                authorization: `Bearer ${token}`,
+                ...storeHeaders.headers,
+              },
+            }
+          )
+
+          expect(response.status).toEqual(200)
+          expect(response.data.customer).toEqual(
+            expect.objectContaining({
+              email: "social@medusa.js",
+              has_account: true,
+            })
+          )
+        })
+
+        it("should fail to create a customer with an email that doesn't match a third-party identity's email", async () => {
+          const token = await generateCustomerRegistrationToken({
+            provider: "google",
+            entity_id: "google_user_2",
+            user_metadata: { email: "social@medusa.js" },
+          })
+
+          const response = await api
+            .post(
+              "/store/customers",
+              {
+                email: "other@medusa.js",
+                first_name: "John",
+                last_name: "Doe",
+              },
+              {
+                headers: {
+                  authorization: `Bearer ${token}`,
+                  ...storeHeaders.headers,
+                },
+              }
+            )
+            .catch((e) => e)
+
+          expect(response.response?.status).toEqual(401)
+        })
+
+        it("should create a customer when the identity has no email", async () => {
+          const token = await generateCustomerRegistrationToken({
+            provider: "phone",
+            entity_id: "+15555555555",
+          })
+
+          const response = await api.post(
+            "/store/customers",
+            {
+              email: "phone-user@medusa.js",
+              first_name: "John",
+              last_name: "Doe",
+            },
+            {
+              headers: {
+                authorization: `Bearer ${token}`,
+                ...storeHeaders.headers,
+              },
+            }
+          )
+
+          expect(response.status).toEqual(200)
+          expect(response.data.customer).toEqual(
+            expect.objectContaining({
+              email: "phone-user@medusa.js",
+              has_account: true,
+            })
+          )
+        })
+
+        it.each(["attacker", " attacker@medusa.js"])(
+          "should fail to create a customer when an emailpass identity's entity_id %p doesn't match",
+          async (entityId) => {
+            const signup = await api.post("/auth/customer/emailpass/register", {
+              email: entityId,
+              password: "secret_password",
+            })
+
+            const response = await api
+              .post(
+                "/store/customers",
+                {
+                  email: "victim@medusa.js",
+                  first_name: "John",
+                  last_name: "Doe",
+                },
+                {
+                  headers: {
+                    authorization: `Bearer ${signup.data.token}`,
+                    ...storeHeaders.headers,
+                  },
+                }
+              )
+              .catch((e) => e)
+
+            expect(response.response?.status).toEqual(401)
+
+            const customers = await api.get(
+              "/admin/customers?email=victim@medusa.js",
+              adminHeaders
+            )
+            expect(customers.data.customers).toHaveLength(0)
+          }
+        )
+
+        it("should fail to create a customer when only the identity's entity_id is an email and it doesn't match", async () => {
+          const token = await generateCustomerRegistrationToken({
+            provider: "custom",
+            entity_id: "owner@medusa.js",
+            user_metadata: { name: "Owner" },
+          })
+
+          const response = await api
+            .post(
+              "/store/customers",
+              {
+                email: "other@medusa.js",
+                first_name: "John",
+                last_name: "Doe",
+              },
+              {
+                headers: {
+                  authorization: `Bearer ${token}`,
+                  ...storeHeaders.headers,
+                },
+              }
+            )
+            .catch((e) => e)
+
+          expect(response.response?.status).toEqual(401)
+        })
+      })
+
+      describe("With ensurePublishableApiKey middleware", () => {
+        it("should fail when no publishable key is passed in the header", async () => {
+          const { response } = await api
+            .post(
+              "/store/customers",
+              {
+                email: "newcustomer@medusa.js",
+                first_name: "John",
+                last_name: "Doe",
+              },
+              {
+                headers: {},
+              }
+            )
+            .catch((e) => e)
+
+          expect(response.data).toEqual({
+            message:
+              "Publishable API key required in the request header: x-publishable-api-key. You can manage your keys in settings in the dashboard.",
+            type: "not_allowed",
+          })
+        })
+
+        it("should fail when publishable keys are invalid", async () => {
+          const { response } = await api
+            .post(
+              "/store/customers",
+              {
+                email: "newcustomer@medusa.js",
+                first_name: "John",
+                last_name: "Doe",
+              },
+              {
+                headers: {
+                  "x-publishable-api-key": ["test1", "test2"],
+                },
+              }
+            )
+            .catch((e) => e)
+
+          expect(response.data).toEqual({
+            message:
+              "A valid publishable key is required to proceed with the request",
+            type: "not_allowed",
+          })
+        })
+      })
+    })
+
+    describe("POST /store/customers/me", () => {
+      it("should successfully update a customer", async () => {
+        const { customer, jwt } = await createAuthenticatedCustomer(
+          api,
+          storeHeaders
+        )
+
+        const response = await api.post(
+          `/store/customers/me`,
+          {
+            first_name: "John2",
+            last_name: "Doe2",
+          },
+          {
+            headers: {
+              authorization: `Bearer ${jwt}`,
+              ...storeHeaders.headers,
+            },
+          }
+        )
+
+        expect(response.status).toEqual(200)
+        expect(response.data).toEqual({
+          customer: expect.objectContaining({
+            id: customer.id,
+            first_name: "John2",
+            last_name: "Doe2",
+            email: "tony@start.com",
+          }),
+        })
+      })
+    })
+  },
+})

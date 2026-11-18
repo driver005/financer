@@ -1,0 +1,48 @@
+name: Demo reset
+
+# Wipes and reseeds the PUBLIC demo database (DEMO_MODE=true instance) every day at
+# 00:00 WIB (17:00 UTC). Only runs on the upstream repo — forks never touch a database.
+# Needs repo secrets DEMO_SUPABASE_URL and DEMO_SUPABASE_SERVICE_ROLE_KEY pointing at the
+# throwaway demo Supabase project (never the real one). See docs/DEMO.md.
+
+on:
+  schedule:
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-reset
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    if: github.repository == 'ilramdhan/dompetku'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Reset and reseed demo data
+        env:
+          SUPABASE_URL: ${{ secrets.DEMO_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEMO_SUPABASE_SERVICE_ROLE_KEY }}
+          APP_TIMEZONE: Asia/Jakarta
+          DEMO_RESET_CONFIRM: "yes"
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Set DEMO_SUPABASE_URL and DEMO_SUPABASE_SERVICE_ROLE_KEY repo secrets"
+            exit 1
+          fi
+          node scripts/seed-demo.mjs --reset --allow-remote

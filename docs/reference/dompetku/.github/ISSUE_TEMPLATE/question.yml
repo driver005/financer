@@ -1,0 +1,33 @@
+name: ❓ Question
+description: Ask for help with installing, configuring or using Dompetku.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read the [FAQ](https://github.com/ilramdhan/dompetku/blob/main/docs/FAQ.md) and the [self-hosting guide](https://github.com/ilramdhan/dompetku/blob/main/docs/SELF-HOSTING.md) (it has a troubleshooting section) first — your answer may already be there.
+
+        **Never paste secrets** (API keys, passwords, Supabase keys, bot tokens, chat IDs) or real financial data.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Steps you followed, docs you read, and what happened.
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Where is it running?
+      options:
+        - Vercel
+        - Lovable
+        - Local (bun/npm run dev)
+        - Not installed yet
+        - Other

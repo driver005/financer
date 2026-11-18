@@ -1,9 +1,0 @@
-node_modules/
-.expo/
-dist/
-web-build/
-expo-env.d.ts
-/ios
-/android
-*.tsbuildinfo
-.metro-health-check*

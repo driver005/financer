@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "lib": ["es2019"],
+    "target": "es2019",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "esModuleInterop": true,
+    "declarationMap": true,
+    "declaration": true,
+    "module": "commonjs",
+    "moduleResolution": "Bundler",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "sourceMap": true,
+    "noImplicitReturns": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noImplicitThis": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "types": ["*"]
+  },
+  "include": ["src"],
+  "exclude": [
+    "dist",
+    "src/**/__tests__",
+    "src/**/__mocks__",
+    "src/**/__fixtures__",
+    "node_modules"
+  ],
+  "ts-node": {
+    "transpileOnly": true
+  }
+}

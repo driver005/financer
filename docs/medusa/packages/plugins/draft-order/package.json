@@ -1,0 +1,121 @@
+{
+  "name": "@medusajs/draft-order",
+  "version": "2.22.7",
+  "description": "A draft order plugin for Medusa.",
+  "author": "Medusa (https://medusajs.com)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/medusajs/medusa.git",
+    "directory": "packages/plugins/draft-order"
+  },
+  "bugs": {
+    "url": "https://github.com/medusajs/medusa/issues"
+  },
+  "files": [
+    ".medusa/server/**",
+    "AGENTS.md"
+  ],
+  "llms": "https://docs.medusajs.com/llms.txt",
+  "llmsFull": "https://docs.medusajs.com/llms-full.txt",
+  "mcpServer": "https://docs.medusajs.com/mcp",
+  "exports": {
+    "./package.json": "./package.json",
+    "./workflows": "./.medusa/server/src/workflows/index.js",
+    "./.medusa/server/src/modules/*": "./.medusa/server/src/modules/*/index.js",
+    "./modules/*": "./.medusa/server/src/modules/*/index.js",
+    "./providers/*": "./.medusa/server/src/providers/*/index.js",
+    "./*": "./.medusa/server/src/*.js",
+    "./admin": {
+      "import": "./.medusa/server/src/admin/index.mjs",
+      "require": "./.medusa/server/src/admin/index.js",
+      "default": "./.medusa/server/src/admin/index.js"
+    }
+  },
+  "keywords": [
+    "medusa",
+    "plugin",
+    "medusa-plugin-other",
+    "medusa-plugin",
+    "medusa-v2"
+  ],
+  "scripts": {
+    "build:plugin": "medusa plugin:build",
+    "dev": "medusa plugin:develop",
+    "prepare": "cross-env NODE_ENV=production yarn run build:plugin",
+    "link:watch": "medusa plugin:publish && medusa plugin:develop",
+    "watch": "medusa plugin:develop"
+  },
+  "dependencies": {
+    "@ariakit/react": "^0.4.15",
+    "@babel/runtime": "^8.0.10",
+    "@hookform/resolvers": "6.0.0",
+    "@medusajs/js-sdk": "2.22.7",
+    "@tanstack/react-query": "5.64.2",
+    "@uiw/react-json-view": "^2.0.0-alpha.17",
+    "date-fns": "^4.4.0",
+    "dequal": "^2.0.3",
+    "lodash.debounce": "^4.0.8",
+    "match-sorter": "^8.3.0",
+    "radix-ui": "1.1.2",
+    "react-hook-form": "7.83.0",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@medusajs/admin-sdk": "2.22.7",
+    "@medusajs/cli": "2.22.7",
+    "@medusajs/dashboard": "2.22.7",
+    "@medusajs/framework": "2.22.7",
+    "@medusajs/icons": "2.22.7",
+    "@medusajs/test-utils": "2.22.7",
+    "@medusajs/types": "2.22.7",
+    "@medusajs/ui": "4.2.14",
+    "@medusajs/ui-preset": "2.22.7",
+    "cross-env": "^10.1.0"
+  },
+  "peerDependencies": {
+    "@medusajs/admin-sdk": "2.22.7",
+    "@medusajs/cli": "2.22.7",
+    "@medusajs/dashboard": "2.22.7",
+    "@medusajs/framework": "2.22.7",
+    "@medusajs/icons": "2.22.7",
+    "@medusajs/test-utils": "2.22.7",
+    "@medusajs/ui": "4.2.14",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.4 || ^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@medusajs/admin-sdk": {
+      "optional": true
+    },
+    "@medusajs/cli": {
+      "optional": true
+    },
+    "@medusajs/dashboard": {
+      "optional": true
+    },
+    "@medusajs/icons": {
+      "optional": true
+    },
+    "@medusajs/test-utils": {
+      "optional": true
+    },
+    "@medusajs/ui": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "react-router-dom": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "packageManager": "yarn@4.18.1"
+}

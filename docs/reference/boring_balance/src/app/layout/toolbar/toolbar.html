@@ -1,0 +1,120 @@
+<z-header [zHeight]="64" class="justify-between gap-4">
+  <div class="flex min-w-0 items-center gap-2">
+    <app-sidebar-toggle
+      [sidebarCollapsed]="sidebarCollapsed()"
+      (sidebarToggle)="onSidebarToggle()"
+    ></app-sidebar-toggle>
+
+    <div class="flex min-w-0 items-center">
+      @if (!hasItemNavigation() && hasTitleBreadcrumbs()) {
+        <div class="flex min-w-0 items-center gap-2">
+          <z-divider zOrientation="vertical" zSpacing="sm" class="h-6"></z-divider>
+
+          <nav [attr.aria-label]="'breadcrumb.ariaLabel' | translate" class="min-w-0">
+            <ol class="flex items-center gap-2 overflow-hidden text-sm text-muted-foreground">
+              @for (item of titleBreadcrumbs(); track item.path ?? item.label; let isLast = $last) {
+                <li class="flex min-w-0 items-center gap-2">
+                  @if (item.path && !isLast) {
+                    <a
+                      [routerLink]="item.path"
+                      class="truncate transition-colors hover:text-foreground"
+                    >
+                      @if (isBreadcrumbLabelTranslated(item)) {
+                        {{ item.label | translate }}
+                      } @else {
+                        {{ item.label }}
+                      }
+                    </a>
+                  } @else {
+                    <span class="truncate font-medium text-foreground">
+                      @if (isBreadcrumbLabelTranslated(item)) {
+                        {{ item.label | translate }}
+                      } @else {
+                        {{ item.label }}
+                      }
+                    </span>
+                  }
+
+                  @if (!isLast) {
+                    <z-icon zType="chevron-right" class="size-4" aria-hidden="true"></z-icon>
+                  }
+                </li>
+              }
+            </ol>
+          </nav>
+        </div>
+      } @else if (!hasItemNavigation() && title(); as title) {
+        <div class="flex min-w-0 items-center gap-2">
+          <z-divider zOrientation="vertical" zSpacing="sm" class="h-6"></z-divider>
+          <h1 class="truncate text-lg font-semibold tracking-tight">{{ title | translate }}</h1>
+        </div>
+      }
+
+      @if (itemNavigation(); as item) {
+        <div class="flex items-center gap-2">
+          <z-segmented
+            [zDefaultValue]="item.defaultValue ?? ''"
+            [zSize]="item.size ?? 'sm'"
+            [zAriaLabel]="item.ariaLabel ?? 'Toolbar segmented control'"
+            (zChange)="onItemNavigationChange(item, $event)"
+          >
+            @for (option of item.options; track option.value) {
+              <z-segmented-item
+                [value]="option.value"
+                [label]="option.label | translate"
+                [disabled]="option.disabled ?? false"
+              />
+            }
+          </z-segmented>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="flex min-w-0 items-center justify-end gap-2 overflow-x-auto">
+    @for (item of itemActions(); track item.id) {
+      @if (isSelectAction(item)) {
+        <div class="inline-flex shrink-0 items-center gap-2">
+          @if (item.label) {
+            <span class="whitespace-nowrap text-xs font-medium text-muted-foreground">
+              {{ item.label | translate }}
+            </span>
+          }
+          <z-select
+            [class]="item.class ?? 'w-24'"
+            [zValue]="resolveSelectItemValue(item)"
+            [zSize]="item.size ?? 'sm'"
+            [zPlaceholder]="item.placeholder ?? ''"
+            [zDisabled]="isToolbarItemDisabled(item)"
+            [attr.title]="item.ariaLabel ?? null"
+            (zSelectionChange)="onSelectItemChange(item, $event)"
+          >
+            @for (option of item.options; track option.value) {
+              <z-select-item
+                [zValue]="option.value"
+                [zLabel]="option.label"
+                [zDisabled]="option.disabled ?? false"
+              />
+            }
+          </z-select>
+        </div>
+      } @else if (isToolbarAction(item)) {
+        <button
+          z-button
+          type="button"
+          class="shrink-0"
+          [zType]="item.buttonType ?? 'default'"
+          [zSize]="item.buttonSize ?? 'sm'"
+          [zShape]="item.buttonShape ?? 'default'"
+          [zDisabled]="isActionDisabled(item)"
+          (click)="onActionClick(item)"
+        >
+          @if (item.icon) {
+            <z-icon [zType]="item.icon" class="size-4" />
+          }
+          <span>{{ item.label | translate }}</span>
+        </button>
+      }
+    }
+  </div>
+</z-header>

@@ -1,27 +1,6 @@
+# Pantry is one local app (apps/mobile). The Rust workspace is empty: there is no server,
+# no client SDK and no network backend. crates/uiconv is a standalone helper with its own
+# workspace, used only to regenerate UI icon constants.
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/store", "crates/openbanking", "crates/api", "crates/server", "crates/llm", "crates/recipes", "crates/receipts", "crates/prices", "crates/embedded", "crates/config", "crates/receipt-sources", "crates/shop-core", "crates/shop-sources", "crates/shop-store", "crates/shop-api", "crates/shop-server", "crates/mail-core", "crates/mail-store", "crates/mail-api", "crates/sdk", "crates/logic"]
-
-[workspace.package]
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
-rust-version = "1.98"
-
-[workspace.dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-time = { version = "0.3", features = ["serde", "serde-human-readable", "macros", "parsing", "formatting"] }
-
-# scrypt (encrypted backups) is deliberately slow; unoptimized it takes minutes in tests
-[profile.dev.package.scrypt]
-opt-level = 3
-[profile.dev.package.salsa20]
-opt-level = 3
-[profile.dev.package.pbkdf2]
-opt-level = 3
-[profile.dev.package.sha2]
-opt-level = 3
-[profile.dev.package.hmac]
-opt-level = 3
+members = ["crates/pantry-core"]

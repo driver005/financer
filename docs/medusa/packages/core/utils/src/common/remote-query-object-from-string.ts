@@ -1,0 +1,171 @@
+import {
+  RemoteQueryObjectConfig,
+  RemoteQueryObjectFromStringResult,
+} from "@medusajs/types"
+import { isObject } from "./is-object"
+import { isUnsafePathSegment } from "./unsafe-path-keys"
+
+/**
+ * Convert a string fields array to a remote query object
+ * @param config - The configuration object
+ *
+ * @example
+ * const fields = [
+ *   "id",
+ *   "created_at",
+ *   "updated_at",
+ *   "deleted_at",
+ *   "url",
+ *   "metadata",
+ *   "tags.id",
+ *   "tags.created_at",
+ *   "tags.updated_at",
+ *   "tags.deleted_at",
+ *   "tags.value",
+ *   "options.id",
+ *   "options.created_at",
+ *   "options.updated_at",
+ *   "options.deleted_at",
+ *   "options.title",
+ *   "options.product_id",
+ *   "options.metadata",
+ *   "options.values.id",
+ *   "options.values.created_at",
+ *   "options.values.updated_at",
+ *   "options.values.deleted_at",
+ *   "options.values.value",
+ *   "options.values.option_id",
+ *   "options.values.variant_id",
+ *   "options.values.metadata",
+ * ]
+ *
+ * const remoteQueryObject = remoteQueryObjectFromString({
+ *   entryPoint: "product",
+ *   variables: {},
+ *   fields,
+ * })
+ *
+ * console.log(remoteQueryObject)
+ * // {
+ * //   product: {
+ * //     __args: {},
+ * //     fields: [
+ * //       "id",
+ * //       "created_at",
+ * //       "updated_at",
+ * //       "deleted_at",
+ * //       "url",
+ * //       "metadata",
+ * //     ],
+ * //
+ * //     tags: {
+ * //       fields: ["id", "created_at", "updated_at", "deleted_at", "value"],
+ * //     },
+ * //
+ * //     options: {
+ * //       fields: [
+ * //         "id",
+ * //         "created_at",
+ * //         "updated_at",
+ * //         "deleted_at",
+ * //         "title",
+ * //         "product_id",
+ * //         "metadata",
+ * //       ],
+ * //       values: {
+ * //         fields: [
+ * //           "id",
+ * //           "created_at",
+ * //           "updated_at",
+ * //           "deleted_at",
+ * //           "value",
+ * //           "option_id",
+ * //           "variant_id",
+ * //           "metadata",
+ * //         ],
+ * //       },
+ * //     },
+ * //   },
+ * // }
+ */
+export function remoteQueryObjectFromString<
+  const TEntry extends string,
+  const TConfig extends RemoteQueryObjectConfig<TEntry>,
+>(
+  config: TConfig | RemoteQueryObjectConfig<TEntry>
+): RemoteQueryObjectFromStringResult<TConfig> {
+  const {
+    entryPoint,
+    service,
+    variables = {},
+    fields = [],
+  } = {
+    ...config,
+    entryPoint: "entryPoint" in config ? config.entryPoint : undefined,
+    service: "service" in config ? config.service : undefined,
+  }
+
+  const entryKey = (entryPoint ?? service) as string
+
+  const remoteJoinerConfig: object = {
+    [entryKey]: {
+      fields: [],
+      isServiceAccess: !!service, // specifies if the entry point is a service
+    },
+  }
+
+  const usedVariables = new Set()
+
+  for (const field of fields) {
+    const fieldAsString = field as string
+    if (!fieldAsString.includes(".")) {
+      remoteJoinerConfig[entryKey]["fields"].push(field)
+      continue
+    }
+
+    const fieldSegments = fieldAsString.split(".")
+
+    // Guard against prototype pollution through unsafe path segments
+    if (fieldSegments.some(isUnsafePathSegment)) {
+      continue
+    }
+
+    const fieldProperty = fieldSegments.pop()
+
+    let combinedPath = ""
+
+    const deepConfigRef = fieldSegments.reduce((acc, curr) => {
+      combinedPath = combinedPath ? combinedPath + "." + curr : curr
+
+      if (!Object.prototype.hasOwnProperty.call(acc, curr)) {
+        acc[curr] = {}
+      }
+
+      if (
+        isObject(variables) &&
+        Object.prototype.hasOwnProperty.call(variables, combinedPath)
+      ) {
+        acc[curr]["__args"] = variables[combinedPath]
+        usedVariables.add(combinedPath)
+      }
+
+      return acc[curr]
+    }, remoteJoinerConfig[entryKey])
+
+    deepConfigRef["fields"] ??= []
+    deepConfigRef["fields"].push(fieldProperty)
+  }
+
+  const topLevelArgs = {}
+  for (const key of Object.keys(variables ?? {})) {
+    if (!usedVariables.has(key)) {
+      topLevelArgs[key] = variables[key]
+    }
+  }
+
+  remoteJoinerConfig[entryKey]["__args"] = topLevelArgs ?? {}
+
+  return {
+    __value: remoteJoinerConfig,
+  } as RemoteQueryObjectFromStringResult<TConfig>
+}

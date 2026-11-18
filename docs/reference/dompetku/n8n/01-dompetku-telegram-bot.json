@@ -1,0 +1,497 @@
+{
+  "name": "Dompetku – Telegram Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 🤖 Dompetku — Telegram Bot\n\nn8n is only a thin **relay**: all logic (parsing, OCR, categories, reports, buttons) lives in the Dompetku web app (`POST /api/public/n8n/bot`), so it is tested and easy to maintain.\n\n**Required n8n env:** `FINTRACK_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS` (+ `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`)\n**Optional:** `TELEGRAM_BOT_USERNAME` (without @) for exact mention matching in groups\n**Credentials:** Telegram API (trigger) & Header Auth — Name `x-api-key`, Value = the web app's `N8N_API_KEY`. Replace every `REPLACE_ME` credential.\n\n🔒 Chats outside the allow-list are silently ignored. Successful executions are not saved (privacy + disk).\nGuide: docs/N8N.md",
+        "height": 300,
+        "width": 760,
+        "color": "6"
+      },
+      "id": "40f81ded-38c8-4fba-a9ca-df15802c4f73",
+      "name": "Note: Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -380
+      ]
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {
+          "download": true,
+          "imageSize": "extraLarge"
+        }
+      },
+      "id": "c312a7fd-416b-4e43-893a-60fcabe153ed",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "10055bdc-78e1-4a66-b9dd-d72a17ceae80",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "Telegram Dompetku Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalisasi update Telegram + allow-list (fail-closed: daftar kosong = tolak semua).\nconst allowed = String($env.TELEGRAM_ALLOWED_CHAT_IDS || '').split(',').map(s => s.trim()).filter(Boolean);\nconst MAX_IMAGE_BYTES = 3_200_000; // base64 ≈ 4,3 MB < batas body Vercel 4,5 MB\nconst botUser = String($env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '') || null; // opsional: cocokkan mention persis\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const u = items[i].json;\n  const cb = u.callback_query;\n  const msg = cb ? cb.message : u.message;\n  const chatId = String(msg?.chat?.id ?? cb?.from?.id ?? '');\n  const base = {\n    update_id: u.update_id,\n    chat_id: chatId,\n    message_id: msg?.message_id ?? null,\n    callback_id: cb?.id ?? null,\n  };\n  const chatType = msg?.chat?.type ?? null; // private | group | supergroup | channel\n  const isGroup = chatType === 'group' || chatType === 'supergroup';\n  const replyToBot = !!msg?.reply_to_message?.from?.is_bot && (!botUser || msg.reply_to_message.from.username?.toLowerCase() === botUser.toLowerCase());\n  const ctx = { chat_type: chatType, reply_to_bot: replyToBot, bot_username: botUser };\n\n  if (!chatId || !allowed.includes(chatId)) { out.push({ json: { ...base, type: 'blocked' } }); continue; }\n\n  if (cb) {\n    out.push({ json: { ...base, type: 'callback', payload: { update_id: u.update_id, chat_id: chatId, callback_data: String(cb.data || '').slice(0, 64), ...ctx } } });\n    continue;\n  }\n\n  // Grup: hanya tanggapi /perintah, mention @username, atau balasan ke bot; sisanya diabaikan diam-diam.\n  if (isGroup) {\n    const t = String(msg?.text ?? msg?.caption ?? '');\n    if (!(t.startsWith('/') || /@\\w+/.test(t) || replyToBot)) { out.push({ json: { ...base, type: 'blocked' } }); continue; }\n  }\n\n  const isImageDoc = !!msg?.document && /^image\\/(jpeg|png|webp)$/.test(msg.document.mime_type || '');\n  if (msg?.photo || isImageDoc) {\n    const bin = items[i].binary?.data;\n    if (!bin) { out.push({ json: { ...base, type: 'reply', reply: '⚠️ Foto gagal diunduh, coba kirim ulang.' } }); continue; }\n    const buf = await this.helpers.getBinaryDataBuffer(i, 'data');\n    if (buf.length > MAX_IMAGE_BYTES) {\n      out.push({ json: { ...base, type: 'reply', reply: '⚠️ Gambar terlalu besar (maks ±3 MB). Kirim sebagai foto biasa, bukan file.' } });\n      continue;\n    }\n    const mime = isImageDoc ? msg.document.mime_type : 'image/jpeg'; // foto Telegram selalu JPEG; server wajib menerima mime_type\n    out.push({ json: { ...base, type: 'image', payload: { update_id: u.update_id, chat_id: chatId, text: msg.caption ?? null, image_base64: buf.toString('base64'), mime_type: mime, ...ctx } } });\n    continue;\n  }\n\n  const text = msg?.text ?? null;\n  if (text) {\n    out.push({ json: { ...base, type: 'text', payload: { update_id: u.update_id, chat_id: chatId, text: text.slice(0, 2000), ...ctx } } });\n    continue;\n  }\n\n  if (isGroup) { out.push({ json: { ...base, type: 'blocked' } }); continue; }\n  out.push({ json: { ...base, type: 'reply', reply: '🙏 Bot ini menerima teks dan foto struk. Ketik /help untuk bantuan.' } });\n}\nreturn out;"
+      },
+      "id": "6c6ae909-c56b-4676-b507-3d1d0925e9d0",
+      "name": "Normalize & Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a98e465e-7e6c-4209-b758-a907eee82607",
+                    "leftValue": "={{ $json.type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "callback"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "callback"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "db02b898-a591-4a55-9450-c3fd34dfd352",
+                    "leftValue": "={{ $json.type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "image"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "image"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7d2a2806-6766-4a11-a731-ed1906c92bab",
+                    "leftValue": "={{ $json.type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "text"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8e218ac4-90db-40b9-a1f4-7e86ddff8897",
+                    "leftValue": "={{ $json.type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "reply"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reply"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1071b38f-ac35-4bff-8733-efe508676f2c",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        440,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendChatAction",
+        "options": {
+          "timeout": 5000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Normalize & Guard').item.json.chat_id, action: $('Normalize & Guard').item.json.type === 'image' ? 'upload_photo' : 'typing' }) }}"
+      },
+      "id": "6a17e6fa-9a84-4929-9e01-f8632885d56f",
+      "name": "Typing…",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        260
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FINTRACK_URL }}/api/public/n8n/bot",
+        "options": {
+          "timeout": 60000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Normalize & Guard').item.json.payload) }}"
+      },
+      "id": "4ebc40cb-11ce-45d2-820e-f7d985270eeb",
+      "name": "Fintrack /bot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        140
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Fintrack x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "430d0d98-1634-45dc-911a-aeb915f363ba",
+                    "leftValue": "={{ $json.method }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "send"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "send"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7d6f6f1a-47a5-4aa6-a0a3-0320d609b676",
+                    "leftValue": "={{ $json.method }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "edit"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "edit"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "af7808d1-5110-4392-bc9d-3cefef7a31db",
+      "name": "Reply method",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1100,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ chat_id: $('Normalize & Guard').item.json.chat_id, text: String($json.text || $json.reply || '⚠️ Server Dompetku sedang bermasalah, coba lagi sebentar.').slice(0, 4000), disable_web_page_preview: true }, $json.reply_markup ? { reply_markup: $json.reply_markup } : {})) }}"
+      },
+      "id": "f5ac3c50-2f14-4498-9ec4-a0120d88af7e",
+      "name": "Send message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/answerCallbackQuery",
+        "options": {
+          "timeout": 5000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ callback_query_id: $('Normalize & Guard').item.json.callback_id, text: $json.toast || '' }) }}"
+      },
+      "id": "02d98a11-4839-4128-b1cc-686e726cbdef",
+      "name": "Answer callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        -60
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/editMessageText",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ chat_id: $('Normalize & Guard').item.json.chat_id, message_id: $('Normalize & Guard').item.json.message_id, text: String($json.text || '✔️').slice(0, 4000) }, $json.reply_markup ? { reply_markup: $json.reply_markup } : {})) }}"
+      },
+      "id": "fd237a64-e83a-455d-916f-1e92d13a96ea",
+      "name": "Edit message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "### Flow\n1. **Text** `kopi 25rb` → parser without AI → preview + buttons ✅❌🏷🏦🔁\n2. **Receipt photo** → OCR (AI vision) → preview\n3. **/command** → reports / balances / paylater / subscriptions (0 AI tokens)\n4. **Button** → `callback_data` forwarded → the preview message is *edited*\n\nRetries are safe: drafts & saves are idempotent (`update_id` / `draft:<id>`).\nAPI error → red (error) output → the user still gets a ⚠️ message.",
+        "height": 300,
+        "width": 700,
+        "color": "4"
+      },
+      "id": "5422e498-c30a-4aa2-9349-6bece238ee8c",
+      "name": "Note: Flow",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        820,
+        -380
+      ]
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & Guard": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Fintrack /bot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Typing…",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Typing…",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typing…": {
+      "main": [
+        [
+          {
+            "node": "Fintrack /bot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fintrack /bot": {
+      "main": [
+        [
+          {
+            "node": "Reply method",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply method": {
+      "main": [
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer callback",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Edit message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Jakarta",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

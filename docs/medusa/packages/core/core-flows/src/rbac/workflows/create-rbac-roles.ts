@@ -1,0 +1,85 @@
+import {
+  createWorkflow,
+  transform,
+  when,
+  WorkflowData,
+  WorkflowResponse,
+} from "@medusajs/framework/workflows-sdk"
+import { createRbacRolePoliciesStep, createRbacRolesStep } from "../steps"
+import { validateActorPermissionsStep } from "../steps/validate-actor-permissions"
+
+/**
+ * @since 2.22.3
+ */
+export type CreateRbacRolesWorkflowInput = {
+  actor_id?: string
+  actor?: string
+  roles: {
+    name: string
+    description?: string | null
+    metadata?: Record<string, unknown> | null
+    policy_ids?: string[]
+  }[]
+}
+
+/**
+ * @since 2.22.3
+ */
+export const createRbacRolesWorkflowId = "create-rbac-roles"
+
+/**
+ * @since 2.22.3
+ */
+export const createRbacRolesWorkflow = createWorkflow(
+  createRbacRolesWorkflowId,
+  (input: WorkflowData<CreateRbacRolesWorkflowInput>) => {
+    const validationData = transform({ input }, ({ input }) => {
+      const allPolicyIds = new Set<string>()
+      input.roles.forEach((role) => {
+        role.policy_ids?.forEach((policyId) => allPolicyIds.add(policyId))
+      })
+      return {
+        actor_id: input.actor_id!,
+        actor: input.actor,
+        policy_ids: Array.from(allPolicyIds),
+      }
+    })
+
+    when({ validationData }, ({ validationData }) => {
+      return !!validationData?.actor_id && !!validationData?.policy_ids?.length
+    }).then(() => {
+      validateActorPermissionsStep(validationData)
+    })
+
+    const roleData = transform({ input }, ({ input }) => ({
+      roles: input.roles.map((r) => ({
+        name: r.name,
+        description: r.description,
+        metadata: r.metadata,
+      })),
+    }))
+
+    const createdRoles = createRbacRolesStep(roleData)
+
+    const policiesData = transform(
+      { input, createdRoles },
+      ({ input, createdRoles }) => {
+        const allPolicies: any[] = []
+        createdRoles.forEach((role, index) => {
+          const policyIds = input.roles[index].policy_ids || []
+          policyIds.forEach((policy_id) => {
+            allPolicies.push({
+              role_id: role.id,
+              policy_id: policy_id,
+            })
+          })
+        })
+        return { policies: allPolicies }
+      }
+    )
+
+    createRbacRolePoliciesStep(policiesData)
+
+    return new WorkflowResponse(createdRoles)
+  }
+)

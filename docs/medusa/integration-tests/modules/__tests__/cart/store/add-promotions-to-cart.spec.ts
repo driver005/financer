@@ -1,0 +1,486 @@
+import { updateCartPromotionsWorkflow } from "@medusajs/core-flows"
+import { RemoteLink } from "@medusajs/modules-sdk"
+import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
+import { ICartModuleService, IPromotionModuleService } from "@medusajs/types"
+import {
+  ContainerRegistrationKeys,
+  Modules,
+  PromotionActions,
+  PromotionStatus,
+  PromotionType,
+} from "@medusajs/utils"
+import {
+  adminHeaders,
+  createAdminUser,
+  generatePublishableKey,
+  generateStoreHeaders,
+} from "../../../../helpers/create-admin-user"
+import { createShippingFixtures } from "../../../helpers/create-shipping-fixtures"
+
+jest.setTimeout(50000)
+
+const env = {}
+
+medusaIntegrationTestRunner({
+  env,
+  testSuite: ({ dbConnection, getContainer, api, dbUtils }) => {
+    describe("Store Carts API: Add promotions to cart", () => {
+      let appContainer
+      let cartModuleService: ICartModuleService
+      let promotionModuleService: IPromotionModuleService
+      let remoteLinkService: RemoteLink
+      let storeHeaders
+
+      beforeAll(async () => {
+        appContainer = getContainer()
+        cartModuleService = appContainer.resolve(Modules.CART)
+        promotionModuleService = appContainer.resolve(Modules.PROMOTION)
+        remoteLinkService = appContainer.resolve(
+          ContainerRegistrationKeys.REMOTE_LINK
+        )
+      })
+
+      beforeAll(async () => {
+        await createAdminUser(dbConnection, adminHeaders, appContainer)
+        const publishableKey = await generatePublishableKey(appContainer)
+        storeHeaders = generateStoreHeaders({ publishableKey })
+
+        await dbUtils.snapshot()
+      })
+
+      describe("POST /store/carts/:id/promotions", () => {
+        it("should add line item adjustments to a cart based on promotions", async () => {
+          const appliedPromotion =
+            await promotionModuleService.createPromotions({
+              code: "PROMOTION_APPLIED",
+              type: PromotionType.STANDARD,
+              status: PromotionStatus.ACTIVE,
+              application_method: {
+                type: "fixed",
+                target_type: "items",
+                allocation: "each",
+                value: 300,
+                apply_to_quantity: 1,
+                currency_code: "usd",
+                max_quantity: 1,
+                target_rules: [
+                  {
+                    attribute: "items.product_id",
+                    operator: "eq",
+                    values: "prod_tshirt",
+                  },
+                ],
+              },
+            })
+
+          const createdPromotion =
+            await promotionModuleService.createPromotions({
+              code: "PROMOTION_TEST",
+              type: PromotionType.STANDARD,
+              status: PromotionStatus.ACTIVE,
+              application_method: {
+                type: "fixed",
+                target_type: "items",
+                allocation: "across",
+                value: 1000,
+                apply_to_quantity: 1,
+                currency_code: "usd",
+                target_rules: [
+                  {
+                    attribute: "items.product_id",
+                    operator: "eq",
+                    values: "prod_mat",
+                  },
+                ],
+              },
+            })
+
+          const cart = await cartModuleService.createCarts({
+            currency_code: "usd",
+            items: [
+              // Adjustment to add
+              {
+                id: "item-1",
+                unit_price: 2000,
+                quantity: 1,
+                title: "Test item",
+                product_id: "prod_mat",
+              } as any,
+              // This adjustment will be removed and recreated
+              {
+                id: "item-2",
+                unit_price: 1000,
+                quantity: 1,
+                title: "Test item",
+                product_id: "prod_tshirt",
+              } as any,
+            ],
+          })
+
+          // Adjustment to keep
+          const [lineItemAdjustment] =
+            await cartModuleService.addLineItemAdjustments([
+              {
+                code: appliedPromotion.code!,
+                amount: 300,
+                item_id: "item-2",
+                promotion_id: appliedPromotion.id,
+              },
+            ])
+
+          await remoteLinkService.create({
+            [Modules.CART]: { cart_id: cart.id },
+            [Modules.PROMOTION]: { promotion_id: appliedPromotion.id },
+          })
+
+          const created = await api.post(
+            `/store/carts/${cart.id}/promotions`,
+            { promo_codes: [createdPromotion.code] },
+            storeHeaders
+          )
+
+          expect(created.status).toEqual(200)
+          expect(created.data.cart).toEqual(
+            expect.objectContaining({
+              id: expect.any(String),
+              items: expect.arrayContaining([
+                expect.objectContaining({
+                  id: "item-1",
+                  adjustments: expect.arrayContaining([
+                    expect.objectContaining({
+                      code: createdPromotion.code,
+                      amount: 1000,
+                    }),
+                  ]),
+                }),
+                expect.objectContaining({
+                  adjustments: expect.arrayContaining([
+                    expect.objectContaining({
+                      id: expect.not.stringContaining(lineItemAdjustment.id),
+                      code: appliedPromotion.code,
+                      amount: 300,
+                    }),
+                  ]),
+                }),
+              ]),
+            })
+          )
+        })
+
+        it("should add line item adjustments only for discountable items", async () => {
+          const createdPromotion =
+            await promotionModuleService.createPromotions({
+              code: "PROMOTION_TEST",
+              type: PromotionType.STANDARD,
+              status: PromotionStatus.ACTIVE,
+              application_method: {
+                type: "fixed",
+                target_type: "items",
+                allocation: "across",
+                value: 1000,
+                apply_to_quantity: 1,
+                currency_code: "usd",
+              },
+            })
+
+          const cart = await cartModuleService.createCarts({
+            currency_code: "usd",
+            items: [
+              {
+                id: "item-1",
+                unit_price: 2000,
+                quantity: 1,
+                title: "Test item",
+                product_id: "prod_mat",
+              } as any,
+              {
+                id: "item-2",
+                unit_price: 1000,
+                quantity: 1,
+                title: "Test item",
+                product_id: "prod_tshirt",
+                is_discountable: false,
+              } as any,
+            ],
+          })
+
+          const created = await api.post(
+            `/store/carts/${cart.id}/promotions`,
+            { promo_codes: [createdPromotion.code] },
+            storeHeaders
+          )
+
+          expect(created.status).toEqual(200)
+          expect(created.data.cart).toEqual(
+            expect.objectContaining({
+              id: expect.any(String),
+              items: expect.arrayContaining([
+                expect.objectContaining({
+                  id: "item-1",
+                  adjustments: expect.arrayContaining([
+                    expect.objectContaining({
+                      code: createdPromotion.code,
+                      amount: 1000,
+                    }),
+                  ]),
+                }),
+                expect.objectContaining({
+                  adjustments: [],
+                }),
+              ]),
+            })
+          )
+        })
+
+        it("should add shipping method adjustments to a cart based on promotions", async () => {
+          const [appliedPromotion] =
+            await promotionModuleService.createPromotions([
+              {
+                code: "PROMOTION_APPLIED",
+                type: PromotionType.STANDARD,
+                status: PromotionStatus.ACTIVE,
+                rules: [
+                  {
+                    attribute: "customer_id",
+                    operator: "in",
+                    values: ["cus_test"],
+                  },
+                ],
+                application_method: {
+                  type: "fixed",
+                  target_type: "shipping_methods",
+                  allocation: "each",
+                  value: 100,
+                  max_quantity: 1,
+                  currency_code: "usd",
+                  target_rules: [
+                    {
+                      attribute: "name",
+                      operator: "in",
+                      values: ["express"],
+                    },
+                  ],
+                },
+              },
+            ])
+
+          const [newPromotion] = await promotionModuleService.createPromotions([
+            {
+              code: "PROMOTION_NEW",
+              type: PromotionType.STANDARD,
+              status: PromotionStatus.ACTIVE,
+              rules: [
+                {
+                  attribute: "customer_id",
+                  operator: "in",
+                  values: ["cus_test"],
+                },
+              ],
+              application_method: {
+                type: "fixed",
+                target_type: "shipping_methods",
+                allocation: "each",
+                value: 200,
+                max_quantity: 1,
+                currency_code: "usd",
+                target_rules: [
+                  {
+                    attribute: "name",
+                    operator: "in",
+                    values: ["express", "standard"],
+                  },
+                ],
+              },
+            },
+          ])
+
+          const { region, salesChannel, shippingOptions, product } =
+            await createShippingFixtures({
+              container: appContainer,
+              shippingOptionNames: ["express", "standard"],
+            })
+
+          const cart = await cartModuleService.createCarts({
+            currency_code: "usd",
+            customer_id: "cus_test",
+            region_id: region.id,
+            sales_channel_id: salesChannel.id,
+            shipping_address: { country_code: "us" },
+            items: [
+              {
+                unit_price: 2000,
+                quantity: 1,
+                title: "Test item",
+                product_id: product.id,
+                variant_id: product.variants[0].id,
+                requires_shipping: true,
+              } as any,
+            ],
+          })
+
+          const [express, standard] =
+            await cartModuleService.addShippingMethods(
+              cart.id,
+              shippingOptions.map((option) => ({
+                amount: 500,
+                name: option.name,
+                shipping_option_id: option.id,
+              }))
+            )
+
+          await remoteLinkService.create({
+            [Modules.CART]: { cart_id: cart.id },
+            [Modules.PROMOTION]: { promotion_id: appliedPromotion.id },
+          })
+
+          const [adjustment] =
+            await cartModuleService.addShippingMethodAdjustments(cart.id, [
+              {
+                shipping_method_id: express.id,
+                amount: 100,
+                code: appliedPromotion.code!,
+              },
+            ])
+
+          const created = await api.post(
+            `/store/carts/${cart.id}/promotions`,
+            { promo_codes: [newPromotion.code] },
+            storeHeaders
+          )
+
+          expect(created.status).toEqual(200)
+          expect(created.data.cart).toEqual(
+            expect.objectContaining({
+              id: expect.any(String),
+              items: expect.arrayContaining([
+                expect.objectContaining({
+                  id: expect.any(String),
+                }),
+              ]),
+              shipping_methods: expect.arrayContaining([
+                expect.objectContaining({
+                  id: express.id,
+                  adjustments: expect.arrayContaining([
+                    expect.objectContaining({
+                      id: expect.any(String),
+                      amount: 200,
+                      code: newPromotion.code,
+                    }),
+                    expect.objectContaining({
+                      id: expect.not.stringContaining(adjustment.id),
+                      amount: 100,
+                      code: appliedPromotion.code,
+                    }),
+                  ]),
+                }),
+                expect.objectContaining({
+                  id: standard.id,
+                  adjustments: [
+                    expect.objectContaining({
+                      id: expect.any(String),
+                      amount: 200,
+                      code: newPromotion.code,
+                    }),
+                  ],
+                }),
+              ]),
+            })
+          )
+        })
+      })
+
+      describe("updateCartPromotionsWorkflow compensation", () => {
+        const createPromotion = (code: string) =>
+          promotionModuleService.createPromotions({
+            code,
+            type: PromotionType.STANDARD,
+            status: PromotionStatus.ACTIVE,
+            application_method: {
+              type: "fixed",
+              target_type: "items",
+              allocation: "across",
+              value: 100,
+              currency_code: "usd",
+              target_rules: [
+                {
+                  attribute: "items.product_id",
+                  operator: "eq",
+                  values: "prod_tshirt",
+                },
+              ],
+            },
+          })
+
+        const getCartPromotionIds = async (cartId: string) => {
+          const query = appContainer.resolve(ContainerRegistrationKeys.QUERY)
+          const {
+            data: [cart],
+          } = await query.graph({
+            entity: "cart",
+            fields: ["promotions.id"],
+            filters: { id: cartId },
+          })
+
+          return cart.promotions.map((promotion) => promotion.id)
+        }
+
+        const runFailingWorkflow = async (input) => {
+          const workflow = updateCartPromotionsWorkflow(appContainer)
+          workflow.addAction(
+            "throw",
+            {
+              invoke: async function failStep() {
+                throw new Error("Failed to update cart promotions")
+              },
+            },
+            { noCompensation: true }
+          )
+
+          const { errors } = await workflow.run({ input, throwOnError: false })
+
+          expect(errors).toHaveLength(1)
+          expect(errors[0].error.message).toEqual(
+            "Failed to update cart promotions"
+          )
+        }
+
+        it.each([PromotionActions.ADD, PromotionActions.REPLACE])(
+          "should restore the cart promotion links when the workflow fails with the %s action",
+          async (action) => {
+            const existingPromotion = await createPromotion(
+              `EXISTING_${action}`
+            )
+            const newPromotion = await createPromotion(`NEW_${action}`)
+
+            const cart = await cartModuleService.createCarts({
+              currency_code: "usd",
+              items: [
+                {
+                  unit_price: 1000,
+                  quantity: 1,
+                  title: "Test item",
+                  product_id: "prod_tshirt",
+                } as any,
+              ],
+            })
+
+            await remoteLinkService.create({
+              [Modules.CART]: { cart_id: cart.id },
+              [Modules.PROMOTION]: { promotion_id: existingPromotion.id },
+            })
+
+            await runFailingWorkflow({
+              cart_id: cart.id,
+              promo_codes: [existingPromotion.code!, newPromotion.code!],
+              action,
+            })
+
+            expect(await getCartPromotionIds(cart.id)).toEqual([
+              existingPromotion.id,
+            ])
+          }
+        )
+      })
+    })
+  },
+})

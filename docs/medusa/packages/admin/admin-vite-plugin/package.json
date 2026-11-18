@@ -1,0 +1,56 @@
+{
+  "name": "@medusajs/admin-vite-plugin",
+  "version": "2.22.7",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/medusajs/medusa.git",
+    "directory": "packages/admin/admin-vite-plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/medusajs/medusa/issues"
+  },
+  "files": [
+    "dist",
+    "package.json",
+    "AGENTS.md"
+  ],
+  "llms": "https://docs.medusajs.com/llms.txt",
+  "llmsFull": "https://docs.medusajs.com/llms-full.txt",
+  "mcpServer": "https://docs.medusajs.com/mcp",
+  "scripts": {
+    "build": "yarn run -T tsup",
+    "watch": "yarn run -T tsup --watch",
+    "test": "../../../node_modules/.bin/vitest --run",
+    "test:watch": "../../../node_modules/.bin/vitest"
+  },
+  "devDependencies": {
+    "vite": "^7.3.6"
+  },
+  "peerDependencies": {
+    "vite": "^5.4.21 || ^6.0.0 || ^7.0.0"
+  },
+  "dependencies": {
+    "@babel/parser": "8.0.10",
+    "@babel/traverse": "8.0.10",
+    "@babel/types": "8.0.10",
+    "@medusajs/admin-shared": "2.22.7",
+    "fdir": "6.1.1",
+    "magic-string": "1.4.3",
+    "outdent": "^0.8.0",
+    "picocolors": "^1.1.0"
+  },
+  "packageManager": "yarn@4.18.1",
+  "engines": {
+    "node": ">=22.22.0"
+  }
+}

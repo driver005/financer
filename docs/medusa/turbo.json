@@ -1,0 +1,24 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "envMode": "loose",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["!node_modules/**", "!src/**", "*/**", ".medusa/**"]
+    },
+    "build:plugin": {
+      "dependsOn": ["^build", "@medusajs/medusa#build"],
+      "outputs": ["!node_modules/**", "!src/**", ".medusa/**"]
+    },
+    "test": {
+      "outputs": []
+    },
+    "test:integration": {
+      "outputs": []
+    },
+    "test:integration:chunk": {
+      "outputs": []
+    }
+  },
+  "globalDependencies": ["turbo.json"]
+}

@@ -1,0 +1,1723 @@
+{
+  "common": {
+    "actions": "Aktionen",
+    "titleBar": "Anwendungstitelleiste",
+    "cancel": "Abbrechen",
+    "yes": "Ja",
+    "no": "Nein",
+    "labels": {
+      "name": "Name",
+      "type": "Typ",
+      "description": "Beschreibung",
+      "color": "Farbe",
+      "icon": "Symbol",
+      "date": "Datum",
+      "settled": "Bezahlt",
+      "account": "Konto",
+      "category": "Kategorie",
+      "amount": "Betrag",
+      "from": "Von",
+      "to": "An",
+      "fromAccount": "Von Konto",
+      "toAccount": "An Konto",
+      "title": "Titel",
+      "startDate": "Startdatum",
+      "plan": "Wiederkehrende Transaktion",
+      "schedule": "Zeitplan",
+      "template": "Vorlage",
+      "occurrences": "Wiederholungen",
+      "frequencyUnit": "Häufigkeitseinheit",
+      "monthPolicy": "Falls der Tag nicht im Monat existiert",
+      "year": "Jahr",
+      "archived": "Archiviert",
+      "frequency": "Häufigkeit"
+    },
+    "placeholders": {
+      "selectType": "Typ auswählen",
+      "selectColor": "Farbe auswählen",
+      "selectIcon": "Symbol auswählen",
+      "pickDate": "Datum auswählen",
+      "selectAccount": "Konto auswählen",
+      "selectCategory": "Kategorie auswählen",
+      "optionalDescription": "Optionale Beschreibung",
+      "transactionDescription": "Transaktionsbeschreibung"
+    },
+    "filters": {
+      "fields": {
+        "dateFrom": "Von Datum",
+        "dateTo": "Bis Datum",
+        "amountFrom": "Betrag von",
+        "amountTo": "Betrag bis",
+        "settled": "Zahlungsstatus",
+        "categoryType": "Kategorietyp",
+        "category": "Kategorie",
+        "account": "Konto"
+      },
+      "placeholders": {
+        "dateFrom": "Von Datum",
+        "dateTo": "Bis Datum",
+        "amountFrom": "Mindestbetrag",
+        "amountTo": "Höchstbetrag",
+        "settled": "Beliebiger Status",
+        "categoryType": "Beliebiger Typ",
+        "category": "Kategorie auswählen",
+        "account": "Konto auswählen",
+        "searchCategory": "Kategorien suchen...",
+        "searchAccount": "Konten suchen..."
+      },
+      "options": {
+        "settled": {
+          "any": "Beliebiger Status",
+          "yes": "Bezahlt",
+          "no": "Ausstehend"
+        },
+        "categoryType": {
+          "any": "Beliebiger Typ"
+        }
+      },
+      "actions": {
+        "apply": "Filter anwenden",
+        "currentMonth": "Aktueller Monat",
+        "reset": "Filter zurücksetzen",
+        "cancel": "Abbrechen"
+      }
+    },
+    "pagination": {
+      "previous": "Zurück",
+      "next": "Weiter",
+      "counter": "Seite {{current}} von {{total}}",
+      "rowsPerPage": "Zeilen pro Seite",
+      "tooltips": {
+        "firstPage": "Zur ersten Seite",
+        "previousPage": "Zur vorherigen Seite",
+        "nextPage": "Zur nächsten Seite",
+        "lastPage": "Zur letzten Seite",
+        "toPage": "Zu Seite {{page}}",
+        "toLastPage": "Zu Seite {{page}}, der letzten Seite"
+      }
+    },
+    "calendar": {
+      "actions": {
+        "previousMonth": "Vorheriger Monat",
+        "nextMonth": "Nächster Monat"
+      },
+      "aria": {
+        "chooseDate": "Datum auswählen",
+        "today": "Heute",
+        "selected": "Ausgewählt",
+        "rangeStart": "Bereichsbeginn",
+        "rangeEnd": "Bereichsende",
+        "inRange": "Im Bereich",
+        "outsideMonth": "Außerhalb des Monats",
+        "disabled": "Deaktiviert"
+      }
+    },
+    "skipToContent": "Zum Hauptinhalt springen",
+    "errors": {
+      "fixHighlightedFields": "Bitte die markierten Felder korrigieren."
+    },
+    "close": "Schließen",
+    "selectAllRows": "Alle Zeilen auswählen",
+    "selectRow": "Zeile auswählen",
+    "search": "Suchen"
+  },
+  "nav": {
+    "sections": {
+      "setup": "Verwalten",
+      "plan": "Planen"
+    },
+    "items": {
+      "overview": "Übersicht",
+      "transactions": "Transaktionen",
+      "breakdown": "Aufschlüsselung",
+      "compare": "Vergleich",
+      "budget": "Budget",
+      "accounts": "Konten",
+      "categories": "Kategorien",
+      "recurringEvents": "Wiederkehrende Transaktionen",
+      "settings": "Einstellungen"
+    }
+  },
+  "settings": {
+    "sections": {
+      "general": {
+        "title": "Allgemein",
+        "description": "Darstellung der App und Anzeige von Geldbeträgen im gesamten Arbeitsbereich festlegen."
+      },
+      "about": {
+        "title": "Über",
+        "description": "App-Details, Datenschutzgrundlagen und den Projektlink an einem Ort einsehen."
+      },
+      "data": {
+        "title": "Daten & Speicher",
+        "description": "Lokale Daten zurücksetzen und verwalten."
+      }
+    },
+    "data": {
+      "settings_problem": {
+        "label": "Die Einstellungsdatei war beschädigt",
+        "description": "Boring Balance konnte die Einstellungsdatei nicht lesen und ist mit den Standardeinstellungen gestartet. Deine Finanzdaten sind nicht betroffen, aber Einstellungen wie die Ordner für Backup und Synchronisierung müssen eventuell neu festgelegt werden.",
+        "kept_as": "Eine Kopie der beschädigten Datei wurde als {{file}} im App-Datenordner aufbewahrt.",
+        "not_moved": "Die beschädigte Datei konnte nicht beiseitegelegt werden. Sie blieb unverändert, und Änderungen an den Einstellungen sind gesperrt, bis sie repariert ist.",
+        "dismiss": "Schließen"
+      },
+      "clear_financial": {
+        "label": "Alle Finanzdaten löschen",
+        "description": "Löscht dauerhaft alle Konten, Transaktionen, Überträge, Budgets, Bewertungsmomentaufnahmen, wiederkehrenden Transaktionen und selbst erstellten Kategorien. Einstellungen bleiben erhalten.",
+        "button": "Daten löschen",
+        "confirm": {
+          "title": "Alle Finanzdaten löschen?",
+          "body": "Dadurch werden alle Konten, Transaktionen, Überträge, Budgets, Bewertungsmomentaufnahmen, wiederkehrenden Transaktionen und selbst erstellten Kategorien dauerhaft gelöscht. Einstellungen und Sicherungsdateien bleiben erhalten. Dieser Vorgang kann nicht rückgängig gemacht werden.",
+          "cta": "Alle Finanzdaten löschen"
+        },
+        "success": "Alle Finanzdaten wurden gelöscht.",
+        "error": "Daten konnten nicht gelöscht werden. Es wurde nichts gelöscht. Bitte erneut versuchen."
+      },
+      "factory_reset": {
+        "label": "App zurücksetzen",
+        "description": "Löscht die gesamte Datenbank und setzt die App auf den Ausgangszustand zurück. Sicherungen sind nicht betroffen.",
+        "button": "App zurücksetzen",
+        "confirm": {
+          "title": "Alles löschen und Boring Balance zurücksetzen?",
+          "body": "Dadurch wird die gesamte Datenbank gelöscht und die App auf den Ausgangszustand zurückgesetzt. Sicherungsdateien sind nicht betroffen. Dieser Vorgang kann nicht rückgängig gemacht werden.",
+          "input_placeholder": "RESET eingeben zur Bestätigung",
+          "cta": "Alles löschen und zurücksetzen"
+        },
+        "error": "App konnte nicht zurückgesetzt werden. App neu starten, prüfen ob die Daten noch vorhanden sind, und erneut versuchen."
+      }
+    },
+    "general": {
+      "appearanceGroupTitle": "Darstellung",
+      "currencyGroupTitle": "Währung",
+      "cards": {
+        "theme": {
+          "fieldLabel": "Designmodus",
+          "options": {
+            "system": "System",
+            "light": "Hell",
+            "dark": "Dunkel"
+          }
+        },
+        "language": {
+          "fieldLabel": "App-Sprache"
+        },
+        "dashboardValuationMode": {
+          "description": "Festlegen, worauf Nettovermögen und Aufteilung in der Übersicht beruhen. Mit Bewertungsmomentaufnahmen nutzen Konten, die eine haben, ihren zuletzt erfassten Wert. Mit „Nur Transaktionen“ wird jeder Saldo aus Transaktionen berechnet.",
+          "fieldLabel": "Nettovermögen basiert auf",
+          "options": {
+            "include": "Bewertungsmomentaufnahmen, wenn vorhanden",
+            "exclude": "Nur Transaktionen"
+          }
+        },
+        "currency": {
+          "fieldLabel": "Währungssymbol",
+          "customLabel": "Benutzerdefiniertes Symbol",
+          "customPlaceholder": "CHF",
+          "options": {
+            "custom": "Benutzerdefiniert"
+          }
+        },
+        "numberFormat": {
+          "fieldLabel": "Format",
+          "previewLabel": "Vorschau",
+          "options": {
+            "US": "1,234,567.89",
+            "EU_DOT": "1.234.567,89",
+            "EU_SPACE": "1 234 567,89"
+          }
+        }
+      }
+    },
+    "about": {
+      "appVersionLabel": "App-Version",
+      "appVersionUnavailable": "In diesem Build nicht verfügbar",
+      "copy": {
+        "paragraph1": "Hallo. Wer hier landet, ist wahrscheinlich genau die Person, für die diese App entwickelt wurde.",
+        "paragraph2": "Ich habe Boring Balance entwickelt, nachdem ich jahrelang zwischen Apps, Excel-Dateien und Google Sheets gewechselt bin, ohne jemals etwas zu finden, das wirklich meinen Anforderungen entsprach.",
+        "paragraph3": "Die meisten Tools waren entweder zu kompliziert, mit Werbung und Tracking überladen oder hinter Abonnements versteckt.",
+        "paragraph4": "Also habe ich mein eigenes gebaut.",
+        "paragraph5": "Boring Balance soll einfach, privat und vollständig unter Ihrer Kontrolle sein. Ihre Daten gehören Ihnen. Keine Werbung, kein Tracking und keine Funktionen, die Sie dazu verleiten sollen, für Ihre eigenen Finanzdaten zu zahlen.",
+        "paragraph6": "Ich glaube, dass persönliche Finanzen aktiv verwaltet werden sollten. Einen Moment damit zu verbringen, Salden zu prüfen, Ausgaben zu überprüfen und alles im Einklang zu halten, ist der einzige Weg, wirklich zu verstehen, wohin das Geld fließt.",
+        "paragraph7": "Diese App bietet einige grundlegende Werkzeuge dafür: Konten und Transaktionen verfolgen, budgetieren und wiederkehrende Transaktionen planen.",
+        "paragraph8": "Nichts davon ist verpflichtend. Nutzen Sie so viel oder so wenig, wie Sie möchten.",
+        "paragraph9": "Willkommen an diesem schlichten kleinen Ort — und denken Sie daran, Ihre Daten von Zeit zu Zeit mit einer Sicherung zu schützen 😉"
+      },
+      "openSourceCta": "Auf GitHub öffnen",
+      "checkForUpdates": "Nach Updates suchen",
+      "upToDate": "Du bist auf dem neuesten Stand (v{{version}})",
+      "updateCheckFailed": "Die Suche nach Updates ist fehlgeschlagen. Prüfe deine Verbindung und versuche es erneut.",
+      "footer": "Erstellt mit ❤️ von {{authorName}}"
+    },
+    "navLabel": "Einstellungsbereiche"
+  },
+  "dataBackups": {
+    "sections": {
+      "backups": {
+        "title": "Sicherungen"
+      },
+      "sync": {
+        "title": "Synchronisierung"
+      },
+      "exportImport": {
+        "title": "Import / Export"
+      }
+    },
+    "backups": {
+      "destination": {
+        "title": "Sicherungsziel",
+        "description": "Sicherungen aktivieren und auswählen, wo Wiederherstellungskopien gespeichert werden sollen."
+      },
+      "form": {
+        "enabled": "Sicherungen aktivieren",
+        "folderPath": "Sicherungsordner",
+        "folderNotSet": "Nicht festgelegt"
+      },
+      "disabledInfo": "Sicherungen aktivieren, um automatisch Wiederherstellungskopien zu erstellen, bei Bedarf eine Sicherung auszuführen und Wiederherstellungspunkte bereitzuhalten.",
+      "warnings": {
+        "missingFolder": "Sicherungen sind aktiviert, aber es wurde noch kein Sicherungsordner konfiguriert."
+      },
+      "autoBackup": {
+        "title": "Automatische Sicherungen",
+        "onQuit": "Sicherung beim Beenden der App ausführen",
+        "intervalMin": "Automatisch sichern",
+        "retentionCount": "Aufzubewahrende Sicherungen",
+        "intervalOptions": {
+          "off": "Aus",
+          "minutes30": "Alle 30 Minuten",
+          "minutes60": "Alle 60 Minuten",
+          "minutes120": "Alle 120 Minuten"
+        }
+      },
+      "manual": {
+        "title": "Manuelle Sicherung und Status"
+      },
+      "actions": {
+        "chooseFolder": "Ordner auswählen",
+        "backupNow": "Jetzt sichern",
+        "refreshList": "Liste aktualisieren",
+        "restoreFromFile": "Aus Datei wiederherstellen…",
+        "restore": "Wiederherstellen",
+        "delete": "Löschen"
+      },
+      "status": {
+        "lastBackupAt": "Letzte Sicherung",
+        "current": "Status",
+        "lastFile": "Letzte Sicherungsdatei",
+        "never": "Nie",
+        "none": "Keine",
+        "idle": "Inaktiv",
+        "running": "Wird ausgeführt",
+        "ok": "Abgeschlossen",
+        "error": "Fehlgeschlagen"
+      },
+      "list": {
+        "title": "Verfügbare Sicherungen",
+        "loading": "Sicherungsliste wird aktualisiert...",
+        "empty": "Noch keine Sicherungen vorhanden. Eine Sicherung ausführen, um den ersten Wiederherstellungspunkt zu erstellen.",
+        "columns": {
+          "date": "Datum",
+          "file": "Datei",
+          "size": "Größe"
+        }
+      },
+      "restoreAlert": {
+        "title": "Diese Sicherung wiederherstellen?",
+        "description": "Aktuelle Daten durch die Sicherung \"{{fileName}}\" ersetzen? Alles, was seit dieser Sicherung hinzugekommen ist, geht verloren.",
+        "actions": {
+          "restore": "Durch Sicherung ersetzen",
+          "cancel": "Abbrechen"
+        }
+      },
+      "deleteAlert": {
+        "title": "Diese Sicherung löschen?",
+        "description": "\"{{fileName}}\" aus dem Sicherungsordner löschen? Eine Wiederherstellung daraus ist danach nicht mehr möglich.",
+        "actions": {
+          "delete": "Sicherung löschen",
+          "cancel": "Abbrechen"
+        }
+      }
+    },
+    "sync": {
+      "overview": {
+        "title": "Externe Ordnersynchronisierung",
+        "description": "Einen Ordner verwenden, der bereits zwischen Geräten synchronisiert wird, z. B. ein Cloud-Laufwerk, NAS oder USB-Laufwerk.",
+        "warning": "Einen vertrauenswürdigen Synchronisierungsordner auswählen. Die App arbeitet weiterhin vom eigenen Gerät und nutzt den gemeinsamen Ordner nur zum sicheren Dateiabgleich.",
+        "enabled": "Synchronisierung aktivieren",
+        "chooseFolder": "Ordnerspeicherort auswählen",
+        "repoPath": "Synchronisierungsordner",
+        "notConnected": "Noch nicht verbunden",
+        "enableHints": {
+          "turnOnFirst": "Synchronisierung zuerst aktivieren, dann den gewünschten Ordner für alle Geräte auswählen.",
+          "ready": "Synchronisierung ist bereit zur Verbindung. Den Ordner auswählen, den dieses Gerät verwenden soll."
+        }
+      },
+      "setup": {
+        "title": "Synchronisierungsordner verbinden",
+        "description": "Auswählen, wo der Synchronisierungsordner liegen soll, und dann einen neuen erstellen oder einem vorhandenen beitreten.",
+        "actions": {
+          "create": "Neuen Synchronisierungsordner erstellen",
+          "attach": "Vorhandenem Synchronisierungsordner beitreten"
+        },
+        "status": {
+          "checking": "Ausgewählter Ordner wird geprüft...",
+          "chooseFirst": "Ordnerspeicherort auswählen, um fortzufahren.",
+          "exists": "In diesem Ordner gibt es bereits einen Synchronisierungsordner. „Beitreten“ verwenden, wenn ein anderes Gerät ihn bereits nutzt.",
+          "missing": "Hier wurde noch kein Synchronisierungsordner gefunden. „Erstellen“ verwenden, wenn dies das erste synchronisierte Gerät ist.",
+          "repoPathPending": "Der Synchronisierungsordner wird hier angezeigt, nachdem der Speicherort geprüft wurde.",
+          "waitingForFolder": "Ordnerspeicherort auswählen, um fortzufahren."
+        },
+        "actionHelp": "„Erstellen“ startet die Synchronisierung von diesem Gerät. „Beitreten“ verbindet mit einem Synchronisierungsordner, den ein anderes Gerät bereits erstellt hat."
+      },
+      "disabledInfo": "Synchronisierung aktivieren, um einen gemeinsamen Ordner auszuwählen und dieses Gerät zu verbinden.",
+      "autoSync": {
+        "title": "Automatische Synchronisierung",
+        "autoPullIntervalMin": "Updates automatisch holen",
+        "autoPushIntervalMin": "Änderungen automatisch senden",
+        "autoPushOnQuit": "Änderungen beim Beenden der App senden",
+        "autoPushOnQuitHint": "Wenn aktiviert, überträgt die App die neuesten Änderungen, bevor sie geschlossen wird.",
+        "intervalOptions": {
+          "off": "Aus",
+          "minutes5": "Alle 5 Minuten",
+          "minutes10": "Alle 10 Minuten",
+          "minutes15": "Alle 15 Minuten",
+          "minutes30": "Alle 30 Minuten",
+          "minutes60": "Alle 60 Minuten"
+        }
+      },
+      "manual": {
+        "title": "Manuelle Synchronisierung",
+        "tooltips": {
+          "syncNow": "Prüft zuerst, ob neuere gemeinsame Daten verfügbar sind, und überträgt anschließend die Aktualisierungen dieses Geräts, falls vorhanden.",
+          "pullNow": "Ruft neuere gemeinsame Daten ab, ohne die Änderungen dieses Geräts zu senden.",
+          "pushNow": "Überträgt die neuesten Änderungen dieses Geräts, ohne zuerst auf neuere gemeinsame Daten zu prüfen."
+        },
+        "hints": {
+          "syncNow": "\"Jetzt synchronisieren\" ist die sicherste vollständige Prüfung: Es sucht nach neueren gemeinsamen Änderungen und teilt dann bei Bedarf die eigenen.",
+          "pullNow": "„Updates holen“ bringt nur neuere gemeinsame Daten auf dieses Gerät.",
+          "pushNow": "„Meine Änderungen senden“ teilt nur die aktuellen Änderungen dieses Geräts mit dem gemeinsamen Ordner."
+        }
+      },
+      "actions": {
+        "syncNow": "Jetzt synchronisieren",
+        "pullNow": "Updates holen",
+        "pushNow": "Meine Änderungen senden"
+      },
+      "status": {
+        "title": "Status",
+        "rows": {
+          "current": "Aktueller Status",
+          "lastPull": "Letzte Updates geholt",
+          "lastPush": "Letzte Änderungen gesendet"
+        },
+        "values": {
+          "never": "Nie",
+          "noLastPull": "Noch keine Updates geholt",
+          "idle": "Inaktiv",
+          "running": "Wird ausgeführt",
+          "ok": "Abgeschlossen",
+          "error": "Fehlgeschlagen",
+          "conflict": "Konflikt"
+        }
+      },
+      "alerts": {
+        "lastErrorTitle": "Letzter Fehler",
+        "conflictTitle": "Konflikt erkannt",
+        "localCopyPath": "Lokale Kopie gespeichert unter",
+        "remoteSnapshotPath": "Gemeinsame Kopie wiederhergestellt von",
+        "conflictHint": "Beide Versionen wurden behalten. Daten unter „Verfügbare Synchronisierungsdateien“ vergleichen und die gewünschte Version verwenden."
+      },
+      "files": {
+        "title": "Verfügbare Synchronisierungsdateien",
+        "description": "Gemeinsame Synchronisierungsdateien prüfen, eine als Standard auswählen oder nicht mehr benötigte Dateien löschen.",
+        "loading": "Liste der Synchronisierungsdateien wird aktualisiert...",
+        "empty": "Noch keine Synchronisierungsdateien verfügbar. Durch Senden der Änderungen wird die erste erstellt.",
+        "columns": {
+          "date": "Datum",
+          "file": "Datei",
+          "device": "Gerät",
+          "changeCounter": "Revision",
+          "size": "Größe",
+          "default": "Standard"
+        },
+        "actions": {
+          "refresh": "Liste aktualisieren",
+          "setDefault": "Als Standard verwenden",
+          "delete": "Löschen"
+        },
+        "setDefaultAlert": {
+          "title": "Diese Synchronisierungsdatei als Standard verwenden?",
+          "description": "\"{{fileName}}\" als Standard-Synchronisierungsdatei verwenden? Die Daten dieses Geräts werden durch ihren Inhalt ersetzt.",
+          "actions": {
+            "setDefault": "Daten ersetzen und verwenden",
+            "cancel": "Abbrechen"
+          }
+        },
+        "deleteAlert": {
+          "title": "Diese Synchronisierungsdatei löschen?",
+          "description": "\"{{fileName}}\" aus dem Synchronisierungsordner löschen? Dies kann nicht rückgängig gemacht werden.",
+          "actions": {
+            "delete": "Synchronisierungsdatei löschen",
+            "cancel": "Abbrechen"
+          }
+        }
+      },
+      "attachAlert": {
+        "title": "Dem vorhandenen Synchronisierungsordner beitreten?",
+        "description": "Wenn der gemeinsame Ordner neuere Daten enthält, werden die Daten dieses Geräts dadurch ersetzt.",
+        "actions": {
+          "attach": "Beitreten",
+          "cancel": "Abbrechen"
+        }
+      }
+    },
+    "exportImport": {
+      "overview": {
+        "description": "Eine übersichtliche Excel-Kopie der Daten aufbewahren oder mit der offiziellen Vorlage beginnen, wenn Informationen sicher importiert werden sollen."
+      },
+      "export": {
+        "title": "Export",
+        "lastExportLabel": "Letzter Export"
+      },
+      "import": {
+        "title": "Aus Excel-Vorlage importieren",
+        "warning": "Importe werden zuerst validiert. Wenn Fehler vorhanden sind, wird nichts importiert.",
+        "selectedFileLabel": "Ausgewählte Datei",
+        "template": {
+          "title": "Importvorlage",
+          "description": "Die Excel-Vorlage herunterladen, in aller Ruhe ausfüllen und dann hier importieren.",
+          "messages": {
+            "success": "Vorlage gespeichert: {{fileName}}",
+            "error": "Importvorlage konnte nicht gespeichert werden. Bitte erneut versuchen."
+          }
+        },
+        "actions": {
+          "title": "Datendatei importieren"
+        },
+        "validation": {
+          "previewTitle": "Validierungsvorschau",
+          "previewDescription": "Diese Zeilen sind bereit zum Importieren.",
+          "errorTitle": "Validierungsfehler",
+          "errorDescription": "Die unten stehenden Zeilen korrigieren und erneut validieren, bevor der Import durchgeführt wird."
+        },
+        "summary": {
+          "accounts": "Konten",
+          "categories": "Kategorien",
+          "transactions": "Transaktionen",
+          "transfers": "Überträge"
+        },
+        "errors": {
+          "tableTitle": "Importfehler",
+          "tableDescription": "Jeder Fehler verweist auf die genaue Tabellenzeile, die korrigiert werden muss.",
+          "empty": "Keine Importfehler.",
+          "columns": {
+            "sheet": "Tabelle",
+            "row": "Zeile",
+            "column": "Spalte",
+            "message": "Meldung"
+          },
+          "count_one": "{{count}} Fehler gefunden",
+          "count_other": "{{count}} Fehler gefunden"
+        },
+        "result": {
+          "title": "Letztes Importergebnis",
+          "description": "Die App wird nach einem erfolgreichen Import neu geladen.",
+          "labels": {
+            "inserted": "Eingefügt",
+            "updated": "Aktualisiert",
+            "skipped": "Übersprungen"
+          }
+        },
+        "confirm": {
+          "title": "Daten aus Excel importieren?",
+          "description": "Konten: {{accounts}}, Kategorien: {{categories}}, Transaktionen: {{transactions}}, Überträge: {{transfers}}. Konten und Kategorien mit gleichem Namen werden aktualisiert. Es wird nichts gelöscht.",
+          "actions": {
+            "import": "Daten importieren",
+            "cancel": "Abbrechen"
+          }
+        },
+        "messages": {
+          "fileRequired": "Zuerst eine Excel-Datei auswählen.",
+          "selectError": "Eine Excel-Datei konnte nicht ausgewählt werden. Bitte erneut versuchen.",
+          "validateError": "Die ausgewählte Excel-Datei konnte nicht validiert werden. Bitte erneut versuchen.",
+          "importSuccess": "Import abgeschlossen. App-Daten werden neu geladen...",
+          "importError": "Import fehlgeschlagen. Bitte erneut versuchen."
+        }
+      },
+      "controls": {
+        "exportExcel": "Als Excel exportieren",
+        "downloadTemplate": "Vorlage herunterladen",
+        "selectFile": "Excel-Datei auswählen",
+        "removeSelectedFile": "Datei entfernen",
+        "validateImport": "Validieren",
+        "importExcel": "Importieren"
+      },
+      "messages": {
+        "success": "Export abgeschlossen: {{fileName}}",
+        "error": "Daten konnten nicht exportiert werden. Bitte erneut versuchen."
+      }
+    },
+    "toasts": {
+      "backup": {
+        "loadSettingsFailed": "Backup-Einstellungen konnten nicht geladen werden. Bitte erneut versuchen.",
+        "updateSettingsFailed": "Backup-Einstellungen konnten nicht aktualisiert werden. Bitte erneut versuchen.",
+        "loadStateFailed": "Backup-Status konnte nicht geladen werden. Bitte erneut versuchen.",
+        "selectFolderFailed": "Backup-Ordner konnte nicht ausgewählt werden. Bitte erneut versuchen.",
+        "loadListFailed": "Backup-Liste konnte nicht geladen werden. Bitte erneut versuchen.",
+        "selectFileFailed": "Backup-Datei konnte nicht ausgewählt werden. Bitte erneut versuchen.",
+        "backupFailed": "Backup fehlgeschlagen. Bitte erneut versuchen.",
+        "restoreFailed": "Wiederherstellung fehlgeschlagen. Bitte erneut versuchen.",
+        "deleted": "Backup gelöscht.",
+        "deleteFailed": "Backup konnte nicht gelöscht werden. Bitte erneut versuchen.",
+        "completed": "Backup abgeschlossen: {{fileName}}",
+        "restoreCompleted": "Wiederherstellung abgeschlossen. App-Daten werden neu geladen..."
+      },
+      "sync": {
+        "loadSettingsFailed": "Sync-Einstellungen konnten nicht geladen werden. Bitte erneut versuchen.",
+        "updateSettingsFailed": "Sync-Einstellungen konnten nicht aktualisiert werden. Bitte erneut versuchen.",
+        "loadStateFailed": "Sync-Status konnte nicht geladen werden. Bitte erneut versuchen.",
+        "checkNewerFailed": "Die Suche nach neueren Sync-Daten ist fehlgeschlagen. Bitte erneut versuchen.",
+        "selectFolderFailed": "Sync-Ordner konnte nicht ausgewählt werden. Bitte erneut versuchen.",
+        "inspectFolderFailed": "Der ausgewählte Sync-Ordner konnte nicht geprüft werden. Bitte erneut versuchen.",
+        "enabled": "Sync aktiviert.",
+        "enableFailed": "Sync konnte nicht aktiviert werden. Bitte erneut versuchen.",
+        "disabled": "Sync deaktiviert.",
+        "disableFailed": "Sync konnte nicht deaktiviert werden. Bitte erneut versuchen.",
+        "syncNothingChanged": "Sync-Prüfung abgeschlossen. Nichts hat sich geändert.",
+        "syncFailed": "Sync fehlgeschlagen. Bitte erneut versuchen.",
+        "pullNothingNewer": "Es wurden keine neueren gemeinsamen Daten gefunden.",
+        "pullFailed": "Abruf fehlgeschlagen. Bitte erneut versuchen.",
+        "pushNothingToPublish": "Es gab keine Änderungen zu senden.",
+        "pushFailed": "Senden fehlgeschlagen. Bitte erneut versuchen.",
+        "loadSnapshotsFailed": "Synchronisierungsdateien konnten nicht geladen werden. Bitte erneut versuchen.",
+        "defaultFileUpdated": "Standard-Sync-Datei aktualisiert. App-Daten werden neu geladen...",
+        "selectDefaultFileFailed": "Standard-Sync-Datei konnte nicht ausgewählt werden. Bitte erneut versuchen.",
+        "fileDeleted": "Sync-Datei gelöscht.",
+        "deleteFileFailed": "Sync-Datei konnte nicht gelöscht werden. Bitte erneut versuchen.",
+        "pullCompleted": "Updates geholt.",
+        "pullCompletedWithId": "Updates geholt ({{snapshotId}})",
+        "pushCompleted": "Änderungen gesendet.",
+        "pushCompletedWithId": "Änderungen gesendet ({{snapshotId}})",
+        "conflictDetected": "Sync-Konflikt erkannt. Prüfe die Details unten."
+      }
+    }
+  },
+  "overview": {
+    "banners": {
+      "syncUpdateAvailable": {
+        "title": "Neuere Synchronisierungsdaten sind verfügbar",
+        "body": "Im Synchronisierungsordner wurde eine neuere Version gefunden. Jetzt synchronisieren, um die neuesten gemeinsamen Daten zu verwenden."
+      },
+      "snapshotsOutdated": {
+        "title": "Momentaufnahmen möglicherweise veraltet",
+        "body_one": "Ihre neueste Momentaufnahme ist {{count}} Tag alt. Momentaufnahmen aktualisieren, um das Nettovermögen korrekt zu halten.",
+        "body_other": "Ihre neueste Momentaufnahme ist {{count}} Tage alt. Momentaufnahmen aktualisieren, um das Nettovermögen korrekt zu halten."
+      }
+    },
+    "errors": {
+      "summaryLoad": "Zusammenfassungsdaten konnten nicht geladen werden. App neu starten und erneut versuchen."
+    },
+    "pie": {
+      "others": "Sonstige"
+    },
+    "cards": {
+      "netWorth": {
+        "summaryTitle": "Nettovermögen",
+        "allocationTitle": "Aufteilung",
+        "tooltips": {
+          "ledgerBalance": "Saldo aus Transaktionen",
+          "marketValue": "Zuletzt erfasster Wert"
+        },
+        "total": "Gesamt",
+        "liquidAssets": "Liquidität",
+        "investments": "Investitionen",
+        "snapshotBased": {
+          "today": "Momentaufnahmen heute aktualisiert",
+          "daysAgo_one": "Basierend auf Momentaufnahmen (vor {{count}} Tag)",
+          "daysAgo_other": "Basierend auf Momentaufnahmen (vor {{count}} Tagen)"
+        },
+        "receivables": "Forderungen",
+        "payables": "Verbindlichkeiten",
+        "totalAfterRP": "Nach Forderungen und Verbindlichkeiten",
+        "emptyDistribution": "Noch keine Kontosalden zur Aufteilung. Konten hinzufügen oder aktualisieren, um die Aufteilung zu sehen.",
+        "emptyDistributionNoAccounts": "Noch keine Konten. Das erste Konto hinzufügen, um die Aufteilung zu sehen."
+      },
+      "monthlyTotals": {
+        "title": "Einnahmen, Ausgaben und Nettocashflow",
+        "segmentTitle": "Einnahmen & Ausgaben",
+        "descriptionCurrentYear": "Einnahmen, Ausgaben und Nettocashflow Monat für Monat in {{year}} vergleichen.",
+        "loading": "Auswertungen werden geladen...",
+        "loadFailedWithError": "Auswertungen konnten nicht geladen werden. App neu starten und erneut versuchen.",
+        "empty": "Keine Auswertungsdaten für die ausgewählten Filter verfügbar.",
+        "series": {
+          "incomes": "Einnahmen",
+          "expenses": "Ausgaben",
+          "netCashflow": "Nettocashflow"
+        }
+      },
+      "activity": {
+        "title": "Aktivität",
+        "latestTransactions": "Neueste {{count}} Transaktionen diesen Monat zur schnellen Überprüfung neuer Ausgaben und Einnahmen.",
+        "latestTransfers": "Neueste {{count}} Überträge diesen Monat zur Überprüfung von Kontobewegungen.",
+        "loadFailed": "Aktivität konnte nicht geladen werden. App neu starten und erneut versuchen."
+      },
+      "recentTransactions": {
+        "empty": "Noch keine Transaktionen diesen Monat. Eine hinzufügen, um den Aktivitätsverlauf zu beginnen.",
+        "tooltips": {
+          "settled": "Bezahlt",
+          "settle": "Als bezahlt markieren",
+          "unsettled": "Ausstehend",
+          "unsettle": "Als ausstehend markieren"
+        },
+        "actions": {
+          "goToTransactionsPage": "Alle Transaktionen",
+          "goToTransfersPage": "Alle Überträge"
+        },
+        "unknownAccount": "Unbekanntes Konto",
+        "unknownCategory": "Unbekannte Kategorie"
+      },
+      "moneyFlowSankey": {
+        "title": "Geldfluss",
+        "loading": "Geldfluss wird geladen...",
+        "loadFailedWithError": "Geldfluss konnte nicht geladen werden. App neu starten und erneut versuchen.",
+        "empty": "Noch kein Geldfluss für diesen Monat. Transaktionen hinzufügen, um Geldbewegungen zu sehen.",
+        "tooltips": {
+          "actualNetCashflow": "Tatsächlicher Nettocashflow"
+        },
+        "nodes": {
+          "incomes": "Einnahmen",
+          "expenses": "Ausgaben",
+          "savings": "Ersparnisse",
+          "investments": "Investitionen",
+          "crypto": "Krypto",
+          "netCashflow": "Nettocashflow",
+          "priorBalances": "Übertrag aus früheren Monaten",
+          "unused": "Übrig",
+          "otherExpenses": "Sonstige Ausgaben"
+        }
+      }
+    },
+    "gettingStarted": {
+      "title": "Erste Schritte",
+      "dismiss": "Checkliste ausblenden",
+      "done": "Erledigt",
+      "steps": {
+        "account": {
+          "title": "Konto hinzufügen",
+          "description": "Konten enthalten dein Geld, zum Beispiel ein Bankkonto oder Bargeld.",
+          "action": "Konto hinzufügen"
+        },
+        "transaction": {
+          "title": "Erste Transaktion hinzufügen",
+          "description": "Eine Ausgabe oder Einnahme erfassen, um sie in den Auswertungen zu sehen.",
+          "action": "Transaktion hinzufügen"
+        }
+      }
+    }
+  },
+  "breakdown": {
+    "toolbar": {
+      "selectYear": "Jahr auswählen"
+    },
+    "averageMode": {
+      "label": "Vergangene Monate für Durchschnitte verwenden",
+      "hint": "Aktivieren, um mit den bisher vergangenen Monaten statt dem gesamten Jahr zu vergleichen."
+    },
+    "sectionYear": "Jahr {{year}}",
+    "moneyFlowOptions": {
+      "showAllocationTargets": {
+        "label": "Ersparnisse, Brokerage- und Krypto-Flüsse anzeigen",
+        "hint": "Ausblenden, um sich auf Kerneinnahmen vs. Ausgaben zu konzentrieren, oder anzeigen, um Ersparnisse und Investitionsbewegungen einzuschließen."
+      }
+    },
+    "metrics": {
+      "yearTotal": "Jahresgesamt",
+      "avgPerMonth": "Monatsdurchschnitt"
+    },
+    "cards": {
+      "moneyFlow": {
+        "titleYear": "Jahr {{year}}",
+        "empty": "Noch kein Geldfluss für dieses Jahr. Transaktionen hinzufügen, um Geldbewegungen über die Zeit zu sehen."
+      },
+      "monthlyTrend": {
+        "title": "{{label}} nach Monat"
+      },
+      "monthlyByCategory": {
+        "title": "{{label}} nach Kategorie",
+        "summaryTitle": "Kategoriesummen und Durchschnitte"
+      }
+    }
+  },
+  "compare": {
+    "loadingTitle": "Vergleich wird vorbereitet",
+    "loadingDescription": "Beide Monate werden zusammengestellt, damit sie nebeneinander verglichen werden können.",
+    "loadFailedWithError": "Vergleichsauswertungen konnten nicht geladen werden. App neu starten und erneut versuchen.",
+    "empty": "Noch keine Vergleichsdaten für diese Monate. Aktivitäten in beiden Monaten erfassen, um sie hier zu vergleichen.",
+    "selectors": {
+      "left": {
+        "title": "Monat 1"
+      },
+      "right": {
+        "title": "Monat 2"
+      },
+      "year": "Jahr",
+      "month": "Monat"
+    },
+    "metrics": {
+      "delta": "Delta"
+    },
+    "cards": {
+      "summary": {
+        "title": "Vergleichszusammenfassung"
+      },
+      "radar": {
+        "title": "Radar-Vergleich",
+        "empty": "Keine Ausgabenkategorien für den Radar-Vergleich verfügbar."
+      },
+      "expensesByCategory": {
+        "title": "Ausgaben nach Kategorie",
+        "empty": "Keine Ausgabenkategorie-Summen für die ausgewählten Monate."
+      }
+    }
+  },
+  "category": {
+    "exclude": {
+      "name": "Nicht gezählt",
+      "description": "Zählt nicht zu Einnahmen, Ausgaben oder Budgets."
+    },
+    "transfer": {
+      "name": "Übertrag",
+      "description": "Geld, das zwischen eigenen Konten bewegt wurde."
+    },
+    "other_expense": {
+      "name": "Sonstige Ausgaben",
+      "description": "Standardkategorie für nicht kategorisierte Ausgaben."
+    },
+    "other_income": {
+      "name": "Sonstige Einnahmen",
+      "description": "Standardkategorie für nicht kategorisierte Einnahmen."
+    },
+    "type": {
+      "income": "Einnahmen",
+      "expense": "Ausgaben",
+      "exclude": "Nicht gezählt"
+    }
+  },
+  "account": {
+    "type": {
+      "cash": "Bargeld",
+      "bank": "Bank",
+      "savings": "Sparkonto",
+      "brokerage": "Depot",
+      "crypto": "Krypto",
+      "credit": "Kredit"
+    }
+  },
+  "accounts": {
+    "table": {
+      "emptyMessage": "Noch keine Konten. Das erste Konto hinzufügen, um Salden und Überträge zu verfolgen.",
+      "actions": {
+        "add": "Konto hinzufügen",
+        "viewDetails": "Kontodetails anzeigen",
+        "edit": "Konto bearbeiten",
+        "archive": "Konto archivieren",
+        "locked": "Gesperrtes Konto",
+        "manageArchived": "Archivierte verwalten"
+      }
+    },
+    "dialog": {
+      "add": {
+        "title": "Konto hinzufügen",
+        "description": "Ein Konto erstellen, das in Transaktionen, Überträgen und der Nettovermögensverfolgung verwendet werden kann.",
+        "placeholders": {
+          "name": "Kontoname",
+          "description": "Kontobeschreibung"
+        },
+        "actions": {
+          "cancel": "Abbrechen",
+          "create": "Konto erstellen"
+        },
+        "errors": {
+          "nameRequired": "Name ist erforderlich.",
+          "nameMinLength": "Name muss mindestens 2 Zeichen haben.",
+          "nameMaxLength": "Name darf höchstens 64 Zeichen haben.",
+          "typeRequired": "Kontotyp ist erforderlich.",
+          "descriptionMaxLength": "Beschreibung darf höchstens 50 Zeichen haben.",
+          "createFailed": "Konto konnte nicht erstellt werden. Bitte erneut versuchen."
+        }
+      },
+      "edit": {
+        "title": "Konto bearbeiten",
+        "description": "Aktualisieren, wie dieses Konto angezeigt wird und wo es in der App verwendet wird.",
+        "actions": {
+          "cancel": "Abbrechen",
+          "save": "Änderungen speichern"
+        },
+        "errors": {
+          "updateFailed": "Konto konnte nicht aktualisiert werden. Bitte erneut versuchen."
+        }
+      }
+    },
+    "archivedDialog": {
+      "title": "Archivierte Konten",
+      "description": "Ein Konto wieder aktivieren, um es in neuen Transaktionen zu verwenden.",
+      "emptyMessage": "Es gibt keine archivierten Konten.",
+      "actions": {
+        "unarchive": "Konto wiederherstellen"
+      },
+      "errors": {
+        "loadFailed": "Archivierte Konten konnten nicht geladen werden. App neu starten und erneut versuchen."
+      }
+    },
+    "archiveAlert": {
+      "title": "Konto archivieren?",
+      "description": "\"{{name}}\" archivieren? Das Konto wird in neuen Transaktionen und Überträgen nicht mehr angeboten. Bisherige Transaktionen behalten es. Die Archivierung kann jederzeit rückgängig gemacht werden.",
+      "actions": {
+        "cancel": "Abbrechen",
+        "archive": "Konto archivieren"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Konto erstellt.",
+      "createError": "Konto konnte nicht erstellt werden. Bitte erneut versuchen.",
+      "updateSuccess": "Konto aktualisiert.",
+      "updateError": "Konto konnte nicht aktualisiert werden. Bitte erneut versuchen.",
+      "archiveSuccess": "Konto archiviert.",
+      "archiveError": "Konto konnte nicht archiviert werden. Bitte erneut versuchen.",
+      "unarchiveSuccess": "Konto wiederhergestellt.",
+      "unarchiveError": "Konto konnte nicht wiederhergestellt werden. Bitte erneut versuchen."
+    },
+    "errors": {
+      "loadFailed": "Konten konnten nicht geladen werden. App neu starten und erneut versuchen."
+    }
+  },
+  "categories": {
+    "table": {
+      "emptyMessage": "Noch keine Kategorien. Die erste Kategorie hinzufügen, um Ausgaben und Einnahmen zu ordnen.",
+      "actions": {
+        "add": "Kategorie hinzufügen",
+        "edit": "Kategorie bearbeiten",
+        "archive": "Kategorie archivieren",
+        "locked": "Gesperrte Kategorie",
+        "manageArchived": "Archivierte verwalten"
+      }
+    },
+    "dialog": {
+      "add": {
+        "title": "Kategorie hinzufügen",
+        "description": "Eine Kategorie erstellen, um Transaktionen zu kennzeichnen und in Berichten zu gruppieren.",
+        "placeholders": {
+          "name": "Kategoriename",
+          "description": "Kategoriebeschreibung"
+        },
+        "actions": {
+          "cancel": "Abbrechen",
+          "create": "Kategorie erstellen"
+        },
+        "errors": {
+          "nameRequired": "Name ist erforderlich.",
+          "nameMinLength": "Name muss mindestens 2 Zeichen haben.",
+          "nameMaxLength": "Name darf höchstens 64 Zeichen haben.",
+          "descriptionMaxLength": "Beschreibung darf höchstens 50 Zeichen haben.",
+          "typeRequired": "Kategorietyp ist erforderlich.",
+          "createFailed": "Kategorie konnte nicht erstellt werden. Bitte erneut versuchen."
+        }
+      },
+      "edit": {
+        "title": "Kategorie bearbeiten",
+        "description": "Bezeichnung, Typ oder visuelles Merkmal dieser Kategorie aktualisieren.",
+        "actions": {
+          "cancel": "Abbrechen",
+          "save": "Änderungen speichern"
+        },
+        "errors": {
+          "updateFailed": "Kategorie konnte nicht aktualisiert werden. Bitte erneut versuchen."
+        }
+      }
+    },
+    "archivedDialog": {
+      "title": "Archivierte Kategorien",
+      "description": "Eine Kategorie wieder aktivieren, um sie in neuen Transaktionen zu verwenden.",
+      "emptyMessage": "Es gibt keine archivierten Kategorien.",
+      "actions": {
+        "unarchive": "Kategorie wiederherstellen"
+      },
+      "errors": {
+        "loadFailed": "Archivierte Kategorien konnten nicht geladen werden. App neu starten und erneut versuchen."
+      }
+    },
+    "archiveAlert": {
+      "title": "Kategorie archivieren?",
+      "description": "\"{{name}}\" archivieren? Die Kategorie wird in neuen Transaktionen nicht mehr angeboten. Bisherige Transaktionen behalten sie. Die Archivierung kann jederzeit rückgängig gemacht werden.",
+      "actions": {
+        "cancel": "Abbrechen",
+        "archive": "Kategorie archivieren"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Kategorie erstellt.",
+      "createError": "Kategorie konnte nicht erstellt werden. Bitte erneut versuchen.",
+      "updateSuccess": "Kategorie aktualisiert.",
+      "updateError": "Kategorie konnte nicht aktualisiert werden. Bitte erneut versuchen.",
+      "archiveSuccess": "Kategorie archiviert.",
+      "archiveError": "Kategorie konnte nicht archiviert werden. Bitte erneut versuchen.",
+      "unarchiveSuccess": "Kategorie wiederhergestellt.",
+      "unarchiveError": "Kategorie konnte nicht wiederhergestellt werden. Bitte erneut versuchen."
+    },
+    "errors": {
+      "loadFailed": "Kategorien konnten nicht geladen werden. App neu starten und erneut versuchen."
+    }
+  },
+  "budgets": {
+    "view": {
+      "setup": "Budgeteinrichtung",
+      "analysis": "Budgetanalyse"
+    },
+    "table": {
+      "emptyMessage": "Noch keine Budgets. Das erste Budget hinzufügen, um Kategorieziele zu verfolgen.",
+      "unknownCategory": "Unbekannte Kategorie",
+      "actions": {
+        "add": "Budget hinzufügen",
+        "edit": "Budget bearbeiten",
+        "delete": "Budget löschen"
+      }
+    },
+    "dialog": {
+      "add": {
+        "title": "Budget hinzufügen",
+        "description": "Ein Ausgabenziel für {{year}} erstellen, um Kategorieausgaben damit zu vergleichen.",
+        "actions": {
+          "cancel": "Abbrechen",
+          "create": "Budget erstellen"
+        },
+        "errors": {
+          "categoryRequired": "Kategorie ist erforderlich.",
+          "amountRequired": "Betrag ist erforderlich.",
+          "amountInvalid": "Betrag muss eine positive Zahl sein.",
+          "descriptionMaxLength": "Beschreibung darf höchstens 75 Zeichen haben.",
+          "createFailed": "Budget konnte nicht erstellt werden. Bitte erneut versuchen."
+        }
+      },
+      "edit": {
+        "title": "Budget bearbeiten",
+        "description": "Dieses Kategorieziel für {{year}} aktualisieren, wenn sich der Plan ändert.",
+        "actions": {
+          "cancel": "Abbrechen",
+          "save": "Änderungen speichern"
+        },
+        "errors": {
+          "updateFailed": "Budget konnte nicht aktualisiert werden. Bitte erneut versuchen."
+        }
+      }
+    },
+    "deleteAlert": {
+      "title": "Budget löschen?",
+      "description": "Das Budget für \"{{category}}\" löschen. Es kann bei Bedarf später wieder hinzugefügt werden.",
+      "actions": {
+        "cancel": "Abbrechen",
+        "delete": "Budget löschen"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Budget erstellt.",
+      "createError": "Budget konnte nicht erstellt werden. Bitte erneut versuchen.",
+      "updateSuccess": "Budget aktualisiert.",
+      "updateError": "Budget konnte nicht aktualisiert werden. Bitte erneut versuchen.",
+      "deleteSuccess": "Budget gelöscht.",
+      "deleteError": "Budget konnte nicht gelöscht werden. Bitte erneut versuchen."
+    },
+    "analysis": {
+      "title": "Budgetanalyse",
+      "loading": "Budgetanalyse wird geladen...",
+      "empty": "Noch keine Budgetanalyse für {{year}}. Budgets und passende Transaktionen hinzufügen, um Plan und Ist zu vergleichen.",
+      "series": {
+        "budget": "Budget",
+        "expenses": "Ausgaben"
+      },
+      "metrics": {
+        "totalBudget": "Gesamtbudget",
+        "totalExpenses": "Gesamtausgaben",
+        "delta": "Verbleibendes Budget",
+        "availablePercent": "Budget noch verfügbar"
+      },
+      "chart": {
+        "title": "Budget vs. Ausgaben nach Kategorie",
+        "description": "Sehen, welche Kategorien im Plan liegen, die Grenze erreichen oder bereits überschritten haben."
+      },
+      "errors": {
+        "loadFailedWithError": "Budgetanalyse konnte nicht geladen werden. App neu starten und erneut versuchen."
+      }
+    },
+    "errors": {
+      "loadFailed": "Budgets konnten nicht geladen werden. App neu starten und erneut versuchen."
+    }
+  },
+  "transactions": {
+    "view": {
+      "commonTransactions": "Transaktionen",
+      "transfers": "Überträge"
+    },
+    "transfers": {
+      "table": {
+        "description": "Überträge ändern, wo Geld liegt, nicht die Ausgabensummen.",
+        "emptyMessage": "Noch keine Überträge. Einen hinzufügen, wenn Geld zwischen eigenen Konten bewegt wird.",
+        "emptyNoAccountsMessage": "Noch keine Konten. Das erste Konto hinzufügen, bevor Überträge erstellt werden.",
+        "emptyNeedTwoAccountsMessage": "Mindestens zwei Konten werden für Überträge benötigt. Ein weiteres Konto hinzufügen, um fortzufahren.",
+        "actions": {
+          "add": "Übertrag hinzufügen",
+          "filter": "Überträge filtern",
+          "edit": "Übertrag bearbeiten",
+          "delete": "Übertrag löschen"
+        }
+      },
+      "dialog": {
+        "add": {
+          "title": "Übertrag hinzufügen",
+          "description": "Geld zwischen zwei eigenen Konten bewegen, ohne Einnahmen- oder Ausgabensummen zu beeinflussen.",
+          "actions": {
+            "cancel": "Abbrechen",
+            "create": "Übertrag erstellen"
+          },
+          "errors": {
+            "dateRequired": "Datum ist erforderlich.",
+            "fromAccountRequired": "Quellkonto ist erforderlich.",
+            "toAccountRequired": "Zielkonto ist erforderlich.",
+            "accountsMustDiffer": "Quell- und Zielkonto müssen unterschiedlich sein.",
+            "amountRequired": "Betrag ist erforderlich.",
+            "amountInvalid": "Betrag muss eine positive Zahl sein.",
+            "descriptionMaxLength": "Beschreibung darf höchstens 75 Zeichen haben.",
+            "createFailed": "Übertrag konnte nicht erstellt werden. Bitte erneut versuchen."
+          }
+        },
+        "edit": {
+          "title": "Übertrag bearbeiten",
+          "description": "Diesen Übertrag aktualisieren, damit der Kontobewegungsverlauf korrekt bleibt.",
+          "actions": {
+            "cancel": "Abbrechen",
+            "save": "Änderungen speichern"
+          },
+          "errors": {
+            "updateFailed": "Übertrag konnte nicht aktualisiert werden. Bitte erneut versuchen."
+          }
+        }
+      },
+      "deleteAlert": {
+        "title": "Diesen Übertrag löschen?",
+        "description": "Wird gelöscht: {{summary}}. Dieser Vorgang kann nicht rückgängig gemacht werden.",
+        "actions": {
+          "cancel": "Abbrechen",
+          "delete": "Übertrag löschen"
+        }
+      },
+      "filters": {
+        "title": "Überträge filtern",
+        "description": "Die Übertragsliste auf die gewünschten Daten, Beträge oder Konten einschränken.",
+        "empty": {
+          "account": "Noch keine Konten. Ein Konto hinzufügen, bevor Überträge gefiltert werden."
+        }
+      },
+      "toasts": {
+        "createSuccess": "Übertrag erstellt.",
+        "createError": "Übertrag konnte nicht erstellt werden. Bitte erneut versuchen.",
+        "updateSuccess": "Übertrag aktualisiert.",
+        "updateError": "Übertrag konnte nicht aktualisiert werden. Bitte erneut versuchen.",
+        "deleteSuccess": "Übertrag gelöscht.",
+        "deleteError": "Übertrag konnte nicht gelöscht werden. Bitte erneut versuchen."
+      },
+      "errors": {
+        "loadFailed": "Überträge konnten nicht geladen werden. App neu starten und erneut versuchen."
+      }
+    },
+    "table": {
+      "description": "Einnahmen- und Ausgabeneinträge prüfen, die Salden, Budgets und Nettocashflow beeinflussen.",
+      "emptyMessage": "Noch keine Transaktionen. Eine hinzufügen, um Ausgaben, Einnahmen und Nettocashflow zu verfolgen.",
+      "emptyNoAccountsMessage": "Noch keine Konten. Das erste Konto hinzufügen, bevor Transaktionen erfasst werden.",
+      "actions": {
+        "add": "Transaktion hinzufügen",
+        "filter": "Transaktionen filtern",
+        "edit": "Transaktion bearbeiten",
+        "duplicate": "Transaktion duplizieren",
+        "delete": "Transaktion löschen"
+      }
+    },
+    "filters": {
+      "title": "Transaktionen filtern",
+      "description": "Die Liste auf gewünschte Daten, Kategorien, Konten oder Beträge einschränken.",
+      "empty": {
+        "category": "Noch keine Kategorien. Eine Kategorie hinzufügen, bevor Transaktionen gefiltert werden.",
+        "account": "Noch keine Konten. Ein Konto hinzufügen, bevor Transaktionen gefiltert werden."
+      }
+    },
+    "dialog": {
+      "add": {
+        "title": "Transaktion hinzufügen",
+        "description": "Eine Einnahme oder Ausgabe erfassen, damit sie in Salden, Budgets und Berichten erscheint.",
+        "actions": {
+          "cancel": "Abbrechen",
+          "create": "Transaktion erstellen"
+        },
+        "errors": {
+          "dateRequired": "Datum ist erforderlich.",
+          "accountRequired": "Konto ist erforderlich.",
+          "amountRequired": "Betrag ist erforderlich.",
+          "amountInvalid": "Betrag muss eine gültige Zahl sein.",
+          "categoryRequired": "Kategorie ist erforderlich.",
+          "descriptionMaxLength": "Beschreibung darf höchstens 75 Zeichen haben.",
+          "createFailed": "Transaktion konnte nicht erstellt werden. Bitte erneut versuchen."
+        }
+      },
+      "edit": {
+        "title": "Transaktion bearbeiten",
+        "description": "Die Details hinter diesem Einnahmen- oder Ausgabeneintrag aktualisieren.",
+        "actions": {
+          "cancel": "Abbrechen",
+          "save": "Änderungen speichern"
+        },
+        "errors": {
+          "updateFailed": "Transaktion konnte nicht aktualisiert werden. Bitte erneut versuchen."
+        }
+      },
+      "form": {
+        "amountHint": "Ausgaben als negative Werte eingeben, Einnahmen oder Erstattungen als positive."
+      }
+    },
+    "deleteAlert": {
+      "title": "Diese Transaktion löschen?",
+      "description": "Wird gelöscht: {{summary}}. Dieser Vorgang kann nicht rückgängig gemacht werden.",
+      "actions": {
+        "cancel": "Abbrechen",
+        "delete": "Transaktion löschen"
+      }
+    },
+    "duplicateAlert": {
+      "title": "Transaktion duplizieren?",
+      "description": "Eine Kopie dieser Transaktion erstellen, um sie zu bearbeiten, statt alles erneut einzugeben.",
+      "actions": {
+        "cancel": "Abbrechen",
+        "duplicate": "Duplizieren"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Transaktion erstellt.",
+      "createError": "Transaktion konnte nicht erstellt werden. Bitte erneut versuchen.",
+      "updateSuccess": "Transaktion aktualisiert.",
+      "updateError": "Transaktion konnte nicht aktualisiert werden. Bitte erneut versuchen.",
+      "deleteSuccess": "Transaktion gelöscht.",
+      "deleteError": "Transaktion konnte nicht gelöscht werden. Bitte erneut versuchen.",
+      "duplicateSuccess": "Transaktion dupliziert.",
+      "duplicateError": "Transaktion konnte nicht dupliziert werden. Bitte erneut versuchen."
+    },
+    "errors": {
+      "loadFailed": "Transaktionen konnten nicht geladen werden. App neu starten und erneut versuchen."
+    }
+  },
+  "options": {
+    "colors": {
+      "none": "Keine",
+      "gray": "Grau",
+      "coral": "Koralle",
+      "amber": "Bernstein",
+      "gold": "Gold",
+      "lime": "Limette",
+      "green": "Grün",
+      "teal": "Blaugrün",
+      "sky": "Himmelblau",
+      "blue": "Blau",
+      "violet": "Violett",
+      "rose": "Rosé",
+      "indigo": "Indigo",
+      "mint": "Mint",
+      "brown": "Braun",
+      "maroon": "Weinrot"
+    },
+    "icons": {
+      "none": "Keines",
+      "blocked": "Gesperrt",
+      "transfer": "Übertrag",
+      "circle": "Kreis",
+      "income": "Einnahmen",
+      "expense": "Ausgaben",
+      "tag": "Etikett",
+      "tags": "Etiketten",
+      "money": "Geld",
+      "coins": "Münzen",
+      "handCoins": "Münzen in Hand",
+      "wallet": "Geldbörse",
+      "piggyBank": "Sparschwein",
+      "vault": "Tresor",
+      "bank": "Bank",
+      "shoppingCart": "Einkaufswagen",
+      "store": "Geschäft",
+      "backpack": "Rucksack",
+      "globe": "Globus",
+      "library": "Bibliothek",
+      "school": "Schule",
+      "graduationCap": "Abschlusskappe",
+      "gamepad": "Spielen",
+      "music": "Musik",
+      "cassette": "Kassette",
+      "film": "Film",
+      "camera": "Kamera",
+      "popcorn": "Popcorn",
+      "cigarette": "Zigarette",
+      "beer": "Bier",
+      "coffee": "Kaffee",
+      "glassWater": "Wasserglas",
+      "martini": "Martini",
+      "techReceipt": "Quittung",
+      "badgePercent": "Prozent",
+      "dumbbell": "Fitness",
+      "biceps": "Training",
+      "ambulance": "Krankenwagen",
+      "hospital": "Krankenhaus",
+      "pill": "Tablette",
+      "cannabis": "Cannabis",
+      "mountainSnow": "Berg",
+      "treePalm": "Palme",
+      "leaf": "Blatt",
+      "bird": "Vogel",
+      "cat": "Katze",
+      "dog": "Hund",
+      "fish": "Fisch",
+      "utensils": "Besteck",
+      "hamburger": "Burger",
+      "salad": "Salat",
+      "pizza": "Pizza",
+      "baby": "Baby",
+      "glasses": "Brille",
+      "gift": "Geschenk",
+      "tech": "Technik",
+      "laptop": "Laptop",
+      "home": "Zuhause",
+      "shirt": "Shirt",
+      "armchair": "Sessel",
+      "lampDesk": "Schreibtischlampe",
+      "frown": "Stirnrunzeln",
+      "smile": "Lächeln",
+      "heart": "Herz",
+      "star": "Stern",
+      "sparkles": "Glitzer",
+      "creditCard": "Kreditkarte",
+      "tractor": "Traktor",
+      "train": "Zug",
+      "footprints": "Fußabdrücke",
+      "wrench": "Schraubenschlüssel",
+      "refrigerator": "Kühlschrank",
+      "package": "Paket",
+      "scissors": "Schere",
+      "brain": "Gehirn",
+      "crypto": "Krypto",
+      "factory": "Fabrik",
+      "car": "Auto",
+      "fuel": "Kraftstoff",
+      "lightbulb": "Glühbirne",
+      "electricity": "Strom",
+      "plug": "Stecker",
+      "water": "Wasser",
+      "gas": "Gas",
+      "internet": "Internet",
+      "phone": "Handy",
+      "bus": "Bus",
+      "plane": "Flugzeug",
+      "bike": "Fahrrad",
+      "ship": "Schiff",
+      "parking": "Parken",
+      "bed": "Bett",
+      "sofa": "Sofa",
+      "laundry": "Wäsche",
+      "doctor": "Arzt",
+      "health": "Gesundheit",
+      "insurance": "Versicherung",
+      "receipt": "Beleg",
+      "ticket": "Ticket",
+      "camping": "Camping",
+      "books": "Bücher",
+      "groceries": "Lebensmittel",
+      "cooking": "Kochen",
+      "pets": "Haustiere",
+      "garden": "Garten",
+      "tools": "Werkzeug",
+      "jewelry": "Schmuck",
+      "work": "Arbeit",
+      "wine": "Wein",
+      "cake": "Kuchen",
+      "bath": "Bad",
+      "delivery": "Lieferung",
+      "heating": "Heizung",
+      "tv": "Fernseher"
+    }
+  },
+  "header": {
+    "language": {
+      "options": {
+        "en": "English",
+        "es": "Español",
+        "it": "Italiano",
+        "fr": "Français",
+        "de": "Deutsch",
+        "uk": "Українська",
+        "zh": "中文"
+      }
+    },
+    "theme": {
+      "activateLight": "Helles Design aktivieren",
+      "activateDark": "Dunkles Design aktivieren",
+      "lightMode": "Helles Design",
+      "darkMode": "Dunkles Design"
+    }
+  },
+  "sidebar": {
+    "close": "Seitenleiste schließen",
+    "expand": "Seitenleiste erweitern",
+    "collapse": "Seitenleiste einklappen"
+  },
+  "breadcrumb": {
+    "ariaLabel": "Navigationspfad"
+  },
+  "recurringEvents": {
+    "table": {
+      "emptyMessage": "Noch keine wiederkehrenden Transaktionen. Eine hinzufügen, um wiederholte Transaktionen oder Überträge zu automatisieren.",
+      "emptyNoAccountsMessage": "Noch keine Konten. Das erste Konto hinzufügen, bevor wiederkehrende Transaktionen erstellt werden.",
+      "actions": {
+        "add": "Wiederkehrende Transaktion hinzufügen",
+        "viewItems": "Geplante Einträge anzeigen",
+        "edit": "Wiederkehrende Transaktion bearbeiten",
+        "delete": "Wiederkehrende Transaktion löschen"
+      },
+      "schedule": {
+        "summary_one": "{{frequency}}, {{count}} Mal",
+        "summary_other": "{{frequency}}, {{count}} Mal"
+      },
+      "template": {
+        "unknown": "Unbekannte Vorlage",
+        "unknownAccount": "Unbekanntes Konto",
+        "unknownCategory": "Unbekannte Kategorie"
+      }
+    },
+    "type": {
+      "transaction": "Transaktion",
+      "transfer": "Übertrag"
+    },
+    "frequency": {
+      "unit": {
+        "day": "Tag",
+        "week": "Woche",
+        "month": "Monat",
+        "year": "Jahr"
+      },
+      "every": {
+        "day": "Jeden Tag",
+        "week": "Jede Woche",
+        "month": "Jeden Monat",
+        "year": "Jedes Jahr"
+      },
+      "everyN": {
+        "day_one": "Alle {{count}} Tage",
+        "day_other": "Alle {{count}} Tage",
+        "week_one": "Alle {{count}} Wochen",
+        "week_other": "Alle {{count}} Wochen",
+        "month_one": "Alle {{count}} Monate",
+        "month_other": "Alle {{count}} Monate",
+        "year_one": "Alle {{count}} Jahre",
+        "year_other": "Alle {{count}} Jahre"
+      }
+    },
+    "monthPolicy": {
+      "none": "Standard (letzter Tag des Monats)",
+      "clip": "Letzten Tag des Monats verwenden (30. Apr. für den 31.)",
+      "skip": "Diesen Monat überspringen",
+      "last_day": "Immer der letzte Tag des Monats",
+      "first_day": "Immer der 1. des Monats"
+    },
+    "dialog": {
+      "add": {
+        "title": "Wiederkehrende Transaktion hinzufügen",
+        "description": "Eine Wiederholungsregel erstellen, damit die App bevorstehende Transaktionen oder Überträge automatisch hinzufügen kann.",
+        "actions": {
+          "cancel": "Abbrechen",
+          "create": "Wiederkehrende Transaktion erstellen"
+        },
+        "errors": {
+          "titleRequired": "Titel ist erforderlich.",
+          "titleMinLength": "Titel muss mindestens 2 Zeichen haben.",
+          "titleMaxLength": "Titel darf höchstens 80 Zeichen haben.",
+          "typeRequired": "Typ ist erforderlich.",
+          "startDateRequired": "Startdatum ist erforderlich.",
+          "countRequired": "Anzahl der Wiederholungen angeben.",
+          "countInvalid": "Eine ganze Zahl größer als 0 eingeben.",
+          "frequencyIntervalRequired": "Angeben, wie oft es sich wiederholt.",
+          "frequencyIntervalInvalid": "Eine ganze Zahl größer als 0 eingeben.",
+          "frequencyUnitRequired": "Tag, Woche, Monat oder Jahr wählen.",
+          "accountRequired": "Konto ist erforderlich.",
+          "categoryRequired": "Kategorie ist erforderlich.",
+          "fromAccountRequired": "Quellkonto ist erforderlich.",
+          "toAccountRequired": "Zielkonto ist erforderlich.",
+          "accountsMustDiffer": "Quell- und Zielkonto müssen unterschiedlich sein.",
+          "amountRequired": "Betrag ist erforderlich.",
+          "amountInvalid": "Betrag muss eine positive Zahl sein.",
+          "descriptionMaxLength": "Beschreibung darf höchstens 75 Zeichen haben.",
+          "createFailed": "Wiederkehrende Transaktion konnte nicht erstellt werden. Bitte erneut versuchen."
+        }
+      },
+      "edit": {
+        "title": "Wiederkehrende Transaktion bearbeiten",
+        "description": "Diese Wiederholungsregel aktualisieren und auswählen, welche verknüpften erzeugten Einträge die Vorlagenänderungen erhalten.",
+        "applyTo": "Änderungen anwenden auf",
+        "fromDate": "Beginnend ab",
+        "applyToOptions": {
+          "all": "Alle verknüpften Einträge",
+          "upcoming": "Zukünftige verknüpfte Einträge",
+          "fromDate": "Verknüpfte Einträge ab einem Datum",
+          "ruleOnly": "Nur Wiederholungsregel"
+        },
+        "applyToOptionHints": {
+          "all": "Aktualisiert alle bereits von dieser Wiederholungsregel erzeugten Einträge, einschließlich vergangener und zukünftiger Einträge.",
+          "upcoming": "Aktualisiert nur erzeugte Einträge, die nach dem Speichern dieser Änderungen geplant sind.",
+          "fromDate": "Aktualisiert erzeugte Einträge, die am oder nach dem ausgewählten Datum geplant sind.",
+          "ruleOnly": "Aktualisiert die wiederkehrende Vorlage, ohne bereits erzeugte Einträge zu ändern."
+        },
+        "actions": {
+          "cancel": "Abbrechen",
+          "save": "Änderungen speichern"
+        },
+        "errors": {
+          "fromDateRequired": "Wählen Sie das Datum aus, ab dem verknüpfte Einträge aktualisiert werden sollen.",
+          "updateFailed": "Wiederkehrende Transaktion konnte nicht aktualisiert werden. Bitte erneut versuchen."
+        }
+      },
+      "form": {
+        "labels": {
+          "frequencyInterval": "Alle"
+        },
+        "placeholders": {
+          "title": "Titel der wiederkehrenden Transaktion",
+          "occurrences": "12",
+          "frequencyInterval": "1"
+        },
+        "tooltips": {
+          "scheduleLockedAfterCreate": "Nach der Erstellung bleibt der Zeitplan fest, damit generierte Daten vorhersehbar bleiben."
+        }
+      }
+    },
+    "deleteAlert": {
+      "title": "Diese wiederkehrende Transaktion löschen?",
+      "description": "\"{{title}}\" löschen und keine weiteren zukünftigen Einträge aus dieser Regel erstellen.",
+      "options": {
+        "deleteLinkedItems": "Auch die bereits erstellten Transaktionen und Überträge löschen",
+        "deleteLinkedItemsHint": "Dadurch werden auch die Transaktionen oder Überträge entfernt, die bereits aus dieser Regel erstellt wurden."
+      },
+      "actions": {
+        "cancel": "Abbrechen",
+        "delete": "Wiederkehrende Transaktion löschen"
+      }
+    },
+    "createResult": {
+      "title": "Wiederkehrende Transaktion erstellt"
+    },
+    "updateResult": {
+      "title": "Wiederkehrende Transaktion aktualisiert",
+      "description": "\"{{title}}\" wurde aktualisiert. Verknüpfte generierte Einträge wurden entsprechend aktualisiert.",
+      "actions": {
+        "ok": "Fertig"
+      }
+    },
+    "runResult": {
+      "title": "Wiederkehrende Transaktionen erstellt",
+      "labels": {
+        "plan": "Wiederkehrende Transaktion",
+        "created": "Neue Einträge",
+        "skipped": "Bereits vorhanden",
+        "total": "Geplante Daten"
+      },
+      "hints": {
+        "noNewItems": "Es wurden keine neuen Einträge erstellt, da alle geplanten Daten bereits verknüpfte Einträge hatten."
+      },
+      "actions": {
+        "ok": "Fertig"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Wiederkehrende Transaktion erstellt.",
+      "createError": "Wiederkehrende Transaktion konnte nicht erstellt werden. Bitte erneut versuchen.",
+      "updateSuccess": "Wiederkehrende Transaktion aktualisiert.",
+      "updateError": "Wiederkehrende Transaktion konnte nicht aktualisiert werden. Bitte erneut versuchen.",
+      "deleteSuccess": "Wiederkehrende Transaktion gelöscht.",
+      "deleteError": "Wiederkehrende Transaktion konnte nicht gelöscht werden. Bitte erneut versuchen."
+    },
+    "errors": {
+      "loadFailedWithError": "Wiederkehrende Transaktionen konnten nicht geladen werden. App neu starten und erneut versuchen.",
+      "loadUnexpected": "Unerwarteter Fehler beim Laden der wiederkehrenden Transaktionen. App neu starten und erneut versuchen."
+    }
+  },
+  "recurringEventItems": {
+    "page": {
+      "title": "Geplante Einträge"
+    },
+    "table": {
+      "transactionsTitle": "Geplante Transaktionen",
+      "transactionsDescription": "Von dieser wiederkehrenden Transaktion erzeugte Transaktionen.",
+      "transfersTitle": "Geplante Überweisungen",
+      "transfersDescription": "Von dieser wiederkehrenden Transaktion erzeugte Überweisungen.",
+      "emptyMessage": "Für diese wiederkehrende Transaktion wurden keine verknüpften Einträge gefunden."
+    },
+    "errors": {
+      "invalidId": "Ungültige ID der wiederkehrenden Transaktion.",
+      "notFound": "Wiederkehrende Transaktion nicht gefunden.",
+      "loadUnexpected": "Unerwarteter Fehler beim Laden der Einträge der wiederkehrenden Transaktion. App neu starten und erneut versuchen."
+    }
+  },
+  "accountDetails": {
+    "page": {
+      "title": "Kontodetails"
+    },
+    "header": {
+      "totalValue": "Gesamtkontowert"
+    },
+    "table": {
+      "transactionsTitle": "Kontotransaktionen",
+      "transactionsDescription": "Für dieses Konto erfasste Einnahmen und Ausgaben.",
+      "transactionsEmptyMessage": "Für dieses Konto wurden keine Transaktionen gefunden.",
+      "transfersTitle": "Kontoübertragungen",
+      "transfersDescription": "Von diesem Konto gesendete oder empfangene Übertragungen.",
+      "transfersEmptyMessage": "Für dieses Konto wurden keine Übertragungen gefunden."
+    },
+    "errors": {
+      "invalidId": "Ungültige Konto-ID.",
+      "notFound": "Konto nicht gefunden.",
+      "loadUnexpected": "Unerwarteter Fehler beim Laden der Kontodetails. App neu starten und erneut versuchen."
+    }
+  },
+  "accountValuations": {
+    "page": {
+      "title": "Kontobewertungen"
+    },
+    "table": {
+      "emptyMessage": "Noch keine Bewertungsmomentaufnahmen. Die erste Momentaufnahme hinzufügen, um mit der Verfolgung zu beginnen.",
+      "columns": {
+        "date": "Datum",
+        "value": "Wert",
+        "change": "Veränderung"
+      },
+      "actions": {
+        "viewHistory": "Bewertungsverlauf anzeigen",
+        "add": "Momentaufnahme hinzufügen",
+        "edit": "Bearbeiten",
+        "delete": "Löschen"
+      }
+    },
+    "header": {
+      "change": "Veränderung",
+      "accountBalance": "Kontosaldo",
+      "lastSnapshot": "Neueste Momentaufnahme",
+      "changeVsBalance": "Veränderung ggü. Saldo",
+      "noSnapshots": "Die erste Momentaufnahme hinzufügen, um mit dem Kontosaldo zu vergleichen."
+    },
+    "chart": {
+      "title": "Wert über die Zeit",
+      "seriesName": "Wert"
+    },
+    "dialog": {
+      "fields": {
+        "value": "Wert",
+        "date": "Datum"
+      },
+      "add": {
+        "title": "Momentaufnahme hinzufügen",
+        "description": "Den aktuellen Wert des Kontos zu einem bestimmten Datum erfassen.",
+        "actions": {
+          "create": "Momentaufnahme hinzufügen",
+          "cancel": "Abbrechen"
+        },
+        "errors": {
+          "createFailed": "Momentaufnahme konnte nicht erstellt werden. Bitte erneut versuchen.",
+          "valueRequired": "Wert ist erforderlich.",
+          "valueInvalid": "Wert muss eine gültige positive Zahl sein.",
+          "dateRequired": "Datum ist erforderlich."
+        }
+      },
+      "edit": {
+        "title": "Momentaufnahme bearbeiten",
+        "description": "Den Wert oder das Datum dieser Bewertungsmomentaufnahme aktualisieren.",
+        "actions": {
+          "save": "Änderungen speichern",
+          "cancel": "Abbrechen"
+        },
+        "errors": {
+          "updateFailed": "Momentaufnahme konnte nicht aktualisiert werden. Bitte erneut versuchen."
+        }
+      }
+    },
+    "deleteAlert": {
+      "title": "Diese Momentaufnahme löschen?",
+      "description": "Wird gelöscht: {{summary}}. Dieser Vorgang kann nicht rückgängig gemacht werden.",
+      "actions": {
+        "delete": "Momentaufnahme löschen",
+        "cancel": "Abbrechen"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Momentaufnahme hinzugefügt.",
+      "createError": "Momentaufnahme konnte nicht hinzugefügt werden. Bitte erneut versuchen.",
+      "updateSuccess": "Momentaufnahme aktualisiert.",
+      "updateError": "Momentaufnahme konnte nicht aktualisiert werden. Bitte erneut versuchen.",
+      "deleteSuccess": "Momentaufnahme gelöscht.",
+      "deleteError": "Momentaufnahme konnte nicht gelöscht werden. Bitte erneut versuchen."
+    }
+  },
+  "onboarding": {
+    "step_counter": "{{current}} / {{total}}",
+    "actions": {
+      "back": "Zurück",
+      "continue": "Weiter"
+    },
+    "welcome": {
+      "title": "Willkommen bei Boring Balance",
+      "subtitle": "Ein einfacher, privater Ort zum Verfolgen, wohin das Geld fließt. Keine Cloud, keine Abonnements, kein Lärm.",
+      "cta": "Loslegen"
+    },
+    "preferences": {
+      "title": "Einstellungen festlegen",
+      "subtitle": "Diese können jederzeit in den Einstellungen geändert werden.",
+      "theme": {
+        "label": "Design"
+      },
+      "language": {
+        "label": "Sprache"
+      },
+      "currency": {
+        "label": "Standardwährung",
+        "hint": "Wird bei allen Beträgen angezeigt. Jederzeit in den Einstellungen änderbar."
+      }
+    },
+    "start": {
+      "title": "Wie möchten Sie beginnen?",
+      "scratch": {
+        "title": "Neu starten",
+        "description": "Mit einem leeren Arbeitsbereich beginnen. Konten und Kategorien hinzufügen, wenn es so weit ist."
+      },
+      "import": {
+        "title": "Vorhandene Daten importieren",
+        "description": "Eine Sicherung wiederherstellen oder einen Excel-Export importieren."
+      }
+    },
+    "confirm": {
+      "title": "Einrichtung abgeschlossen.",
+      "subtitle": "Alles wird lokal auf dem Gerät gespeichert. Sie haben die Kontrolle.",
+      "import_note": "Die Sicherung kann jederzeit über Einstellungen → Sicherungen importiert werden.",
+      "cta": "Boring Balance öffnen"
+    }
+  },
+  "update": {
+    "modal": {
+      "title": "Eine neue Version ist verfügbar",
+      "body": "Sie verwenden v{{current}}. Boring Balance v{{latest}} ist jetzt auf GitHub verfügbar.",
+      "ignore": "Nicht mehr an v{{latest}} erinnern",
+      "cta": {
+        "update": "Auf GitHub aktualisieren",
+        "dismiss": "Bei v{{current}} bleiben"
+      }
+    },
+    "sidebar": {
+      "label": "Update verfügbar · v{{latest}}"
+    }
+  }
+}

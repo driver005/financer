@@ -1,0 +1,82 @@
+import 'package:flutter/material.dart';
+import 'package:gap/gap.dart';
+import 'package:hugeicons/hugeicons.dart';
+import 'package:pockaw/core/constants/app_colors.dart';
+import 'package:pockaw/core/constants/app_radius.dart';
+import 'package:pockaw/core/constants/app_spacing.dart';
+import 'package:pockaw/core/constants/app_text_styles.dart';
+import 'package:pockaw/core/extensions/text_style_extensions.dart';
+
+class SmallButton extends StatelessWidget {
+  final String label;
+  final TextStyle labelTextStyle;
+  final List<List<dynamic>>? prefixIcon;
+  final List<List<dynamic>>? suffixIcon;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
+  final Color? borderColor;
+  final GestureTapCallback? onTap;
+  const SmallButton({
+    super.key,
+    required this.label,
+    this.labelTextStyle = AppTextStyles.body4,
+    this.prefixIcon,
+    this.suffixIcon,
+    this.backgroundColor,
+    this.foregroundColor,
+    this.borderColor,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.radius8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.spacing12,
+          AppSpacing.spacing4,
+          AppSpacing.spacing8,
+          AppSpacing.spacing4,
+        ),
+        decoration: BoxDecoration(
+          color: backgroundColor ?? context.secondaryButtonBackground,
+          border: Border.all(color: borderColor ?? context.secondaryBorder),
+          borderRadius: BorderRadius.circular(AppRadius.radius24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: AppSpacing.spacing4,
+              children: [
+                if (prefixIcon != null)
+                  HugeIcon(
+                    icon: prefixIcon!,
+                    size: 16,
+                    color: foregroundColor ?? AppColors.secondary400,
+                  ),
+                Text(
+                  label,
+                  style: labelTextStyle.bold.copyWith(
+                    color: foregroundColor,
+                    height: 2,
+                  ),
+                ),
+              ],
+            ),
+            if (suffixIcon != null) const Gap(AppSpacing.spacing4),
+            if (suffixIcon != null)
+              HugeIcon(
+                icon: suffixIcon!,
+                size: 12,
+                color: foregroundColor ?? AppColors.secondary400,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

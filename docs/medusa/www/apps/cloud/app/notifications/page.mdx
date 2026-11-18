@@ -1,0 +1,76 @@
+import { InlineIcon } from "docs-ui"
+import { BellAlert } from "@medusajs/icons"
+
+export const metadata = {
+  title: `Notifications`,
+}
+
+# {metadata.title}
+
+In this guide, you'll learn about the notifications you receive from Cloud and how to view them.
+
+## Notifications Overview
+
+Medusa shows you notifications related to your Cloud organization, projects, environments, and deployments. These notifications keep you updated without needing to manually check for changes.
+
+### Notification Types
+
+Notifications may be related to:
+
+- **Payment updates**: Whether a Cloud payment subscription succeeded or failed.
+- **Database Dump Import / Export**: Notification when a database dump import or export is completed.
+- **Build and deployment failure**: Notification when a project's build or deployment fails.
+- **Build and deployment recovery**: Notification after a project's build that previously failed was successful.
+
+---
+
+## How to View Notifications on Cloud
+
+### Notifications Sidebar
+
+The notifications sidebar shows you a history of all your organization's notifications.
+
+To open the notifications sidebar, click on the <InlineIcon Icon={BellAlert} alt="bell" /> icon at the top right of the Cloud dashboard.
+
+![Bell icon at the top right of the Cloud dashboard](https://res.cloudinary.com/dza7lstvk/image/upload/v1750161444/Cloud/CleanShot_2025-06-17_at_14.56.58_2x_yccifu.png)
+
+This will open the notifications sidebar, where you can see all notifications related to your organization.
+
+<Note title="Tip">
+
+To view the notifications for a different organization, learn how to [switch organizations](../organizations/page.mdx#switch-organization).
+
+</Note>
+
+![Notifications sidebar showing a list of notifications](https://res.cloudinary.com/dza7lstvk/image/upload/v1750161526/Cloud/CleanShot_2025-06-17_at_14.58.26_2x_dij4pg.png)
+
+Actionable notifications will have a link that you can click to go to the relevant page. For example, if a database dump export was completed, you can click the link to download the dump.
+
+### Toast Notifications
+
+Medusa also shows you toast notifications at the top right of the dashboard when you receive a new notification. These notifications appear momentarily and then disappear. They're helpful to quickly inform you about important updates.
+
+![Toast notification showing a new notification](https://res.cloudinary.com/dza7lstvk/image/upload/v1750161675/Cloud/CleanShot_2025-06-17_at_14.56.06_2x_fsu5ny.png)
+
+---
+
+## Change Notification Preferences
+
+You can change notification preferences to control whether you receive notifications on deployment and build failures.
+
+<Note>
+
+You can't change notification preferences for payment updates or account changes. These notifications are always sent to the billing email configured for your organization.
+
+</Note>
+
+To change your notification preferences:
+
+1. If you're in a different organization, [switch to the organization](../organizations/page.mdx#switch-organization) whose settings you want to view.
+2. Make sure you're on the projects overview page of the organization. You can do this by clicking on the organization name at the top left of the dashboard.
+3. Click **Settings** > **General** in the sidebar to open the organization's settings.
+4. In the "Notification Preferences" section, you can toggle the notifications you want to receive:
+    - **Emails**: Receive notifications via email. Updates will be sent to the billing email configured for your organization.
+    - **Feedback**: Receive notifications in the Cloud dashboard. These notifications will appear in the notifications sidebar and as toast notifications for all members of the organization.
+
+Changes are saved automatically when you toggle a notification preference.

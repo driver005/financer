@@ -1,0 +1,9 @@
+<div class="h-dvh overflow-hidden">
+  <app-root-layout>
+    <router-outlet />
+  </app-root-layout>
+</div>
+<z-toaster />
+@if (updateService.showModal()) {
+  <app-update-modal />
+}

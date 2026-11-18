@@ -1,0 +1,250 @@
+import { InlineIcon, getOsShortcut, Kbd } from "docs-ui"
+import { EllipsisHorizontal, ChevronUpDown } from "@medusajs/icons"
+
+export const metadata = {
+  title: `Organizations`,
+}
+
+# {metadata.title}
+
+In this guide, you'll learn about organizations in Cloud and how to manage them.
+
+## What is an Organization?
+
+In Cloud, an organization is a group of users that have access to the same settings, projects, resources, environments, and billing details.
+
+As a user, you must be in an organization to create and deploy projects. A user can be a member of multiple organizations.
+
+---
+
+## Create or Join an Organization
+
+To get started with Cloud, you need to either create a new organization or [join an existing one](#invite-members-to-organization).
+
+If you don't have a Cloud account, you can [sign up for Cloud](../sign-up/page.mdx) and create a new organization.
+
+To create a new organization when you already have a Cloud account:
+
+1. Click on the <InlineIcon Icon={ChevronUpDown} alt="switch organization" /> icon next to the current organization name at the top left of the Cloud dashboard.
+2. Choose "Create Organization" from the dropdown.
+3. In the "Setup your organization" step, enter your organization's name and click the "Create" button.
+4. In the final step:
+    - Choose a plan for your organization. By default, the **Develop** plan is selected. You can change the plan by clicking the "Change plan" link.
+    - **Payment Details**: Enter your card details. You'll be charged upfront based on the plan you selected once you finish the setup.
+    - **Billing address**: Enter your billing address. This address is used for generated invoices.
+5. Once you're done, click the "Start your X/mo plan" button. Then, Medusa will charge you for the plan you selected, create an organization, and redirect you to your organization's Cloud dashboard.
+
+<Note title="Free Trial">
+
+If you don't belong to any organizations yet and you're eligible for a free trial, which is available only in select regions, Medusa starts a free trial for the new organization and redirects you to the organization's projects list. Learn how to view the trial's status in the [Manage Plans](../billing/plans/page.mdx#view-trial-status) guide.
+
+</Note>
+
+---
+
+## Organization Dashboard
+
+When you open the Cloud dashboard and log in, you're viewing the projects, resources, and settings of a specific organization. You'll find the name of that organization at the top left of the dashboard.
+
+### Switch Organization
+
+If you're a member of multiple organizations, you can switch between them to view their projects, resources, and settings.
+
+To switch to a different organization:
+
+1. Click on the <InlineIcon Icon={ChevronUpDown} alt="switch organization" /> icon next to the organization name at the top left of the Cloud dashboard.
+2. Choose the organization you want to switch to from the dropdown.
+
+This will change the view to the selected organization, and you'll see its projects, resources, and settings.
+
+---
+
+## Edit Organization Details
+
+To edit an organization's general details:
+
+<Note title="Tip">
+
+You can also navigate to an organization's settings from the [command palette](../command-palette/page.mdx). Press <Kbd>{getOsShortcut()}</Kbd> + <Kbd>K</Kbd> and select **Organization Settings**.
+
+</Note>
+
+1. If you're in a different organization, [switch to the organization](#switch-organization) whose settings you want to view.
+2. Make sure you're on the projects overview page of the organization. You can do this by clicking on the organization name at the top left of the dashboard.
+3. Click **Settings** > **General** in the sidebar to open the organization's settings.
+4. You can edit the organization's name, billing email address, or tax ID.
+5. Once you're done making changes, click the **Save changes** button in the Details section.
+
+---
+
+## Leave Organization
+
+<Note type="warning">
+  
+Leaving an organization will remove you from it, and you'll no longer have access to its projects, resources, and settings. You can only access it by being invited again by another user in the organization.
+
+</Note>
+
+To leave an organization:
+
+<Note title="Tip">
+
+You can also navigate to an organization's settings from the [command palette](../command-palette/page.mdx). Press <Kbd>{getOsShortcut()}</Kbd> + <Kbd>K</Kbd> and select **Organization Settings**.
+
+</Note>
+
+1. If you're in a different organization, [switch to the organization](#switch-organization) whose settings you want to view.
+2. Make sure you're on the projects overview page of the organization. You can do this by clicking on the organization name at the top left of the dashboard.
+3. Click **Settings** > **General** in the sidebar to open the organization's settings.
+4. Click the "Leave organization" button.
+
+---
+
+## Delete Organization
+
+<Note type="warning" title="Danger">
+
+Deleting an organization will remove all its projects, resources, and settings. This action is irreversible, and you won't be able to recover any data after deletion.
+
+</Note>
+
+Organization deletion is only available for organizations that have canceled their subscriptions. Organizations with active paid subscriptions cannot be deleted.
+
+To delete an organization:
+
+<Note title="Tip">
+
+You can also navigate to an organization's settings from the [command palette](../command-palette/page.mdx). Press <Kbd>{getOsShortcut()}</Kbd> + <Kbd>K</Kbd> and select **Organization Settings**.
+
+</Note>
+
+1. If you're in a different organization, [switch to the organization](#switch-organization) whose settings you want to view.
+2. Make sure you're on the projects overview page of the organization. You can do this by clicking on the organization name at the top left of the dashboard.
+3. Click **Settings** > **General** in the sidebar to open the organization's settings.
+4. If your organization has canceled its subscription, click the "Delete organization" button to proceed with deletion.
+
+---
+
+## View Organization Members
+
+To view the members of an organization:
+
+1. If you're in a different organization, [switch to the organization](#switch-organization) whose settings you want to view.
+2. Make sure you're on the projects overview page of the organization. You can do this by clicking on the organization name at the top left of the dashboard.
+3. Click on **Team** in the sidebar.
+
+This opens the Team page where you can view the members of the organization, their roles, and their email addresses. You can also view invited members who haven't accepted the invitation yet.
+
+### View Available Seats
+
+Based on your organization's plan, you may have a limited number of seats available for members. You can view the number of available seats at the top of the Team page.
+
+If you need more seats, learn more about [other available plans](../pricing/page.mdx) or [purchasing add-on resources](../billing/page.mdx#purchase-add-on-resources).
+
+### Invite Members to Organization
+
+<Note>
+
+Make sure you have [enough available seats](#view-available-seats) in your organization before inviting new members.
+
+</Note>
+
+To invite members to your organization:
+
+<Note title="Tip">
+
+You can also navigate to an organization's team member settings from the [command palette](../command-palette/page.mdx). Press <Kbd>{getOsShortcut()}</Kbd> + <Kbd>K</Kbd> and select **Team Members**.
+
+</Note>
+
+1. If you're in a different organization, [switch to the organization](#switch-organization) whose settings you want to view.
+2. Make sure you're on the projects overview page of the organization. You can do this by clicking on the organization name at the top left of the dashboard.
+3. Click on **Team** in the sidebar.
+4. In the "Invite members" section, enter the email addresses of the users you want to invite. You can enter multiple email addresses separated by commas.
+
+These users will receive an email invitation to join your organization. They can accept the invitation by clicking the link in the email.
+
+### Resend Invitation
+
+You may need to resend an invitation if a user has lost the invitation email or if the invitation has expired.
+
+To resend an invitation:
+
+<Note title="Tip">
+
+You can also navigate to an organization's team member settings from the [command palette](../command-palette/page.mdx). Press <Kbd>{getOsShortcut()}</Kbd> + <Kbd>K</Kbd> and select **Team Members**.
+
+</Note>
+
+1. If you're in a different organization, [switch to the organization](#switch-organization) whose settings you want to view.
+2. Make sure you're on the projects overview page of the organization. You can do this by clicking on the organization name at the top left of the dashboard.
+3. Click on **Team** in the sidebar.
+4. In the "Organization members" section, find the user whose invitation you want to resend. If a user's invitation has expired, you'll see an "Invite expired" badge in their row.
+5. Click the <InlineIcon alt="ellipsis" Icon={EllipsisHorizontal} /> button at the end of the user's row.
+6. Choose "Resend invite" from the dropdown.
+
+### Revoke Invitation
+
+You can revoke an invitation to a user if you no longer want them to join your organization.
+
+To revoke an invitation:
+
+<Note title="Tip">
+
+You can also navigate to an organization's team member settings from the [command palette](../command-palette/page.mdx). Press <Kbd>{getOsShortcut()}</Kbd> + <Kbd>K</Kbd> and select **Team Members**.
+
+</Note>
+
+1. If you're in a different organization, [switch to the organization](#switch-organization) whose settings you want to view.
+2. Make sure you're on the projects overview page of the organization. You can do this by clicking on the organization name at the top left of the dashboard.
+3. Click on **Team** in the sidebar.
+4. In the "Organization members" section, find the user whose invitation you want to resend. If a user's invitation has expired, you'll see an "Invite expired" badge in their row.
+4. Click the <InlineIcon alt="ellipsis" Icon={EllipsisHorizontal} /> button at the end of the user's row.
+5. Choose **Revoke invite** from the dropdown.
+
+### Remove Members from Organization
+
+Owner and admin users can remove any members from the organization that aren't owners.
+
+To remove a member from your organization:
+
+<Note title="Tip">
+
+You can also navigate to an organization's team member settings from the [command palette](../command-palette/page.mdx). Press <Kbd>{getOsShortcut()}</Kbd> + <Kbd>K</Kbd> and select **Team Members**.
+
+</Note>
+
+1. If you're in a different organization, [switch to the organization](#switch-organization) whose settings you want to view.
+2. Make sure you're on the projects overview page of the organization. You can do this by clicking on the organization name at the top left of the dashboard.
+3. Click on **Team** in the sidebar.
+4. In the "Organization members" section, find the member you want to remove.
+5. Click the <InlineIcon alt="ellipsis" Icon={EllipsisHorizontal} /> button at the end of the member's row.
+6. Choose **Remove from organization** from the dropdown.
+
+### Promote a Member to Owner
+
+Organization owners can promote other members to the Owner role. This action is only available to owners and only appears for members who are not already owners.
+
+To promote a member to owner:
+
+<Note title="Tip">
+
+You can also navigate to an organization's team member settings from the [command palette](../command-palette/page.mdx). Press <Kbd>{getOsShortcut()}</Kbd> + <Kbd>K</Kbd> and select **Team Members**.
+
+</Note>
+
+1. If you're in a different organization, [switch to the organization](#switch-organization) whose settings you want to view.
+2. Make sure you're on the projects overview page of the organization. You can do this by clicking on the organization name at the top left of the dashboard.
+3. Click on **Team** in the sidebar.
+4. In the "Organization members" section, find the member you want to promote.
+5. Click the <InlineIcon alt="ellipsis" Icon={EllipsisHorizontal} /> button at the end of the member's row.
+6. Choose **Promote to Owner** from the dropdown.
+7. Confirm the promotion in the dialog that appears.
+
+The member is promoted to owner and gains full owner privileges in the organization.
+
+---
+
+## Manage Billing Details
+
+Refer to the [Billing](../billing/page.mdx) guide to learn how to manage your organization's billing details, including payment methods, invoices, and usage.

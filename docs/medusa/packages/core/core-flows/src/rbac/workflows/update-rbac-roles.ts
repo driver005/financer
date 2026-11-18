@@ -1,0 +1,88 @@
+import { isDefined } from "@medusajs/framework/utils"
+import {
+  WorkflowData,
+  WorkflowResponse,
+  createWorkflow,
+  transform,
+  when,
+} from "@medusajs/framework/workflows-sdk"
+import { UpdateRbacRoleDTO } from "@medusajs/framework/types"
+import { createRbacRolePoliciesStep } from "../steps"
+import { updateRbacRolesStep } from "../steps/update-rbac-roles"
+import { validateActorPermissionsStep } from "../steps/validate-actor-permissions"
+
+/**
+ * @since 2.22.3
+ */
+export type UpdateRbacRolesWorkflowInput = {
+  actor_id?: string
+  actor?: string
+  selector: Record<string, any>
+  update: Omit<UpdateRbacRoleDTO, "id"> & {
+    policy_ids?: string[]
+  }
+}
+
+/**
+ * @since 2.22.3
+ */
+export const updateRbacRolesWorkflowId = "update-rbac-roles"
+
+/**
+ * @since 2.22.3
+ */
+export const updateRbacRolesWorkflow = createWorkflow(
+  updateRbacRolesWorkflowId,
+  (input: WorkflowData<UpdateRbacRolesWorkflowInput>) => {
+    const validationData = transform({ input }, ({ input }) => {
+      const policyIds = input.update.policy_ids || []
+      return {
+        actor_id: input.actor_id!,
+        policy_ids: policyIds,
+        actor: input.actor,
+      }
+    })
+
+    when({ validationData }, ({ validationData }) => {
+      return !!validationData?.actor_id && !!validationData?.policy_ids?.length
+    }).then(() => {
+      validateActorPermissionsStep(validationData)
+    })
+
+    const roleUpdateData = transform({ input }, ({ input }) => ({
+      selector: input.selector,
+      update: {
+        name: input.update.name,
+        description: input.update.description,
+        metadata: input.update.metadata,
+      },
+    }))
+
+    const updatedRoles = updateRbacRolesStep(roleUpdateData)
+
+    const policiesUpdateData = transform(
+      { input, updatedRoles },
+      ({ input, updatedRoles }) => {
+        if (!isDefined(input.update.policy_ids)) {
+          return { policies: [] }
+        }
+
+        const allPolicies: any[] = []
+        updatedRoles.forEach((role) => {
+          const policyIds = input.update.policy_ids || []
+          policyIds.forEach((policyId) => {
+            allPolicies.push({
+              role_id: role.id,
+              policy_id: policyId,
+            })
+          })
+        })
+        return { policies: allPolicies }
+      }
+    )
+
+    createRbacRolePoliciesStep(policiesUpdateData)
+
+    return new WorkflowResponse(updatedRoles)
+  }
+)

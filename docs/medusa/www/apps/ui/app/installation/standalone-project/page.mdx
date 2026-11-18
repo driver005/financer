@@ -1,0 +1,159 @@
+import { Note } from "docs-ui"
+
+export const metadata = {
+  title: `Install Medusa UI in Standalone Projects`,
+}
+
+# {metadata.title}
+
+In this guide, you'll learn how to install and use Medusa UI in a standalone project.
+
+Medusa UI is a React UI library that, while intended for use within Medusa projects, can also be used in any React project.
+
+<Note>
+
+The icons package is installed independently from Medusa UI. Learn how to install it in the [Icons](../../icons/overview/page.mdx) guide.
+
+</Note>
+
+---
+
+## Medusa UI Compatibility
+
+To use Medusa UI in your standalone project, you must have:
+
+- React v18.3.1 or later (within the React 18 range) installed. The package's peer dependency requires `react@^18.3.1`, so React 19 is not officially supported yet. Most React 18-compatible frameworks and libraries, such as Next.js and Vite, satisfy this requirement.
+- [Tailwind CSS](https://tailwindcss.com/) v3.4.3 or later, or v4, installed. The components in Medusa UI are styled using Tailwind CSS, so you'll need to install it in your project as well.
+    - Since `@medusajs/ui-preset` v2.22.3, the preset supports both Tailwind CSS v3 and v4.
+
+---
+
+## Step 1: Install Medusa UI
+
+In your standalone project, install the Medusa UI package with the following command:
+
+```bash npm2yarn
+npm install @medusajs/ui
+```
+
+---
+
+## Step 2: Install UI Presets
+
+Medusa UI customizes Tailwind CSS classes to implement its design system, so you must also install the Medusa UI preset package.
+
+To install the Medusa UI preset, run the following command:
+
+```bash npm2yarn
+npm install @medusajs/ui-preset --save-dev
+```
+
+---
+
+## Step 3: Configure Tailwind CSS
+
+Next, you'll need to configure Tailwind CSS to use the Medusa UI preset and explicitly add the paths to the Medusa UI components as content files. The configurations differ based on your Tailwind CSS version.
+
+### Tailwind CSS v4 Configurations
+
+<Note title="Version Note">
+
+The CSS-first theme is available since `@medusajs/ui-preset` v2.22.3. In earlier versions, use the [Tailwind CSS v3 configurations](#tailwind-css-v3-configurations) with the `@config` directive instead.
+
+</Note>
+
+In Tailwind CSS v4, import the Medusa UI theme in the CSS file that imports Tailwind CSS, and add the path to the Medusa UI components with the `@source` directive:
+
+```css title="globals.css"
+@import "tailwindcss";
+@import "@medusajs/ui-preset/theme.css";
+@source "../node_modules/@medusajs/ui/dist";
+```
+
+The `@medusajs/ui-preset/theme.css` file includes the Medusa UI design tokens, colors, shadows, fonts, typography utilities, and animations. It also defines a `dark` variant that applies dark mode styles when an element or its ancestor has the `dark` class or the `data-mode="dark"` attribute.
+
+Make sure the path in the `@source` directive is relative to your CSS file. For example, if your CSS file is at `src/app/globals.css`, use `@source "../../node_modules/@medusajs/ui/dist";`.
+
+### Tailwind CSS v3 Configurations
+
+In Tailwind CSS v3, you need to add the following configurations to your `tailwind.config.js` or `tailwind.config.ts` file:
+
+1. Add the Medusa UI preset to the `presets` array.
+2. Ensure that the `content` field includes the path to the Medusa UI package.
+
+```js title="tailwind.config.js" highlights={[["5"]]}
+module.exports = {
+  presets: [require("@medusajs/ui-preset")],
+  content: [
+    // ...
+    "./node_modules/@medusajs/ui/dist/**/*.{js,jsx,ts,tsx}",
+  ],
+  // ...
+}
+```
+
+If your project is in a monorepo, you'll need to resolve the path to the `@medusajs/ui` package from the monorepo root:
+
+export const monorepoHighlights = [
+  ["3", "uiPath", "Resolve the UI package path from `node_modules`."],
+  ["13"]
+]
+
+```tsx title="tailwind.config.js" highlights={monorepoHighlights}
+const path = require("path")
+
+const uiPath = path.resolve(
+  require.resolve("@medusajs/ui"),
+  "../..",
+  "\*_/_.{js,jsx,ts,tsx}"
+)
+
+module.exports = {
+  presets: [require("@medusajs/ui-preset")],
+  content: [
+    // ...
+    uiPath,
+  ],
+  // ...
+}
+
+```
+
+By default, the preset applies Medusa UI's dark mode styles based on the user's system preference. To apply them when an element has the `dark` class instead, set the `darkMode` field in your Tailwind CSS configurations to `"class"`.
+
+---
+
+## Step 4: Use Medusa UI in Standalone Projects
+
+You can now start building your application with Medusa UI.
+
+For example, you can use the `Button` in your custom components:
+
+```tsx
+import { Button } from "@medusajs/ui"
+
+export function ButtonDemo() {
+  return <Button>Button</Button>
+}
+```
+
+Refer to the documentation of each component to learn about its props and usage.
+
+---
+
+## Update UI Packages in Standalone Projects
+
+Medusa's design system packages, including `@medusajs/ui` and `@medusajs/ui-preset`, are versioned independently from other `@medusajs/*` packages. However, they're still released as part of Medusa's releases.
+
+So, to find the latest updates and breaking changes to any of these packages, refer to the [release notes in the Medusa GitHub repository](https://github.com/medusajs/medusa/releases).
+
+To update these packages in your standalone project, update their version in your `package.json` file and re-install dependencies. For example:
+
+```json title="package.json"
+{
+  "dependencies": {
+    "@medusajs/ui": "4.0.0",
+    "@medusajs/ui-preset": "4.0.0"
+  }
+}
+```

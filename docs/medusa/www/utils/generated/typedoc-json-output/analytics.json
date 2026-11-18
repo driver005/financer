@@ -1,0 +1,434 @@
+{
+	"schemaVersion": "2.0",
+	"id": 67637,
+	"name": "analytics",
+	"variant": "project",
+	"kind": 1,
+	"flags": {},
+	"children": [
+		{
+			"id": 67638,
+			"name": "IAnalyticsModuleService",
+			"variant": "declaration",
+			"kind": 256,
+			"flags": {},
+			"children": [
+				{
+					"id": 67639,
+					"name": "getProvider",
+					"variant": "declaration",
+					"kind": 2048,
+					"flags": {},
+					"sources": [
+						{
+							"fileName": "analytics/service.ts",
+							"line": 16,
+							"character": 2,
+							"url": "https://github.com/medusajs/medusa/blob/2ed5d39e343a7794363a90c57d70e89f74a75fde/packages/core/types/src/analytics/service.ts#L16"
+						}
+					],
+					"signatures": [
+						{
+							"id": 67640,
+							"name": "getProvider",
+							"variant": "signature",
+							"kind": 4096,
+							"flags": {},
+							"comment": {
+								"summary": [
+									{
+										"kind": "text",
+										"text": "This method returns the service of the configured Analytics Module Provider in "
+									},
+									{
+										"kind": "code",
+										"text": "`medusa-config.ts`"
+									},
+									{
+										"kind": "text",
+										"text": ". This is useful\nif you want to execute custom methods defined in the provider's service or you need direct access to it."
+									}
+								],
+								"blockTags": [
+									{
+										"tag": "@returns",
+										"content": [
+											{
+												"kind": "text",
+												"text": "An instance of the Analytics Module Provider's service."
+											}
+										]
+									},
+									{
+										"tag": "@example",
+										"content": [
+											{
+												"kind": "code",
+												"text": "```ts\nconst postHogProviderService = analyticsModuleService.getProvider()\n// TODO: perform custom actions with the provider\n```"
+											}
+										]
+									}
+								]
+							},
+							"sources": [
+								{
+									"fileName": "analytics/service.ts",
+									"line": 16,
+									"character": 2,
+									"url": "https://github.com/medusajs/medusa/blob/2ed5d39e343a7794363a90c57d70e89f74a75fde/packages/core/types/src/analytics/service.ts#L16"
+								}
+							],
+							"type": {
+								"type": "reference",
+								"target": {
+									"packageName": "@medusajs/types",
+									"packagePath": "src/analytics/provider.ts",
+									"qualifiedName": "IAnalyticsProvider"
+								},
+								"name": "IAnalyticsProvider",
+								"package": "@medusajs/types"
+							}
+						}
+					]
+				},
+				{
+					"id": 67641,
+					"name": "track",
+					"variant": "declaration",
+					"kind": 2048,
+					"flags": {},
+					"sources": [
+						{
+							"fileName": "analytics/service.ts",
+							"line": 35,
+							"character": 2,
+							"url": "https://github.com/medusajs/medusa/blob/2ed5d39e343a7794363a90c57d70e89f74a75fde/packages/core/types/src/analytics/service.ts#L35"
+						}
+					],
+					"signatures": [
+						{
+							"id": 67642,
+							"name": "track",
+							"variant": "signature",
+							"kind": 4096,
+							"flags": {},
+							"comment": {
+								"summary": [
+									{
+										"kind": "text",
+										"text": "This method tracks an event in the analytics provider. The Analytics Module\nwill use the "
+									},
+									{
+										"kind": "code",
+										"text": "`track`"
+									},
+									{
+										"kind": "text",
+										"text": " method of the underlying provider configured in "
+									},
+									{
+										"kind": "code",
+										"text": "`medusa-config.ts`"
+									},
+									{
+										"kind": "text",
+										"text": " to track the event."
+									}
+								],
+								"blockTags": [
+									{
+										"tag": "@returns",
+										"content": [
+											{
+												"kind": "text",
+												"text": "Resolves when the event is tracked successfully."
+											}
+										]
+									},
+									{
+										"tag": "@example",
+										"content": [
+											{
+												"kind": "code",
+												"text": "```ts\nawait analyticsModuleService.track({\n  event: \"order_placed\",\n  properties: {\n    order_id: \"order_123\",\n    customer_id: \"customer_456\",\n    total: 100,\n  }\n})\n```"
+											}
+										]
+									}
+								]
+							},
+							"sources": [
+								{
+									"fileName": "analytics/service.ts",
+									"line": 35,
+									"character": 2,
+									"url": "https://github.com/medusajs/medusa/blob/2ed5d39e343a7794363a90c57d70e89f74a75fde/packages/core/types/src/analytics/service.ts#L35"
+								}
+							],
+							"parameters": [
+								{
+									"id": 67643,
+									"name": "data",
+									"variant": "param",
+									"kind": 32768,
+									"flags": {},
+									"comment": {
+										"summary": [
+											{
+												"kind": "text",
+												"text": "The event's details."
+											}
+										]
+									},
+									"type": {
+										"type": "reference",
+										"target": {
+											"packageName": "@medusajs/types",
+											"packagePath": "src/analytics/mutations.ts",
+											"qualifiedName": "TrackAnalyticsEventDTO"
+										},
+										"name": "TrackAnalyticsEventDTO",
+										"package": "@medusajs/types"
+									}
+								}
+							],
+							"type": {
+								"type": "reference",
+								"target": {
+									"packageName": "typescript",
+									"packagePath": "lib/lib.es5.d.ts",
+									"qualifiedName": "Promise"
+								},
+								"typeArguments": [
+									{
+										"type": "intrinsic",
+										"name": "void"
+									}
+								],
+								"name": "Promise",
+								"package": "typescript"
+							}
+						}
+					]
+				},
+				{
+					"id": 67644,
+					"name": "identify",
+					"variant": "declaration",
+					"kind": 2048,
+					"flags": {},
+					"sources": [
+						{
+							"fileName": "analytics/service.ts",
+							"line": 52,
+							"character": 2,
+							"url": "https://github.com/medusajs/medusa/blob/2ed5d39e343a7794363a90c57d70e89f74a75fde/packages/core/types/src/analytics/service.ts#L52"
+						}
+					],
+					"signatures": [
+						{
+							"id": 67645,
+							"name": "identify",
+							"variant": "signature",
+							"kind": 4096,
+							"flags": {},
+							"comment": {
+								"summary": [
+									{
+										"kind": "text",
+										"text": "This method identifies an actor or group in the analytics provider. The Analytics Module\nwill use the "
+									},
+									{
+										"kind": "code",
+										"text": "`identify`"
+									},
+									{
+										"kind": "text",
+										"text": " method of the underlying provider configured in "
+									},
+									{
+										"kind": "code",
+										"text": "`medusa-config.ts`"
+									},
+									{
+										"kind": "text",
+										"text": " to identify the actor or group."
+									}
+								],
+								"blockTags": [
+									{
+										"tag": "@returns",
+										"content": [
+											{
+												"kind": "text",
+												"text": "Resolves when the actor or group is identified successfully."
+											}
+										]
+									},
+									{
+										"tag": "@example",
+										"content": [
+											{
+												"kind": "code",
+												"text": "```ts\nawait analyticsModuleService.identify({\n  actor_id: \"123\",\n  properties: {\n    name: \"John Doe\"\n  }\n})\n```"
+											}
+										]
+									}
+								]
+							},
+							"sources": [
+								{
+									"fileName": "analytics/service.ts",
+									"line": 52,
+									"character": 2,
+									"url": "https://github.com/medusajs/medusa/blob/2ed5d39e343a7794363a90c57d70e89f74a75fde/packages/core/types/src/analytics/service.ts#L52"
+								}
+							],
+							"parameters": [
+								{
+									"id": 67646,
+									"name": "data",
+									"variant": "param",
+									"kind": 32768,
+									"flags": {},
+									"comment": {
+										"summary": [
+											{
+												"kind": "text",
+												"text": "The details of the actor or group."
+											}
+										]
+									},
+									"type": {
+										"type": "reference",
+										"target": {
+											"packageName": "@medusajs/types",
+											"packagePath": "src/analytics/mutations.ts",
+											"qualifiedName": "IdentifyAnalyticsEventDTO"
+										},
+										"name": "IdentifyAnalyticsEventDTO",
+										"package": "@medusajs/types"
+									}
+								}
+							],
+							"type": {
+								"type": "reference",
+								"target": {
+									"packageName": "typescript",
+									"packagePath": "lib/lib.es5.d.ts",
+									"qualifiedName": "Promise"
+								},
+								"typeArguments": [
+									{
+										"type": "intrinsic",
+										"name": "void"
+									}
+								],
+								"name": "Promise",
+								"package": "typescript"
+							}
+						}
+					]
+				}
+			],
+			"groups": [
+				{
+					"title": "Methods",
+					"children": [
+						67639,
+						67641,
+						67644
+					]
+				}
+			],
+			"sources": [
+				{
+					"fileName": "analytics/service.ts",
+					"line": 5,
+					"character": 17,
+					"url": "https://github.com/medusajs/medusa/blob/2ed5d39e343a7794363a90c57d70e89f74a75fde/packages/core/types/src/analytics/service.ts#L5"
+				}
+			],
+			"extendedTypes": [
+				{
+					"type": "reference",
+					"target": {
+						"packageName": "@medusajs/types",
+						"packagePath": "src/modules-sdk/index.ts",
+						"qualifiedName": "IModuleService"
+					},
+					"name": "IModuleService",
+					"package": "@medusajs/types"
+				}
+			]
+		}
+	],
+	"groups": [
+		{
+			"title": "Interfaces",
+			"children": [
+				67638
+			]
+		}
+	],
+	"packageName": "@medusajs/types",
+	"symbolIdMap": {
+		"67637": {
+			"packageName": "@medusajs/types",
+			"packagePath": "src/analytics/service.ts",
+			"qualifiedName": ""
+		},
+		"67638": {
+			"packageName": "@medusajs/types",
+			"packagePath": "src/analytics/service.ts",
+			"qualifiedName": "IAnalyticsModuleService"
+		},
+		"67639": {
+			"packageName": "@medusajs/types",
+			"packagePath": "src/analytics/service.ts",
+			"qualifiedName": "IAnalyticsModuleService.getProvider"
+		},
+		"67640": {
+			"packageName": "@medusajs/types",
+			"packagePath": "src/analytics/service.ts",
+			"qualifiedName": "IAnalyticsModuleService.getProvider"
+		},
+		"67641": {
+			"packageName": "@medusajs/types",
+			"packagePath": "src/analytics/service.ts",
+			"qualifiedName": "IAnalyticsModuleService.track"
+		},
+		"67642": {
+			"packageName": "@medusajs/types",
+			"packagePath": "src/analytics/service.ts",
+			"qualifiedName": "IAnalyticsModuleService.track"
+		},
+		"67643": {
+			"packageName": "@medusajs/types",
+			"packagePath": "src/analytics/service.ts",
+			"qualifiedName": "data"
+		},
+		"67644": {
+			"packageName": "@medusajs/types",
+			"packagePath": "src/analytics/service.ts",
+			"qualifiedName": "IAnalyticsModuleService.identify"
+		},
+		"67645": {
+			"packageName": "@medusajs/types",
+			"packagePath": "src/analytics/service.ts",
+			"qualifiedName": "IAnalyticsModuleService.identify"
+		},
+		"67646": {
+			"packageName": "@medusajs/types",
+			"packagePath": "src/analytics/service.ts",
+			"qualifiedName": "data"
+		}
+	},
+	"files": {
+		"entries": {
+			"1": "../../../../packages/core/types/src/analytics/service.ts"
+		},
+		"reflections": {
+			"1": 67637
+		}
+	}
+}

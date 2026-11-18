@@ -1,0 +1,99 @@
+{
+  "name": "Dompetku – Setup Bot Commands",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "919b6fda-c329-412e-907d-e12fb8616ad5",
+      "name": "Jalankan manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/setMyCommands",
+        "options": {
+          "timeout": 10000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"commands\": [{\"command\": \"hariini\", \"description\": \"Laporan hari ini\"}, {\"command\": \"kemarin\", \"description\": \"Laporan kemarin\"}, {\"command\": \"minggu\", \"description\": \"Laporan minggu ini\"}, {\"command\": \"bulan\", \"description\": \"Laporan bulan ini (opsional YYYY-MM)\"}, {\"command\": \"bulanlalu\", \"description\": \"Laporan bulan lalu\"}, {\"command\": \"pemasukan\", \"description\": \"Daftar pemasukan (hariini/minggu/bulan)\"}, {\"command\": \"pengeluaran\", \"description\": \"Daftar pengeluaran (hariini/minggu/bulan)\"}, {\"command\": \"saldo\", \"description\": \"Saldo semua akun\"}, {\"command\": \"paylater\", \"description\": \"Paylater, cicilan & hutang\"}, {\"command\": \"langganan\", \"description\": \"Langganan aktif & tagihan\"}, {\"command\": \"tagihan\", \"description\": \"Tagihan jatuh tempo (opsional jumlah hari)\"}, {\"command\": \"budget\", \"description\": \"Pemakaian budget bulan ini\"}, {\"command\": \"piutang\", \"description\": \"Piutang yang belum lunas\"}, {\"command\": \"bayar\", \"description\": \"Catat bayar langganan/cicilan: /bayar netflix\"}, {\"command\": \"tarik\", \"description\": \"Tarik tunai: /tarik 500rb dari BCA\"}, {\"command\": \"undo\", \"description\": \"Hapus transaksi terakhir dari bot\"}, {\"command\": \"help\", \"description\": \"Bantuan\"}]}"
+      },
+      "id": "259167ad-83ce-4952-8a30-7d8667f786fd",
+      "name": "setMyCommands",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getWebhookInfo",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "cea6fa55-b966-41a6-9f8c-80257fa3daba",
+      "name": "getWebhookInfo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ⚙️ One-time setup\nRegisters the `/` command menu in Telegram, then shows the webhook info so you can confirm the Telegram Trigger is installed (activate workflow 01 first).\nEnv: `TELEGRAM_BOT_TOKEN`. Run it manually with *Test workflow*.",
+        "height": 180,
+        "width": 600,
+        "color": "5"
+      },
+      "id": "b8b592fb-13a7-45f9-a99a-1d3bd80511c6",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -220
+      ]
+    }
+  ],
+  "connections": {
+    "Jalankan manual": {
+      "main": [
+        [
+          {
+            "node": "setMyCommands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setMyCommands": {
+      "main": [
+        [
+          {
+            "node": "getWebhookInfo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "tags": []
+}

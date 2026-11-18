@@ -11,11 +11,13 @@ export const spacing = {
 
 export type SpacingKey = keyof typeof spacing;
 
-/** The named steps: 2xs 2, xs 4, sm 8, md 12, lg 16, xl 24, 2xl 32, 3xl 48, 4xl 64. */
+/** The named steps: 2xs 2, xs 4, snug 6, sm 8, md 12, lg 16, xl 24, 2xl 32, 3xl 48, 4xl 64. */
 export const space = {
   none: spacing[0],
   "2xs": spacing[0.5],
   xs: spacing[1],
+  /** Between xs and sm: the vertical padding of dense pills and rows. */
+  snug: spacing[1.5],
   sm: spacing[2],
   md: spacing[3],
   lg: spacing[4],

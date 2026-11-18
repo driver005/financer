@@ -1,0 +1,109 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gap/gap.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hugeicons/styles/stroke_rounded.dart';
+import 'package:pockaw/core/components/buttons/small_button.dart';
+import 'package:pockaw/core/constants/app_colors.dart';
+import 'package:pockaw/core/constants/app_radius.dart';
+import 'package:pockaw/core/constants/app_spacing.dart';
+import 'package:pockaw/core/constants/app_text_styles.dart';
+import 'package:pockaw/core/extensions/double_extension.dart';
+import 'package:pockaw/core/extensions/text_style_extensions.dart';
+import 'package:pockaw/core/router/routes.dart';
+import 'package:pockaw/features/transaction/data/model/transaction_model.dart';
+import 'package:pockaw/features/wallet/data/model/wallet_model.dart';
+import 'package:pockaw/features/wallet/riverpod/wallet_providers.dart';
+
+class TransactionSummaryCard extends ConsumerWidget {
+  final List<TransactionModel> transactions;
+  const TransactionSummaryCard({super.key, required this.transactions});
+
+  @override
+  Widget build(BuildContext context, ref) {
+    final currency = ref
+        .read(activeWalletProvider)
+        .value
+        ?.currencyByIsoCode(ref)
+        .symbol;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.spacing16),
+      padding: const EdgeInsets.all(AppSpacing.spacing12),
+      decoration: BoxDecoration(
+        color: context.secondaryBackground,
+        border: Border.all(color: context.secondaryBorderLighter),
+        borderRadius: BorderRadius.circular(AppRadius.radius12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Earning', style: AppTextStyles.body3),
+              Expanded(
+                child: Text(
+                  '$currency ${transactions.totalIncome.toPriceFormat()}',
+                  textAlign: TextAlign.end,
+                  style: AppTextStyles.numericMedium.extraBold.copyWith(
+                    color: context.incomeText,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Gap(AppSpacing.spacing4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Spending', style: AppTextStyles.body3),
+              Expanded(
+                child: Text(
+                  '- $currency ${transactions.totalExpenses.toPriceFormat()}',
+                  textAlign: TextAlign.end,
+                  style: AppTextStyles.numericMedium.extraBold.copyWith(
+                    color: context.expenseText,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Divider(color: context.breakLineColor, thickness: 1, height: 9),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total',
+                style: AppTextStyles.body3.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  '$currency ${transactions.total.toPriceFormat()}',
+                  textAlign: TextAlign.end,
+                  style: AppTextStyles.numericMedium.extraBold,
+                ),
+              ),
+            ],
+          ),
+          const Gap(AppSpacing.spacing4),
+          SmallButton(
+            label: 'View full report',
+            backgroundColor: context.purpleBackground,
+            borderColor: context.purpleButtonBorder,
+            foregroundColor: context.secondaryText,
+            labelTextStyle: AppTextStyles.body5,
+            suffixIcon: HugeIconsStrokeRounded.arrowRight01,
+            onTap: () => context.push(
+              Routes.basicMonthlyReports,
+              extra: transactions.first.date,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

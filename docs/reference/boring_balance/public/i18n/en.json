@@ -1,0 +1,1723 @@
+{
+  "common": {
+    "actions": "Actions",
+    "titleBar": "Application title bar",
+    "cancel": "Cancel",
+    "yes": "Yes",
+    "no": "No",
+    "labels": {
+      "name": "Name",
+      "type": "Type",
+      "description": "Description",
+      "color": "Color",
+      "icon": "Icon",
+      "date": "Date",
+      "settled": "Paid",
+      "account": "Account",
+      "category": "Category",
+      "amount": "Amount",
+      "from": "From",
+      "to": "To",
+      "fromAccount": "From account",
+      "toAccount": "To account",
+      "title": "Title",
+      "startDate": "Start date",
+      "plan": "Recurring transaction",
+      "schedule": "Schedule",
+      "template": "Template",
+      "occurrences": "Occurrences",
+      "frequencyUnit": "Frequency unit",
+      "monthPolicy": "If the day is not in the month",
+      "year": "Year",
+      "archived": "Archived",
+      "frequency": "Frequency"
+    },
+    "placeholders": {
+      "selectType": "Select type",
+      "selectColor": "Select color",
+      "selectIcon": "Select icon",
+      "pickDate": "Pick a date",
+      "selectAccount": "Select account",
+      "selectCategory": "Select category",
+      "optionalDescription": "Optional description",
+      "transactionDescription": "Transaction description"
+    },
+    "filters": {
+      "fields": {
+        "dateFrom": "From date",
+        "dateTo": "To date",
+        "amountFrom": "Amount from",
+        "amountTo": "Amount to",
+        "settled": "Payment status",
+        "categoryType": "Category type",
+        "category": "Category",
+        "account": "Account"
+      },
+      "placeholders": {
+        "dateFrom": "From date",
+        "dateTo": "To date",
+        "amountFrom": "Minimum amount",
+        "amountTo": "Maximum amount",
+        "settled": "Any status",
+        "categoryType": "Any type",
+        "category": "Select a category",
+        "account": "Select an account",
+        "searchCategory": "Search categories...",
+        "searchAccount": "Search accounts..."
+      },
+      "options": {
+        "settled": {
+          "any": "Any status",
+          "yes": "Paid",
+          "no": "Pending"
+        },
+        "categoryType": {
+          "any": "Any type"
+        }
+      },
+      "actions": {
+        "apply": "Apply filters",
+        "currentMonth": "Current month",
+        "reset": "Reset filters",
+        "cancel": "Cancel"
+      }
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "counter": "Page {{current}} of {{total}}",
+      "rowsPerPage": "Rows per page",
+      "tooltips": {
+        "firstPage": "Go to first page",
+        "previousPage": "Go to previous page",
+        "nextPage": "Go to next page",
+        "lastPage": "Go to last page",
+        "toPage": "Go to page {{page}}",
+        "toLastPage": "Go to page {{page}}, the last page"
+      }
+    },
+    "calendar": {
+      "actions": {
+        "previousMonth": "Previous month",
+        "nextMonth": "Next month"
+      },
+      "aria": {
+        "chooseDate": "Choose date",
+        "today": "Today",
+        "selected": "Selected",
+        "rangeStart": "Range start",
+        "rangeEnd": "Range end",
+        "inRange": "In range",
+        "outsideMonth": "Outside month",
+        "disabled": "Disabled"
+      }
+    },
+    "skipToContent": "Skip to main content",
+    "errors": {
+      "fixHighlightedFields": "Fix the highlighted fields to continue."
+    },
+    "close": "Close",
+    "selectAllRows": "Select all rows",
+    "selectRow": "Select row",
+    "search": "Search"
+  },
+  "nav": {
+    "sections": {
+      "setup": "Manage",
+      "plan": "Plan"
+    },
+    "items": {
+      "overview": "Overview",
+      "transactions": "Transactions",
+      "breakdown": "Breakdown",
+      "compare": "Compare",
+      "budget": "Budget",
+      "accounts": "Accounts",
+      "categories": "Categories",
+      "recurringEvents": "Recurring transactions",
+      "settings": "Settings"
+    }
+  },
+  "settings": {
+    "sections": {
+      "general": {
+        "title": "General",
+        "description": "Set how the app looks and how money amounts appear across your workspace."
+      },
+      "about": {
+        "title": "About",
+        "description": "See app details, privacy basics, and the project link in one place."
+      },
+      "data": {
+        "title": "Data & Storage",
+        "description": "Reset and manage your local data."
+      }
+    },
+    "data": {
+      "settings_problem": {
+        "label": "Your settings file was damaged",
+        "description": "Boring Balance could not read its settings file and started from default settings. Your financial data is not affected, but preferences such as backup and sync folders may need to be set again.",
+        "kept_as": "A copy of the damaged file was kept as {{file}} in the app data folder.",
+        "not_moved": "The damaged file could not be moved aside, so it was left untouched and settings changes are blocked until it is repaired.",
+        "dismiss": "Dismiss"
+      },
+      "clear_financial": {
+        "label": "Delete all financial data",
+        "description": "Permanently deletes all accounts, transactions, transfers, budgets, valuation snapshots, recurring transactions and the categories you created. Your preferences are kept.",
+        "button": "Delete data",
+        "confirm": {
+          "title": "Delete all financial data?",
+          "body": "This will permanently delete all accounts, transactions, transfers, budgets, valuation snapshots, recurring transactions and the categories you created. Your preferences and backup files are kept. This cannot be undone.",
+          "cta": "Delete all financial data"
+        },
+        "success": "All financial data was deleted.",
+        "error": "Couldn't clear your data. Nothing was deleted. Try again."
+      },
+      "factory_reset": {
+        "label": "Reset the app",
+        "description": "Deletes the entire database and resets the app to its initial state. Your backups are not affected.",
+        "button": "Reset app",
+        "confirm": {
+          "title": "Delete everything and reset Boring Balance?",
+          "body": "This will delete the entire database and return the app to its initial state. Your backup files will not be affected. This cannot be undone.",
+          "input_placeholder": "Type RESET to confirm",
+          "cta": "Delete everything and reset"
+        },
+        "error": "Couldn't reset the app. Restart it and check that your data is still there, then try again."
+      }
+    },
+    "general": {
+      "appearanceGroupTitle": "Appearance",
+      "currencyGroupTitle": "Currency",
+      "cards": {
+        "theme": {
+          "fieldLabel": "Theme mode",
+          "options": {
+            "system": "System",
+            "light": "Light",
+            "dark": "Dark"
+          }
+        },
+        "language": {
+          "fieldLabel": "App language"
+        },
+        "dashboardValuationMode": {
+          "description": "Choose what net worth and allocation on the Overview are based on. With valuation snapshots, accounts that have one use their latest recorded value. With transactions only, every balance is calculated from transactions.",
+          "fieldLabel": "Net worth is based on",
+          "options": {
+            "include": "Valuation snapshots when available",
+            "exclude": "Transactions only"
+          }
+        },
+        "currency": {
+          "fieldLabel": "Currency symbol",
+          "customLabel": "Custom symbol",
+          "customPlaceholder": "CHF",
+          "options": {
+            "custom": "Custom"
+          }
+        },
+        "numberFormat": {
+          "fieldLabel": "Format",
+          "previewLabel": "Preview",
+          "options": {
+            "US": "1,234,567.89",
+            "EU_DOT": "1.234.567,89",
+            "EU_SPACE": "1 234 567,89"
+          }
+        }
+      }
+    },
+    "about": {
+      "appVersionLabel": "App version",
+      "appVersionUnavailable": "Not available in this build",
+      "copy": {
+        "paragraph1": "Hi. If you ended up here, you’re probably the kind of person this app was built for.",
+        "paragraph2": "I created Boring Balance after years of moving between apps, Excel files, and Google Sheets without ever finding something that truly fit my needs.",
+        "paragraph3": "Most tools were either too complicated, full of ads and tracking, or locked behind subscriptions.",
+        "paragraph4": "So I built my own.",
+        "paragraph5": "Boring Balance is meant to be simple, private, and completely under your control. Your data stays yours. There are no ads, no tracking, and no features designed to push you into paying just to see your own finances.",
+        "paragraph6": "I believe personal finance should be something you actively manage. Taking a moment to check your balances, review your expenses, and keep things aligned is the only way to truly understand where your money goes.",
+        "paragraph7": "This app provides a few core tools to support that: tracking accounts and transactions, budgeting, and planning recurring transactions.",
+        "paragraph8": "Nothing here is forced. Use as much or as little of it as you want.",
+        "paragraph9": "Welcome to this boring little place — and remember to keep your balance safe with a backup from time to time 😉"
+      },
+      "openSourceCta": "Open on GitHub",
+      "checkForUpdates": "Check for updates",
+      "upToDate": "You're up to date (v{{version}})",
+      "updateCheckFailed": "Couldn't check for updates. Check your connection and try again.",
+      "footer": "Made with ❤️ by {{authorName}}"
+    },
+    "navLabel": "Settings sections"
+  },
+  "dataBackups": {
+    "sections": {
+      "backups": {
+        "title": "Backups"
+      },
+      "sync": {
+        "title": "Sync"
+      },
+      "exportImport": {
+        "title": "Import / Export"
+      }
+    },
+    "backups": {
+      "destination": {
+        "title": "Backup destination",
+        "description": "Turn on backups and choose where recovery copies should be saved."
+      },
+      "form": {
+        "enabled": "Enable backups",
+        "folderPath": "Backup folder",
+        "folderNotSet": "Not set"
+      },
+      "disabledInfo": "Turn on backups to create recovery copies automatically, run one on demand, and keep restore points ready.",
+      "warnings": {
+        "missingFolder": "Backups are enabled but no backup folder is configured yet."
+      },
+      "autoBackup": {
+        "title": "Automatic backups",
+        "onQuit": "Run backup on app quit",
+        "intervalMin": "Back up automatically",
+        "retentionCount": "Backups to keep",
+        "intervalOptions": {
+          "off": "Off",
+          "minutes30": "Every 30 minutes",
+          "minutes60": "Every 60 minutes",
+          "minutes120": "Every 120 minutes"
+        }
+      },
+      "manual": {
+        "title": "Manual backup and status"
+      },
+      "actions": {
+        "chooseFolder": "Choose folder",
+        "backupNow": "Backup now",
+        "refreshList": "Refresh list",
+        "restoreFromFile": "Restore from file…",
+        "restore": "Restore",
+        "delete": "Delete"
+      },
+      "status": {
+        "lastBackupAt": "Last backup",
+        "current": "Status",
+        "lastFile": "Last backup file",
+        "never": "Never",
+        "none": "None",
+        "idle": "Idle",
+        "running": "Running",
+        "ok": "Completed",
+        "error": "Failed"
+      },
+      "list": {
+        "title": "Available backups",
+        "loading": "Refreshing backups list...",
+        "empty": "No backups here yet. Run a backup to create your first restore point.",
+        "columns": {
+          "date": "Date",
+          "file": "File",
+          "size": "Size"
+        }
+      },
+      "restoreAlert": {
+        "title": "Restore this backup?",
+        "description": "Replace your current data with the backup \"{{fileName}}\"? Anything added since that backup will be lost.",
+        "actions": {
+          "restore": "Replace with this backup",
+          "cancel": "Cancel"
+        }
+      },
+      "deleteAlert": {
+        "title": "Delete this backup?",
+        "description": "Delete \"{{fileName}}\" from your backup folder? You will not be able to restore from it afterward.",
+        "actions": {
+          "delete": "Delete backup",
+          "cancel": "Cancel"
+        }
+      }
+    },
+    "sync": {
+      "overview": {
+        "title": "External folder sync",
+        "description": "Use a folder you already keep in sync between devices, such as a cloud drive, NAS, or USB drive.",
+        "warning": "Choose a sync folder you trust. The app keeps working from your device and uses the shared folder only to exchange copies safely.",
+        "enabled": "Enable sync",
+        "chooseFolder": "Choose folder location",
+        "repoPath": "Sync folder",
+        "notConnected": "Not connected yet",
+        "enableHints": {
+          "turnOnFirst": "Turn on sync first, then choose the folder you want to use across devices.",
+          "ready": "Sync is ready to connect. Choose the folder you want this device to use."
+        }
+      },
+      "setup": {
+        "title": "Connect a sync folder",
+        "description": "Choose where the sync folder should live, then create a new sync folder or join an existing one.",
+        "actions": {
+          "create": "Create new sync folder",
+          "attach": "Join existing sync folder"
+        },
+        "status": {
+          "checking": "Checking the selected folder...",
+          "chooseFirst": "Choose a folder location to continue.",
+          "exists": "A sync folder already exists here. Use Join if another device already uses it.",
+          "missing": "No sync folder was found here yet. Use Create if this is your first synced device.",
+          "repoPathPending": "The sync folder will appear here after the folder location is checked.",
+          "waitingForFolder": "Choose a folder location to continue."
+        },
+        "actionHelp": "Create starts sync from this device. Join connects to a sync folder that another device already created."
+      },
+      "disabledInfo": "Turn on sync to choose a shared folder and connect this device.",
+      "autoSync": {
+        "title": "Automatic sync",
+        "autoPullIntervalMin": "Get updates automatically",
+        "autoPushIntervalMin": "Send changes automatically",
+        "autoPushOnQuit": "Send changes when the app closes",
+        "autoPushOnQuitHint": "When enabled, the app shares your latest changes before you close it.",
+        "intervalOptions": {
+          "off": "Off",
+          "minutes5": "Every 5 minutes",
+          "minutes10": "Every 10 minutes",
+          "minutes15": "Every 15 minutes",
+          "minutes30": "Every 30 minutes",
+          "minutes60": "Every 60 minutes"
+        }
+      },
+      "manual": {
+        "title": "Manual sync",
+        "tooltips": {
+          "syncNow": "Checks for newer shared data first, then shares this device's updates, if any.",
+          "pullNow": "Brings in newer shared data without sending this device's changes.",
+          "pushNow": "Shares this device's latest changes without checking for newer shared data first."
+        },
+        "hints": {
+          "syncNow": "Sync now is the safest full check: it looks for newer shared changes, then shares yours if needed.",
+          "pullNow": "Get updates only brings newer shared data to this device.",
+          "pushNow": "Send my changes only shares this device's current changes to the shared folder."
+        }
+      },
+      "actions": {
+        "syncNow": "Sync now",
+        "pullNow": "Get updates",
+        "pushNow": "Send my changes"
+      },
+      "status": {
+        "title": "Status",
+        "rows": {
+          "current": "Current status",
+          "lastPull": "Last update received",
+          "lastPush": "Last changes sent"
+        },
+        "values": {
+          "never": "Never",
+          "noLastPull": "No updates received yet",
+          "idle": "Idle",
+          "running": "Running",
+          "ok": "Completed",
+          "error": "Failed",
+          "conflict": "Conflict"
+        }
+      },
+      "alerts": {
+        "lastErrorTitle": "Last error",
+        "conflictTitle": "Conflict detected",
+        "localCopyPath": "Local copy saved at",
+        "remoteSnapshotPath": "Shared copy restored from",
+        "conflictHint": "Both versions were kept. Compare the dates in Available sync files and use the one you want to continue with."
+      },
+      "files": {
+        "title": "Available sync files",
+        "description": "Review shared sync files, choose the one to use as the default, or remove files you no longer need.",
+        "loading": "Refreshing sync files list...",
+        "empty": "No sync files are available yet. Send your changes to create the first one.",
+        "columns": {
+          "date": "Date",
+          "file": "File",
+          "device": "Device",
+          "changeCounter": "Revision",
+          "size": "Size",
+          "default": "Default"
+        },
+        "actions": {
+          "refresh": "Refresh list",
+          "setDefault": "Use as default",
+          "delete": "Delete"
+        },
+        "setDefaultAlert": {
+          "title": "Use this sync file as default?",
+          "description": "Use \"{{fileName}}\" as the default sync file? This replaces the data on this device with its contents.",
+          "actions": {
+            "setDefault": "Replace data and use",
+            "cancel": "Cancel"
+          }
+        },
+        "deleteAlert": {
+          "title": "Delete this sync file?",
+          "description": "Delete \"{{fileName}}\" from the sync folder? This cannot be undone.",
+          "actions": {
+            "delete": "Delete sync file",
+            "cancel": "Cancel"
+          }
+        }
+      },
+      "attachAlert": {
+        "title": "Join the existing sync folder?",
+        "description": "If the shared folder has newer data, connecting replaces the data on this device with it.",
+        "actions": {
+          "attach": "Join",
+          "cancel": "Cancel"
+        }
+      }
+    },
+    "exportImport": {
+      "overview": {
+        "description": "Keep a clear Excel copy of your data, or start from the official template when you want to bring information in safely."
+      },
+      "export": {
+        "title": "Export",
+        "lastExportLabel": "Last export"
+      },
+      "import": {
+        "title": "Import from Excel template",
+        "warning": "Imports are validated first. If errors exist, nothing is imported.",
+        "selectedFileLabel": "Selected file",
+        "template": {
+          "title": "Import template",
+          "description": "Download the Excel template, fill it in at your pace, then come back here to import it.",
+          "messages": {
+            "success": "Template saved: {{fileName}}",
+            "error": "Couldn't save the import template. Try again."
+          }
+        },
+        "actions": {
+          "title": "Import data file"
+        },
+        "validation": {
+          "previewTitle": "Validation preview",
+          "previewDescription": "These rows are ready to be imported.",
+          "errorTitle": "Validation errors",
+          "errorDescription": "Fix the rows below and validate again before importing."
+        },
+        "summary": {
+          "accounts": "Accounts",
+          "categories": "Categories",
+          "transactions": "Transactions",
+          "transfers": "Transfers"
+        },
+        "errors": {
+          "tableTitle": "Import errors",
+          "tableDescription": "Each error points to the exact worksheet row that must be fixed.",
+          "empty": "No import errors.",
+          "columns": {
+            "sheet": "Sheet",
+            "row": "Row",
+            "column": "Column",
+            "message": "Message"
+          },
+          "count_one": "{{count}} error found",
+          "count_other": "{{count}} errors found"
+        },
+        "result": {
+          "title": "Last import result",
+          "description": "The app will reload after a successful import.",
+          "labels": {
+            "inserted": "Inserted",
+            "updated": "Updated",
+            "skipped": "Skipped"
+          }
+        },
+        "confirm": {
+          "title": "Import data from Excel?",
+          "description": "Accounts: {{accounts}}, categories: {{categories}}, transactions: {{transactions}}, transfers: {{transfers}}. Accounts and categories with the same name are updated. Nothing is deleted.",
+          "actions": {
+            "import": "Import data",
+            "cancel": "Cancel"
+          }
+        },
+        "messages": {
+          "fileRequired": "Select an Excel file first.",
+          "selectError": "Couldn't select an Excel file. Try again.",
+          "validateError": "Couldn't validate the selected Excel file. Try again.",
+          "importSuccess": "Import completed. Reloading app data...",
+          "importError": "Couldn't import the file. Nothing was imported. Try again."
+        }
+      },
+      "controls": {
+        "exportExcel": "Export to Excel",
+        "downloadTemplate": "Download template",
+        "selectFile": "Select Excel file",
+        "removeSelectedFile": "Remove file",
+        "validateImport": "Validate",
+        "importExcel": "Import"
+      },
+      "messages": {
+        "success": "Export completed: {{fileName}}",
+        "error": "Couldn't export the data. Try again."
+      }
+    },
+    "toasts": {
+      "backup": {
+        "loadSettingsFailed": "Couldn't load the backup settings. Try again.",
+        "updateSettingsFailed": "Couldn't update the backup settings. Try again.",
+        "loadStateFailed": "Couldn't load the backup state. Try again.",
+        "selectFolderFailed": "Couldn't select a backup folder. Try again.",
+        "loadListFailed": "Couldn't load the backups list. Try again.",
+        "selectFileFailed": "Couldn't select a backup file. Try again.",
+        "backupFailed": "Couldn't back up your data. Try again.",
+        "restoreFailed": "Couldn't restore the backup. Try again, or pick a different backup.",
+        "deleted": "Backup deleted.",
+        "deleteFailed": "Couldn't delete the backup. Try again.",
+        "completed": "Backup completed: {{fileName}}",
+        "restoreCompleted": "Restore completed. Reloading app data..."
+      },
+      "sync": {
+        "loadSettingsFailed": "Couldn't load the sync settings. Try again.",
+        "updateSettingsFailed": "Couldn't update the sync settings. Try again.",
+        "loadStateFailed": "Couldn't load the sync state. Try again.",
+        "checkNewerFailed": "Couldn't check for newer sync data. Try again.",
+        "selectFolderFailed": "Couldn't select a sync folder. Try again.",
+        "inspectFolderFailed": "Couldn't inspect the selected sync folder. Try again.",
+        "enabled": "Sync enabled.",
+        "enableFailed": "Couldn't turn on sync. Try again.",
+        "disabled": "Sync disabled.",
+        "disableFailed": "Couldn't turn off sync. Try again.",
+        "syncNothingChanged": "Sync check completed. Nothing changed.",
+        "syncFailed": "Couldn't sync. Check the sync folder and try again.",
+        "pullNothingNewer": "No newer shared data was found.",
+        "pullFailed": "Couldn't get updates from the sync folder. Try again.",
+        "pushNothingToPublish": "There were no changes to send.",
+        "pushFailed": "Couldn't send your changes to the sync folder. Try again.",
+        "loadSnapshotsFailed": "Couldn't load the sync files. Try again.",
+        "defaultFileUpdated": "Default sync file updated. Reloading app data...",
+        "selectDefaultFileFailed": "Couldn't select the default sync file. Try again.",
+        "fileDeleted": "Sync file deleted.",
+        "deleteFileFailed": "Couldn't delete the sync file. Try again.",
+        "pullCompleted": "Updates received.",
+        "pullCompletedWithId": "Updates received ({{snapshotId}})",
+        "pushCompleted": "Changes sent.",
+        "pushCompletedWithId": "Changes sent ({{snapshotId}})",
+        "conflictDetected": "Sync conflict detected. Review the details below."
+      }
+    }
+  },
+  "overview": {
+    "banners": {
+      "syncUpdateAvailable": {
+        "title": "Newer sync data is available",
+        "body": "A newer version was found in your sync folder. Sync now to use the latest shared data."
+      },
+      "snapshotsOutdated": {
+        "title": "Snapshots may be outdated",
+        "body_one": "Your latest snapshot is {{count}} day old. Update your snapshots to keep net worth accurate.",
+        "body_other": "Your latest snapshot is {{count}} days old. Update your snapshots to keep net worth accurate."
+      }
+    },
+    "errors": {
+      "summaryLoad": "Couldn't load summary data. Restart the app and try again."
+    },
+    "pie": {
+      "others": "Others"
+    },
+    "cards": {
+      "netWorth": {
+        "summaryTitle": "Net worth",
+        "allocationTitle": "Allocation",
+        "tooltips": {
+          "ledgerBalance": "Balance from transactions",
+          "marketValue": "Latest recorded value"
+        },
+        "total": "Total",
+        "liquidAssets": "Liquidity",
+        "investments": "Investments",
+        "snapshotBased": {
+          "today": "Snapshots updated today",
+          "daysAgo_one": "Based on snapshots ({{count}} day ago)",
+          "daysAgo_other": "Based on snapshots ({{count}} days ago)"
+        },
+        "receivables": "Receivables",
+        "payables": "Payables",
+        "totalAfterRP": "After receivables and payables",
+        "emptyDistribution": "No account balances to split yet. Add or update accounts to see the allocation.",
+        "emptyDistributionNoAccounts": "No accounts yet. Add your first account to see the allocation."
+      },
+      "monthlyTotals": {
+        "title": "Income, expenses and net cash flow",
+        "segmentTitle": "Income & expenses",
+        "descriptionCurrentYear": "Compare income, expenses, and net cash flow month by month across {{year}}.",
+        "loading": "Loading analytics...",
+        "loadFailedWithError": "Couldn't load analytics. Restart the app and try again.",
+        "empty": "No analytics data available for the selected filters.",
+        "series": {
+          "incomes": "Income",
+          "expenses": "Expenses",
+          "netCashflow": "Net cash flow"
+        }
+      },
+      "activity": {
+        "title": "Activity",
+        "latestTransactions": "Latest {{count}} transactions this month so you can review new spending and income quickly.",
+        "latestTransfers": "Latest {{count}} transfers this month so you can verify money moved between accounts.",
+        "loadFailed": "Couldn't load activity. Restart the app and try again."
+      },
+      "recentTransactions": {
+        "empty": "No transactions this month yet. Add one to start building your activity feed.",
+        "tooltips": {
+          "settled": "Paid",
+          "settle": "Mark as paid",
+          "unsettled": "Pending",
+          "unsettle": "Mark as pending"
+        },
+        "actions": {
+          "goToTransactionsPage": "All transactions",
+          "goToTransfersPage": "All transfers"
+        },
+        "unknownAccount": "Unknown account",
+        "unknownCategory": "Unknown category"
+      },
+      "moneyFlowSankey": {
+        "title": "Money flow",
+        "loading": "Loading money flow...",
+        "loadFailedWithError": "Couldn't load money flow. Restart the app and try again.",
+        "empty": "No money flow for this month yet. Add transactions to see where money moved.",
+        "tooltips": {
+          "actualNetCashflow": "Actual net cash flow"
+        },
+        "nodes": {
+          "incomes": "Income",
+          "expenses": "Expenses",
+          "savings": "Savings",
+          "investments": "Investments",
+          "crypto": "Crypto",
+          "netCashflow": "Net cash flow",
+          "priorBalances": "Carried over from earlier months",
+          "unused": "Left over",
+          "otherExpenses": "Other expenses"
+        }
+      }
+    },
+    "gettingStarted": {
+      "title": "Get started",
+      "dismiss": "Hide checklist",
+      "done": "Done",
+      "steps": {
+        "account": {
+          "title": "Add an account",
+          "description": "Accounts hold your money, such as a bank account or cash.",
+          "action": "Add account"
+        },
+        "transaction": {
+          "title": "Add your first transaction",
+          "description": "Record an expense or income to see it in your reports.",
+          "action": "Add transaction"
+        }
+      }
+    }
+  },
+  "breakdown": {
+    "toolbar": {
+      "selectYear": "Select year"
+    },
+    "averageMode": {
+      "label": "Use elapsed months for averages",
+      "hint": "Turn this on to compare against the months that have happened so far instead of averaging across the full year."
+    },
+    "sectionYear": "Year {{year}}",
+    "moneyFlowOptions": {
+      "showAllocationTargets": {
+        "label": "Show savings, brokerage and crypto flows",
+        "hint": "Hide these to focus on core income versus expenses, or show them to include savings and investment moves."
+      }
+    },
+    "metrics": {
+      "yearTotal": "Year total",
+      "avgPerMonth": "Monthly average"
+    },
+    "cards": {
+      "moneyFlow": {
+        "titleYear": "Year {{year}}",
+        "empty": "No money flow for this year yet. Add transactions to see how money moved over time."
+      },
+      "monthlyTrend": {
+        "title": "{{label}} by month"
+      },
+      "monthlyByCategory": {
+        "title": "{{label}} by category",
+        "summaryTitle": "Category totals and averages"
+      }
+    }
+  },
+  "compare": {
+    "loadingTitle": "Preparing comparison",
+    "loadingDescription": "Gathering both months so you can compare them side by side.",
+    "loadFailedWithError": "Couldn't load comparison analytics. Restart the app and try again.",
+    "empty": "No comparison data for these months yet. Record activity in both months to compare them here.",
+    "selectors": {
+      "left": {
+        "title": "Month 1"
+      },
+      "right": {
+        "title": "Month 2"
+      },
+      "year": "Year",
+      "month": "Month"
+    },
+    "metrics": {
+      "delta": "Delta"
+    },
+    "cards": {
+      "summary": {
+        "title": "Comparison summary"
+      },
+      "radar": {
+        "title": "Radar comparison",
+        "empty": "No expense categories available for radar comparison."
+      },
+      "expensesByCategory": {
+        "title": "Expenses by category",
+        "empty": "No expense category totals for the selected months."
+      }
+    }
+  },
+  "category": {
+    "exclude": {
+      "name": "Not counted",
+      "description": "Doesn't count toward income, spending or budgets."
+    },
+    "transfer": {
+      "name": "Transfer",
+      "description": "Money moved between your own accounts."
+    },
+    "other_expense": {
+      "name": "Other expense",
+      "description": "Fallback category for uncategorized expenses."
+    },
+    "other_income": {
+      "name": "Other income",
+      "description": "Fallback category for uncategorized income."
+    },
+    "type": {
+      "income": "Income",
+      "expense": "Expense",
+      "exclude": "Not counted"
+    }
+  },
+  "account": {
+    "type": {
+      "cash": "Cash",
+      "bank": "Bank",
+      "savings": "Savings",
+      "brokerage": "Brokerage",
+      "crypto": "Crypto",
+      "credit": "Credit"
+    }
+  },
+  "accounts": {
+    "table": {
+      "emptyMessage": "No accounts yet. Add your first account to start tracking balances and transfers.",
+      "actions": {
+        "add": "Add account",
+        "viewDetails": "View account details",
+        "edit": "Edit account",
+        "archive": "Archive account",
+        "locked": "Locked account",
+        "manageArchived": "Manage archived"
+      }
+    },
+    "dialog": {
+      "add": {
+        "title": "Add account",
+        "description": "Create an account you can use in transactions, transfers, and net worth tracking.",
+        "placeholders": {
+          "name": "Account name",
+          "description": "Account description"
+        },
+        "actions": {
+          "cancel": "Cancel",
+          "create": "Create account"
+        },
+        "errors": {
+          "nameRequired": "Name is required.",
+          "nameMinLength": "Name must be at least 2 characters.",
+          "nameMaxLength": "Name must be at most 64 characters.",
+          "typeRequired": "Account type is required.",
+          "descriptionMaxLength": "Description must be at most 50 characters.",
+          "createFailed": "Couldn't create the account. Try again."
+        }
+      },
+      "edit": {
+        "title": "Edit account",
+        "description": "Update how this account appears and where you use it across the app.",
+        "actions": {
+          "cancel": "Cancel",
+          "save": "Save changes"
+        },
+        "errors": {
+          "updateFailed": "Couldn't update the account. Try again."
+        }
+      }
+    },
+    "archivedDialog": {
+      "title": "Archived accounts",
+      "description": "Unarchive an account to use it in new transactions again.",
+      "emptyMessage": "There are no archived accounts.",
+      "actions": {
+        "unarchive": "Unarchive account"
+      },
+      "errors": {
+        "loadFailed": "Couldn't load archived accounts. Restart the app and try again."
+      }
+    },
+    "archiveAlert": {
+      "title": "Archive account?",
+      "description": "Archive \"{{name}}\"? It will be hidden from new transactions and transfers. Past transactions keep it, and you can unarchive it any time.",
+      "actions": {
+        "cancel": "Cancel",
+        "archive": "Archive account"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Account created.",
+      "createError": "Couldn't create the account. Try again.",
+      "updateSuccess": "Account updated.",
+      "updateError": "Couldn't update the account. Try again.",
+      "archiveSuccess": "Account archived.",
+      "archiveError": "Couldn't archive the account. Try again.",
+      "unarchiveSuccess": "Account unarchived.",
+      "unarchiveError": "Couldn't unarchive the account. Try again."
+    },
+    "errors": {
+      "loadFailed": "Couldn't load accounts. Restart the app and try again."
+    }
+  },
+  "categories": {
+    "table": {
+      "emptyMessage": "No categories yet. Add your first category to organize spending and income.",
+      "actions": {
+        "add": "Add category",
+        "edit": "Edit category",
+        "archive": "Archive category",
+        "locked": "Locked category",
+        "manageArchived": "Manage archived"
+      }
+    },
+    "dialog": {
+      "add": {
+        "title": "Add category",
+        "description": "Create a category to label transactions and group them in reports.",
+        "placeholders": {
+          "name": "Category name",
+          "description": "Category description"
+        },
+        "actions": {
+          "cancel": "Cancel",
+          "create": "Create category"
+        },
+        "errors": {
+          "nameRequired": "Name is required.",
+          "nameMinLength": "Name must be at least 2 characters.",
+          "nameMaxLength": "Name must be at most 64 characters.",
+          "descriptionMaxLength": "Description must be at most 50 characters.",
+          "typeRequired": "Category type is required.",
+          "createFailed": "Couldn't create the category. Try again."
+        }
+      },
+      "edit": {
+        "title": "Edit category",
+        "description": "Update this category's label, type, or visual marker.",
+        "actions": {
+          "cancel": "Cancel",
+          "save": "Save changes"
+        },
+        "errors": {
+          "updateFailed": "Couldn't update the category. Try again."
+        }
+      }
+    },
+    "archivedDialog": {
+      "title": "Archived categories",
+      "description": "Unarchive a category to use it in new transactions again.",
+      "emptyMessage": "There are no archived categories.",
+      "actions": {
+        "unarchive": "Unarchive category"
+      },
+      "errors": {
+        "loadFailed": "Couldn't load archived categories. Restart the app and try again."
+      }
+    },
+    "archiveAlert": {
+      "title": "Archive category?",
+      "description": "Archive \"{{name}}\"? It will be hidden from new transactions. Past transactions keep it, and you can unarchive it any time.",
+      "actions": {
+        "cancel": "Cancel",
+        "archive": "Archive category"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Category created.",
+      "createError": "Couldn't create the category. Try again.",
+      "updateSuccess": "Category updated.",
+      "updateError": "Couldn't update the category. Try again.",
+      "archiveSuccess": "Category archived.",
+      "archiveError": "Couldn't archive the category. Try again.",
+      "unarchiveSuccess": "Category unarchived.",
+      "unarchiveError": "Couldn't unarchive the category. Try again."
+    },
+    "errors": {
+      "loadFailed": "Couldn't load categories. Restart the app and try again."
+    }
+  },
+  "budgets": {
+    "view": {
+      "setup": "Budget setup",
+      "analysis": "Budget analysis"
+    },
+    "table": {
+      "emptyMessage": "No budgets yet. Add your first budget to start tracking category targets.",
+      "unknownCategory": "Unknown category",
+      "actions": {
+        "add": "Add budget",
+        "edit": "Edit budget",
+        "delete": "Delete budget"
+      }
+    },
+    "dialog": {
+      "add": {
+        "title": "Add budget",
+        "description": "Create a spending target for {{year}} so you can measure category spending against it.",
+        "actions": {
+          "cancel": "Cancel",
+          "create": "Create budget"
+        },
+        "errors": {
+          "categoryRequired": "Category is required.",
+          "amountRequired": "Amount is required.",
+          "amountInvalid": "Amount must be a positive number.",
+          "descriptionMaxLength": "Description must be at most 75 characters.",
+          "createFailed": "Couldn't create the budget. Try again."
+        }
+      },
+      "edit": {
+        "title": "Edit budget",
+        "description": "Update this category target for {{year}} as your plan changes.",
+        "actions": {
+          "cancel": "Cancel",
+          "save": "Save changes"
+        },
+        "errors": {
+          "updateFailed": "Couldn't update the budget. Try again."
+        }
+      }
+    },
+    "deleteAlert": {
+      "title": "Delete budget?",
+      "description": "Delete the budget for \"{{category}}\". You can add it again later if needed.",
+      "actions": {
+        "cancel": "Cancel",
+        "delete": "Delete budget"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Budget created.",
+      "createError": "Couldn't create the budget. Try again.",
+      "updateSuccess": "Budget updated.",
+      "updateError": "Couldn't update the budget. Try again.",
+      "deleteSuccess": "Budget deleted.",
+      "deleteError": "Couldn't delete the budget. Try again."
+    },
+    "analysis": {
+      "title": "Budget analysis",
+      "loading": "Loading budget analysis...",
+      "empty": "No budget analysis for {{year}} yet. Add budgets and matching transactions to compare plan versus actual.",
+      "series": {
+        "budget": "Budget",
+        "expenses": "Expenses"
+      },
+      "metrics": {
+        "totalBudget": "Total budget",
+        "totalExpenses": "Total expenses",
+        "delta": "Remaining budget",
+        "availablePercent": "Budget still available"
+      },
+      "chart": {
+        "title": "Budget vs expenses by category",
+        "description": "See which categories are on track, close to the limit, or already over budget."
+      },
+      "errors": {
+        "loadFailedWithError": "Couldn't load budget analysis. Restart the app and try again."
+      }
+    },
+    "errors": {
+      "loadFailed": "Couldn't load budgets. Restart the app and try again."
+    }
+  },
+  "transactions": {
+    "view": {
+      "commonTransactions": "Common transactions",
+      "transfers": "Transfers"
+    },
+    "transfers": {
+      "table": {
+        "description": "Transfers change where money sits, not your spending totals.",
+        "emptyMessage": "No transfers yet. Add one when you move money between your own accounts.",
+        "emptyNoAccountsMessage": "No accounts yet. Add your first account before creating transfers.",
+        "emptyNeedTwoAccountsMessage": "You need at least two accounts before creating transfers. Add another account to continue.",
+        "actions": {
+          "add": "Add transfer",
+          "filter": "Filter transfers",
+          "edit": "Edit transfer",
+          "delete": "Delete transfer"
+        }
+      },
+      "dialog": {
+        "add": {
+          "title": "Add transfer",
+          "description": "Move money between two of your accounts without affecting income or expense totals.",
+          "actions": {
+            "cancel": "Cancel",
+            "create": "Create transfer"
+          },
+          "errors": {
+            "dateRequired": "Date is required.",
+            "fromAccountRequired": "Source account is required.",
+            "toAccountRequired": "Destination account is required.",
+            "accountsMustDiffer": "Source and destination accounts must be different.",
+            "amountRequired": "Amount is required.",
+            "amountInvalid": "Amount must be a positive number.",
+            "descriptionMaxLength": "Description must be at most 75 characters.",
+            "createFailed": "Couldn't create the transfer. Try again."
+          }
+        },
+        "edit": {
+          "title": "Edit transfer",
+          "description": "Update this transfer so your account movement history stays accurate.",
+          "actions": {
+            "cancel": "Cancel",
+            "save": "Save changes"
+          },
+          "errors": {
+            "updateFailed": "Couldn't update the transfer. Try again."
+          }
+        }
+      },
+      "deleteAlert": {
+        "title": "Delete this transfer?",
+        "description": "You are about to delete: {{summary}}. This cannot be undone.",
+        "actions": {
+          "cancel": "Cancel",
+          "delete": "Delete transfer"
+        }
+      },
+      "filters": {
+        "title": "Filter transfers",
+        "description": "Narrow the transfer list to the dates, amounts, or accounts you want to review.",
+        "empty": {
+          "account": "No accounts yet. Add an account before filtering transfers."
+        }
+      },
+      "toasts": {
+        "createSuccess": "Transfer created.",
+        "createError": "Couldn't create the transfer. Try again.",
+        "updateSuccess": "Transfer updated.",
+        "updateError": "Couldn't update the transfer. Try again.",
+        "deleteSuccess": "Transfer deleted.",
+        "deleteError": "Couldn't delete the transfer. Try again."
+      },
+      "errors": {
+        "loadFailed": "Couldn't load transfers. Restart the app and try again."
+      }
+    },
+    "table": {
+      "description": "Review the income and expense entries that affect balances, budgets, and net cash flow.",
+      "emptyMessage": "No transactions yet. Add one to start tracking spending, income, and net cash flow.",
+      "emptyNoAccountsMessage": "No accounts yet. Add your first account before recording transactions.",
+      "actions": {
+        "add": "Add transaction",
+        "filter": "Filter transactions",
+        "edit": "Edit transaction",
+        "duplicate": "Duplicate transaction",
+        "delete": "Delete transaction"
+      }
+    },
+    "filters": {
+      "title": "Filter transactions",
+      "description": "Narrow the list to the dates, categories, accounts, or amounts you want to review.",
+      "empty": {
+        "category": "No categories yet. Add a category before filtering transactions.",
+        "account": "No accounts yet. Add an account before filtering transactions."
+      }
+    },
+    "dialog": {
+      "add": {
+        "title": "Add transaction",
+        "description": "Record an income or expense so it appears in balances, budgets, and reports.",
+        "actions": {
+          "cancel": "Cancel",
+          "create": "Create transaction"
+        },
+        "errors": {
+          "dateRequired": "Date is required.",
+          "accountRequired": "Account is required.",
+          "amountRequired": "Amount is required.",
+          "amountInvalid": "Amount must be a valid number.",
+          "categoryRequired": "Category is required.",
+          "descriptionMaxLength": "Description must be at most 75 characters.",
+          "createFailed": "Couldn't create the transaction. Try again."
+        }
+      },
+      "edit": {
+        "title": "Edit transaction",
+        "description": "Update the details behind this income or expense entry.",
+        "actions": {
+          "cancel": "Cancel",
+          "save": "Save changes"
+        },
+        "errors": {
+          "updateFailed": "Couldn't update the transaction. Try again."
+        }
+      },
+      "form": {
+        "amountHint": "Enter expenses as negative values, income or refunds as positive."
+      }
+    },
+    "deleteAlert": {
+      "title": "Delete this transaction?",
+      "description": "You are about to delete: {{summary}}. This cannot be undone.",
+      "actions": {
+        "cancel": "Cancel",
+        "delete": "Delete transaction"
+      }
+    },
+    "duplicateAlert": {
+      "title": "Duplicate transaction?",
+      "description": "Create a copy of this transaction so you can edit it instead of entering everything again.",
+      "actions": {
+        "cancel": "Cancel",
+        "duplicate": "Duplicate"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Transaction created.",
+      "createError": "Couldn't create the transaction. Try again.",
+      "updateSuccess": "Transaction updated.",
+      "updateError": "Couldn't update the transaction. Try again.",
+      "deleteSuccess": "Transaction deleted.",
+      "deleteError": "Couldn't delete the transaction. Try again.",
+      "duplicateSuccess": "Transaction duplicated.",
+      "duplicateError": "Couldn't duplicate the transaction. Try again."
+    },
+    "errors": {
+      "loadFailed": "Couldn't load transactions. Restart the app and try again."
+    }
+  },
+  "options": {
+    "colors": {
+      "none": "None",
+      "gray": "Gray",
+      "coral": "Coral",
+      "amber": "Amber",
+      "gold": "Gold",
+      "lime": "Lime",
+      "green": "Green",
+      "teal": "Teal",
+      "sky": "Sky",
+      "blue": "Blue",
+      "violet": "Violet",
+      "rose": "Rose",
+      "indigo": "Indigo",
+      "mint": "Mint",
+      "brown": "Brown",
+      "maroon": "Maroon"
+    },
+    "icons": {
+      "none": "None",
+      "blocked": "Blocked",
+      "transfer": "Transfer",
+      "circle": "Circle",
+      "income": "Income",
+      "expense": "Expense",
+      "tag": "Tag",
+      "tags": "Tags",
+      "money": "Money",
+      "coins": "Coins",
+      "handCoins": "Hand coins",
+      "wallet": "Wallet",
+      "piggyBank": "Piggy bank",
+      "vault": "Vault",
+      "bank": "Bank",
+      "shoppingCart": "Shopping cart",
+      "store": "Store",
+      "backpack": "Backpack",
+      "globe": "Globe",
+      "library": "Library",
+      "school": "School",
+      "graduationCap": "Graduation cap",
+      "gamepad": "Gaming",
+      "music": "Music",
+      "cassette": "Cassette tape",
+      "film": "Film",
+      "camera": "Camera",
+      "popcorn": "Popcorn",
+      "cigarette": "Cigarette",
+      "beer": "Beer",
+      "coffee": "Coffee",
+      "glassWater": "Glass water",
+      "martini": "Martini",
+      "techReceipt": "Receipt",
+      "badgePercent": "Percent",
+      "dumbbell": "Fitness",
+      "biceps": "Workout",
+      "ambulance": "Ambulance",
+      "hospital": "Hospital",
+      "pill": "Pill",
+      "cannabis": "Cannabis",
+      "mountainSnow": "Mountain",
+      "treePalm": "Palm tree",
+      "leaf": "Leaf",
+      "bird": "Bird",
+      "cat": "Cat",
+      "dog": "Dog",
+      "fish": "Fish",
+      "utensils": "Utensils",
+      "hamburger": "Burger",
+      "salad": "Salad",
+      "pizza": "Pizza",
+      "baby": "Baby",
+      "glasses": "Eyewear",
+      "gift": "Gift",
+      "tech": "Tech",
+      "laptop": "Laptop",
+      "home": "Home",
+      "shirt": "Shirt",
+      "armchair": "Armchair",
+      "lampDesk": "Desk lamp",
+      "frown": "Frown",
+      "smile": "Smile",
+      "heart": "Heart",
+      "star": "Star",
+      "sparkles": "Sparkles",
+      "creditCard": "Credit card",
+      "tractor": "Tractor",
+      "train": "Train",
+      "footprints": "Footprints",
+      "wrench": "Wrench",
+      "refrigerator": "Refrigerator",
+      "package": "Package",
+      "scissors": "Scissors",
+      "brain": "Brain",
+      "crypto": "Crypto",
+      "factory": "Factory",
+      "car": "Car",
+      "fuel": "Fuel",
+      "lightbulb": "Lightbulb",
+      "electricity": "Electricity",
+      "plug": "Plug",
+      "water": "Water",
+      "gas": "Gas",
+      "internet": "Internet",
+      "phone": "Phone",
+      "bus": "Bus",
+      "plane": "Plane",
+      "bike": "Bike",
+      "ship": "Ship",
+      "parking": "Parking",
+      "bed": "Bed",
+      "sofa": "Sofa",
+      "laundry": "Laundry",
+      "doctor": "Doctor",
+      "health": "Health",
+      "insurance": "Insurance",
+      "receipt": "Receipt",
+      "ticket": "Ticket",
+      "camping": "Camping",
+      "books": "Books",
+      "groceries": "Groceries",
+      "cooking": "Cooking",
+      "pets": "Pets",
+      "garden": "Garden",
+      "tools": "Tools",
+      "jewelry": "Jewelry",
+      "work": "Work",
+      "wine": "Wine",
+      "cake": "Cake",
+      "bath": "Bath",
+      "delivery": "Delivery",
+      "heating": "Heating",
+      "tv": "TV"
+    }
+  },
+  "header": {
+    "language": {
+      "options": {
+        "en": "English",
+        "es": "Español",
+        "it": "Italiano",
+        "fr": "Français",
+        "de": "Deutsch",
+        "uk": "Українська",
+        "zh": "中文"
+      }
+    },
+    "theme": {
+      "activateLight": "Activate light mode",
+      "activateDark": "Activate dark mode",
+      "lightMode": "Light mode",
+      "darkMode": "Dark mode"
+    }
+  },
+  "sidebar": {
+    "close": "Close sidebar",
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
+  },
+  "breadcrumb": {
+    "ariaLabel": "Breadcrumb"
+  },
+  "recurringEvents": {
+    "table": {
+      "emptyMessage": "No recurring transactions yet. Add one to automate repeated transactions or transfers.",
+      "emptyNoAccountsMessage": "No accounts yet. Add your first account before creating recurring transactions.",
+      "actions": {
+        "add": "Add recurring transaction",
+        "viewItems": "View scheduled items",
+        "edit": "Edit recurring transaction",
+        "delete": "Delete recurring transaction"
+      },
+      "schedule": {
+        "summary_one": "{{frequency}}, {{count}} time",
+        "summary_other": "{{frequency}}, {{count}} times"
+      },
+      "template": {
+        "unknown": "Unknown template",
+        "unknownAccount": "Unknown account",
+        "unknownCategory": "Unknown category"
+      }
+    },
+    "type": {
+      "transaction": "Transaction",
+      "transfer": "Transfer"
+    },
+    "frequency": {
+      "unit": {
+        "day": "Day",
+        "week": "Week",
+        "month": "Month",
+        "year": "Year"
+      },
+      "every": {
+        "day": "Every day",
+        "week": "Every week",
+        "month": "Every month",
+        "year": "Every year"
+      },
+      "everyN": {
+        "day_one": "Every {{count}} day",
+        "day_other": "Every {{count}} days",
+        "week_one": "Every {{count}} week",
+        "week_other": "Every {{count}} weeks",
+        "month_one": "Every {{count}} month",
+        "month_other": "Every {{count}} months",
+        "year_one": "Every {{count}} year",
+        "year_other": "Every {{count}} years"
+      }
+    },
+    "monthPolicy": {
+      "none": "Default (use the month's last day)",
+      "clip": "Use the month's last day (30 Apr for the 31st)",
+      "skip": "Skip that month",
+      "last_day": "Always the last day of the month",
+      "first_day": "Always the 1st of the month"
+    },
+    "dialog": {
+      "add": {
+        "title": "Add recurring transaction",
+        "description": "Create a repeating rule so the app can add upcoming transactions or transfers for you.",
+        "actions": {
+          "cancel": "Cancel",
+          "create": "Create recurring transaction"
+        },
+        "errors": {
+          "titleRequired": "Title is required.",
+          "titleMinLength": "Title must be at least 2 characters.",
+          "titleMaxLength": "Title must be at most 80 characters.",
+          "typeRequired": "Type is required.",
+          "startDateRequired": "Start date is required.",
+          "countRequired": "Enter how many times it should repeat.",
+          "countInvalid": "Enter a whole number greater than 0.",
+          "frequencyIntervalRequired": "Enter how often it repeats.",
+          "frequencyIntervalInvalid": "Enter a whole number greater than 0.",
+          "frequencyUnitRequired": "Choose day, week, month or year.",
+          "accountRequired": "Account is required.",
+          "categoryRequired": "Category is required.",
+          "fromAccountRequired": "Source account is required.",
+          "toAccountRequired": "Destination account is required.",
+          "accountsMustDiffer": "Source and destination accounts must be different.",
+          "amountRequired": "Amount is required.",
+          "amountInvalid": "Amount must be a positive number.",
+          "descriptionMaxLength": "Description must be at most 75 characters.",
+          "createFailed": "Couldn't create the recurring transaction. Try again."
+        }
+      },
+      "edit": {
+        "title": "Edit recurring transaction",
+        "description": "Update this recurring rule and choose which linked generated items should receive template changes.",
+        "applyTo": "Apply changes to",
+        "fromDate": "Starting from",
+        "applyToOptions": {
+          "all": "All linked items",
+          "upcoming": "Upcoming linked items",
+          "fromDate": "Linked items from a date",
+          "ruleOnly": "Recurring rule only"
+        },
+        "applyToOptionHints": {
+          "all": "Updates every item already generated by this recurring rule, including past and upcoming items.",
+          "upcoming": "Updates only generated items scheduled after you save these changes.",
+          "fromDate": "Updates generated items scheduled on or after the selected date.",
+          "ruleOnly": "Updates the recurring template without changing any items already generated."
+        },
+        "actions": {
+          "cancel": "Cancel",
+          "save": "Save changes"
+        },
+        "errors": {
+          "fromDateRequired": "Select the date from which linked items should be updated.",
+          "updateFailed": "Couldn't update the recurring transaction. Try again."
+        }
+      },
+      "form": {
+        "labels": {
+          "frequencyInterval": "Every"
+        },
+        "placeholders": {
+          "title": "Recurring transaction title",
+          "occurrences": "12",
+          "frequencyInterval": "1"
+        },
+        "tooltips": {
+          "scheduleLockedAfterCreate": "After you create it, the schedule stays fixed so generated dates remain predictable."
+        }
+      }
+    },
+    "deleteAlert": {
+      "title": "Delete this recurring transaction?",
+      "description": "Delete \"{{title}}\" and stop creating future items from this rule.",
+      "options": {
+        "deleteLinkedItems": "Also delete the transactions and transfers it already created",
+        "deleteLinkedItemsHint": "This also removes the transactions or transfers that were already created from this rule."
+      },
+      "actions": {
+        "cancel": "Cancel",
+        "delete": "Delete recurring transaction"
+      }
+    },
+    "createResult": {
+      "title": "Recurring transaction created"
+    },
+    "updateResult": {
+      "title": "Recurring transaction updated",
+      "description": "\"{{title}}\" was updated. Linked generated items were updated where applicable.",
+      "actions": {
+        "ok": "Done"
+      }
+    },
+    "runResult": {
+      "title": "Recurring transactions created",
+      "labels": {
+        "plan": "Recurring transaction",
+        "created": "New items",
+        "skipped": "Already added",
+        "total": "Dates covered"
+      },
+      "hints": {
+        "noNewItems": "No new items were created because all scheduled dates already had linked items."
+      },
+      "actions": {
+        "ok": "Done"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Recurring transaction created.",
+      "createError": "Couldn't create the recurring transaction. Try again.",
+      "updateSuccess": "Recurring transaction updated.",
+      "updateError": "Couldn't update the recurring transaction. Try again.",
+      "deleteSuccess": "Recurring transaction deleted.",
+      "deleteError": "Couldn't delete the recurring transaction. Try again."
+    },
+    "errors": {
+      "loadFailedWithError": "Couldn't load recurring transactions. Restart the app and try again.",
+      "loadUnexpected": "Couldn't load recurring transactions. Restart the app and try again."
+    }
+  },
+  "recurringEventItems": {
+    "page": {
+      "title": "Scheduled items"
+    },
+    "table": {
+      "transactionsTitle": "Scheduled transactions",
+      "transactionsDescription": "Transactions generated by this recurring transaction.",
+      "transfersTitle": "Scheduled transfers",
+      "transfersDescription": "Transfers generated by this recurring transaction.",
+      "emptyMessage": "No linked items were found for this recurring transaction."
+    },
+    "errors": {
+      "invalidId": "Invalid recurring transaction ID.",
+      "notFound": "Recurring transaction not found.",
+      "loadUnexpected": "Couldn't load recurring transaction items. Restart the app and try again."
+    }
+  },
+  "accountDetails": {
+    "page": {
+      "title": "Account details"
+    },
+    "header": {
+      "totalValue": "Total account value"
+    },
+    "table": {
+      "transactionsTitle": "Account transactions",
+      "transactionsDescription": "Income and expense entries recorded for this account.",
+      "transactionsEmptyMessage": "No transactions were found for this account.",
+      "transfersTitle": "Account transfers",
+      "transfersDescription": "Transfers sent from or received by this account.",
+      "transfersEmptyMessage": "No transfers were found for this account."
+    },
+    "errors": {
+      "invalidId": "Invalid account ID.",
+      "notFound": "Account not found.",
+      "loadUnexpected": "Couldn't load account details. Restart the app and try again."
+    }
+  },
+  "accountValuations": {
+    "page": {
+      "title": "Account valuations"
+    },
+    "table": {
+      "emptyMessage": "No valuation snapshots yet. Add your first snapshot to start tracking.",
+      "columns": {
+        "date": "Date",
+        "value": "Value",
+        "change": "Change"
+      },
+      "actions": {
+        "viewHistory": "View valuation history",
+        "add": "Add snapshot",
+        "edit": "Edit",
+        "delete": "Delete"
+      }
+    },
+    "header": {
+      "change": "Change",
+      "accountBalance": "Account balance",
+      "lastSnapshot": "Latest snapshot",
+      "changeVsBalance": "Change vs balance",
+      "noSnapshots": "Add your first snapshot to compare against your account balance."
+    },
+    "chart": {
+      "title": "Value over time",
+      "seriesName": "Value"
+    },
+    "dialog": {
+      "fields": {
+        "value": "Value",
+        "date": "Date"
+      },
+      "add": {
+        "title": "Add snapshot",
+        "description": "Record the current value of your account at a specific date.",
+        "actions": {
+          "create": "Add snapshot",
+          "cancel": "Cancel"
+        },
+        "errors": {
+          "createFailed": "Couldn't create the snapshot. Try again.",
+          "valueRequired": "Value is required.",
+          "valueInvalid": "Value must be a valid positive number.",
+          "dateRequired": "Date is required."
+        }
+      },
+      "edit": {
+        "title": "Edit snapshot",
+        "description": "Update the value or date of this valuation snapshot.",
+        "actions": {
+          "save": "Save changes",
+          "cancel": "Cancel"
+        },
+        "errors": {
+          "updateFailed": "Couldn't update the snapshot. Try again."
+        }
+      }
+    },
+    "deleteAlert": {
+      "title": "Delete this snapshot?",
+      "description": "You are about to delete: {{summary}}. This cannot be undone.",
+      "actions": {
+        "delete": "Delete snapshot",
+        "cancel": "Cancel"
+      }
+    },
+    "toasts": {
+      "createSuccess": "Snapshot added.",
+      "createError": "Couldn't add the snapshot. Try again.",
+      "updateSuccess": "Snapshot updated.",
+      "updateError": "Couldn't update the snapshot. Try again.",
+      "deleteSuccess": "Snapshot deleted.",
+      "deleteError": "Couldn't delete the snapshot. Try again."
+    }
+  },
+  "onboarding": {
+    "step_counter": "{{current}} / {{total}}",
+    "actions": {
+      "back": "Back",
+      "continue": "Continue"
+    },
+    "welcome": {
+      "title": "Welcome to Boring Balance",
+      "subtitle": "A simple, private place to track where your money goes. No cloud, no subscriptions, no noise.",
+      "cta": "Get started"
+    },
+    "preferences": {
+      "title": "Set your preferences",
+      "subtitle": "You can change these at any time in Settings.",
+      "theme": {
+        "label": "Theme"
+      },
+      "language": {
+        "label": "Language"
+      },
+      "currency": {
+        "label": "Default currency",
+        "hint": "Shown next to all amounts. You can change it any time in Settings."
+      }
+    },
+    "start": {
+      "title": "How do you want to begin?",
+      "scratch": {
+        "title": "Start fresh",
+        "description": "Start with an empty workspace. Add accounts and categories when you are ready."
+      },
+      "import": {
+        "title": "Import existing data",
+        "description": "Restore a backup or bring in an Excel export."
+      }
+    },
+    "confirm": {
+      "title": "You're set up.",
+      "subtitle": "Everything is saved locally on your device. You're in control.",
+      "import_note": "You can import your backup from Settings → Backups at any time.",
+      "cta": "Enter Boring Balance"
+    }
+  },
+  "update": {
+    "modal": {
+      "title": "A new version is available",
+      "body": "You are on v{{current}}. Boring Balance v{{latest}} is now available on GitHub.",
+      "ignore": "Don't remind me again for v{{latest}}",
+      "cta": {
+        "update": "Update on GitHub",
+        "dismiss": "Stay on v{{current}}"
+      }
+    },
+    "sidebar": {
+      "label": "Update available · v{{latest}}"
+    }
+  }
+}

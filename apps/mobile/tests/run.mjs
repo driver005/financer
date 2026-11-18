@@ -1,11 +1,8 @@
-// Runs the tests with the Rust SDK loaded in every test process (the runner starts one per file and
-// does not pass --import on, so it goes through NODE_OPTIONS).
 import { spawnSync } from "node:child_process";
+import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const preload = fileURLToPath(new URL("./preload.mjs", import.meta.url));
-const res = spawnSync(process.execPath, ["--test", ".test-build/apps/mobile/tests/*.test.js", "tests/*.test.mjs"], {
-  stdio: "inherit",
-  env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${preload}`.trim() },
-});
-process.exit(res.status ?? 1);
+const dir = fileURLToPath(new URL("../.test-build/tests/", import.meta.url));
+const files = readdirSync(dir).filter((f) => f.endsWith(".test.js")).map((f) => `${dir}${f}`);
+const result = spawnSync(process.execPath, ["--test", ...files], { stdio: "inherit" });
+process.exit(result.status ?? 1);

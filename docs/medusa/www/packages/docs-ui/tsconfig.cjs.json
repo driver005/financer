@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist/cjs",
+    "module": "CommonJS",
+    "customConditions": ["import"]
+  },
+  "exclude": [
+    "tailwind.config.js",
+    "postcss.config.js",
+    "**/__tests__/**",
+    "**/__mocks__/**"
+  ]
+}

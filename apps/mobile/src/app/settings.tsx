@@ -1,115 +1,105 @@
+import React, { useEffect, useState } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
-import { Group, ListItem, Note, Section, Text } from "@financer/ui";
+import { Button, Card, IconButton, Note, Screen, SectionTitle, Segmented, Text, TextField } from "../ui/primitives";
+import { tokens } from "../ui/theme";
+import { getSetting, setSetting } from "../db/database";
+import { clearAllData } from "../db/money";
+import { core } from "../rust/core";
+import { clearSamplePrices } from "../db/prices";
+import { EMPTY_BANK_CONFIG, type BankConfig } from "../lib/bank";
 
-import { useApi } from "@/api/config";
-import { AboutCard } from "@/components/AboutCard";
-import { BackupCard } from "@/components/BackupCard";
-import { BankConnectionsCard } from "@/components/BankConnectionsCard";
-import { LockCard } from "@/components/LockCard";
-import { NotificationsCard } from "@/components/NotificationsCard";
-import { Page } from "@/components/Page";
-import { BackendCard } from "@/components/settings/BackendCard";
-import { DataCard } from "@/components/settings/DataCard";
-import { AiCard, HabitsCard, PaydayCard, type SaveSetting } from "@/components/settings/PreferenceCards";
-import { useScreenData } from "@/hooks";
-import { startReplay } from "@/native/onboardingStore";
-import { SHOPPING_ENABLED } from "@/modules";
-import { priceSourcesLabel } from "@/settingsPlan";
-
-/**
- * Settings, in five sections (Account & data, Money, Groceries, Privacy & security, About). Each
- * section is a group of rows; a row either opens in place (a panel with its form), goes to a
- * screen, or shows a value read-only. Every card is its own component, so adding one (a bank
- * connections card, say) is one line in the section it belongs to.
- */
 export default function SettingsScreen() {
-  const { api, mode } = useApi();
   const router = useRouter();
-  const { data: settings, setData: setSettings, error } = useScreenData((a) => a.settings());
+  const [config, setConfig] = useState<BankConfig>(EMPTY_BANK_CONFIG);
+  const [saved, setSaved] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [startDay, setStartDay] = useState("1");
+  const [pin, setPin] = useState("");
+  const [pinMessage, setPinMessage] = useState<string | null>(null);
 
-  const save: SaveSetting = useCallback(
-    async (patch) => {
-      if (!api) return "Connect a backend first.";
-      try {
-        setSettings(await api.saveSettings(patch));
-        return null;
-      } catch (e) {
-        return e instanceof Error ? e.message : "Could not save";
-      }
-    },
-    [api, setSettings],
-  );
+  useEffect(() => {
+    void getSetting("startDay").then((value) => { if (value) setStartDay(value); });
+    void getSetting("bankConfig").then((raw) => {
+      if (raw) setConfig({ ...EMPTY_BANK_CONFIG, ...(JSON.parse(raw) as Partial<BankConfig>) });
+    });
+  }, []);
+
+  const update = (key: keyof BankConfig, value: string) => {
+    setSaved(false);
+    setConfig((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const save = async () => {
+    await setSetting("bankConfig", JSON.stringify(config));
+    setSaved(true);
+  };
 
   return (
-    <Page title="Settings">
-      <Section quiet title="Account & data">
-        <Group>
-          <BackendCard settingsLoaded={settings !== null} settingsError={error} />
-          {api && mode === "remote" ? <ListItem icon="server-network" tile title="Server settings" subtitle="Keys, bank providers, receipts: everything in financer.toml" onPress={() => router.push("/server-config")} /> : null}
-          <DataCard />
-          <BackupCard />
-        </Group>
-        {api ? null : <Text variant="caption" tone="muted">Export, import and backup appear once a backend is connected.</Text>}
-        {api && error ? <Note tone="error">{`Could not load your settings: ${error}`}</Note> : null}
-      </Section>
+    <Screen
+      title="Settings"
+      subtitle="Everything on this device"
+      back={<IconButton icon="arrow-left" label="Back" onPress={() => router.back()} />}
+    >
+      <Card>
+        <SectionTitle>Plaid</SectionTitle>
+        <Note>Connect straight from the phone. Connection uses the network; the transactions and keys are kept only in this app's local database.</Note>
+        <TextField label="Client ID" value={config.plaidClientId} onChangeText={(v) => update("plaidClientId", v)} />
+        <TextField label="Secret" value={config.plaidSecret} onChangeText={(v) => update("plaidSecret", v)} />
+        <TextField label="Access token" value={config.plaidAccessToken} onChangeText={(v) => update("plaidAccessToken", v)} />
+        <Segmented
+          value={config.plaidEnv}
+          onChange={(v) => update("plaidEnv", v)}
+          options={[{ value: "sandbox", label: "Sandbox" }, { value: "development", label: "Dev" }, { value: "production", label: "Live" }]}
+        />
+      </Card>
 
-      <Section quiet title="Money">
-        <Group>
-          {settings ? <PaydayCard settings={settings} onSave={save} /> : null}
-          <ListItem icon="shape-outline" tile title="Categorization rules" subtitle="Match merchants to categories" onPress={() => router.push("/rules")} />
-          <ListItem icon="calendar-sync-outline" tile title="Subscriptions" subtitle="Recurring payments and price increases" onPress={() => router.push("/subscriptions")} />
-          <ListItem icon="shield-alert-outline" tile title="Alerts" subtitle="Payments that look odd" onPress={() => router.push("/alerts")} />
-          <ListItem icon="bank-transfer" tile title="Bank sync" subtitle="Sparkasse over FinTS" onPress={() => router.push("/sync")} />
-          <BankConnectionsCard />
-        </Group>
-      </Section>
+      <Card>
+        <SectionTitle>GoCardless / other provider</SectionTitle>
+        <TextField label="Access token" value={config.gocardlessToken} onChangeText={(v) => update("gocardlessToken", v)} />
+        <TextField label="Account ID" value={config.gocardlessAccount} onChangeText={(v) => update("gocardlessAccount", v)} />
+      </Card>
 
-      <Section quiet title="Groceries">
-        <Group>
-          {settings ? <HabitsCard settings={settings} onSave={save} /> : null}
-          <ListItem icon="format-list-checks" tile title="Usual items" subtitle="What you buy most often" onPress={() => router.push("/basket")} />
-          <ListItem icon="receipt-text-outline" tile title="Receipts" subtitle="Add and read receipts" onPress={() => router.push("/receipts")} />
-          <ListItem icon="email-sync-outline" tile title="Receipt sources" subtitle="Mailbox, Lidl Plus and a watched folder" onPress={() => router.push("/receipt-sources")} />
-          <ListItem icon="silverware-fork-knife" tile title="Meal plan" subtitle="Plan the week and shop for it" onPress={() => router.push("/mealplan")} />
-          <ListItem icon="email-outline" tile title="Mail" subtitle="Chats by person and topic, calendar, greetings" onPress={() => router.push("/mail")} />
-          {SHOPPING_ENABLED ? <ListItem icon="shopping-search-outline" tile title="Shopping assistant" subtitle="Compare phones, plans and prices" onPress={() => router.push("/shop")} /> : null}
-          {settings ? <AiCard settings={settings} onSave={save} /> : null}
-          {settings ? (
-            <ListItem
-              icon="tag-multiple-outline"
-              tile
-              title="Price sources"
-              value={priceSourcesLabel(settings.price_sources)}
-              subtitle={mode === "embedded" ? "Set in the on-phone settings" : "Add and change them under Server settings"}
-              onPress={mode === "embedded" ? undefined : () => router.push("/server-config")}
-            />
-          ) : null}
-        </Group>
-      </Section>
+      <Card>
+        <SectionTitle>Start of month</SectionTitle>
+        <Text color="muted">A payday start day (1-28) shifts monthly totals and budgets to run from this day to the day before it next month.</Text>
+        <TextField label="Start day" value={startDay} onChangeText={setStartDay} keyboardType="number-pad" />
+        <Button label="Save start day" icon="calendar" onPress={() => void setSetting("startDay", startDay).then(() => setPinMessage("Start day saved."))} />
+      </Card>
 
-      <Section quiet title="Privacy & security">
-        <Group>
-          <LockCard />
-          <NotificationsCard />
-        </Group>
-        <Text variant="caption" tone="muted">Only item names, offers, diet and budget are ever sent to an AI model, never bank data.</Text>
-      </Section>
+      <Card>
+        <SectionTitle>App lock</SectionTitle>
+        <Text color="muted">A local passcode locks the app on every start. The code is stored as a hash on this device.</Text>
+        <TextField label="New passcode" value={pin} onChangeText={setPin} keyboardType="number-pad" placeholder="4+ digits" />
+        <Button label="Set passcode" icon="lock" onPress={() => void setSetting("passcodeHash", core.pinHash(pin)).then(() => { setPin(""); setPinMessage("Passcode saved."); })} disabled={pin.length < 4} />
+        <Button label="Remove passcode" tone="secondary" onPress={() => void setSetting("passcodeHash", "").then(() => setPinMessage("Passcode removed."))} />
+        {pinMessage ? <Note tone="success">{pinMessage}</Note> : null}
+      </Card>
 
-      <Section quiet title="About">
-        <Group>
-          <AboutCard />
-          <ListItem
-            icon="replay"
-            tile
-            title="Replay setup"
-            subtitle="Walk through the first-run questions again. Nothing is changed unless you answer."
-            onPress={() => {
-              void startReplay().then(() => router.push("/onboarding"));
-            }}
-          />
-        </Group>
-      </Section>
-    </Page>
+      <Card>
+        <SectionTitle>Prices</SectionTitle>
+        <Text color="muted">Price curves start with local sample prices so you can see the comparison. Add your own prices on any item, then remove the samples.</Text>
+        <Button label="Remove sample prices" tone="secondary" icon="delete-sweep" onPress={() => void clearSamplePrices()} />
+      </Card>
+
+      <Card>
+        <SectionTitle>Local data</SectionTitle>
+        <Text color="muted">Recipes, saved favourites, shopping lists, Angebote and transactions never leave the device. There is no account, token or server.</Text>
+        {confirmClear ? (
+          <View style={styles.row}>
+            <Button label="Yes, erase everything" tone="danger" onPress={() => void clearAllData().then(() => setConfirmClear(false))} />
+            <Button label="Cancel" tone="secondary" onPress={() => setConfirmClear(false)} />
+          </View>
+        ) : (
+          <Button label="Erase all local data" tone="danger" onPress={() => setConfirmClear(true)} />
+        )}
+      </Card>
+
+      <Button label={saved ? "Saved" : "Save provider settings"} icon="content-save" onPress={() => void save()} disabled={saved} />
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  row: { flexDirection: "row", gap: tokens.sm, flexWrap: "wrap" },
+});

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "include-v-in-tag": true,
+  "include-component-in-tag": false,
+  "pull-request-title-pattern": "chore(release): v${version}",
+  "bootstrap-sha": "dc4bcb9133dd9560f8a1cd6fc164c92b6eea0481",
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "revert", "section": "Reverts" },
+    { "type": "docs", "section": "Documentation" },
+    { "type": "refactor", "section": "Maintenance" },
+    { "type": "chore", "section": "Maintenance", "hidden": true },
+    { "type": "ci", "section": "Maintenance", "hidden": true },
+    { "type": "test", "section": "Maintenance", "hidden": true },
+    { "type": "style", "section": "Maintenance", "hidden": true },
+    { "type": "build", "section": "Maintenance", "hidden": true }
+  ],
+  "packages": {
+    ".": {
+      "package-name": "dompetku",
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}

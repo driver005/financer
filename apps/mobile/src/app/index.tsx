@@ -1,265 +1,175 @@
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import { Badge, Box, Button, Card, Divider, Icon, Mascot, Meter, Money, Row, Snackbar, Text, type Tone } from "@financer/ui";
+import React, { useCallback, useEffect, useState } from "react";
+import { Image, Pressable, StyleSheet, Text as RNText, View } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
+import { Badge, Button, Card, Chip, Empty, IconButton, Loading, Screen, Text, TextField } from "../ui/primitives";
+import { tokens, useTheme } from "../ui/theme";
+import { recipeApp } from "../lib/providerRust";
+import { cacheRecipe, favorite, isFavorite, unfavorite } from "../db/recipes";
+import type { Recipe } from "../lib/types";
 
-import type { Forecast, SafeToSpend } from "@/api/client";
-import { useApi } from "@/api/config";
-import { getSecret, setSecret } from "@/api/storage";
-import { ForecastCard } from "@/components/ForecastCard";
-import { Page } from "@/components/Page";
-import { Empty, Loading, NeedsSetup } from "@/components/Status";
-import { StoresLink } from "@/components/StoresLink";
-import { CategoryCard } from "@/components/today/CategoryCard";
-import { OverviewTiles } from "@/components/today/OverviewTiles";
-import { UpcomingCard } from "@/components/today/UpcomingCard";
-import { TodayHero } from "@/components/today/TodayHero";
-import { WeekCard } from "@/components/today/WeekCard";
-import { TrophiesCard } from "@/components/TrophiesCard";
-import { WatchdogCard } from "@/components/Watchdog";
-import { formatMoney } from "@/format";
-import { computeRewards, coachMessage, dailyAllowanceOn, freshBadges, level, moodFor, quests, spentOn, xp, type Progress, type Quest } from "@/game";
-import { useScreenData } from "@/hooks";
-import { celebrate } from "@/native/haptics";
-import { MONTH_NAMES, budgetPeriod, localIsoDate } from "@/period";
-import { getSavingsGoal } from "@/savingsGoal";
+const QUICK = ["Chicken", "Pasta", "Salad", "Beef", "Fish"];
 
-const SEEN_KEY = "financer.quests.seen";
-// Quests already celebrated since the app started. Module level (not per component) so a
-// remount or two quick reloads cannot celebrate the same quest twice.
-const celebrated = new Set<string>();
-const BADGES_SEEN_KEY = "financer.badges.seen";
-// The same guard for badges (see `freshBadges`).
-const celebratedBadges = new Set<string>();
-
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-/** `2026-10-12` -> `Monday, 12 October`. */
-function longDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}, ${d} ${MONTH_NAMES[m - 1]}`;
-}
-
-function QuestRow({ quest, onGo }: { quest: Quest; onGo: () => void }) {
-  return (
-    <Row gap="md" py="sm" touch accessible accessibilityLabel={`${quest.title}${quest.done ? ", done" : ""}`}>
-      <Box dim="icon-lg" radius="full" align="center" justify="center" bg={quest.done ? "accent-solid" : "sunken"}>
-        {quest.done ? <Icon name="check-bold" size="sm" tone="on-accent-solid" /> : null}
-      </Box>
-      <Box grow>
-        <Text variant="bodyStrong" tone={quest.done ? "subtle" : "default"} strike={quest.done}>{quest.title}</Text>
-        <Text variant="caption" tone="muted">{quest.hint}</Text>
-      </Box>
-      {quest.done ? null : <Button size="sm" label="Go" onPress={onGo} />}
-    </Row>
-  );
-}
-
-type TodayData = {
-  progress: Progress;
-  txs: Awaited<ReturnType<import("@/api/client").Api["transactions"]>>;
-  groceryLimit: number;
-  safe: SafeToSpend | null;
-  forecast: Forecast | null;
-  savingsGoal: number;
-};
-
-export default function Today() {
-  const { api, loaded } = useApi();
+export default function RecipesScreen() {
   const router = useRouter();
-  const [celebrating, setCelebrating] = useState(false);
-  const [note, setNote] = useState<{ title: string; text: string } | null>(null);
-  const [allQuests, setAllQuests] = useState(false);
-  const { data, error, busy, reload } = useScreenData<TodayData>(async (a) => {
-    const [txs, budget, basket, prices, receipts, forecast, savingsGoal] = await Promise.all([
-      a.transactions(),
-      a.budget("current", localIsoDate()),
-      a.basket(),
-      a.prices(),
-      a.receipts(),
-      // the rest of the screen still works if this one fails (e.g. an older server)
-      a.forecast(localIsoDate()).catch(() => null),
-      getSavingsGoal(),
-    ]);
-    const envelopes = budget.envelopes;
-    const safe = budget.safe_to_spend ?? null;
-    return {
-      txs,
-      safe,
-      forecast,
-      savingsGoal,
-      groceryLimit: envelopes.find((e) => e.category === "groceries")?.limit_cents ?? 0,
-      progress: {
-        transactions: txs.length,
-        limits: envelopes.length,
-        usualItems: basket.items.length,
-        prices: prices.length,
-        receipts: receipts.length,
-      },
-    };
-  });
+  const { colors } = useTheme();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Recipe[]>([]);
+  const [favs, setFavs] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searched, setSearched] = useState(false);
+  const [initialLoaded, setInitialLoaded] = useState(false);
 
-  const today = localIsoDate();
-  // the budget period (payday to payday) decides how many days the limit is spread over
-  const payday = data?.safe?.payday ?? 1;
-  const allowance = data ? dailyAllowanceOn(data.groceryLimit, today, payday) : 0;
-  const spentToday = data ? spentOn(data.txs, today, "groceries") : 0;
-  // streak with freezes, badges and bests, all replayed from the bookings (see game.ts)
-  const rewards = data
-    ? computeRewards({ txs: data.txs, groceryLimit: data.groceryLimit, savingsGoal: data.savingsGoal, today, payday, progress: data.progress })
-    : null;
-  const days = rewards?.streak.days ?? 0;
-  const list = data ? quests(data.progress) : [];
-  const doneCount = list.filter((q) => q.done).length;
-  const points = xp(doneCount, days);
-  const lvl = level(points);
+  const refreshFavorites = useCallback(async () => {
+    const ids = await Promise.all(results.map((r) => isFavorite(r.id)));
+    setFavs(Object.fromEntries(results.map((r, i) => [r.id, ids[i]])));
+  }, [results]);
 
-  // Celebrate quests completed since the last visit.
+  useEffect(() => { void refreshFavorites(); }, [refreshFavorites]);
+
   useEffect(() => {
-    if (!data) return;
-    const doneIds = list.filter((q) => q.done).map((q) => q.id);
-    const unclaimed = list.filter((q) => q.done && !celebrated.has(q.id));
-    if (unclaimed.length === 0) return;
-    unclaimed.forEach((q) => celebrated.add(q.id));
-    void (async () => {
-      let seen: string[] = [];
+    if (initialLoaded) return;
+    setInitialLoaded(true);
+    (async () => {
+      setLoading(true);
       try {
-        seen = JSON.parse((await getSecret(SEEN_KEY)) ?? "[]");
+        const suggestions = await recipeApp.random(8);
+        await Promise.all(suggestions.map(cacheRecipe));
+        setResults(suggestions);
       } catch {
-        seen = [];
+        // offline: the empty state offers another try
+      } finally {
+        setLoading(false);
       }
-      const fresh = unclaimed.filter((q) => !seen.includes(q.id));
-      if (fresh.length === 0) return;
-      await setSecret(SEEN_KEY, JSON.stringify(doneIds));
-      celebrate();
-      setCelebrating(true);
-      setTimeout(() => setCelebrating(false), 4000);
-      setNote({ title: `Quest complete! +${fresh.length * 10} XP 🎉`, text: fresh.map((q) => q.title).join(", ") });
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  }, [initialLoaded]);
 
-  // Celebrate badges earned since the last visit, once per badge.
-  useEffect(() => {
-    if (!rewards) return;
-    const earnedIds = rewards.badges.filter((b) => b.earned).map((b) => b.id);
-    const unclaimed = freshBadges(rewards.badges, [], celebratedBadges);
-    if (unclaimed.length === 0) return;
-    unclaimed.forEach((b) => celebratedBadges.add(b.id));
-    void (async () => {
-      let seen: string[] = [];
-      try {
-        seen = JSON.parse((await getSecret(BADGES_SEEN_KEY)) ?? "[]");
-      } catch {
-        seen = [];
-      }
-      const fresh = unclaimed.filter((b) => !seen.includes(b.id));
-      if (fresh.length === 0) return;
-      await setSecret(BADGES_SEEN_KEY, JSON.stringify(earnedIds));
-      celebrate();
-      setCelebrating(true);
-      setTimeout(() => setCelebrating(false), 4000);
-      setNote({ title: fresh.length === 1 ? "New badge! 🏅" : `${fresh.length} new badges! 🏅`, text: fresh.map((b) => `${b.icon} ${b.title}`).join(", ") });
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  useFocusEffect(useCallback(() => {
+    if (results.length) void refreshFavorites();
+  }, [results.length, refreshFavorites]));
 
-  if (!loaded) return <Page title="Today"><Loading /></Page>;
-  if (!api) return <Page title="Today" subtitle={longDate(today)}><NeedsSetup /></Page>;
+  const run = useCallback(async (fn: () => Promise<Recipe[]>) => {
+    setLoading(true);
+    setError(null);
+    setSearched(true);
+    try {
+      const recipes = await fn();
+      await Promise.all(recipes.map(cacheRecipe));
+      setResults(recipes);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load recipes");
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const over = allowance > 0 && spentToday > allowance;
-  const nearly = allowance > 0 && spentToday > allowance * 0.8;
-  const goalLeft = Math.max(0, allowance - spentToday);
-  const goalTone: Tone = over ? "danger" : nearly ? "warning" : "success";
+  const toggle = useCallback(async (recipe: Recipe) => {
+    if (favs[recipe.id]) {
+      await unfavorite(recipe.id);
+      setFavs((prev) => ({ ...prev, [recipe.id]: false }));
+    } else {
+      await favorite(recipe);
+      setFavs((prev) => ({ ...prev, [recipe.id]: true }));
+    }
+  }, [favs]);
 
   return (
-    <Page
-      title="Today"
-      subtitle={longDate(today)}
-      actions={
-        data ? (
-          <Row gap="sm">
-            <Badge tone="warning" icon="fire" label={`${days}`} />
-            {rewards ? <Badge tone="info" icon="snowflake" label={`${rewards.streak.freezes}`} /> : null}
-          </Row>
-        ) : null
-      }
+    <Screen
+      title="Recipes"
+      subtitle="From TheMealDB. Save what you like, add it to your list."
+      action={<IconButton icon="shuffle-variant" label="Surprise me" onPress={() => run(() => recipeApp.random(10))} />}
     >
-      {!data ? (
-        error ? (
-          <Empty title="Could not load your numbers" message={error} mood="worried" actionLabel="Try again" actionIcon="refresh" onAction={() => void reload()} />
-        ) : (
-          <Loading rows={4} />
-        )
+      <TextField label="Find a recipe" value={query} onChangeText={setQuery} placeholder="e.g. Chicken curry" />
+      <Button label="Search recipes" onPress={() => run(() => recipeApp.search(query))} disabled={!query.trim() || loading} />
+      <View style={styles.chips}>
+        {QUICK.map((term) => <Chip key={term} label={term} onPress={() => { setQuery(term); void run(() => recipeApp.search(term)); }} />)}
+      </View>
+      {error ? <Text color="danger">{error}</Text> : null}
+      {loading ? <Loading rows={4} /> : null}
+      {!loading && !results.length ? (
+        <Empty
+          icon="food-outline"
+          title={searched ? "No recipes found" : "Find something to cook"}
+          message={searched ? "Try another search or use Surprise me." : "Search the recipe provider or let it surprise you."}
+          actionLabel={searched ? "Surprise me" : undefined}
+          onAction={searched ? () => run(() => recipeApp.random(10)) : undefined}
+        />
+      ) : null}
+      {results.map((recipe, index) => index === 0 && recipe.image ? (
+        <FeaturedRecipe
+          key={`${recipe.id}-${index}`}
+          recipe={recipe}
+          onPress={() => router.push({ pathname: "/recipe", params: { id: recipe.id } })}
+          onSave={() => void toggle(recipe)}
+          saved={!!favs[recipe.id]}
+        />
       ) : (
-        <>
-          <Snackbar visible={note !== null} onDismiss={() => setNote(null)} seconds={5}>{note ? `${note.title} ${note.text}` : ""}</Snackbar>
-          <TodayHero safe={data.safe} forecast={data.forecast} txs={data.txs} today={today} />
-
-          <UpcomingCard />
-
-          <OverviewTiles safe={data.safe} txs={data.txs} today={today} />
-
-          <WeekCard txs={data.txs} today={today} />
-
-          <CategoryCard txs={data.txs} period={data.safe ? { start: data.safe.period_start, end: data.safe.period_end } : budgetPeriod(today, payday)} />
-
-          <Card gap="md">
-            <Text variant="label" tone="muted">Today's grocery goal</Text>
-            {allowance > 0 ? (
-              <>
-                <Row justify="between" align="baseline" gap="sm" wrap>
-                  <Row gap="sm" align="baseline">
-                    <Money cents={goalLeft} variant="title" tone={over ? "bad" : "plain"} />
-                    <Text variant="label" tone="muted">left</Text>
-                  </Row>
-                  <Text variant="caption" tone="muted">{`${formatMoney(spentToday)} of ${formatMoney(allowance)}`}</Text>
-                </Row>
-                <Meter value={spentToday / allowance} tone={goalTone} thickness="lg" label={`${Math.round((spentToday / allowance) * 100)} percent of today's grocery goal spent`} />
-              </>
-            ) : (
-              <>
-                <Text variant="body" tone="muted">Set a grocery limit and it becomes a daily goal here.</Text>
-                <Button label="Set a limit" onPress={() => router.push("/budget")} />
-              </>
-            )}
-          </Card>
-
-          <ForecastCard data={data.forecast} />
-
-          <WatchdogCard />
-
-          <StoresLink />
-
-          <Card gap="md">
-            <Row justify="between" gap="md">
-              <Box grow>
-                <Text variant="heading" level={2}>{`Level ${lvl.level}`}</Text>
-                <Text variant="caption" tone="muted">{`${lvl.title} · ${lvl.into} / ${lvl.size} XP to level ${lvl.level + 1}`}</Text>
-              </Box>
-              <Badge tone="warning" icon="lightning-bolt" label={`${points} XP`} />
-            </Row>
-            <Meter value={lvl.into / lvl.size} tone="warning" label={`${lvl.into} of ${lvl.size} experience points to level ${lvl.level + 1}`} />
-            <Divider />
-            <Row justify="between" gap="md">
-              <Text variant="bodyStrong">Quests</Text>
-              <Badge tone="accent" label={`${doneCount} / ${list.length}`} />
-            </Row>
-            <Meter value={doneCount / Math.max(1, list.length)} label={`${doneCount} of ${list.length} quests done`} />
-            {/* the next open quest is enough at a glance; the rest is one tap away */}
-            {(allQuests ? list : list.filter((q) => !q.done).slice(0, 1)).map((q) => (
-              <QuestRow key={q.id} quest={q} onGo={() => router.push(q.route)} />
-            ))}
-            {list.length > 1 ? <Row><Button size="sm" variant="ghost" icon={allQuests ? "chevron-up" : "chevron-down"} label={allQuests ? "Show fewer" : `All ${list.length} quests`} onPress={() => setAllQuests((v) => !v)} /></Row> : null}
-          </Card>
-
-          {rewards ? <TrophiesCard rewards={rewards} /> : null}
-
-          <Mascot
-            mood={moodFor({ streakDays: days, allowanceCents: allowance, spentTodayCents: spentToday, celebrating, freezeUsedToday: rewards?.streak.frozenToday })}
-            message={coachMessage({ progress: data.progress, streakDays: days, allowanceCents: allowance, spentTodayCents: spentToday, freezeUsedToday: rewards?.streak.frozenToday })}
-          />
-        </>
-      )}
-    </Page>
+        <Card key={`${recipe.id}-${index}`}>
+          <View style={styles.row}>
+            <Pressable style={styles.grow} onPress={() => router.push({ pathname: "/recipe", params: { id: recipe.id } })}>
+              <View style={styles.row}>
+                {recipe.image ? <Image source={{ uri: recipe.image }} style={styles.thumb} /> : <View style={[styles.thumb, { backgroundColor: colors.accentSoft }]} />}
+                <View style={styles.grow}>
+                  <Text variant="subheading" numberOfLines={2}>{recipe.title}</Text>
+                  <Text variant="caption" color="muted">{recipe.summary}</Text>
+                  <View style={styles.badges}>
+                    <Badge label={`${recipe.ingredients.length} ingredients`} />
+                    <Badge label={`${recipe.minutes} min`} />
+                  </View>
+                </View>
+              </View>
+            </Pressable>
+            <IconButton
+              icon={favs[recipe.id] ? "heart" : "heart-outline"}
+              label={favs[recipe.id] ? "Remove from saved" : "Save recipe"}
+              onPress={() => void toggle(recipe)}
+            />
+          </View>
+        </Card>
+      ))}
+    </Screen>
   );
 }
+
+function FeaturedRecipe({ recipe, onPress, onSave, saved }: {
+  recipe: Recipe; onPress: () => void; onSave: () => void; saved: boolean;
+}) {
+  return (
+    <View style={styles.featured}>
+      <Pressable onPress={onPress} style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel={`Open recipe ${recipe.title}`}>
+        <Image source={{ uri: recipe.image }} style={styles.featuredImage} />
+        <View style={styles.featuredScrim} />
+        <View style={styles.featuredBody}>
+          <Badge label="DISH OF THE DAY" tone="offer" />
+          <RNText style={[styles.featuredTitle, { color: "#FFFFFF" }]} numberOfLines={2}>{recipe.title}</RNText>
+          <RNText style={[styles.featuredMeta, { color: "#FFFFFF" }]}>
+            {`${recipe.minutes} min · ${recipe.ingredients.length} ingredients`}
+          </RNText>
+        </View>
+        <View style={{ position: "absolute", bottom: 12, right: 16 }}>
+          <MaterialCommunityIcons name="arrow-right" size={22} color="#FFFFFF" />
+        </View>
+      </Pressable>
+      <Pressable onPress={onSave} accessibilityRole="button" accessibilityLabel={saved ? "Remove from saved" : "Save recipe"} style={styles.featuredSave}>
+        <MaterialCommunityIcons name={saved ? "heart" : "heart-outline"} size={22} color="#FFFFFF" />
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: { flexDirection: "row", gap: tokens.md, alignItems: "center" },
+  grow: { flex: 1, gap: 4 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: tokens.sm },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: tokens.xs, marginTop: 4 },
+  thumb: { width: 88, height: 88, borderRadius: 16 },
+  featured: { height: 190, borderRadius: tokens.radius.card, overflow: "hidden", borderWidth: 1, borderColor: "#E2E8E1" },
+  featuredImage: { width: "100%", height: "100%" },
+  featuredScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(10,20,14,0.45)" },
+  featuredBody: { position: "absolute", left: 18, right: 18, bottom: 18, gap: 6 },
+  featuredTitle: { fontFamily: tokens.serif, fontSize: 24, fontWeight: "600" },
+  featuredMeta: { fontFamily: tokens.sans, fontSize: 12 },
+  featuredSave: { position: "absolute", top: 14, right: 14, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.28)", alignItems: "center", justifyContent: "center" },
+});

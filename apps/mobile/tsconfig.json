@@ -6,22 +6,21 @@
       "@/*": [
         "./src/*"
       ],
-      "@financer/ui": [
-        "../../packages/ui/src/index.ts"
+      "@finance/ui": [
+        "../../packages/finance-ui/src/index.ts"
       ]
     }
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts",
-    "../../packages/ui/src/**/*.ts",
-    "../../packages/ui/src/**/*.tsx"
+    "../../packages/finance-ui/src/**/*.ts",
+    "../../packages/finance-ui/src/**/*.tsx"
   ],
   "exclude": [
     "node_modules",
     "tests",
-    ".test-build"
+    ".test-build",
+    "dist"
   ]
 }

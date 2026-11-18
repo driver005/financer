@@ -1,0 +1,502 @@
+import {
+  Buildings,
+  Component,
+  GlobeEurope,
+  PencilSquare,
+  Trash,
+} from "@medusajs/icons"
+import { HttpTypes } from "@medusajs/types"
+import {
+  Badge,
+  Container,
+  createDataTableColumnHelper,
+  createDataTableCommandHelper,
+  createDataTableFilterHelper,
+  DataTableAction,
+  Tooltip,
+  usePrompt,
+} from "@medusajs/ui"
+import { keepPreviousData } from "@tanstack/react-query"
+import { useCallback, useMemo } from "react"
+import { useTranslation } from "react-i18next"
+
+import { CellContext } from "@tanstack/react-table"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { DataTable } from "../../../../../components/data-table"
+import { useDataTableDateFilters } from "../../../../../components/data-table/helpers/general/use-data-table-date-filters"
+import { VariantInventoryCell } from "../../../../../components/table/table-cells/product/variant-inventory-cell"
+import {
+  useDeleteVariantLazy,
+  useProductVariants,
+} from "../../../../../hooks/api/products"
+import { useQueryParams } from "../../../../../hooks/use-query-params"
+import { PRODUCT_VARIANT_IDS_KEY } from "../../../common/constants"
+import { Thumbnail } from "../../../../../components/common/thumbnail"
+import { usePermissions } from "../../../../../providers/permissions-provider"
+import {
+  useInventoryLevelPermissions,
+  useCanOpenTranslations,
+} from "../../../../../hooks/use-resource-permissions"
+
+type ProductVariantSectionProps = {
+  product: HttpTypes.AdminProduct
+}
+
+const PAGE_SIZE = 10
+const PREFIX = "pv"
+
+export const ProductVariantSection = ({
+  product,
+}: ProductVariantSectionProps) => {
+  const { t } = useTranslation()
+  const { hasAllPermissions } = usePermissions()
+  const { canRead: canReadInventory } = useInventoryLevelPermissions()
+  const canOpenTranslations = useCanOpenTranslations()
+
+  const canUpdateVariant = hasAllPermissions([
+    "product:update",
+    "product_variant:update",
+  ])
+  const canCreateVariant = hasAllPermissions([
+    "product:update",
+    "product_variant:create",
+  ])
+  const canDelete = hasAllPermissions([
+    "product_variant:delete",
+    "product:update",
+  ])
+  const canUpdatePrices = hasAllPermissions([
+    "product:update",
+    "product_variant:create",
+    "product_variant:update",
+    "product_variant:delete",
+  ])
+  const canUpdateInventory = hasAllPermissions([
+    "stock_location:read",
+    "inventory_item:read",
+    "inventory_level:read",
+    "inventory_level:create",
+    "inventory_level:update",
+    "inventory_level:delete",
+  ])
+  const canManageTranslations = canOpenTranslations
+
+  const { q, order, offset, allow_backorder, manage_inventory } =
+    useQueryParams(
+      ["q", "order", "offset", "manage_inventory", "allow_backorder"],
+      PREFIX
+    )
+
+  const columns = useColumns(product, {
+    canUpdateVariant,
+    canManageTranslations,
+    canReadInventory,
+    canDelete,
+  })
+  const filters = useFilters()
+  const commands = useCommands({ canUpdate: canUpdateInventory })
+
+  const { variants, count, isPending, isError, error } = useProductVariants(
+    product.id,
+    {
+      q,
+      order: order ? order : "variant_rank",
+      offset: offset ? parseInt(offset) : undefined,
+      limit: PAGE_SIZE,
+      allow_backorder: allow_backorder
+        ? JSON.parse(allow_backorder)
+        : undefined,
+      manage_inventory: manage_inventory
+        ? JSON.parse(manage_inventory)
+        : undefined,
+      fields:
+        "title,sku,thumbnail,*options,created_at,*inventory_items.inventory.location_levels,inventory_quantity,manage_inventory",
+    },
+    {
+      placeholderData: keepPreviousData,
+    }
+  )
+
+  const translationParams = new URLSearchParams()
+  variants?.forEach((variant) => {
+    translationParams.append("reference_id", variant.id)
+  })
+
+  if (isError) {
+    throw error
+  }
+
+  const sectionActions = [
+    ...(canUpdatePrices
+      ? [
+          {
+            label: t("products.editPrices"),
+            to: `prices`,
+            icon: <PencilSquare />,
+          },
+        ]
+      : []),
+    ...(canUpdateInventory
+      ? [
+          {
+            label: t("inventory.stock.action"),
+            to: `stock`,
+            icon: <Buildings />,
+          },
+        ]
+      : []),
+    ...(canManageTranslations
+      ? [
+          {
+            icon: <GlobeEurope />,
+            label: t("translations.actions.manage"),
+            to: `/settings/translations/edit?reference=product_variant&${translationParams.toString()}`,
+          },
+        ]
+      : []),
+  ]
+
+  return (
+    <Container className="divide-y p-0">
+      <DataTable
+        data={variants}
+        columns={columns}
+        filters={filters}
+        rowCount={count}
+        getRowId={(row) => row.id}
+        rowHref={(row) => `/products/${product.id}/variants/${row.id}`}
+        pageSize={PAGE_SIZE}
+        isLoading={isPending}
+        heading={t("products.variants.header")}
+        headingLevel="h2"
+        emptyState={{
+          empty: {
+            heading: t("products.variants.empty.heading"),
+            description: t("products.variants.empty.description"),
+          },
+          filtered: {
+            heading: t("products.variants.filtered.heading"),
+            description: t("products.variants.filtered.description"),
+          },
+        }}
+        action={
+          canCreateVariant
+            ? {
+                label: t("actions.create"),
+                to: `variants/create`,
+              }
+            : undefined
+        }
+        actionMenu={
+          sectionActions.length > 0
+            ? { groups: [{ actions: sectionActions }] }
+            : undefined
+        }
+        commands={commands}
+        prefix={PREFIX}
+      />
+    </Container>
+  )
+}
+
+const columnHelper =
+  createDataTableColumnHelper<HttpTypes.AdminProductVariant>()
+
+const useColumns = (
+  product: HttpTypes.AdminProduct,
+  permissions: {
+    canUpdateVariant: boolean
+    canManageTranslations: boolean
+    canReadInventory: boolean
+    canDelete: boolean
+  }
+) => {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const { mutateAsync } = useDeleteVariantLazy(product.id)
+  const prompt = usePrompt()
+  const [searchParams] = useSearchParams()
+  const {
+    canUpdateVariant: canUpdate,
+    canManageTranslations,
+    canReadInventory,
+    canDelete,
+  } = permissions
+
+  const tableSearchParams = useMemo(() => {
+    const filtered = new URLSearchParams()
+    for (const [key, value] of searchParams.entries()) {
+      if (key.startsWith(`${PREFIX}_`)) {
+        filtered.append(key, value)
+      }
+    }
+    return filtered
+  }, [searchParams])
+
+  const handleDelete = useCallback(
+    async (id: string, title: string) => {
+      const res = await prompt({
+        title: t("general.areYouSure"),
+        description: t("products.deleteVariantWarning", {
+          title,
+        }),
+        confirmText: t("actions.delete"),
+        cancelText: t("actions.cancel"),
+      })
+
+      if (!res) {
+        return
+      }
+
+      await mutateAsync({ variantId: id })
+    },
+    [mutateAsync, prompt, t]
+  )
+
+  const optionColumns = useMemo(() => {
+    if (!product?.options) {
+      return []
+    }
+
+    return product.options.map((option) => {
+      return columnHelper.display({
+        id: option.id,
+        header: option.title,
+        cell: ({ row }) => {
+          const variantOpt = row.original.options?.find(
+            (opt) => opt.option_id === option.id
+          )
+
+          if (!variantOpt) {
+            return <span className="text-ui-fg-muted">-</span>
+          }
+
+          return (
+            <div className="flex items-center">
+              <Tooltip content={variantOpt.value}>
+                <Badge
+                  size="2xsmall"
+                  title={variantOpt.value}
+                  className="inline-flex min-w-[20px] max-w-[140px] items-center justify-center overflow-hidden truncate"
+                >
+                  {variantOpt.value}
+                </Badge>
+              </Tooltip>
+            </div>
+          )
+        },
+      })
+    })
+  }, [product])
+
+  const getActions = useCallback(
+    (ctx: CellContext<HttpTypes.AdminProductVariant, unknown>) => {
+      const variant = ctx.row.original as HttpTypes.AdminProductVariant & {
+        inventory_items: { inventory: HttpTypes.AdminInventoryItem }[]
+      }
+
+      const mainActions: DataTableAction<HttpTypes.AdminProductVariant>[] = []
+
+      if (canUpdate) {
+        mainActions.push({
+          icon: <PencilSquare />,
+          label: t("actions.edit"),
+          onClick: (row) => {
+            navigate(
+              `edit-variant?variant_id=${
+                row.row.original.id
+              }&${tableSearchParams.toString()}`,
+              {
+                state: {
+                  restore_params: tableSearchParams.toString(),
+                },
+              }
+            )
+          },
+        })
+      }
+
+      if (canManageTranslations) {
+        mainActions.push({
+          icon: <GlobeEurope />,
+          label: t("translations.actions.manage"),
+          onClick: () => {
+            navigate(
+              `/settings/translations/edit?reference=product_variant&reference_id=${variant.id}`
+            )
+          },
+        })
+      }
+
+      const secondaryActions: DataTableAction<HttpTypes.AdminProductVariant>[] =
+        canDelete
+          ? [
+              {
+                icon: <Trash />,
+                label: t("actions.delete"),
+                onClick: () => handleDelete(variant.id, variant.title!),
+              },
+            ]
+          : []
+
+      const inventoryItemsCount = variant.inventory_items?.length || 0
+
+      if (canReadInventory) {
+        switch (inventoryItemsCount) {
+          case 0:
+            break
+          case 1: {
+            const inventoryItemLink = `/inventory/${
+              variant.inventory_items![0].inventory.id
+            }`
+
+            mainActions.push({
+              label: t("products.variant.inventory.actions.inventoryItems"),
+              onClick: () => {
+                navigate(inventoryItemLink)
+              },
+              icon: <Buildings />,
+            })
+            break
+          }
+          default: {
+            const ids = variant.inventory_items?.map((i) => i.inventory?.id)
+
+            if (!ids || ids.length === 0) {
+              break
+            }
+
+            const inventoryKitLink = `/inventory?${new URLSearchParams({
+              id: ids.join(","),
+            }).toString()}`
+
+            mainActions.push({
+              label: t("products.variant.inventory.actions.inventoryKit"),
+              onClick: () => {
+                navigate(inventoryKitLink)
+              },
+              icon: <Component />,
+            })
+          }
+        }
+      }
+
+      return [mainActions, secondaryActions].filter((group) => group.length > 0)
+    },
+    [
+      handleDelete,
+      navigate,
+      t,
+      tableSearchParams,
+      canUpdate,
+      canDelete,
+      canManageTranslations,
+      canReadInventory,
+    ]
+  )
+
+  const hasRowActions =
+    canUpdate || canDelete || canManageTranslations || canReadInventory
+
+  return useMemo(() => {
+    return [
+      columnHelper.accessor("thumbnail", {
+        header: "",
+        headerAlign: "center",
+        maxSize: 72,
+        cell: ({ row }) => {
+          return (
+            <div className="flex items-center pl-[1px]">
+              <Thumbnail src={row.original.thumbnail} />
+            </div>
+          )
+        },
+      }),
+      columnHelper.accessor("title", {
+        header: t("fields.title"),
+        enableSorting: true,
+        sortAscLabel: t("filters.sorting.alphabeticallyAsc"),
+        sortDescLabel: t("filters.sorting.alphabeticallyDesc"),
+      }),
+      columnHelper.accessor("sku", {
+        header: t("fields.sku"),
+        enableSorting: true,
+        sortAscLabel: t("filters.sorting.alphabeticallyAsc"),
+        sortDescLabel: t("filters.sorting.alphabeticallyDesc"),
+      }),
+      ...optionColumns,
+      ...(canReadInventory
+        ? [
+            columnHelper.display({
+              id: "inventory",
+              header: t("fields.inventory"),
+              cell: ({ row }) => (
+                <VariantInventoryCell variant={row.original} />
+              ),
+              maxSize: 250,
+            }),
+          ]
+        : []),
+      ...(hasRowActions
+        ? [
+            columnHelper.action({
+              actions: getActions,
+            }),
+          ]
+        : []),
+    ]
+  }, [t, optionColumns, getActions, hasRowActions, canReadInventory])
+}
+
+const filterHelper =
+  createDataTableFilterHelper<HttpTypes.AdminProductVariant>()
+
+const useFilters = () => {
+  const { t } = useTranslation()
+  const dateFilters = useDataTableDateFilters()
+
+  return useMemo(() => {
+    return [
+      filterHelper.accessor("allow_backorder", {
+        type: "radio",
+        label: t("fields.allowBackorder"),
+        options: [
+          { label: t("filters.radio.yes"), value: "true" },
+          { label: t("filters.radio.no"), value: "false" },
+        ],
+      }),
+      filterHelper.accessor("manage_inventory", {
+        type: "radio",
+        label: t("fields.manageInventory"),
+        options: [
+          { label: t("filters.radio.yes"), value: "true" },
+          { label: t("filters.radio.no"), value: "false" },
+        ],
+      }),
+      ...dateFilters,
+    ]
+  }, [t, dateFilters])
+}
+
+const commandHelper = createDataTableCommandHelper()
+
+const useCommands = ({ canUpdate }: { canUpdate: boolean }) => {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+
+  if (!canUpdate) {
+    return []
+  }
+
+  return [
+    commandHelper.command({
+      label: t("inventory.stock.action"),
+      shortcut: "i",
+      action: async (selection) => {
+        navigate(
+          `stock?${PRODUCT_VARIANT_IDS_KEY}=${Object.keys(selection).join(",")}`
+        )
+      },
+    }),
+  ]
+}

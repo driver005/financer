@@ -1,0 +1,135 @@
+const { app, BrowserWindow, dialog, session } = require('electron');
+const path = require('node:path');
+const {
+  closeDatabase,
+  createDatabase,
+  initSchema,
+  isFirstStart,
+  markFirstStartCompleted,
+  runMigrations,
+} = require('./database');
+const { backupController, syncController } = require('./controllers');
+const { registerIpcHandlers } = require('./ipc');
+const { installPermissionPolicy } = require('./utils/trusted-sender');
+const { createWindow, getTrustedRendererSources } = require('./window');
+const { buildQuitFailureDialog } = require('./utils/quit-outcome');
+
+const APP_NAME = 'Boring Balance';
+const APP_STORAGE_DIR_NAME = 'boringbalance';
+let beforeQuitHandled = false;
+
+app.setName(APP_NAME);
+app.setAboutPanelOptions({
+  applicationName: APP_NAME,
+});
+app.setPath('userData', path.join(app.getPath('appData'), APP_STORAGE_DIR_NAME));
+
+app
+  .whenReady()
+  .then(() => {
+    const database = createDatabase();
+    const firstStart = isFirstStart();
+
+    if (!firstStart) {
+      console.log('[electron] Schema initialization skipped - app already initialized');
+    } else {
+      initSchema(database);
+    }
+
+    // A new database was just built from the latest schema files, so it is stamped as up to date.
+    runMigrations(database, { isNewDatabase: firstStart, stampOnly: firstStart });
+
+    if (firstStart) {
+      markFirstStartCompleted();
+    }
+
+    installPermissionPolicy(session.defaultSession);
+    registerIpcHandlers(getTrustedRendererSources());
+    backupController.init();
+    syncController.init();
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  })
+  .catch((error) => {
+    console.error('[electron] Failed to start app:', error);
+    app.quit();
+  });
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('before-quit', (event) => {
+  if (beforeQuitHandled) {
+    syncController.dispose();
+    backupController.dispose();
+    closeDatabase();
+    return;
+  }
+
+  beforeQuitHandled = true;
+  event.preventDefault();
+
+  Promise.resolve()
+    .then(async () => {
+      const outcomes = [];
+      try {
+        outcomes.push(await syncController.onAppBeforeQuit());
+      } catch (error) {
+        console.error('[electron] Sync before quit failed:', error);
+        outcomes.push({
+          failed: true,
+          operation: 'sync',
+          message: String(error?.message ?? error),
+        });
+      }
+
+      try {
+        outcomes.push(await backupController.onAppBeforeQuit());
+      } catch (error) {
+        console.error('[electron] Backup before quit failed:', error);
+        outcomes.push({
+          failed: true,
+          operation: 'backup',
+          message: String(error?.message ?? error),
+        });
+      }
+
+      // A failed backup or sync means the latest changes may not be safe yet. Ask before closing.
+      const failureDialog = buildQuitFailureDialog(outcomes);
+      if (!failureDialog) {
+        return true;
+      }
+
+      const choice = await dialog.showMessageBox({
+        type: 'warning',
+        title: failureDialog.title,
+        message: failureDialog.message,
+        detail: failureDialog.detail,
+        buttons: ['Quit anyway', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+      });
+
+      return choice.response === 0;
+    })
+    .then((shouldQuit) => {
+      if (!shouldQuit) {
+        // Cancelled: keep the app open. The next quit runs the backup and sync again before asking.
+        beforeQuitHandled = false;
+        return;
+      }
+
+      syncController.dispose();
+      backupController.dispose();
+      closeDatabase();
+      app.quit();
+    });
+});

@@ -1,0 +1,69 @@
+import { CORE_LAYOUT_IDS } from "@medusajs/admin-shared"
+import { useLoaderData, useParams } from "react-router-dom"
+
+import { SingleColumnPageSkeleton } from "../../../components/common/skeleton"
+import {
+  LayoutComposer,
+  detailPageDefaultEntries,
+} from "../../../components/layout-composer"
+import { useProductTag } from "../../../hooks/api"
+import { useFeatureFlag } from "../../../providers/feature-flag-provider"
+import { ProductTagGeneralSection } from "./components/product-tag-general-section"
+import { ProductTagProductSection } from "./components/product-tag-product-section"
+import { ConfigurableProductTagProductSection } from "./components/product-tag-product-section/configurable-product-tag-product-section"
+import { productTagLoader } from "./loader"
+import { PermissionGuard } from "../../../components/common/permission-guard"
+
+export const ProductTagDetail = () => {
+  const { id } = useParams()
+  const isViewConfigEnabled = useFeatureFlag("view_configurations")
+
+  const initialData = useLoaderData() as Awaited<
+    ReturnType<typeof productTagLoader>
+  >
+
+  const { product_tag, isPending, isError, error } = useProductTag(
+    id!,
+    undefined,
+    {
+      initialData,
+    }
+  )
+
+  if (isPending || !product_tag) {
+    return <SingleColumnPageSkeleton showJSON sections={2} />
+  }
+
+  if (isError) {
+    throw error
+  }
+
+  return (
+    <LayoutComposer
+      widgetsZonePrefix="product_tag.details"
+      preferredLayoutId={CORE_LAYOUT_IDS.SINGLE_COLUMN}
+      data={product_tag}
+      sections={{
+        main: (
+          <>
+            <LayoutComposer.Entry id="ProductTagGeneralSection">
+              <ProductTagGeneralSection productTag={product_tag} />
+            </LayoutComposer.Entry>
+            <LayoutComposer.Entry id="ProductTagProductSection">
+              <PermissionGuard permission="product:read">
+                {isViewConfigEnabled ? (
+                  <ConfigurableProductTagProductSection
+                    productTag={product_tag}
+                  />
+                ) : (
+                  <ProductTagProductSection productTag={product_tag} />
+                )}
+              </PermissionGuard>
+            </LayoutComposer.Entry>
+            {detailPageDefaultEntries(product_tag)}
+          </>
+        ),
+      }}
+    />
+  )
+}

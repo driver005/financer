@@ -1,0 +1,417 @@
+<div align="center">
+
+**English** · [Bahasa Indonesia](README.id.md)
+
+<img src="docs/assets/banner.png" alt="Dompetku — catat keuangan pribadi dengan rapi: Telegram bot, receipt OCR, dashboard, budgets and gold tracking" width="100%">
+
+# Dompetku
+
+**A private, self-hosted personal finance tracker with a Telegram bot and receipt OCR.**
+
+[![GitHub stars](https://img.shields.io/github/stars/ilramdhan/dompetku?style=social)](https://github.com/ilramdhan/dompetku/stargazers)
+[![Latest release](https://img.shields.io/github/v/release/ilramdhan/dompetku)](https://github.com/ilramdhan/dompetku/releases/latest)
+[![CI](https://github.com/ilramdhan/dompetku/actions/workflows/ci.yml/badge.svg)](https://github.com/ilramdhan/dompetku/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![TanStack Start](https://img.shields.io/badge/TanStack-Start-ff4154)](https://tanstack.com/start)
+[![Supabase](https://img.shields.io/badge/Supabase-Postgres-3ecf8e?logo=supabase&logoColor=white)](https://supabase.com)
+[![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com)
+[![Live demo](https://img.shields.io/badge/Live%20demo-demo.dompetku.ilramdhan.dev-2f7d5b?logo=googlechrome&logoColor=white)](https://demo.dompetku.ilramdhan.dev)
+
+### 🚀 [Live demo → demo.dompetku.ilramdhan.dev](https://demo.dompetku.ilramdhan.dev)
+
+Demo credentials are shown on the login page (one-click **Masuk ke demo**). Fake data, resets daily at 00:00 WIB.
+
+⭐ If Dompetku helps you, [star the repo](https://github.com/ilramdhan/dompetku/stargazers) — it helps others find it.
+
+</div>
+
+Dompetku ("my wallet" in Indonesian) helps you track income, expenses, transfers, installments,
+subscriptions, budgets, savings goals, gold and money people owe you, all in one place. Log a
+coffee by sending _"kopi 25rb"_ to your own Telegram bot, or snap a photo of a receipt and let AI
+fill in the details. Everything lives in **your own** Supabase database and **your own** Vercel
+deployment, so your financial data stays yours.
+
+It is built for **you and your family**: the owner login is defined in environment variables, and
+the owner can add **family members** from the web UI, each with access to only the wallets you
+choose (view or manage). No sign-up pages, no shared servers. The interface is available in **Indonesian and English** (switch any
+time), and amounts support **IDR and USD**.
+
+> [!NOTE]
+> Dompetku was designed with Indonesian users in mind (Rupiah, local banks and e-wallets, Antam
+> gold prices, chat shortcuts like `25rb` / `2jt`), but it works for anyone who tracks money in
+> IDR and/or USD.
+
+## Table of contents
+
+- [What's new in v1.7](#whats-new-in-v17)
+- [Live demo](#live-demo)
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Deploy your own in ~20 minutes](#deploy-your-own-in-20-minutes)
+- [Tech stack](#tech-stack)
+- [Project structure](#project-structure)
+- [Documentation](#documentation)
+- [Local development](#local-development)
+- [Contributing](#contributing)
+- [Security](#security)
+- [License](#license)
+- [Contributors](#contributors)
+- [Star history](#star-history)
+- [Acknowledgements](#acknowledgements)
+
+## What's new in v1.7
+
+A plain-language summary of the v1.7 release, ready to share: Reports and the Yearly recap can now
+be filtered by wallet, dark mode is easier to read (and works better with screen readers), and pages
+load faster on phones and show their data right away. No database changes this time; just update
+the app.
+
+<p>
+  <a href="docs/assets/whats-new-v1.7-id.png"><img src="docs/assets/whats-new-v1.7-id.png" alt="Apa yang baru di Dompetku v1.7 (Bahasa Indonesia)" width="49%"></a>
+  <a href="docs/assets/whats-new-v1.7-en.png"><img src="docs/assets/whats-new-v1.7-en.png" alt="What's new in Dompetku v1.7 (English)" width="49%"></a>
+</p>
+
+Full size: [Bahasa Indonesia](docs/assets/whats-new-v1.7-id.png) · [English](docs/assets/whats-new-v1.7-en.png) ·
+[Changelog](CHANGELOG.md)
+
+<details>
+<summary>Previously in v1.6: Docker image, search-friendly landing page, streamed AI answers and sponsors</summary>
+
+<p>
+  <a href="docs/assets/whats-new-v1.6-id.png"><img src="docs/assets/whats-new-v1.6-id.png" alt="Apa yang baru di Dompetku v1.6 (Bahasa Indonesia)" width="49%"></a>
+  <a href="docs/assets/whats-new-v1.6-en.png"><img src="docs/assets/whats-new-v1.6-en.png" alt="What's new in Dompetku v1.6 (English)" width="49%"></a>
+</p>
+
+</details>
+
+<details>
+<summary>Previously in v1.5: bot settings in the app, profile page, family accounts and pockets</summary>
+
+Already on v1.4 or older? Run `supabase/schema.sql` once more for the v1.5 features; everything
+else is optional.
+
+<p>
+  <a href="docs/assets/whats-new-v1.5-id.png"><img src="docs/assets/whats-new-v1.5-id.png" alt="Apa yang baru di Dompetku v1.5 (Bahasa Indonesia)" width="49%"></a>
+  <a href="docs/assets/whats-new-v1.5-en.png"><img src="docs/assets/whats-new-v1.5-en.png" alt="What's new in Dompetku v1.5 (English)" width="49%"></a>
+</p>
+
+</details>
+
+## Live demo
+
+Try it without installing anything: **<https://demo.dompetku.ilramdhan.dev>**
+
+- The demo login is shown on the login page — click **Masuk ke demo** to sign in with one click.
+- All data is fake and **resets daily at 00:00 WIB**; feel free to add, edit and delete.
+- AI receipt scanning, photo upload, CSV import, restore, app settings and the Telegram bot are
+  turned off in the demo. Want to run your own public demo? See [docs/DEMO.md](docs/DEMO.md).
+
+## Screenshots
+
+All screenshots use the fictional [demo data](docs/DEMO-DATA.md) and follow your GitHub theme (light
+or dark). Regenerate them with `bun run screenshots` (see [Regenerating screenshots](docs/DEMO-DATA.md#regenerating-screenshots)).
+
+<p align="center">
+  <picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/dashboard-dark.png"><img src="public/screenshots/dashboard.png" alt="Dompetku dashboard — personal finance overview with balances, net worth, cash flow and spending per category"></picture>
+</p>
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/transactions-dark.png"><img src="public/screenshots/transactions.png" alt="Dompetku transactions list — personal expense tracker with search, filters, sorting and CSV/PDF export"></picture><br><b>Transactions</b>: Search, filter and sort every transaction; CSV import/export and PDF.</td>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/reports-dark.png"><img src="public/screenshots/reports.png" alt="Dompetku reports — monthly spending trends per category over 6 or 12 months and a yearly recap"></picture><br><b>Reports</b>: Category trends over 6 or 12 months and a yearly recap.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/budgets-dark.png"><img src="public/screenshots/budgets.png" alt="Dompetku budgets — monthly budget per category with rollover and 80% / 100% alerts"></picture><br><b>Budgets</b>: Monthly budgets with rollover and 80% / 100% alerts.</td>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/accounts-detail-dark.png"><img src="public/screenshots/accounts-detail.png" alt="Dompetku wallet detail — 12-month bank account balance chart, spending per category and reconciliation"></picture><br><b>Account detail</b>: 12-month balance, spending per category and reconciliation.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/goals-dark.png"><img src="public/screenshots/goals.png" alt="Dompetku savings goals — progress bars, monthly target and projected completion date"></picture><br><b>Savings goals</b>: Progress, monthly target and projected completion date.</td>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/gold-dark.png"><img src="public/screenshots/gold.png" alt="Dompetku gold tracker — Antam and world (XAU) gold prices with unrealised profit"></picture><br><b>Gold</b>: Antam and world gold prices with unrealised profit.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/recurring-dark.png"><img src="public/screenshots/recurring.png" alt="Dompetku recurring transactions — salary, rent and top-ups posted automatically when due"></picture><br><b>Recurring transactions</b>: Salary, rent and top-ups posted automatically when due.</td>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/settings-dark.png"><img src="public/screenshots/settings.png" alt="Dompetku settings — categories, app settings and optional two-factor (TOTP) login"></picture><br><b>Settings</b>: Categories, app settings and optional two-factor login.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/accounts-pockets-dark.png"><img src="public/screenshots/accounts-pockets.png" alt="Dompetku wallet detail with Kantong (pockets) — envelope budgeting inside one wallet with low-balance badge"></picture><br><b>Kantong (pockets)</b>: Envelopes inside a wallet with what is left this month and a low-balance badge.</td>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/transaction-pocket-dark.png"><img src="public/screenshots/transaction-pocket.png" alt="Dompetku transaction form with the Kantong (pocket) select open while recording an expense"></picture><br><b>Kantong on transactions</b>: Pick the wallet's pocket when recording an expense, income or transfer.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/dashboard-pockets-dark.png"><img src="public/screenshots/dashboard-pockets.png" alt="Dompetku dashboard pocket alert — pockets at or below their low-balance threshold this month"></picture><br><b>Pocket alerts</b>: The dashboard flags pockets at or below their threshold this month.</td>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/settings-users-dark.png"><img src="public/screenshots/settings-users.png" alt="Dompetku family members settings — add users and choose which wallets each can view or manage"></picture><br><b>Family members</b>: Add members and choose which wallets they can view or manage.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/settings-integrations-dark.png"><img src="public/screenshots/settings-integrations.png" alt="Dompetku integrations settings — configure Telegram bot, AI receipt OCR, email and n8n with encrypted secrets"></picture><br><b>Integrations</b>: Configure the Telegram bot, AI, email and n8n from the web UI; secrets stay encrypted.</td>
+    <td width="50%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/profile-dark.png"><img src="public/screenshots/profile.png" alt="Dompetku profile page — name, address, avatar and password change"></picture><br><b>Profile</b>: Name, address, avatar and password change.</td>
+  </tr>
+</table>
+
+**On your phone and in Telegram**
+
+<p align="center">
+  <picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/dashboard-mobile-dark.png"><img src="public/screenshots/dashboard-mobile.png" alt="Dompetku dashboard on a mobile phone — mobile-first personal finance app" width="240"></picture>
+  <picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/transactions-mobile-dark.png"><img src="public/screenshots/transactions-mobile.png" alt="Dompetku transactions list on a mobile phone" width="240"></picture>
+  <picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/telegram-bot-dark.png"><img src="public/screenshots/telegram-bot.png" alt="Dompetku Telegram bot — expense preview with Save/Cancel buttons, budget alert and /saldo balance command" width="240"></picture>
+</p>
+
+## Features
+
+### Money tracking
+
+- **Income, expenses and transfers** between accounts (banks, e-wallets, cash, and so on) with
+  live balances.
+- **IDR and USD** amounts with an automatic daily exchange rate.
+- **Debts and installments** (paylater, loans) with payment tracking.
+- **Subscriptions**, monthly or yearly, in IDR or USD, with optional tax.
+- **Account fees**: transfer, top-up and monthly admin fees recorded as separate expenses.
+- **Recurring transactions** (salary, rent, regular transfers) posted automatically when due. A
+  long-missed schedule posts only its latest 12 occurrences; resuming a paused one skips what was
+  missed while paused.
+- **Split transactions**: split one receipt across several categories.
+- **Up to 5 receipt photos** per transaction, stored privately, plus search by receipt item name.
+- **CSV import** with a preview, duplicate detection and optional creation of new categories or
+  accounts.
+
+### Budgets and goals
+
+- Monthly **budgets per category**, with optional **rollover** of unused amounts.
+- **Instant alerts at 80% and 100%** of a budget, on the web and in the bot.
+- **Savings goals**, optionally linked to a savings account.
+- **Kantong (pockets)** inside a wallet: earmark part of one wallet's money (e.g. Mandiri → Makan
+  500rb, Transport 250rb), monthly or running, with an "unallocated" figure and alerts when a
+  pocket runs low or is empty, on the web and in the bot (`kopi 25rb #makan`, `/kantong`; schema v19).
+
+### Assets and net worth
+
+- **Gold savings** with daily world (XAU) and Antam prices, optionally linked to an account.
+- **Receivables** (money others owe you) with partial payments.
+- **Net worth** that counts account balances, gold and outstanding receivables.
+- **Multi-user (family)**: add members in Settings → Pengguna and give each one view or manage
+  access per wallet; members only see the dashboard, transactions, accounts and reports of their
+  wallets (schema v18).
+
+### Automation
+
+- **Telegram bot**: record transactions by chat (`kopi 25rb`, `gaji masuk 8jt ke BCA`) or by sending
+  a receipt photo. Chat and receipt entries are shown as a **preview with buttons** before they are
+  saved (change the category, account, type or description — even for a receipt); `/undo` removes
+  the last one. `/bayar <name>` (subscription or installment payment) and
+  `/tarik <amount> dari <account>` (cash withdrawal) are recorded immediately, without a preview.
+  Slash commands give balances, reports, bills, budgets and more.
+- **Receipt OCR** in the web app and the bot, using any OpenAI-compatible AI provider (for example
+  Google Gemini or OpenAI).
+- **Reminders** for upcoming bills via Telegram or email, plus daily, weekly and monthly reports,
+  all scheduled by ready-to-import [n8n](https://n8n.io) workflows.
+
+### Invoices and payments
+
+- **Invoices** with automatic numbers, line items, due dates and partial or full payments booked as
+  income; an aging report and an unpaid-invoices card on the dashboard (schema v21).
+- **Public invoice link** the customer can open, print or save as PDF, and share via WhatsApp (v23).
+- **Bank transfer / QRIS instructions** with proof-of-transfer upload and an approval queue (v24).
+- **Invoice emails** via Resend: send the invoice, payment confirmations and due/overdue reminders.
+- **Online payment (optional)** through **Midtrans Snap** (QRIS, e-wallets, cards, VA) with
+  verified webhooks and refunds (v25) — step-by-step guide: [PAYMENT-GATEWAY.md](docs/PAYMENT-GATEWAY.md).
+- **Bank notification matching (optional)**: an Android phone forwards incoming-money notifications
+  from any bank / e-wallet app via **MacroDroid**; formats are configurable in Settings and a
+  1–999 rupiah **unique code** per invoice makes the match exact (v26) — guide:
+  [MACRODROID.md](docs/MACRODROID.md).
+
+### Reports
+
+- Dashboard with cash flow, category breakdowns and net worth charts.
+- Monthly reports, a printable **yearly summary** with CSV export, for all wallets or **one wallet**
+  (transfers in and out included).
+- **Per-account report** with a balance chart and **bank statement reconciliation**.
+- Activity log of every change.
+
+### Security and privacy
+
+- **Your database, your server.** The browser never talks to the database; only server code holds
+  the key, and database row-level security blocks everything else.
+- Single-user login with a signed, `httpOnly` session cookie and a brute-force login limit.
+- Optional **two-factor login (TOTP)** with any authenticator app.
+- **Privacy mode** (eye icon or <kbd>Shift</kbd>+<kbd>H</kbd>) hides every amount, balance and
+  chart value on the current device, handy when sharing your screen.
+- Telegram bot answers **only** the chat IDs you allow.
+
+### Reliability and experience
+
+- **Backup and restore** of all data as one JSON file, plus an optional weekly automatic backup to
+  Google Drive or email via n8n.
+- **Error monitoring**: structured server logs and optional [Sentry](https://sentry.io) reporting.
+- **Installable as an app** (PWA) on phone and desktop.
+- **Indonesian / English** interface and **light / dark** theme.
+- Mobile-first design that works on small screens.
+
+## Deploy your own in ~20 minutes
+
+You need free accounts on [GitHub](https://github.com), [Supabase](https://supabase.com) and
+[Vercel](https://vercel.com). No coding is required.
+
+1. **Fork** this repository to your GitHub account (the **Fork** button at the top right of this
+   page).
+2. **Create a Supabase project**, open **SQL Editor**, paste the contents of
+   [`supabase/schema.sql`](supabase/schema.sql) and click **Run**.
+3. **Import your fork into Vercel** (or use the button below).
+4. **Add the required environment variables**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+   `APP_USERNAME`, `APP_PASSWORD` and `SESSION_SECRET` (a random string of at least 32
+   characters).
+5. **Deploy, open your site and log in.** Add the Telegram bot, OCR and reminders later if you
+   want them.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ilramdhan/dompetku&env=SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY,APP_USERNAME,APP_PASSWORD,SESSION_SECRET)
+
+> [!IMPORTANT]
+> The button deploys the app, but you still need to run `supabase/schema.sql` in your Supabase
+> project (step 2) before logging in. Never share your `SUPABASE_SERVICE_ROLE_KEY`: it gives full
+> access to your database.
+
+**Prefer your own server?** An official multi-arch Docker image (`ghcr.io/ilramdhan/dompetku`) and a
+[`docker-compose.yml`](docker-compose.yml) are published for every release: `docker compose up -d` with
+your `.env`, behind an HTTPS reverse proxy. Supabase stays external. See
+[SELF-HOSTING.md → Docker](docs/SELF-HOSTING.md#10-docker-your-own-server).
+
+The complete, beginner-friendly walkthrough (exact clicks, optional features, updating and
+troubleshooting) is in **[docs/SELF-HOSTING.md](docs/SELF-HOSTING.md)**.
+Every environment variable is explained in [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md).
+
+## Tech stack
+
+| Layer      | Technology                                                                               |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| App        | [TanStack Start](https://tanstack.com/start) (React 19, SSR, server functions)           |
+| Data & UI  | TanStack Router & Query, Tailwind CSS v4, shadcn/ui (Radix), Recharts, zod               |
+| Database   | [Supabase](https://supabase.com) PostgreSQL + private Storage (server-only)              |
+| Hosting    | [Vercel](https://vercel.com) serverless, [Lovable](https://lovable.dev) or Docker (Node) |
+| Automation | [n8n](https://n8n.io) + Telegram Bot API                                                 |
+| AI         | Any OpenAI-compatible API (receipt OCR and chat parsing)                                 |
+| Extras     | Resend (email, optional), Sentry (errors, optional)                                      |
+| Quality    | Vitest, Testing Library, ESLint, Prettier, GitHub Actions                                |
+
+How it all fits together, with diagrams: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+
+## Project structure
+
+```text
+src/
+  routes/        Pages (file-based) and the /api/public/n8n/* API used by n8n
+  components/    UI components (shadcn/ui in components/ui, lazy charts in components/charts)
+  lib/           Business logic: *.server.ts = server-only, *.functions.ts = server functions,
+                 other files = pure, tested helpers
+  test/          Vitest test suites
+supabase/        schema.sql — the whole database, in re-runnable sections v1–v13
+n8n/             Importable n8n workflows: Telegram bot, schedules, error alerts, backup
+docs/            Documentation
+public/          PWA manifest, icons and self-hosted fonts
+```
+
+## Documentation
+
+| Document                                     | What it covers                                                                     |
+| -------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [Self-hosting guide](docs/SELF-HOSTING.md)   | Step-by-step install: Supabase, Vercel, first login, optional features, updates    |
+| [Environment variables](docs/ENVIRONMENT.md) | Reference for every setting                                                        |
+| [Payment gateway](docs/PAYMENT-GATEWAY.md)   | Online invoice payments with Midtrans (ID + EN): setup, sandbox, refunds           |
+| [Bank notifications](docs/MACRODROID.md)     | Match bank/e-wallet notifications to invoices via MacroDroid (ID + EN)             |
+| [n8n, Telegram & email](docs/N8N.md)         | Telegram bot, reminders, reports, weekly backup, Google Drive, Gmail SMTP, Resend  |
+| [Architecture](docs/ARCHITECTURE.md)         | Tech stack, directory layout, data flows, contributor rules                        |
+| [FAQ](docs/FAQ.md)                           | Common questions and troubleshooting                                               |
+| [Public demo](docs/DEMO.md)                  | How the live demo works and how to run your own                                    |
+| [n8n templates](n8n/README.md)               | What each workflow file does                                                       |
+| [Changelog](CHANGELOG.md)                    | Notable changes                                                                    |
+| [Contributing](CONTRIBUTING.md)              | How to propose changes                                                             |
+| [Security policy](SECURITY.md)               | How to report a vulnerability                                                      |
+| [Accessibility](ACCESSIBILITY.md)            | Accessibility goals, supported environments, known gaps and how to report barriers |
+
+## Local development
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ilramdhan/dompetku)
+
+Prefer zero setup? Open the repo in GitHub Codespaces: the dev container installs dependencies
+and includes Docker, so `bun run db:up`, `bun run dev` and `bun run test` work right away.
+
+Locally, you need [Node.js](https://nodejs.org) 22 or newer, [Bun](https://bun.sh) (the primary package manager, used by CI) and
+a Supabase project with the schema applied. npm also works (`npm install` / `npm run <script>`).
+
+```bash
+git clone https://github.com/<your-username>/dompetku.git
+cd dompetku
+bun install
+cp .env.example .env    # then fill in at least the five required variables
+bun run dev             # open the URL printed in the terminal
+```
+
+| Command             | What it does                                                                 |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `bun run dev`       | Start the development server                                                 |
+| `bun run build`     | Production build                                                             |
+| `bun run lint`      | ESLint                                                                       |
+| `bun run typecheck` | TypeScript check                                                             |
+| `bun run test`      | Run all tests once (`bun run test:watch` to keep watching)                   |
+| `bun run format`    | Format the code with Prettier                                                |
+| `bun run gen:types` | Regenerate database types (needs `SUPABASE_PROJECT_ID` and the Supabase CLI) |
+
+More detail is in the [local development section of the self-hosting guide](docs/SELF-HOSTING.md).
+
+## Contributing
+
+Contributions are welcome, from typo fixes and translations to new features. Please read
+[CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) first. Before
+opening a pull request, make sure `bun run lint`, `bun run typecheck`, `bun run test` and
+`bun run build` all pass; CI runs the same checks. Contributor rules (schema sections, i18n,
+privacy mode and more) are summarised in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#conventions-and-contributor-rules)
+and listed in full in [AGENTS.md](AGENTS.md). For user-facing changes, also follow the
+[accessibility expectations](ACCESSIBILITY.md#contributor-expectations).
+
+## Security
+
+Please **do not** open a public issue for security problems. See [SECURITY.md](SECURITY.md) for
+how to report a vulnerability privately.
+
+## License
+
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Ilham Ramadhan.
+
+Every instance also serves short, public [privacy policy](src/components/legal/legal-content.ts)
+(`/privacy`) and terms (`/terms`) pages written for a self-hosted deployment; they are linked from
+the landing page footer. Edit `src/components/legal/legal-content.ts` (and the matching English
+strings in `src/lib/i18n.tsx`) if your instance needs different wording.
+
+## Contributors
+
+Thanks to everyone who has helped build Dompetku. Want to join them? Pick a [good first issue](https://github.com/ilramdhan/dompetku/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+
+<a href="https://github.com/ilramdhan/dompetku/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=ilramdhan/dompetku" alt="Dompetku contributors">
+</a>
+
+## Star history
+
+<a href="https://star-history.com/#ilramdhan/dompetku&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=ilramdhan/dompetku&type=Date&theme=dark">
+    <img src="https://api.star-history.com/svg?repos=ilramdhan/dompetku&type=Date" alt="Dompetku GitHub star history chart" width="600">
+  </picture>
+</a>
+
+## Acknowledgements
+
+- [TanStack](https://tanstack.com) for Start, Router and Query
+- [Supabase](https://supabase.com) for the database and storage
+- [shadcn/ui](https://ui.shadcn.com) and [Radix UI](https://www.radix-ui.com) for UI components,
+  [Lucide](https://lucide.dev) for icons and [Recharts](https://recharts.org) for charts
+- [n8n](https://n8n.io) for workflow automation
+- Technology logos on the landing page from [Simple Icons](https://simpleicons.org) (CC0 1.0)
+- Fonts [Bricolage Grotesque](https://github.com/ateliertriay/bricolage),
+  [Figtree](https://github.com/erikdkennedy/figtree) and
+  [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono), self-hosted via
+  [Fontsource](https://fontsource.org) under the SIL Open Font License 1.1
+  ([license](public/fonts/LICENSE-OFL.txt))
+- Originally scaffolded with [Lovable](https://lovable.dev)
+
+---
+
+If Dompetku is useful to you, please consider giving it a star, or support its development via
+[GitHub Sponsors](https://github.com/sponsors/ilramdhan). Feedback, ideas and bug reports
+are welcome in [GitHub Issues](https://github.com/ilramdhan/dompetku/issues).

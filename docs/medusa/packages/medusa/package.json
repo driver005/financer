@@ -1,0 +1,154 @@
+{
+  "name": "@medusajs/medusa",
+  "version": "2.22.7",
+  "description": "Building blocks for digital commerce",
+  "main": "dist/index.js",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./dist/index.js",
+    "./types": "./dist/types/index.js",
+    "./utils": "./dist/utils/index.js",
+    "./api/*": "./dist/api/*.js",
+    "./subscribers/*": "./dist/subscribers/*.js",
+    "./jobs/*": "./dist/jobs/*.js",
+    "./core-flows": "./dist/core-flows/index.js",
+    "./loaders/*": "./dist/loaders/*.js",
+    "./commands/*": "./dist/commands/*.js",
+    "./feature-flags/*": "./dist/feature-flags/*.js",
+    "./*": "./dist/modules/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/medusajs/medusa.git",
+    "directory": "packages/medusa"
+  },
+  "bugs": {
+    "url": "https://github.com/medusajs/medusa/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "oas",
+    "AGENTS.md",
+    "!dist/**/__tests__",
+    "!dist/**/__mocks__",
+    "!dist/**/__fixtures__"
+  ],
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "author": "Sebastian Rindom",
+  "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://medusajs.com",
+  "llms": "https://docs.medusajs.com/llms.txt",
+  "llmsFull": "https://docs.medusajs.com/llms-full.txt",
+  "mcpServer": "https://docs.medusajs.com/mcp",
+  "scripts": {
+    "watch": "yarn run -T tsc --build --watch",
+    "build": "yarn run -T rimraf dist && yarn run -T tsc --build",
+    "serve": "node dist/app.js",
+    "test": "../../node_modules/.bin/jest --bail --forceExit --testPathIgnorePatterns='/integration-tests/' --testPathPatterns=src",
+    "test:integration": "../../node_modules/.bin/jest --passWithNoTests --forceExit --testPathPatterns=\"src/.*/integration-tests/__tests__/.*\\.ts\""
+  },
+  "devDependencies": {
+    "@medusajs/framework": "2.22.7"
+  },
+  "dependencies": {
+    "@inquirer/checkbox": "^5.2.7",
+    "@inquirer/confirm": "^6.3.4",
+    "@inquirer/input": "^5.1.8",
+    "@medusajs/admin-bundler": "2.22.7",
+    "@medusajs/analytics": "2.22.7",
+    "@medusajs/analytics-local": "2.22.7",
+    "@medusajs/analytics-posthog": "2.22.7",
+    "@medusajs/api-key": "2.22.7",
+    "@medusajs/audit": "2.22.7",
+    "@medusajs/auth": "2.22.7",
+    "@medusajs/auth-emailpass": "2.22.7",
+    "@medusajs/auth-github": "2.22.7",
+    "@medusajs/auth-google": "2.22.7",
+    "@medusajs/auth-oidc": "2.22.7",
+    "@medusajs/cache-inmemory": "2.22.7",
+    "@medusajs/cache-redis": "2.22.7",
+    "@medusajs/caching": "2.22.7",
+    "@medusajs/caching-redis": "2.22.7",
+    "@medusajs/cart": "2.22.7",
+    "@medusajs/cloud": "2.22.7",
+    "@medusajs/core-flows": "2.22.7",
+    "@medusajs/currency": "2.22.7",
+    "@medusajs/customer": "2.22.7",
+    "@medusajs/draft-order": "2.22.7",
+    "@medusajs/event-bus-local": "2.22.7",
+    "@medusajs/event-bus-redis": "2.22.7",
+    "@medusajs/file": "2.22.7",
+    "@medusajs/file-local": "2.22.7",
+    "@medusajs/file-s3": "2.22.7",
+    "@medusajs/fulfillment": "2.22.7",
+    "@medusajs/fulfillment-manual": "2.22.7",
+    "@medusajs/index": "2.22.7",
+    "@medusajs/inventory": "2.22.7",
+    "@medusajs/link-modules": "2.22.7",
+    "@medusajs/locking": "2.22.7",
+    "@medusajs/locking-postgres": "2.22.7",
+    "@medusajs/locking-redis": "2.22.7",
+    "@medusajs/notification": "2.22.7",
+    "@medusajs/notification-local": "2.22.7",
+    "@medusajs/notification-sendgrid": "2.22.7",
+    "@medusajs/order": "2.22.7",
+    "@medusajs/payment": "2.22.7",
+    "@medusajs/payment-adyen": "2.22.7",
+    "@medusajs/payment-stripe": "2.22.7",
+    "@medusajs/pricing": "2.22.7",
+    "@medusajs/product": "2.22.7",
+    "@medusajs/promotion": "2.22.7",
+    "@medusajs/rbac": "2.22.7",
+    "@medusajs/region": "2.22.7",
+    "@medusajs/sales-channel": "2.22.7",
+    "@medusajs/search": "2.22.7",
+    "@medusajs/search-postgres": "2.22.7",
+    "@medusajs/settings": "2.22.7",
+    "@medusajs/stock-location": "2.22.7",
+    "@medusajs/store": "2.22.7",
+    "@medusajs/tax": "2.22.7",
+    "@medusajs/telemetry": "2.22.7",
+    "@medusajs/translation": "2.22.7",
+    "@medusajs/user": "2.22.7",
+    "@medusajs/workflow-engine-inmemory": "2.22.7",
+    "@medusajs/workflow-engine-redis": "2.22.7",
+    "boxen": "^9.0.0",
+    "chokidar": "^6.0.0",
+    "compression": "^1.8.2",
+    "express": "^4.21.0",
+    "fs-exists-cached": "^1.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.5.0",
+    "node-schedule": "^2.1.1",
+    "qs": "^6.16.1",
+    "request-ip": "^3.3.0",
+    "slugify": "^1.6.6"
+  },
+  "peerDependencies": {
+    "@medusajs/framework": "2.22.7",
+    "@swc/core": "^1.7.28",
+    "posthog-node": "^5.57.0",
+    "react-dom": "^18.3.1",
+    "yalc": "^1.0.0-pre.53"
+  },
+  "peerDependenciesMeta": {
+    "@swc/core": {
+      "optional": true
+    },
+    "posthog-node": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "yalc": {
+      "optional": true
+    }
+  },
+  "gitHead": "cd1f5afa5aa8c0b15ea957008ee19f1d695cbd2e"
+}

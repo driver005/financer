@@ -1,0 +1,300 @@
+<!doctype html>
+<!--
+  Static Telegram chat mock used by scripts/screenshots.mjs for public/screenshots/telegram-bot*.png.
+  Message texts mirror the real bot replies (src/lib/bot.ts previewText/previewKeyboard/undoKeyboard,
+  finance.server.ts createFromExternal, budget.ts budgetAlertText, bot.server.ts balancesText)
+  with the fictional demo accounts from scripts/seed-demo.mjs. Add ?theme=dark for the dark variant.
+-->
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Telegram mock</title>
+    <style>
+      :root {
+        --bg: #cfe3c9;
+        --pattern: rgba(29, 59, 47, 0.06);
+        --bar: #ffffff;
+        --bar-fg: #000000;
+        --muted: #8a8f98;
+        --in: #ffffff;
+        --out: #e1fec6;
+        --fg: #111111;
+        --time: #8a9a87;
+        --out-time: #5fa452;
+        --btn: rgba(29, 59, 47, 0.32);
+        --btn-fg: #ffffff;
+        --accent: #3a8ad6;
+        --input: #ffffff;
+      }
+      :root.dark {
+        --bg: #0e1621;
+        --pattern: rgba(255, 255, 255, 0.025);
+        --bar: #17212b;
+        --bar-fg: #ffffff;
+        --muted: #708499;
+        --in: #182533;
+        --out: #2b5278;
+        --fg: #f5f5f5;
+        --time: #6d7f8f;
+        --out-time: #7da8d3;
+        --btn: rgba(24, 37, 51, 0.85);
+        --btn-fg: #ffffff;
+        --accent: #6ab3f3;
+        --input: #17212b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        font:
+          15px/1.38 -apple-system,
+          "SF Pro Text",
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        color: var(--fg);
+        background-color: var(--bg);
+        background-image: radial-gradient(var(--pattern) 1.5px, transparent 1.5px);
+        background-size: 18px 18px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 14px 8px;
+        background: var(--bar);
+        color: var(--bar-fg);
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+      }
+      .back {
+        color: var(--accent);
+        font-size: 28px;
+        line-height: 1;
+        margin-right: 2px;
+      }
+      .avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        background: #1d3b2f;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+      .avatar img {
+        width: 30px;
+        height: 30px;
+      }
+      .title b {
+        display: block;
+        font-size: 16px;
+      }
+      .title span {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 5px;
+        padding: 10px 10px 8px;
+        overflow: hidden;
+      }
+      .day {
+        align-self: center;
+        background: rgba(0, 0, 0, 0.18);
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 2px 10px;
+        border-radius: 12px;
+        margin: 0 0 2px;
+      }
+      .msg {
+        max-width: 84%;
+        padding: 6px 10px 6px;
+        border-radius: 14px;
+        white-space: pre-wrap;
+        position: relative;
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+        font-size: 13px;
+        line-height: 1.27;
+      }
+      .msg time {
+        float: right;
+        margin: 6px 0 -4px 10px;
+        font-size: 11px;
+        color: var(--time);
+      }
+      .in {
+        align-self: flex-start;
+        background: var(--in);
+        border-bottom-left-radius: 4px;
+      }
+      .out {
+        align-self: flex-end;
+        background: var(--out);
+        border-bottom-right-radius: 4px;
+      }
+      .out time {
+        color: var(--out-time);
+      }
+      .group {
+        align-self: flex-start;
+        max-width: 84%;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .group .msg {
+        max-width: none;
+      }
+      .kb {
+        display: grid;
+        gap: 3px;
+      }
+      .row {
+        display: flex;
+        gap: 3px;
+      }
+      .row span {
+        flex: 1;
+        text-align: center;
+        background: var(--btn);
+        color: var(--btn-fg);
+        font-size: 13px;
+        font-weight: 500;
+        padding: 7px 4px;
+        border-radius: 8px;
+        backdrop-filter: blur(6px);
+        white-space: nowrap;
+      }
+      footer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px 18px;
+        background: var(--bar);
+        color: var(--muted);
+        font-size: 15px;
+      }
+      footer .field {
+        flex: 1;
+        background: var(--input);
+        border-radius: 18px;
+        padding: 6px 4px;
+      }
+      footer .mic {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 2px solid var(--muted);
+      }
+    </style>
+    <script>
+      if (new URLSearchParams(location.search).get("theme") === "dark")
+        document.documentElement.classList.add("dark");
+    </script>
+  </head>
+  <body>
+    <header>
+      <span class="back">‹</span>
+      <span class="avatar"><img src="/logo.svg" alt="" /></span>
+      <span class="title"><b>Dompetku Bot</b><span>bot</span></span>
+    </header>
+    <main id="chat"><span class="day">Hari ini</span></main>
+    <footer><span>📎</span><span class="field">Pesan</span><span class="mic"></span></footer>
+    <script>
+      // Texts follow the real reply formats (see the comment at the top of this file).
+      const today = new Intl.DateTimeFormat("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }).format(new Date());
+      const CHAT = [
+        { out: true, time: "08:12", text: "kopi 28rb pakai gopay" },
+        {
+          time: "08:12",
+          text: [
+            "📝 Pratinjau transaksi",
+            "",
+            "Jenis: 💸 Pengeluaran",
+            "Jumlah: Rp 28.000",
+            "Kategori: Makanan & Minuman",
+            "Akun: GoPay",
+            `Tanggal: ${today}`,
+            "Ket: kopi",
+            "",
+            "⚡ Dibaca tanpa AI",
+          ],
+          kb: [
+            ["✅ Simpan", "❌ Batal"],
+            ["🏷 Kategori", "🏦 Akun", "🔁 Masuk/Keluar"],
+          ],
+        },
+        { out: true, time: "19:40", text: "nonton bioskop 85rb pakai ovo" },
+        {
+          time: "19:41",
+          text: [
+            "✅ Tercatat: Pengeluaran Rp 85.000 • Hiburan • nonton bioskop • OVO",
+            "",
+            "🔴 Budget Hiburan terlampaui: 140% (Rp 560.000 / Rp 400.000)",
+          ],
+          kb: [["↩️ Undo"]],
+        },
+        { out: true, time: "19:42", text: "/saldo" },
+        {
+          time: "19:42",
+          text: [
+            "💰 Saldo akun",
+            "",
+            "🏦 BCA: Rp 18.742.500",
+            "🏦 Mandiri Tabungan: Rp 9.315.000",
+            "📱 GoPay: Rp 412.000",
+            "📱 OVO: Rp 96.500",
+            "💵 Tunai: Rp 535.000",
+            "💳 Kartu Kredit: -Rp 1.285.000",
+            "📈 Reksa Dana USD: US$ 2.618,40",
+            "",
+            "Total (IDR): Rp 70.470.736",
+          ],
+        },
+      ];
+      const chat = document.getElementById("chat");
+      const el = (tag, cls, text) => {
+        const e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text != null) e.textContent = text;
+        return e;
+      };
+      for (const m of CHAT) {
+        const msg = el("div", `msg ${m.out ? "out" : "in"}`, [].concat(m.text).join("\n"));
+        msg.append(el("time", null, m.out ? `${m.time} ✓✓` : m.time));
+        if (!m.kb) {
+          chat.append(msg);
+          continue;
+        }
+        const group = el("div", "group");
+        const kb = el("div", "kb");
+        for (const row of m.kb) {
+          const r = el("div", "row");
+          for (const b of row) r.append(el("span", null, b));
+          kb.append(r);
+        }
+        group.append(msg, kb);
+        chat.append(group);
+      }
+    </script>
+  </body>
+</html>

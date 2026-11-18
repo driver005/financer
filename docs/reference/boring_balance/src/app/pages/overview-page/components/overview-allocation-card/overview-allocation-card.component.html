@@ -1,0 +1,40 @@
+<app-base-card
+  class="h-full"
+  [style.height.%]="100"
+  [zTitle]="'overview.cards.netWorth.allocationTitle' | translate"
+>
+  @if (isLoading()) {
+    <div class="flex h-40 items-center justify-center">
+      <z-loader zSize="default" />
+    </div>
+  } @else if (loadError()) {
+    <p class="text-sm text-destructive">{{ 'overview.errors.summaryLoad' | translate }}</p>
+  } @else if (distributionPieItems().length === 0) {
+    <div
+      class="flex h-24 flex-col items-center justify-center gap-3 rounded-md border border-border/50 bg-muted/30 px-4 py-4 text-center"
+    >
+      <p class="text-xs text-muted-foreground">{{ emptyMessageKey() | translate }}</p>
+      @if (canCreateAccountFromEmptyState()) {
+        <button z-button zType="outline" zSize="sm" (click)="onCreateAccountClick()">
+          + {{ 'accounts.table.actions.add' | translate }}
+        </button>
+      }
+    </div>
+  } @else {
+    <app-pie-chart
+      class="mt-1"
+      [data]="distributionPieItems()"
+      [showLegend]="true"
+      [showLabels]="false"
+      [legendPosition]="'right'"
+      [donut]="false"
+      [radiusScale]="3"
+      [scaleSize]="1"
+      [dimOthersOnFocus]="true"
+      [scaleOnFocus]="true"
+      [blurOpacity]="0.2"
+      [tooltipShowPercentage]="true"
+      [height]="pieChartHeight()"
+    ></app-pie-chart>
+  }
+</app-base-card>

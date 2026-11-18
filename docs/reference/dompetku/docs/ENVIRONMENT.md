@@ -1,0 +1,243 @@
+# Environment variables
+
+Every setting Dompetku reads from its environment. New to this? An **environment variable** is a named setting (like `APP_PASSWORD`) that you give to the server instead of writing it into the code — so your secrets never end up on GitHub.
+
+**Where to set them**
+
+| Place                          | How                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Vercel** (production)        | Project → **Settings → Environment Variables** → add Key/Value → then **Deployments → ⋯ → Redeploy**. Changes only apply after a redeploy. |
+| **Local `.env`** (development) | `cp .env.example .env`, fill in values. Never commit `.env`.                                                                               |
+| **n8n**                        | Environment of the n8n container/process (e.g. `docker-compose.yml`). See [n8n variables](#n8n-variables) and [N8N.md](N8N.md).            |
+
+> [!WARNING]
+> All app variables are **server-only**. None of them start with `VITE_`, so none are ever sent to the browser. Keep it that way — never rename a secret to `VITE_…`.
+
+Step-by-step setup: [SELF-HOSTING.md](SELF-HOSTING.md). Template: [`.env.example`](../.env.example).
+
+## Setting integrations from the web UI (v16)
+
+After running the **v16** section of `supabase/schema.sql`, **Settings → Integrasi** can store the bot, AI, email and n8n values below in the database — like Vercel environment variables, but without editing `.env` or redeploying. Changes apply within ~60 s per server instance (immediately on the instance that saved them).
+
+**Precedence:** value saved in Settings (if valid) → env var → built-in default. Nothing saved (or no v16 table) = exactly the env behaviour you have today. **Remove** in Settings deletes the database value and falls back to env.
+
+| Can be set in Settings → Integrasi                                                                                                   | Env only (never manageable from the UI)                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_SITE_URL` (Situs, https only; http only for `localhost`)                                                                     |                                                                                                                                          |
+| `N8N_API_KEY`\*, `BOT_ALLOWED_CHAT_IDS`, `TELEGRAM_ADMIN_CHAT_ID`, `BOT_TEXT_AI`, `BOT_AI_DAILY_LIMIT`                               | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (needed to read the database at all)                                                         |
+| `AI_API_URL`, `AI_API_KEY`\*, `AI_MODEL`, `AI_MODEL_TEXT`                                                                            | `SESSION_SECRET`, `SETTINGS_ENCRYPTION_KEY`, `APP_USERNAME`, `APP_PASSWORD`, `APP_TOTP_SECRET` (guard access to the settings themselves) |
+| `RESEND_API_KEY`\*, `EMAIL_FROM`, `EMAIL_TO`                                                                                         | `DEMO_MODE`, `SENTRY_DSN`, `APP_TIMEZONE`/`BOT_DEFAULT_ACCOUNT` (those two are in Settings → Aplikasi, v14), `FALLBACK_USD_IDR`, …       |
+| `TELEGRAM_BOT_TOKEN`\* (optional, [Telegram direct mode](N8N.md#telegram-direct-mode-without-n8n))                                   |                                                                                                                                          |
+| `MIDTRANS_ENABLED`, `MIDTRANS_SERVER_KEY`\*, `MIDTRANS_CLIENT_KEY`, `MIDTRANS_PRODUCTION`, `MIDTRANS_FEES`, `MIDTRANS_PARTIAL` (v25) | `MIDTRANS_API_BASE`, `MIDTRANS_SNAP_BASE` (test-only overrides)                                                                          |
+| `MACRODROID_TOKEN`\*, `MACRODROID_AUTO_CONFIRM`, `MACRODROID_GENERIC` (v26)                                                          |                                                                                                                                          |
+
+\* **Secrets** are write-only, like Vercel: they are encrypted at rest (AES-256-GCM, random IV per value) and the server never sends them back to the browser — Settings only shows the source (Database / Env / Belum diatur) and the last 4 characters. The `integration_settings` table is **not** included in JSON backups, so re-enter secrets after restoring onto a new instance.
+
+| Name                      | Required? | Example                     | What it does                                                                                                                                                                                                        | Security                                                                                                                                                                                                                    |
+| ------------------------- | --------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SETTINGS_ENCRYPTION_KEY` | No        | `<openssl rand -base64 48>` | Key material (≥ 32 chars) for encrypting secrets saved in Settings → Integrasi and for the Telegram webhook secret. When empty (or shorter), a key is derived from `SESSION_SECRET` with HKDF and a separate label. | **Secret.** Changing it (or `SESSION_SECRET` when this is empty) makes saved secrets unreadable: the app then falls back to env and Settings asks you to re-enter them. Set it if you ever plan to rotate `SESSION_SECRET`. |
+
+> [!WARNING]
+> **Rotating `SESSION_SECRET`** without `SETTINGS_ENCRYPTION_KEY` logs you out **and** invalidates every secret saved in Settings → Integrasi (and the Telegram webhook secret). Nothing crashes — env values are used — but re-enter the secrets and click **Pasang webhook** again afterwards.
+
+## Required
+
+| Name                        | Example                                       | What it does                                                                                                                                                                                                                                                                          | How to obtain                                                                               | Security                                                                                                        |
+| --------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `SUPABASE_URL`              | `https://your-project-ref.supabase.co`        | Address of your Supabase database API.                                                                                                                                                                                                                                                | Supabase → Project Settings → Data API → Project URL.                                       | Not secret on its own.                                                                                          |
+| `SUPABASE_SERVICE_ROLE_KEY` | `sb_secret_…` or `eyJ…` (legacy service_role) | Server key used for **all** database and Storage access. RLS is on with no policies, so only this key can read data.                                                                                                                                                                  | Supabase → Project Settings → API Keys → Secret key (or Legacy → `service_role`).           | **Highly sensitive** — full database access. Never in browser, logs, screenshots. Rotate in Supabase if leaked. |
+| `APP_USERNAME`              | `me`                                          | The single login username.                                                                                                                                                                                                                                                            | Choose it.                                                                                  | Treat as private.                                                                                               |
+| `APP_PASSWORD`              | `<long random password>`                      | The login password (compared in constant time; 8 failed attempts per 15 min lock login). Once you change the password in **Profile** (schema v17) the stored hash is used instead and this value stops working — see [Password changed in the app](#password-changed-in-the-app-v17). | Password manager.                                                                           | **Secret.** Use a long unique password.                                                                         |
+| `SESSION_SECRET`            | `<openssl rand -base64 48>`                   | HMAC key that signs the login cookie (valid 7 days). **Must be ≥ 32 characters**, otherwise login fails.                                                                                                                                                                              | `openssl rand -base64 48` (see [SELF-HOSTING §3](SELF-HOSTING.md#3-generate-your-secrets)). | **Secret.** Changing it logs everyone out.                                                                      |
+
+## Automation (n8n)
+
+| Name          | Required?                                                 | Example                     | What it does                                                                                                                                                                                       | Security                                                                                                                                     |
+| ------------- | --------------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `N8N_API_KEY` | For bot, reminders, backups, any `/api/public/n8n/*` call | `<openssl rand -base64 48>` | Shared key that n8n sends in the `x-api-key` header (or `Authorization: Bearer`). **Must be ≥ 24 characters**; empty/shorter makes every n8n endpoint answer **503**, a wrong value gives **401**. | **Secret.** Same value goes into the n8n _Header Auth_ credential. The backup endpoint returns all your data, so protect it like a password. |
+
+## Password changed in the app (v17)
+
+After running the **v17** section of `supabase/schema.sql`, **Profile** (avatar menu, or Settings → Profil & password) lets you change your name, address, photo and password. The new password is stored in `app_users.password_hash` as a salted **scrypt** hash (`scrypt$v1$N$r$p$salt$hash`); from then on the login uses that hash and `APP_PASSWORD` is ignored. Changing it also signs out every other device. Without v17 (or before your first change) login works exactly as before with `APP_PASSWORD`.
+
+| Name                 | Example                  | What it does                                                                                                                                                                                               | Security                                                                                                                  |
+| -------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `APP_PASSWORD_RESET` | `true` (only to recover) | **Recovery switch.** `true` ignores the stored password hash so `APP_PASSWORD` works again. Each login with it is logged (server log + activity "Login dengan APP_PASSWORD_RESET"). Any other value = off. | Only someone with access to your hosting env can set it. Change the password in Profile, then **remove it** and redeploy. |
+
+## Login 2FA (optional)
+
+| Name              | Example                                  | What it does                                                                                                                                   | How to obtain                                                           | Security                                                                                 |
+| ----------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `APP_TOTP_SECRET` | `JBSWY3DPEHPK3PXP…` (base32, ≥ 16 chars) | Enables a 6-digit authenticator code after the password. Empty = password-only. An invalid value is ignored (2FA off) and flagged in Settings. | App → **Settings → Two-step verification (2FA) → Generate secret key**. | **Secret.** Keep a backup in your password manager. Removing it + redeploy disables 2FA. |
+
+## AI: receipt OCR and chat parsing (optional)
+
+| Name              | Default                                    | Example                                                                    | What it does                                                                                                                     |
+| ----------------- | ------------------------------------------ | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `AI_API_URL`      | Lovable AI gateway (only works on Lovable) | `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` | Full URL of an **OpenAI-compatible chat-completions** endpoint. Must end in `/chat/completions`. Set it on Vercel.               |
+| `AI_API_KEY`      | —                                          | `<provider API key>`                                                       | Sent as `Authorization: Bearer …`. Without it, OCR and AI parsing return an error (non-AI chat parsing still works). **Secret.** |
+| `AI_MODEL`        | `google/gemini-2.5-flash`                  | `gemini-2.5-flash`, `gpt-4o-mini`                                          | Model for receipt photos — must support images (vision). Name format depends on the provider.                                    |
+| `AI_MODEL_TEXT`   | value of `AI_MODEL`                        | `gemini-2.5-flash-lite`                                                    | Cheaper model for parsing ambiguous chat messages.                                                                               |
+| `LOVABLE_API_KEY` | —                                          | —                                                                          | Set automatically by Lovable; used as the key when `AI_API_KEY` is empty. Don't set it on Vercel.                                |
+
+Provider examples (Gemini, OpenAI, OpenRouter, Ollama): [SELF-HOSTING §6.2](SELF-HOSTING.md#62-receipt-ocr-and-ai-chat-parsing).
+
+Proxies and routers (e.g. 9router, LiteLLM) work too: the app sends `"stream": false`, and if the proxy still answers with a streamed (`text/event-stream`) response, the chunks are joined automatically. If the bot replies "Respons AI tidak bisa dibaca", check that `AI_API_URL` is the full `/chat/completions` URL.
+
+## Telegram bot (optional)
+
+| Name                     | Required?                   | Example                       | What it does                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------ | --------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BOT_ALLOWED_CHAT_IDS`   | **Yes, if you use the bot** | `123456789,987654321`         | Comma-separated Telegram chat IDs allowed to use the bot (group chats have negative IDs, supergroups start with `-100`; see [N8N.md](N8N.md#using-the-bot-in-a-telegram-group)). **Fails closed:** empty = every chat is refused before any database access, and the bot replies with the chat ID to add.                                                                                                  |
+| `BOT_DEFAULT_ACCOUNT`    | No                          | `BCA`                         | Account name used when a message doesn't mention one. Must match an existing account name. Can be overridden in Settings → App (v14).                                                                                                                                                                                                                                                                      |
+| `BOT_TEXT_AI`            | No (default `auto`)         | `auto` \| `always` \| `never` | When chat messages may use AI: only when ambiguous, always, or never (zero AI tokens for chat; receipts still use AI).                                                                                                                                                                                                                                                                                     |
+| `BOT_AI_DAILY_LIMIT`     | No (default `50`)           | `50` \| `0`                   | Max bot AI calls (chat parsing + photo OCR) per chat per app-local day; the bot then asks for the quick format. `0` = unlimited. Counted in `ai_usage` (v15); without it, today's AI/OCR drafts.                                                                                                                                                                                                           |
+| `TELEGRAM_BOT_TOKEN`     | Only for direct mode        | `123456789:AA…`               | Enables [Telegram direct mode](N8N.md#telegram-direct-mode-without-n8n): Telegram calls `POST /api/public/telegram/webhook` on the app itself, no n8n relay. Not needed with n8n. **Secret.**                                                                                                                                                                                                              |
+| `TELEGRAM_ADMIN_CHAT_ID` | No                          | `123456789` \| `-100123…`     | Owner chat for [per-member notifications](N8N.md#per-member-notifications-optional-v22) (`/api/public/n8n/notifications`, workflow 06): gets the all-wallet report/reminder text. Members' chat ids are set in Settings → Pengguna or by each member in Profil (v22). Also settable in Settings → Integrasi. Not a bot allow-list entry. Workflow 02/03 keep reading the **n8n** env var of the same name. |
+
+## Regional (optional)
+
+| Name               | Default        | Example                          | What it does                                                                                                                                                                                |
+| ------------------ | -------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_TIMEZONE`     | `Asia/Jakarta` | `Asia/Makassar`, `Europe/Berlin` | IANA time zone that defines "today" for new transactions, reminders, reports and recurring items. Use the same zone in n8n (`GENERIC_TIMEZONE`). Can be overridden in Settings → App (v14). |
+| `FALLBACK_USD_IDR` | `16000`        | `16250`                          | USD→IDR rate used only when the live rate API (open.er-api.com) fails **and** no rate is stored yet.                                                                                        |
+
+> **Settings override (v14).** After running the v14 section of `supabase/schema.sql`, Settings → **Aplikasi** stores the app name, tagline, logo, time zone, base currency (display preference only — totals stay in IDR), landing page toggle, bot default account and default reminder days in the single-row `app_settings` table. Values set there win over `APP_TIMEZONE` / `BOT_DEFAULT_ACCOUNT`; empty fields (or a missing table) fall back to these env vars and built-in defaults. Changes apply within ~60 s per server instance.
+
+## Email reminders via Resend (optional)
+
+All three are needed for `POST /api/public/n8n/reminders-send-email`. Not needed if n8n sends email itself.
+
+| Name             | Example                               | What it does                                                             | How to obtain                                                  |
+| ---------------- | ------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `RESEND_API_KEY` | `re_…`                                | Resend API key. **Secret.**                                              | <https://resend.com> → API Keys.                               |
+| `EMAIL_FROM`     | `Dompetku <noreply@mail.example.com>` | Sender; the domain must be verified in Resend.                           | Resend → Domains → add DNS records your domain provider shows. |
+| `EMAIL_TO`       | `you@example.com`                     | Default recipient(s), comma-separated. A request body `to` overrides it. | —                                                              |
+
+## Payment gateway: Midtrans (optional)
+
+Online invoice payments ("Bayar sekarang" on the public invoice page), schema **v25**. Step-by-step
+guide (ID + EN): **[PAYMENT-GATEWAY.md](PAYMENT-GATEWAY.md)**. All six (except the test-only bases) can also be set in
+Settings → Integrasi (wins over env). Off unless `MIDTRANS_ENABLED=true` and a server key is set.
+
+| Name                  | Example                                                | What it does                                                                                                                                                      | How to obtain                                |
+| --------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `MIDTRANS_ENABLED`    | `true`                                                 | Turns the gateway on (default `false`).                                                                                                                           | —                                            |
+| `MIDTRANS_SERVER_KEY` | `SB-Mid-server-…`                                      | Server key for Snap, status and refund calls and the webhook signature. **Secret**, never sent to the browser.                                                    | Midtrans dashboard → Settings → Access Keys. |
+| `MIDTRANS_CLIENT_KEY` | `SB-Mid-client-…`                                      | Public client key for Snap JS. Without it the customer is redirected to the Midtrans page instead of a popup.                                                     | Same page.                                   |
+| `MIDTRANS_PRODUCTION` | `false`                                                | `false` = sandbox hosts (default), `true` = production hosts (real money). Must match the keys.                                                                   | —                                            |
+| `MIDTRANS_FEES`       | `qris=0.7%; credit_card=2.9%+2000; bank_transfer=4000` | Optional (#124): MDR rates per Midtrans `payment_type` (`*` = others). Each paid order books the fee once as a "Biaya Admin" expense. Empty/invalid = not booked. | Your Midtrans pricing / agreement.           |
+| `MIDTRANS_PARTIAL`    | `false`                                                | Optional (#124): `true` lets customers pay part of the remaining balance (min. Rp10,000, leaving ≥ Rp10,000) via "Bayar sekarang".                                | —                                            |
+| `MIDTRANS_API_BASE`   | `http://127.0.0.1:4010`                                | **Test only**, env only: Core API base (status/refund) for a local mock. Ignored when `MIDTRANS_PRODUCTION=true`.                                                 | Leave empty.                                 |
+| `MIDTRANS_SNAP_BASE`  | `http://127.0.0.1:4010`                                | **Test only**, env only: Snap base (create). Ignored in production; the browser then uses `redirect_url`.                                                         | Leave empty.                                 |
+
+Set **Payment Notification URL** in the Midtrans dashboard to
+`https://<your-domain>/api/public/payments/midtrans`. Set `PUBLIC_SITE_URL` so the return link
+uses your public domain: without it no per-payment return link is sent (the request Host header is
+never trusted) and Midtrans uses the Finish Redirect URL from its dashboard. A sandbox key (`SB-…`)
+with `MIDTRANS_PRODUCTION=true`, or a production key in sandbox mode, keeps the gateway off. The
+test-only base overrides apply only in sandbox mode with an `SB-` server key.
+
+## Network (optional)
+
+Per-IP rate limits (invoice proof upload, the pay button, bad gateway webhooks, demo writes) need
+the real client address. `X-Forwarded-For` can be forged by any client, so it is **ignored unless
+you set `TRUSTED_PROXY`**; the address the platform reports for the connection is used instead.
+Env only (a security setting, never manageable from Settings).
+
+| Name            | Example                                       | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | When to set                                                                                                                                                                                                                                                      |
+| --------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRUSTED_PROXY` | `127.0.0.1`, `172.18.0.0/16`, `loopback`, `1` | Empty (default) = `X-Forwarded-For`/`X-Real-IP` ignored. A comma list of IPs/CIDRs (plus `loopback`, `private`) = trusted proxy addresses; the header is walked right to left past them (recommended). A number `1`–`10` = that many proxies in front of the app each **append** to `X-Forwarded-For`; the client is that many entries from the right (fewer entries = the connection address), and the header is only read when the connection comes from a loopback/private address. Invalid entries are ignored and never become the client address. | **Vercel** and **Lovable/Cloudflare**: leave empty (the platform already reports the real client). **Docker/Node behind Caddy, Nginx, Traefik or a tunnel**: the proxy address(es), or the number of appending proxies. Directly exposed container: leave empty. |
+
+> [!WARNING]
+> `TRUSTED_PROXY` is only safe when the app port is reachable **only through the proxy** (e.g.
+> `127.0.0.1:3000:3000` in `docker-compose.yml`, or no published port on a shared Docker network).
+>
+> - **Prefer the address list.** A hop count must equal the number of proxies that _append_ to
+>   `X-Forwarded-For`. Too high a count lets a client pick its own address (e.g. `2` behind a
+>   single Nginx using `$proxy_add_x_forwarded_for`); too low or a proxy that _replaces_ the header
+>   puts everyone in the proxy's bucket.
+> - **Caddy and Traefik replace `X-Forwarded-For`** with their own peer unless they trust the hop
+>   before them. Behind Cloudflare → Caddy, first set `trusted_proxies` to the Cloudflare ranges
+>   in Caddy's global `servers` options (so Caddy keeps Cloudflare's entry and appends its own),
+>   then set `TRUSTED_PROXY` to Caddy's address plus the Cloudflare ranges (or `2`). With default
+>   Caddy settings `2` only ever sees Caddy's own peer.
+> - **`private` and the Docker gateway:** with a published port, Docker's userland proxy (Docker
+>   Desktop, loopback and IPv6 traffic) makes every connection appear to come from the bridge
+>   gateway (e.g. `172.17.0.1`), which is inside `private`. Use `private` only when nothing but the
+>   proxy can reach the port; otherwise list the exact proxy address or container subnet.
+> - IPv4-mapped ranges (`::ffff:10.0.0.0/104`) are ignored; mapped peers match the plain IPv4 range.
+
+Per-IP limits bucket IPv6 clients by their `/64`. When the runtime reports no client address at all,
+the per-IP rule is skipped (the per-invoice-link limits still apply) and `client-ip:unknown` is
+logged once per server instance.
+
+## Bank notifications: MacroDroid (optional)
+
+Matches incoming-money notifications from bank / e-wallet apps (forwarded by MacroDroid on an
+Android phone) with open invoices, schema **v26**. Step-by-step guide (ID + EN):
+**[MACRODROID.md](MACRODROID.md)**. All three can also be set in Settings → Integrasi (wins over
+env). Notification formats themselves are configured in Settings → Format notifikasi bank (DB).
+
+| Name                      | Example                  | What it does                                                                                                                                                                    |
+| ------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MACRODROID_TOKEN`        | `<openssl rand -hex 24>` | Device token (32–200 chars, `A-Z a-z 0-9 - _`) sent as `Authorization: Bearer`. **Secret.** Empty = `/api/public/payments/notify` answers 503 and no unique codes are assigned. |
+| `MACRODROID_AUTO_CONFIRM` | `false`                  | `false` (default) = a single match only marks the invoice "Menunggu verifikasi" for the admin. `true` = book it right away (notifications can be faked on the phone).           |
+| `MACRODROID_GENERIC`      | `false`                  | `true` = notifications matching no configured format are tried with a generic Rupiah pattern + incoming-money keywords.                                                         |
+
+## Monitoring (optional)
+
+| Name         | Example                                          | What it does                                                                                                                                                                                                                                                               |
+| ------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SENTRY_DSN` | `https://<key>@o000000.ingest.sentry.io/0000000` | Also sends server errors to Sentry (plain fetch, 3 s timeout, never fails a request). Without it errors are still logged as one JSON line in Vercel Logs. From Sentry → Project Settings → Client Keys (DSN). Not highly secret, but keep it private to avoid spam events. |
+
+## Public demo (optional)
+
+See [DEMO.md](DEMO.md).
+
+| Name              | Example                               | What it does                                                                                                                                                                                                                                           | Security                                                                                                      |
+| ----------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `DEMO_MODE`       | `true` (only on a demo instance)      | Turns the instance into a **public demo**: shows `APP_USERNAME`/`APP_PASSWORD` on the login page with one-click sign-in, ignores 2FA, disables AI/uploads/import/restore/settings/n8n routes, caps rows and rate-limits writes. Any other value = off. | **Never** on an instance with real data — it publishes the login. Use a separate, throwaway Supabase project. |
+| `PUBLIC_DEMO_URL` | `https://demo.dompetku.ilramdhan.dev` | On your **main** instance: shows a **Coba demo** button (navbar, hero, final CTA) linking to a public demo. Must be `https://`; empty = hidden.                                                                                                        | Not secret.                                                                                                   |
+
+## Search engines (optional)
+
+Only the public pages (`/`, `/privacy`, `/terms`) are indexable; the app, the login page and every page of a `DEMO_MODE` instance send `noindex, nofollow`. `/robots.txt` is generated by the app (blocks `/api/` and app paths; `Disallow: /` in demo mode). Each public page is server-rendered in Indonesian by default and in English with `?lang=en` (e.g. `/?lang=en`), so both languages are crawlable. `/llms.txt` gives AI assistants a short project overview with links (404 in demo mode).
+
+| Name                       | Example                        | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Security                         |
+| -------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `PUBLIC_SITE_URL`          | `https://dompetku.example.com` | Your instance's public address (http/https, no query). Adds `<link rel="canonical">`, `og:url`, absolute `og:image`/`twitter:image`, serves `/sitemap.xml` (both languages with `xhtml:link` alternates), `hreflang` alternates (`id`, `en`, `x-default`) and a `Sitemap:` line in `/robots.txt`. Empty = none of those (sitemap 404). Also the base of invoice share/email links and the Midtrans return URL. Can be set in Settings → Integrasi → **Situs** (v16; wins over env, https only — http only for `localhost`, no query/fragment; applies within ~60 s, no redeploy). | Not secret.                      |
+| `GOOGLE_SITE_VERIFICATION` | `AbC123…`                      | Google Search Console "HTML tag" token → `<meta name="google-site-verification">` on the landing page (`/`) only. A pasted full `<meta>` tag is unwrapped. Ignored on a `DEMO_MODE` instance.                                                                                                                                                                                                                                                                                                                                                                                     | Not secret (public in the page). |
+| `BING_SITE_VERIFICATION`   | `0123ABCD…`                    | Bing Webmaster Tools token → `<meta name="msvalidate.01">` on the landing page only. Ignored on a `DEMO_MODE` instance.                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Not secret (public in the page). |
+
+## Development only
+
+| Name                  | Where                  | What it does                                                                                                                |
+| --------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `DEMO_RESET_CONFIRM`  | GitHub Actions / shell | Must be `yes` (plus `--allow-remote`) before `scripts/seed-demo.mjs` touches a non-local database. Set by `demo-reset.yml`. |
+| `SUPABASE_PROJECT_ID` | local shell / `.env`   | Project ref (the `abcdefghijkl` in your Supabase URL) for `bun run gen:types`. Not used by the app; don't set it on Vercel. |
+
+## Set by the platform (don't set these)
+
+| Name                    | Set by        | Used for                                                           |
+| ----------------------- | ------------- | ------------------------------------------------------------------ |
+| `VERCEL`                | Vercel builds | `vite.config.ts` switches the build target to Vercel when present. |
+| `VERCEL_ENV`            | Vercel        | `environment` tag on Sentry events.                                |
+| `VERCEL_GIT_COMMIT_SHA` | Vercel        | `release` tag on Sentry events.                                    |
+| `NODE_ENV`              | runtime       | Fallback `environment` tag for Sentry.                             |
+
+## n8n variables
+
+These live in the **n8n** environment (not Vercel) and are read by the workflow templates in [`n8n/`](../n8n) via `$env.…`. n8n must allow it: `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`. Full setup: [N8N.md](N8N.md).
+
+| Name                        | Used by            | Example                       | What it does                                                                                                             |
+| --------------------------- | ------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `FINTRACK_URL`              | 01, 02, 05         | `https://your-app.vercel.app` | Base URL of your Dompetku deployment (no trailing slash).                                                                |
+| `TELEGRAM_BOT_TOKEN`        | 01, 02, 03, 04     | `<token from @BotFather>`     | Telegram Bot API token. **Secret.** (The app reads its own `TELEGRAM_BOT_TOKEN` only for direct mode.)                   |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | 01                 | `123456789`                   | Comma-separated chat IDs n8n forwards to the app (first filter; the app re-checks `BOT_ALLOWED_CHAT_IDS`).               |
+| `TELEGRAM_BOT_USERNAME`     | 01                 | `chatbotfinance`              | Optional. Bot username without `@`; makes group mention/reply matching exact. Without it any `@…bot` mention counts.     |
+| `TELEGRAM_ADMIN_CHAT_ID`    | 02, 03             | `123456789`                   | Chat that receives scheduled reminders/reports and workflow error alerts. (Workflow 06 uses the app-side value instead.) |
+| `BACKUP_EMAIL_FROM`         | 05 (email variant) | `noreply@mail.example.com`    | Sender for emailed backups.                                                                                              |
+| `BACKUP_EMAIL_TO`           | 05 (email variant) | `you@example.com`             | Recipient for emailed backups.                                                                                           |
+
+The `N8N_API_KEY` value is **not** an n8n environment variable — it goes into an n8n **Header Auth credential** (Name `x-api-key`).

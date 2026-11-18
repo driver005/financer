@@ -3,12 +3,12 @@
 // the tokens above it.
 
 export const fontSize = {
-  xs: 12, sm: 14, base: 16, lg: 18, xl: 20, "2xl": 24, "3xl": 30, "4xl": 36, "5xl": 48,
+  xs: 12, compact: 13, sm: 14, base: 16, lg: 18, xl: 20, "2xl": 24, "3xl": 30, "4xl": 36, "5xl": 48,
 } as const;
 
 /** Line height for each size, as Tailwind pairs them. */
 export const lineHeight = {
-  xs: 16, sm: 20, base: 24, lg: 28, xl: 28, "2xl": 32, "3xl": 36, "4xl": 40, "5xl": 48,
+  xs: 16, compact: 20, sm: 20, base: 24, lg: 28, xl: 28, "2xl": 32, "3xl": 36, "4xl": 40, "5xl": 48,
 } as const;
 
 export const fontWeight = {
@@ -38,6 +38,10 @@ export const textVariants = {
   bodyStrong: { size: "base", weight: "semibold", tracking: "normal" },
   label: { size: "sm", weight: "medium", tracking: "normal" },
   caption: { size: "xs", weight: "normal", tracking: "wide" },
+  /** Dense lists and tables (Medusa's 13 px text) and the 14 px body that is not a label. */
+  compact: { size: "compact", weight: "normal", tracking: "normal" },
+  compactStrong: { size: "compact", weight: "medium", tracking: "normal" },
+  bodySmall: { size: "sm", weight: "normal", tracking: "normal" },
   /** Badges and tags (Untitled UI: medium weight). */
   badge: { size: "xs", weight: "medium", tracking: "normal" },
   /** The label of a medium and a large button (HeroUI: base and lg, medium weight). */

@@ -12,9 +12,10 @@ import { financeStories } from "./stories/finance";
 import { foundations } from "./stories/foundations";
 import { layoutStories } from "./stories/layout";
 import { mailStories } from "./stories/mail";
+import { medusaStories } from "./stories/medusa";
 import { shopStories } from "./stories/shop";
 
-type Group = "foundations" | "actions" | "feedback" | "layout" | "finance" | "calendar" | "shop" | "mail";
+type Group = "foundations" | "actions" | "feedback" | "layout" | "finance" | "calendar" | "shop" | "mail" | "medusa";
 
 const GROUPS: (NavItem<Group> & { stories: StoryDef[]; title: string })[] = [
   { key: "foundations", label: "Tokens", title: "Foundations", icon: "palette-outline", stories: foundations },
@@ -25,6 +26,7 @@ const GROUPS: (NavItem<Group> & { stories: StoryDef[]; title: string })[] = [
   { key: "calendar", label: "Calendar", title: "Calendar", icon: "calendar-month-outline", stories: calendarStories },
   { key: "shop", label: "Shopping", title: "Shopping", icon: "shopping-outline", stories: shopStories },
   { key: "mail", label: "Mail", title: "Mail", icon: "email-outline", stories: mailStories },
+  { key: "medusa", label: "Medusa", title: "Medusa components", icon: "shopping-outline", stories: medusaStories },
 ];
 
 const DEVICES = [
