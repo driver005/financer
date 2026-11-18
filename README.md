@@ -18,6 +18,8 @@ monthly spending — all stored on the device. **No server, no account, no token
 UI follows the `ui-ux-pro-max` design system: minimal single column, monochrome + one blue accent,
 large type, 44px touch targets, visible empty/loading/error states, light and dark.
 
+On device (Hermes has no WebAssembly engine), the same `core.*` API is served by `apps/mobile/src/rust/coreFallback.ts`; the browser build uses the Rust/WASM module. Both paths have tests.
+
 ## CI builds
 
 `.github/workflows/build.yml` builds both apps on a tag (`v*`) or via manual dispatch, with no external credentials:

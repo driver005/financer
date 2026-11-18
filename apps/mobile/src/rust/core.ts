@@ -70,6 +70,11 @@ import {
   wasm_supermarkets,
 } from "./pantry";
 import { WASM_BASE64 } from "./wasmBytes";
+import { coreFallback } from "./coreFallback";
+
+/** Hermes (React Native) has no WebAssembly engine; the browser build uses the Rust core. */
+const forceNativeFallback = typeof location !== "undefined" && /[?&]native=1/.test(location.search);
+const hasWasm = !forceNativeFallback && typeof WebAssembly !== "undefined" && typeof WebAssembly.Module === "function";
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -90,13 +95,13 @@ function decodeBase64(value: string): Uint8Array {
   return out;
 }
 
-initSync({ module: decodeBase64(WASM_BASE64) });
+if (hasWasm) initSync({ module: decodeBase64(WASM_BASE64) });
 
 function json<T>(value: string): T {
   return JSON.parse(value) as T;
 }
 
-export const core = {
+const wasmCore = {
   periodKey(scope: "week" | "month", date: Date): string {
     const [y, m, d] = [date.getFullYear(), date.getMonth() + 1, date.getDate()];
     return wasm_period_key(scope, BigInt(y), BigInt(m), BigInt(d));
@@ -288,3 +293,5 @@ export const core = {
     );
   },
 };
+
+export const core = hasWasm ? wasmCore : coreFallback;
