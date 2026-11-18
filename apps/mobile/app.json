@@ -40,8 +40,17 @@
       "expo-sharing",
       "expo-notifications",
       "expo-image-picker",
-      ["expo-local-authentication", { "faceIDPermission": "Pantry uses Face ID to unlock your local data." }],
-      ["./plugins/withQuickAddShortcut.js"]
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Pantry uses Face ID to unlock your local data."
+        }
+      ],
+      [
+        "./plugins/withQuickAddShortcut.js"
+      ],
+      "expo-secure-store",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": false
