@@ -51,6 +51,37 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  release:
+    name: GitHub Release
+    needs: [android, ios]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: pantry-android-apk
+          path: release-assets/android
+
+      - name: Download iOS app
+        uses: actions/download-artifact@v4
+        with:
+          name: pantry-ios-simulator-app
+          path: release-assets/ios
+
+      - name: Publish release with both apps
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Pantry ${{ github.ref_name }}
+          generate_release_notes: true
+          overwrite_files: true
+          files: |
+            release-assets/android/app-release.apk
+            release-assets/ios/Pantry-ios-simulator.zip
+
   ios:
     name: iOS simulator app
     runs-on: macos-latest
