@@ -15,11 +15,11 @@ import { LockGate } from "../components/LockGate";
 import { tokens, useTheme } from "../ui/theme";
 
 const TABS: { route: string; label: string; icon: IconName }[] = [
-  { route: "/", label: "Recipes", icon: "silverware-fork-knife" },
-  { route: "/favorites", label: "Saved", icon: "heart" },
-  { route: "/list", label: "List", icon: "format-list-checks" },
+  { route: "/home", label: "Home", icon: "home" },
+  { route: "/transactions", label: "Money", icon: "cash" },
+  { route: "/goals", label: "Plans", icon: "target" },
   { route: "/shops", label: "Shops", icon: "store" },
-  { route: "/money", label: "Money", icon: "cash" },
+  { route: "/hub", label: "More", icon: "view-grid" },
 ];
 
 function BottomBar() {
@@ -108,6 +108,17 @@ export default function RootLayout() {
         <Tabs.Screen name="pc" options={{ title: "PC editor" }} />
         <Tabs.Screen name="ask" options={{ title: "Ask your money" }} />
         <Tabs.Screen name="showcase" options={{ title: "UI kit" }} />
+        <Tabs.Screen name="home" options={{ title: "Home" }} />
+        <Tabs.Screen name="recipes" options={{ title: "Recipes" }} />
+        <Tabs.Screen name="transactions" options={{ title: "Transactions" }} />
+        <Tabs.Screen name="goals" options={{ title: "Goals" }} />
+        <Tabs.Screen name="hub" options={{ title: "All apps" }} />
+        <Tabs.Screen name="budgets" options={{ title: "Budgets" }} />
+        <Tabs.Screen name="projects" options={{ title: "Projects" }} />
+        <Tabs.Screen name="paycheck" options={{ title: "Paycheck" }} />
+        <Tabs.Screen name="accounts" options={{ title: "Accounts" }} />
+        <Tabs.Screen name="obligations" options={{ title: "Obligations" }} />
+        <Tabs.Screen name="assets" options={{ title: "Assets" }} />
         <Tabs.Screen name="finance" options={{ title: "Finance suite" }} />
         <Tabs.Screen name="upstream" options={{ title: "Upstream features" }} />
         <Tabs.Screen name="gaps" options={{ title: "Parity gaps" }} />

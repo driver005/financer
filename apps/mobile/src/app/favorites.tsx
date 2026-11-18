@@ -45,7 +45,7 @@ export default function FavoritesScreen() {
           </View>
         </Card>
       ))}
-      {recipes.length > 0 ? <Button label="Find more recipes" tone="secondary" onPress={() => router.push("/")} /> : null}
+      {recipes.length > 0 ? <Button label="Find more recipes" tone="secondary" onPress={() => router.push("/recipes")} /> : null}
     </Screen>
   );
 }
