@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "app.pantry.mobile",
+      "minSdkVersion": 25,
       "adaptiveIcon": {
         "backgroundColor": "#3C318F",
         "foregroundImage": "./assets/android-icon-foreground.png"
