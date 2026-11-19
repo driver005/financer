@@ -13,8 +13,7 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - run: cargo test -p pantry-core
-      # Match the wasm-pack used to generate the committed wasmBytes.ts.
-      - run: cargo install wasm-pack --version 0.15.0 --locked || true
+      - run: cargo install wasm-pack --locked || true
       - run: make core-build
       - run: git diff --exit-code -- apps/mobile/src/rust
 
