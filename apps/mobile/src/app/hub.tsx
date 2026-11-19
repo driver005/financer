@@ -15,7 +15,7 @@ const GROUPS: { title: string; items: { label: string; route: string; icon: Icon
     { label: "Projects", route: "/projects", icon: "folder" },
     { label: "Paycheck", route: "/paycheck", icon: "cash" },
     { label: "Obligations", route: "/obligations", icon: "calendar-clock" },
-    { label: "Assets", route: "/assets", icon: "gold" },
+    { label: "Assets", route: "/holdings", icon: "gold" },
   ] },
   { title: "Everyday", items: [
     { label: "Recipes", route: "/recipes", icon: "food" },

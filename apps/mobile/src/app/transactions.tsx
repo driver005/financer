@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Badge, Box, Button, Card, DayScroller, EmptyState, Money, Segmented, Text, TextField } from "@finance/ui";
+import { Badge, Box, Button, Card, DayScroller, EmptyState, Icon, Money, Segmented, Text, TextField } from "@finance/ui";
 import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
 import { core } from "../rust/core";
 import { allTransactions, accounts } from "../db/moneyTracker";
-import { CategoryAssetIcon } from "@finance/ui";
 
 type Row = { id: number; date: string; merchant: string; amountCents: number; category: string; kind?: string; accountId?: string };
 
@@ -32,7 +31,7 @@ export default function TransactionsScreen() {
         <SectionTitle>{mode === "list" ? "Recent" : "Editable table"}</SectionTitle>
         {visible.slice(0, 40).map((row) => (
           <Box key={row.id} row gap={12} style={{ minHeight: 56, borderBottomWidth: 1, borderBottomColor: "#E8E8E8" }}>
-            <CategoryAssetIcon category={row.category} size={40} />
+            <Box style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#E6F4F1", alignItems: "center", justifyContent: "center" }}><Icon name="shape-outline" size={20} /></Box>
             <Box style={{ flex: 1 }}>
               <Text variant="body3">{row.merchant}</Text>
               <Text variant="body5" color="muted">{`${row.date} · ${row.category} · ${row.kind ?? "expense"}`}</Text>

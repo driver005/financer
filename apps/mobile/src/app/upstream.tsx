@@ -4,9 +4,9 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
 import {
-  Badge, BillConfirmationCard, Box, Card, CategoryAssetIcon, ChatCommandBar, CreditCommitmentCard,
+  Badge, BillConfirmationCard, Box, Card, ChatCommandBar, CreditCommitmentCard,
   ExcelImportCard, FinanceUIProvider, GoldCard, OcrReceiptCard, Onboarding, PaymentProofRow,
-  ProjectCard, ReceivableRow, SubscriptionRow, Text, TextField, Button, darkTheme, lightTheme,
+  ProjectCard, ReceivableRow, SubscriptionRow, Text, TextField, Button, darkTheme, lightTheme, Icon,
 } from "@finance/ui";
 import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
 import { core } from "../rust/core";
@@ -139,7 +139,7 @@ export default function UpstreamScreen() {
           <SectionTitle>Category artwork (Pockaw)</SectionTitle>
           <Box row gap={8}>
             {["Groceries", "Transport", "Shopping", "Leisure", "Bills"].map((category) => (
-              <Box key={category} gap={4}><CategoryAssetIcon category={category} /><Text variant="body5">{category}</Text></Box>
+              <Box key={category} gap={4}><Box style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#E6F4F1", alignItems: "center", justifyContent: "center" }}><Icon name="shape-outline" size={20} /></Box><Text variant="body5">{category}</Text></Box>
             ))}
           </Box>
         </Card>

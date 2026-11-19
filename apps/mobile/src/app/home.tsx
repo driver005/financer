@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
-import { BalanceCard, Box, Button, Card, CategoryDonut, DayScroller, Money, Sparkline, StatCard, Text } from "@finance/ui";
+import { BalanceCard, Box, Button, Card, CategoryDonut, DayScroller, FadeIn, Money, Skeleton, Sparkline, StatCard, Text } from "@finance/ui";
 import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
 import { core } from "../rust/core";
 import { allTransactions, accounts } from "../db/moneyTracker";
@@ -17,6 +17,7 @@ export default function HomeScreen() {
   const [openItems, setOpenItems] = useState(0);
   const [offerRows, setOfferRows] = useState<unknown[]>([]);
   const [day, setDay] = useState("today");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void Promise.all([allTransactions(), accounts(), budgets(), shoppingList("week", core.periodKey("week", new Date())), localOffers()])
@@ -24,6 +25,7 @@ export default function HomeScreen() {
         setRows(t); setAccountRows(a as never); setBudgetRows(b);
         setOpenItems(items.filter((i) => !i.checked).length);
         setOfferRows(offers);
+        setLoading(false);
       });
   }, []);
 
@@ -35,6 +37,7 @@ export default function HomeScreen() {
 
   return (
     <Screen title="Home" subtitle="Everything in one place" action={<AppIconButton icon="view-grid" label="All apps" onPress={() => router.push("/hub")} />}>
+      <FadeIn>
       <BalanceCard
         balanceCents={totals.balance}
         incomeCents={totals.income}
@@ -55,14 +58,18 @@ export default function HomeScreen() {
       </Card>
       <Card>
         <SectionTitle>This week</SectionTitle>
-        <DayScroller
-          days={["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label, i) => ({ key: String(i), label, active: i === 2 }))}
-          active={day}
-          onChange={setDay}
-        />
-        <Sparkline points={[12, 18, 9, 22, 17, 25, 20]} />
+        {loading ? <Skeleton rows={2} /> : <>
+          <DayScroller
+            days={["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label, i) => ({ key: String(i), label, active: i === 2 }))}
+            active={day}
+            onChange={setDay}
+          />
+          <Sparkline points={[12, 18, 9, 22, 17, 25, 20]} />
+        </>}
         <Text variant="body5" color="muted">{`${budgetRows.length} budgets · ${offerRows.length} Angebote`}</Text>
       </Card>
+      </FadeIn>
+      <FadeIn delay={80}>
       <CategoryDonut data={categories.slice(0, 6).map((c) => ({ label: c.category, cents: c.cents }))} total={totals.expense} />
       <Card>
         <SectionTitle>Jump in</SectionTitle>
@@ -73,6 +80,7 @@ export default function HomeScreen() {
           <Button label="Reports" icon="chart-bar" variant="secondary" onPress={() => router.push("/reports")} />
         </View>
       </Card>
+      </FadeIn>
     </Screen>
   );
 }

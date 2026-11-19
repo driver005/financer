@@ -1,6 +1,6 @@
 import React, { createContext, useContext, type ReactNode } from "react";
 import {
-  Modal, Pressable, ScrollView, StyleSheet, Switch as RNSwitch, Text as RNText,
+  AccessibilityInfo, Animated, Modal, Pressable, ScrollView, StyleSheet, Switch as RNSwitch, Text as RNText,
   TextInput, View, type StyleProp, type TextStyle, type ViewStyle,
 } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
@@ -189,6 +189,25 @@ export function Sheet({ visible, onClose, title, children }: { visible: boolean;
 }
 
 export function Divider() { const theme = useFinanceTheme(); return <View style={{ height: 1, backgroundColor: theme.border }} />; }
+
+/** Subtle 240ms entrance. Honours the OS reduced-motion setting. */
+export function FadeIn({ children, delay = 0 }: { children: ReactNode; delay?: number }) {
+  const opacity = React.useRef(new Animated.Value(0)).current;
+  const translateY = React.useRef(new Animated.Value(8)).current;
+  React.useEffect(() => {
+    let active = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
+      if (!active) return;
+      if (reduced) { opacity.setValue(1); translateY.setValue(0); return; }
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 240, delay, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 240, delay, useNativeDriver: true }),
+      ]).start();
+    });
+    return () => { active = false; };
+  }, [delay, opacity, translateY]);
+  return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
+}
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },

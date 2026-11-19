@@ -1,11 +1,10 @@
 import React, { useEffect } from "react";
-import { Pressable, StyleSheet, Text as RNText, View } from "react-native";
+import { Pressable, StyleSheet, Text as RNText, useColorScheme, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
-import { Fraunces_600SemiBold } from "@expo-google-fonts/fraunces";
-import { PlusJakartaSans_400Regular, PlusJakartaSans_600SemiBold } from "@expo-google-fonts/plus-jakarta-sans";
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold } from "@expo-google-fonts/montserrat";
-import { Urbanist_600SemiBold } from "@expo-google-fonts/urbanist";
+import { Urbanist_500Medium, Urbanist_600SemiBold } from "@expo-google-fonts/urbanist";
+import { FinanceUIProvider, darkTheme, lightTheme } from "@finance/ui";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -77,17 +76,17 @@ export default function RootLayout() {
     const subscription = Linking.addEventListener("url", ({ url }) => open(url));
     return () => subscription.remove();
   }, [router, pathname]);
+  const scheme = useColorScheme();
   const [fontsLoaded] = useFonts({
-    Fraunces: Fraunces_600SemiBold,
-    "Plus Jakarta Sans": PlusJakartaSans_400Regular,
-    "Plus Jakarta Sans SemiBold": PlusJakartaSans_600SemiBold,
     Montserrat: Montserrat_600SemiBold,
     "Montserrat Regular": Montserrat_400Regular,
     "Montserrat Bold": Montserrat_700Bold,
     Urbanist: Urbanist_600SemiBold,
+    "Urbanist Medium": Urbanist_500Medium,
   });
   if (!fontsLoaded) return null;
   return (
+    <FinanceUIProvider theme={scheme === "dark" ? darkTheme : lightTheme}>
     <View style={{ flex: 1 }}>
       <StatusBar style="auto" />
       <LockGate>
@@ -118,7 +117,7 @@ export default function RootLayout() {
         <Tabs.Screen name="paycheck" options={{ title: "Paycheck" }} />
         <Tabs.Screen name="accounts" options={{ title: "Accounts" }} />
         <Tabs.Screen name="obligations" options={{ title: "Obligations" }} />
-        <Tabs.Screen name="assets" options={{ title: "Assets" }} />
+        <Tabs.Screen name="holdings" options={{ title: "Assets" }} />
         <Tabs.Screen name="finance" options={{ title: "Finance suite" }} />
         <Tabs.Screen name="upstream" options={{ title: "Upstream features" }} />
         <Tabs.Screen name="gaps" options={{ title: "Parity gaps" }} />
@@ -128,5 +127,6 @@ export default function RootLayout() {
         <IconButton icon="cog-outline" label="Settings" onPress={() => router.push("/settings")} />
       </View>
     </View>
+    </FinanceUIProvider>
   );
 }
