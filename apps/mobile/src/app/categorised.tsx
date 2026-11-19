@@ -31,7 +31,10 @@ export default function CategorisedScreen() {
   return (
     <FgScreen
       title="Automatically categorised"
-      actions={<FgHeaderIcon name="cog-outline" label="Settings" onPress={() => router.push("/settings")} />}
+      actions={<>
+        <FgHeaderIcon name="view-grid" label="All apps" onPress={() => router.push("/hub")} />
+        <FgHeaderIcon name="cog-outline" label="Settings" onPress={() => router.push("/settings")} />
+      </>}
     >
       <AsyncBoundary loading={loading} error={error} onRetry={load} rows={5}>
         {data && <>

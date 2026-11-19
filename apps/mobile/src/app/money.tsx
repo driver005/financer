@@ -17,7 +17,7 @@ import { parseEuro } from "../lib/money";
 import type { BankProviderId, Store, Transaction } from "../lib/types";
 
 type Period = "day" | "week" | "month" | "total";
-const CHART_COLORS = ["#2F7D5D", "#4C9A72", "#7CB98E", "#E2563B", "#D99700", "#5B8DEF", "#8A7BC7", "#9CA3AF"];
+const CHART_COLORS = ["#3C318F", "#7B3FE4", "#2FBFA0", "#F2A93B", "#E4647A", "#5B8DEF", "#9B6BE0", "#9B96BA"];
 
 function periodPrefix(period: Period, startDay: number): string {
   const now = new Date();

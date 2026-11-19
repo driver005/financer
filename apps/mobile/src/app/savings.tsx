@@ -42,7 +42,10 @@ export default function SavingsScreen() {
   return (
     <FgScreen
       title="Savings Booster"
-      actions={<FgHeaderIcon name="gift-outline" label="Offers" onPress={() => router.push("/shops")} />}
+      actions={<>
+        <FgHeaderIcon name="view-grid" label="All apps" onPress={() => router.push("/hub")} />
+        <FgHeaderIcon name="gift-outline" label="Offers" onPress={() => router.push("/shops")} />
+      </>}
     >
       <AsyncBoundary loading={loading} error={error} onRetry={load} rows={6}>
         {data && <>

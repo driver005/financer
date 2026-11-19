@@ -41,7 +41,10 @@ export default function InsuranceScreen() {
   return (
     <FgScreen
       title="Insurance"
-      actions={<FgHeaderIcon name="comment-question-outline" label="Advice" onPress={() => router.push("/ask")} />}
+      actions={<>
+        <FgHeaderIcon name="view-grid" label="All apps" onPress={() => router.push("/hub")} />
+        <FgHeaderIcon name="comment-question-outline" label="Advice" onPress={() => router.push("/ask")} />
+      </>}
     >
       <AsyncBoundary loading={loading} error={error} onRetry={load} rows={5}>
         {data && <>

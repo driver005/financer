@@ -52,7 +52,10 @@ export default function BudgetsScreen() {
   const max = Math.max(1, ...spending.map((s) => Math.abs(s.cents)));
 
   return (
-    <FgScreen title="Budgets" actions={<FgHeaderIcon name="plus" label="Add budget" onPress={() => setOpen(true)} />}>
+    <FgScreen title="Budgets" actions={<>
+      <FgHeaderIcon name="view-grid" label="All apps" onPress={() => router.push("/hub")} />
+      <FgHeaderIcon name="plus" label="Add budget" onPress={() => setOpen(true)} />
+    </>}>
       <AsyncBoundary loading={loading} error={error} onRetry={load} rows={5}>
         <FadeIn>
           <Card>

@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
   outer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 8 },
   bar: {
     flexDirection: "row", borderWidth: 1, borderRadius: tokens.radius.card, paddingVertical: 8,
-    shadowColor: "#2F7D5D", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 6,
+    shadowColor: "#3C318F", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.16, shadowRadius: 16, elevation: 6,
   },
   tab: { flex: 1, minHeight: 52, alignItems: "center", justifyContent: "center", gap: 3 },
   iconWrap: { width: 40, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
