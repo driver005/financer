@@ -24,6 +24,7 @@ const GROUPS: { title: string; items: { label: string; route: string; icon: Icon
     { label: "Assets", route: "/holdings", icon: "gold" },
   ] },
   { title: "Everyday", items: [
+    { label: "Price comparison", route: "/prices", icon: "tag-search" },
     { label: "Recipes", route: "/recipes", icon: "food" },
     { label: "Shopping list", route: "/list", icon: "cart" },
     { label: "Shops & offers", route: "/shops", icon: "store" },

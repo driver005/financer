@@ -20,6 +20,7 @@ const TABS: { route: string; label: string; icon: IconName }[] = [
   { route: "/insights", label: "Insights", icon: "chart-bar" },
   { route: "/insurance", label: "Insurance", icon: "shield-outline" },
   { route: "/savings", label: "Savings Booster", icon: "piggy-bank" },
+  { route: "/prices", label: "Prices", icon: "tag-search" },
 ];
 
 function BottomBar() {
@@ -127,6 +128,7 @@ export default function RootLayout() {
         <Tabs.Screen name="insights" options={{ title: "Insights" }} />
         <Tabs.Screen name="insurance" options={{ title: "Insurance" }} />
         <Tabs.Screen name="savings" options={{ title: "Savings Booster" }} />
+        <Tabs.Screen name="prices" options={{ title: "Price comparison" }} />
         <Tabs.Screen name="finance" options={{ title: "Finance suite" }} />
         <Tabs.Screen name="upstream" options={{ title: "Upstream features" }} />
         <Tabs.Screen name="gaps" options={{ title: "Parity gaps" }} />

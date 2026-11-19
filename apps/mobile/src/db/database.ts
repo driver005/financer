@@ -81,6 +81,27 @@ function hash(text: string): number {
   return Math.abs(value);
 }
 
+/** Local sample sales so promotions are visible before the user imports real offers. */
+async function seedSampleOffers(db: Db): Promise<void> {
+  const count = await db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM offers");
+  if (count && count.n > 0) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const until = "2099-12-31";
+  const samples: [string, string, string, string][] = [
+    ["aldi", "Milk", "1,09", "-19 % this week"],
+    ["lidl", "Coffee", "3,49", "Sale"],
+    ["rewe", "Pasta", "0,79", "2 for 1"],
+    ["netto", "Bananas", "1,29", "-15 %"],
+    ["penny", "Rice", "1,59", "Sale"],
+  ];
+  for (const [storeId, product, price, note] of samples) {
+    await db.runAsync(
+      "INSERT INTO offers (storeId, product, price, note, validFrom, validTo, source, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      storeId, product, price, note, today, until, "sample", Date.now(),
+    );
+  }
+}
+
 /** Local sample price history so price curves work before the user enters real prices. */
 async function seedSamplePrices(db: Db): Promise<void> {
   const count = await db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM prices");
@@ -147,6 +168,7 @@ export async function getDb(): Promise<Db> {
         }
       }
       await seedSamplePrices(db);
+      await seedSampleOffers(db);
       const accountCount = await db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM accounts");
       if (!accountCount || accountCount.n === 0) {
         await db.runAsync("INSERT INTO accounts (id, name, balanceCents, kind) VALUES ('cash', 'Cash', 0, 'cash')");

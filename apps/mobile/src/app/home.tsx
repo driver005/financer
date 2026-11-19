@@ -95,6 +95,7 @@ export default function HomeScreen() {
         <Card>
           <Chip label="Recipes" onPress={() => router.push("/recipes")} selected />
           <Box row gap={8} style={{ flexWrap: "wrap", marginTop: 10 }}>
+            <Tile icon="tag-search" label="Compare prices" onPress={() => router.push("/prices")} accent />
             <Tile icon="cart" label="Shopping list" onPress={() => router.push("/list")} />
             <Tile icon="receipt" label="Transactions" onPress={() => router.push("/transactions")} />
             <Tile icon="chart-bar" label="Reports" onPress={() => router.push("/reports")} />
