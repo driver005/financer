@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { Badge, Box, BudgetCard, Button, Card, GoalCard, PlanCard, Progress, Text } from "@finance/ui";
+import { Badge, Box, BudgetCard, Button, Card, EmptyState, GoalCard, PlanCard, Progress, Text } from "@finance/ui";
 import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
 import { core } from "../rust/core";
 import { allTransactions, budgets, goals } from "../db/moneyTracker";
@@ -28,7 +28,7 @@ export default function GoalsScreen() {
 
   return (
     <Screen title="Plans" subtitle="Goals, budgets and checklists" action={<AppIconButton icon="plus" label="More plans" onPress={() => router.push("/projects")} />}>
-      <Card>
+      {goalRows.length ? <Card>
         <SectionTitle>Goals & plans</SectionTitle>
         {goalRows.map((goal) => (
           <GoalCard
@@ -43,16 +43,16 @@ export default function GoalsScreen() {
         ))}
         {status.map((s) => <Text key={s.id} variant="body5" color="muted">{`${s.name}: ${s.done}/${s.total} checklist items`}</Text>)}
         <Button label="Projects & envelopes" icon="view-grid" variant="secondary" onPress={() => router.push("/projects")} />
-      </Card>
+      </Card> : <EmptyState title="No goals yet" message="Create a goal or open Projects to start planning." icon="target" action={{ label: "Open projects", onPress: () => router.push("/projects") }} />}
       <Card>
         <SectionTitle>Budgets</SectionTitle>
         {rolled.map((r) => <BudgetCard key={r.category} category={r.category} spentCents={r.spent} limitCents={r.limit} rolloverCents={r.rollover} />)}
         <Button label="Paycheck waterfall" icon="water" variant="secondary" onPress={() => router.push("/paycheck")} />
       </Card>
-      <Card>
+      {fundRows.length ? <Card>
         <SectionTitle>Funding ledger</SectionTitle>
         {fundRows.map((f) => <Badge key={f.id} label={`${f.date} · ${(f.cents / 100).toFixed(2)}`} />)}
-      </Card>
+      </Card> : null}
       <PlanCard title="Emergency fund" targetCents={200000} savedCents={85000} pace="8 paychecks left" />
     </Screen>
   );

@@ -44,10 +44,15 @@ export default function HomeScreen() {
         wallet="Main wallet"
       />
       <Box row gap={8}>
-        <StatCard label="Net worth" cents={netWorth} />
-        <StatCard label="Groceries" cents={grocery} tone="expense" />
-        <StatCard label="List open" cents={openItems * 100} caption="items" />
+        <Box style={{ flex: 1 }}><StatCard label="Net worth" cents={netWorth} /></Box>
+        <Box style={{ flex: 1 }}><StatCard label="Groceries" cents={grocery} tone="expense" /></Box>
       </Box>
+      <Card>
+        <Box row style={{ justifyContent: "space-between" }}>
+          <Text variant="body3">Shopping list</Text>
+          <Text variant="body3" color="primary">{`${openItems} open items`}</Text>
+        </Box>
+      </Card>
       <Card>
         <SectionTitle>This week</SectionTitle>
         <DayScroller

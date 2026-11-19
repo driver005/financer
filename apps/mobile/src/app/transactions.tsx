@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Badge, Box, Button, Card, DayScroller, Money, Segmented, Text, TextField } from "@finance/ui";
+import { Badge, Box, Button, Card, DayScroller, EmptyState, Money, Segmented, Text, TextField } from "@finance/ui";
 import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
 import { core } from "../rust/core";
 import { allTransactions, accounts } from "../db/moneyTracker";
@@ -41,7 +41,7 @@ export default function TransactionsScreen() {
             {mode === "table" ? <Button label="Edit" variant="secondary" onPress={() => router.push("/pc")} /> : null}
           </Box>
         ))}
-        {!visible.length ? <Text variant="body4" color="muted">No transactions yet.</Text> : null}
+        {!visible.length ? <EmptyState title="No transactions yet" message="Add one with the + button, import a CSV, or connect a provider." icon="receipt" action={{ label: "Add transaction", onPress: () => router.push("/quickadd") }} /> : null}
       </Card>
       <Button label="Open full PC editor" icon="laptop" variant="secondary" onPress={() => router.push("/pc")} />
     </Screen>

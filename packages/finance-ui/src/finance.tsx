@@ -88,7 +88,7 @@ export function StatCard({ label, cents, caption, tone }: { label: string; cents
   return (
     <Card style={styles.statCard}>
       <Text variant="body4" color="muted">{label}</Text>
-      <Money cents={cents} variant="numericTitle" color={tone} />
+      <Money cents={cents} variant="numericMedium" color={tone} />
       {caption ? <Text variant="body5" color="muted">{caption}</Text> : null}
     </Card>
   );
