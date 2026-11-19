@@ -2,12 +2,13 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import {
   AsyncBoundary, Box, Button, Card, FadeIn, FgCancelledBadge, FgHeaderIcon, FgMerchantRow, FgScreen, FgSection,
-  FgSortButton, FgTipsRow, Sheet, Text, TextField,
+  FgSortButton, FgTipsRow, Segmented, Sheet, Text, TextField,
 } from "@finance/ui";
 import { recurringList, debts } from "../db/moneyTracker";
 import { subscriptions, receivables } from "../db/upstreamFeatures";
 import { base64Encode, saveDocument } from "../lib/file";
 import { loadCancellations, saveCancellation, type Cancellation } from "../lib/finanzguru";
+import { loadWebhookConfig, saveWebhookConfig, sendCancellation, type SendMethod } from "../lib/cancellationSender";
 
 type Item = { name: string; category: string; cents: number; emoji: string; logoColor?: string };
 
@@ -33,6 +34,9 @@ export default function ContractsScreen() {
   const [customerNo, setCustomerNo] = useState("");
   const [effective, setEffective] = useState("");
   const [cancelled, setCancelled] = useState<Cancellation[]>([]);
+  const [sendMethod, setSendMethod] = useState<SendMethod>("email");
+  const [webhook, setWebhook] = useState({ endpoint: "", token: "" });
+  const [sendMessage, setSendMessage] = useState<string | null>(null);
 
   useEffect(() => {
     void loadCancellations().then(setCancelled);
@@ -51,11 +55,15 @@ export default function ContractsScreen() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (cancelItem) { void loadWebhookConfig().then(setWebhook); setSendMessage(null); }
+  }, [cancelItem]);
+
   const totalCents = items.reduce((sum, item) => sum + Math.abs(item.cents), 0);
   const shownCents = cycle === "Yearly" ? totalCents * 12 : totalCents;
 
-  const createCancellation = async () => {
-    if (!cancelItem) return;
+  const buildLetter = () => {
+    if (!cancelItem) return null;
     const date = effective || new Date().toISOString().slice(0, 10);
     const html = `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Kündigung ${cancelItem.name}</title>
 <style>body{font-family:Arial,sans-serif;max-width:700px;margin:40px auto;line-height:1.6;color:#2A2166}h1{color:#3C318F}</style></head><body>
@@ -64,10 +72,32 @@ export default function ContractsScreen() {
 <p>hiermit kündige ich meinen Vertrag (${cancelItem.category}) mit Kundennummer ${customerNo || "-"} fristgerecht zum ${date}. Bitte bestätigen Sie den Eingang dieser Kündigung schriftlich.</p>
 <p>Mit freundlichen Grüßen</p><p>_____</p><p><small>Generated locally by Pantry — verify the provider address and notice period before sending.</small></p>
 </body></html>`;
-    await saveDocument(base64Encode(html), `kuendigung-${cancelItem.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.html`, "text/html");
+    return { to: address, subject: `Kündigung ${cancelItem.name}`, html };
+  };
+
+  const markCancelled = async () => {
+    if (!cancelItem) return;
     await saveCancellation(cancelItem.name);
     setCancelled(await loadCancellations());
+  };
+
+  const createCancellation = async () => {
+    const letter = buildLetter();
+    if (!letter || !cancelItem) return;
+    await saveDocument(base64Encode(letter.html), `kuendigung-${cancelItem.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.html`, "text/html");
+    await markCancelled();
     setCancelItem(null);
+  };
+
+  const sendLetter = async () => {
+    const letter = buildLetter();
+    if (!letter) return;
+    try {
+      const result = await sendCancellation(letter, sendMethod);
+      setSendMessage(result);
+      await markCancelled();
+      setCancelItem(null);
+    } catch (e) { setSendMessage(e instanceof Error ? e.message : "Sending failed"); }
   };
 
   return (
@@ -128,11 +158,24 @@ export default function ContractsScreen() {
       </AsyncBoundary>
 
       <Sheet visible={!!cancelItem} onClose={() => setCancelItem(null)} title={`Cancel ${cancelItem?.name ?? ""}`}>
-        <Text variant="body3" color="muted">Free, legally styled cancellation letter. Saved locally as a printable HTML file — nothing is sent.</Text>
+        <Text variant="body3" color="muted">Free, legally styled cancellation letter. Download it or hand it to your mail/SMS app for sending.</Text>
         <TextField label="Provider address" value={address} onChangeText={setAddress} placeholder="Kundenservice, Musterstr. 1" />
         <TextField label="Customer number" value={customerNo} onChangeText={setCustomerNo} placeholder="e.g. 123456789" />
         <TextField label="Effective date" value={effective} onChangeText={setEffective} placeholder="YYYY-MM-DD" />
-        <Button label="Create cancellation letter" icon="file-document-outline" onPress={() => void createCancellation()} />
+        <Button label="Download letter" icon="file-document-outline" variant="secondary" onPress={() => void createCancellation()} />
+        <Text variant="body4" color="muted">Send via</Text>
+        <Segmented value={sendMethod} onChange={setSendMethod} options={[
+          { value: "email", label: "Email" }, { value: "sms", label: "SMS" }, { value: "webhook", label: "Webhook" },
+        ]} />
+        {sendMethod === "webhook" ? (
+          <>
+            <TextField label="HTTPS endpoint" value={webhook.endpoint} onChangeText={(v) => setWebhook({ ...webhook, endpoint: v })} placeholder="https://…" />
+            <TextField label="Bearer token" value={webhook.token} onChangeText={(v) => setWebhook({ ...webhook, token: v })} />
+            <Button label="Save webhook" variant="secondary" onPress={() => void saveWebhookConfig(webhook.endpoint, webhook.token)} />
+          </>
+        ) : null}
+        {sendMessage ? <Text variant="body3" color="accent">{sendMessage}</Text> : null}
+        <Button label="Send cancellation" icon="send" onPress={() => void sendLetter()} />
       </Sheet>
     </FgScreen>
   );

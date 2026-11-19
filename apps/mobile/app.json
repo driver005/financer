@@ -50,7 +50,9 @@
         "./plugins/withQuickAddShortcut.js"
       ],
       "expo-secure-store",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-web-browser",
+      "expo-mail-composer"
     ],
     "experiments": {
       "typedRoutes": false

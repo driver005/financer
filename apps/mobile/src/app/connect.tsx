@@ -1,26 +1,69 @@
 import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text as RNText, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Box, Button, Card, FgBankCircle, FgHeaderIcon, FgOnboarding, Sheet, Text, palette, typography } from "@finance/ui";
-import { BANKS, connectBank, loadConnect } from "../lib/finanzguru";
+import { Box, Button, Card, Chip, FgBankCircle, FgHeaderIcon, FgOnboarding, Sheet, Text, TextField, palette, typography } from "@finance/ui";
 import { fgEuro } from "@finance/ui";
+import { BANKS, connectBank, loadConnect } from "../lib/finanzguru";
+import {
+  createRequisition, importRequisition, listInstitutions, loadProviderConfig,
+  openBankLogin, saveProviderConfig, type Institution, type ProviderConfig,
+} from "../lib/bankProvider";
 
 type Data = Awaited<ReturnType<typeof loadConnect>>;
 
-/** Connect-accounts onboarding, faithful to the Finanzguru store screenshot, backed by local accounts. */
+/** Connect-accounts onboarding, faithful to the store screenshot, with local and real PSD2 adapters. */
 export default function ConnectScreen() {
   const router = useRouter();
   const [data, setData] = useState<Data>({ accounts: [] });
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<"local" | "psd2">("local");
+  const [config, setConfig] = useState<ProviderConfig>({ secretId: "", secretKey: "", redirectUri: "", agreement: "" });
+  const [institutions, setInstitutions] = useState<Institution[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = () => { void loadConnect().then(setData); };
   useEffect(load, []);
 
+  const openSheet = () => {
+    void loadProviderConfig().then(setConfig);
+    setMessage(null); setOpen(true);
+  };
+
   const banks = BANKS.filter((bank) => bank.name.toLowerCase().includes(query.toLowerCase()));
+
   const connect = async (name: string) => {
     await connectBank(name);
     load();
+  };
+
+  const saveConfig = async () => {
+    await saveProviderConfig(config);
+    setMessage("Provider credentials saved to secure storage.");
+  };
+
+  const findBanks = async () => {
+    setBusy(true); setMessage(null);
+    try {
+      const list = await listInstitutions("DE");
+      setInstitutions(list.slice(0, 40));
+      setMessage(`${list.length} institutions available via your provider.`);
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not list banks"); }
+    finally { setBusy(false); }
+  };
+
+  const connectInstitution = async (institution: Institution) => {
+    setBusy(true); setMessage(null);
+    try {
+      const requisition = await createRequisition(institution.id);
+      const result = await openBankLogin(requisition.link);
+      if (result.cancelled || !result.ref) { setMessage("Bank login cancelled."); return; }
+      const imported = await importRequisition(result.ref);
+      load();
+      setMessage(`Imported ${imported.imported} transactions from ${institution.name}.`);
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Bank connection failed"); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -38,50 +81,67 @@ export default function ConnectScreen() {
           <FgBankCircle emoji="🦁" size={82} style={{ top: 418, left: "28%" }} />
         </View>
         <Text variant="body3" style={styles.note}>{`${data.accounts.length} account${data.accounts.length === 1 ? "" : "s"} connected locally`}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Connect your bank" onPress={() => setOpen(true)} style={styles.cta}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Connect your bank" onPress={openSheet} style={styles.cta}>
           <RNText style={[styles.ctaText, { fontFamily: typography.font.display }]}>Connect your bank</RNText>
         </Pressable>
       </FgOnboarding>
 
       <Sheet visible={open} onClose={() => setOpen(false)} title="Connect accounts">
-        <Text variant="body4" color="muted">Local adapter with 12 example banks — not real PSD2 bank login. No credentials stored, no cloud connection.</Text>
-        {data.accounts.length ? (
-          <Card>
-            <Text variant="heading6">Connected</Text>
-            {data.accounts.map((account) => (
-              <Box key={account.id} row style={{ justifyContent: "space-between" }}>
-                <Text variant="body3">{account.name}</Text>
-                <Text variant="body4" color="muted">{fgEuro(account.balanceCents)}</Text>
-              </Box>
-            ))}
-          </Card>
-        ) : null}
-        <TextInput
-          value={query} onChangeText={setQuery} placeholder="Search your bank"
-          placeholderTextColor="#9B96BA" style={styles.search}
-          accessibilityLabel="Search your bank"
-        />
-        <ScrollView style={styles.list}>
-          {banks.map((bank) => {
-            const connected = data.accounts.some((a) => a.name === bank.name);
-            return (
-              <Pressable
-                key={bank.name}
-                accessibilityRole="button"
-                accessibilityLabel={`Connect ${bank.name}`}
-                disabled={connected}
-                onPress={() => void connect(bank.name)}
-                style={({ pressed }) => [styles.bankRow, pressed && { opacity: 0.7 }]}
-              >
-                <View style={[styles.bankIcon, { backgroundColor: bank.color }]}>
-                  <RNText style={styles.bankGlyph}>{bank.emoji}</RNText>
-                </View>
-                <Text variant="body3" style={{ flex: 1 }}>{bank.name}</Text>
-                <Text variant="body4" color={connected ? "income" : "primary"}>{connected ? "Connected ✓" : "Connect"}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <Chip label="Demo banks" selected={mode === "local"} onPress={() => setMode("local")} />
+        <Chip label="Real PSD2" selected={mode === "psd2"} onPress={() => setMode("psd2")} />
+        {message ? <Text variant="body3" color="accent">{message}</Text> : null}
+
+        {mode === "psd2" ? (
+          <>
+            <Text variant="body4" color="muted">GoCardless Bank Account Data API. Credentials stay in Expo SecureStore; bank login opens in a secure browser. You need a free developer account.</Text>
+            <TextField label="Secret ID" value={config.secretId} onChangeText={(v) => setConfig({ ...config, secretId: v })} />
+            <TextField label="Secret Key" value={config.secretKey} onChangeText={(v) => setConfig({ ...config, secretKey: v })} />
+            <TextField label="Redirect URI" value={config.redirectUri} onChangeText={(v) => setConfig({ ...config, redirectUri: v })} />
+            <TextField label="Agreement ID (optional)" value={config.agreement} onChangeText={(v) => setConfig({ ...config, agreement: v })} />
+            <Button label="Save credentials" icon="lock" onPress={() => void saveConfig()} />
+            <Button label="Find my bank" icon="magnify" onPress={() => void findBanks()} disabled={busy} />
+            <ScrollView style={styles.list}>
+              {institutions.map((bank) => (
+                <Pressable key={bank.id} accessibilityRole="button" accessibilityLabel={`Connect ${bank.name}`}
+                  disabled={busy} onPress={() => void connectInstitution(bank)} style={styles.bankRow}>
+                  <View style={[styles.bankIcon, { backgroundColor: palette.primary }]}><RNText style={styles.bankGlyph}>{bank.name.slice(0, 1)}</RNText></View>
+                  <Text variant="body3" style={{ flex: 1 }}>{bank.name}</Text>
+                  <Text variant="body4" color="primary">Connect</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </>
+        ) : (
+          <>
+            <Text variant="body4" color="muted">Local adapter with 12 example banks — no credentials stored, no cloud connection. Use Real PSD2 for live banks.</Text>
+            {data.accounts.length ? (
+              <Card>
+                <Text variant="heading6">Connected</Text>
+                {data.accounts.map((account) => (
+                  <Box key={account.id} row style={{ justifyContent: "space-between" }}>
+                    <Text variant="body3">{account.name}</Text>
+                    <Text variant="body4" color="muted">{fgEuro(account.balanceCents)}</Text>
+                  </Box>
+                ))}
+              </Card>
+            ) : null}
+            <TextInput value={query} onChangeText={setQuery} placeholder="Search your bank"
+              placeholderTextColor="#9B96BA" style={styles.search} accessibilityLabel="Search your bank" />
+            <ScrollView style={styles.list}>
+              {banks.map((bank) => {
+                const connected = data.accounts.some((a) => a.name === bank.name);
+                return (
+                  <Pressable key={bank.name} accessibilityRole="button" accessibilityLabel={`Connect ${bank.name}`}
+                    disabled={connected} onPress={() => void connect(bank.name)} style={({ pressed }) => [styles.bankRow, pressed && { opacity: 0.7 }]}>
+                    <View style={[styles.bankIcon, { backgroundColor: bank.color }]}><RNText style={styles.bankGlyph}>{bank.emoji}</RNText></View>
+                    <Text variant="body3" style={{ flex: 1 }}>{bank.name}</Text>
+                    <Text variant="body4" color={connected ? "income" : "primary"}>{connected ? "Connected ✓" : "Connect"}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
         <Button label="Done" variant="secondary" onPress={() => setOpen(false)} />
       </Sheet>
     </View>
@@ -95,7 +155,7 @@ const styles = StyleSheet.create({
   cta: { backgroundColor: "#FFFFFF", borderRadius: 999, paddingHorizontal: 28, paddingVertical: 14, marginBottom: 48 },
   ctaText: { color: palette.primary, fontSize: 16, fontWeight: "700" },
   search: { borderWidth: 1, borderColor: "#E4E2ED", borderRadius: 12, paddingHorizontal: 14, minHeight: 46, fontFamily: typography.font.body },
-  list: { maxHeight: 260 },
+  list: { maxHeight: 220 },
   bankRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#E4E2ED" },
   bankIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   bankGlyph: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },

@@ -95,16 +95,22 @@ each leg now has its own id.
 
 ## Limitations (honest parity boundaries)
 
-- **Bank connection is a local adapter, not real PSD2/open banking.** `/connect`
-  offers 12 searchable example banks and creates a local SQLite account with a
-  zero balance. It does **not** connect to the 4,000+ real banks, does not use a
-  bank API, and stores no credentials. Real bank login requires a licensed
-  banking/PSD2 provider plus user consent and credentials — outside a local-first
-  offline app.
-- **Cancellation generates a printable local letter; it is not sent.** The app
-  cannot legally transmit a cancellation to a provider without an integration
-  and the user's authorisation. The generated HTML must be checked and sent by
-  the user.
+- **Bank connection has two adapters.** `/connect` → Demo banks uses 12 local
+  examples with no network. `/connect` → Real PSD2 implements the GoCardless
+  Bank Account Data API v2 (`/token/new/`, `/institutions/`, `/requisitions/`,
+  account details and booked transactions), with credentials entered at runtime
+  and stored in SecureStore (localStorage on web). Bank login opens in a secure
+  in-app browser and imported transactions are written to local SQLite.
+  GoCardless stopped accepting **new** Bank Account Data signups in July 2025,
+  so an existing provider account (or an API-compatible alternative) is required.
+  Without valid credentials the UI reports the provider's 401 error. No keys are
+  bundled in the app.
+- **Cancellation can be downloaded or sent.** `/contracts` offers a printable
+  HTML letter plus runtime-configurable delivery: email through Expo Mail
+  Composer (user confirms in their mail app, `mailto:` on web), SMS via the
+  native composer, or an HTTPS webhook with bearer token. The letter is stored
+  locally and marked `Cancelled!` after handoff. The user remains responsible
+  for checking the provider address and notice period.
 - **Savings Booster points, vouchers and the 7 % bonus are local simulations**
   computed from the user's own transactions, goals and offers. No cashback is
   actually earned and no retirement product is opened.
