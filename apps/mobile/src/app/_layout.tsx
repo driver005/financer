@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text as RNText, useColorScheme, View } from "rea
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold } from "@expo-google-fonts/montserrat";
+import { PlusJakartaSans_400Regular, PlusJakartaSans_600SemiBold } from "@expo-google-fonts/plus-jakarta-sans";
 import { Urbanist_500Medium, Urbanist_600SemiBold } from "@expo-google-fonts/urbanist";
 import { FinanceUIProvider, darkTheme, lightTheme } from "@finance/ui";
 import { Tabs, usePathname, useRouter } from "expo-router";
@@ -83,6 +84,8 @@ export default function RootLayout() {
     "Montserrat Bold": Montserrat_700Bold,
     Urbanist: Urbanist_600SemiBold,
     "Urbanist Medium": Urbanist_500Medium,
+    "Plus Jakarta Sans": PlusJakartaSans_400Regular,
+    "Plus Jakarta Sans SemiBold": PlusJakartaSans_600SemiBold,
   });
   if (!fontsLoaded) return null;
   return (

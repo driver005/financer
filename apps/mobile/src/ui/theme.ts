@@ -9,7 +9,7 @@ export const tokens = {
   radius: { sm: 14, md: 20, card: 24, lg: 24, pill: 999 },
   font: { caption: 11, label: 13, body: 14, subheading: 19, title: 28, number: 36 },
   serif: "Montserrat",
-  sans: "Montserrat",
+  sans: "Plus Jakarta Sans",
   minTouch: 46,
 };
 

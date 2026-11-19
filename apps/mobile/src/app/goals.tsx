@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { Badge, Box, BudgetCard, Button, Card, EmptyState, GoalCard, PlanCard, Progress, Text } from "@finance/ui";
+import { AsyncBoundary, Badge, Box, BudgetCard, Button, Card, EmptyState, FadeIn, GoalCard, PlanCard, Progress, Text } from "@finance/ui";
 import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
 import { core } from "../rust/core";
 import { allTransactions, budgets, goals } from "../db/moneyTracker";
@@ -14,11 +14,18 @@ export default function GoalsScreen() {
   const [checkRows, setCheckRows] = useState<{ id: number; goalId: number; title: string; amountCents: number; completed: number }[]>([]);
   const [fundRows, setFundRows] = useState<{ id: number; cents: number; date: string }[]>([]);
   const [txRows, setTxRows] = useState<Record<string, unknown>[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
-    const [g, b, c, t] = await Promise.all([goals(), budgets(), checklist(), allTransactions()]);
-    setGoalRows(g as never); setBudgetRows(b as never); setCheckRows(c as never); setTxRows(t);
-    setFundRows(g.length ? await goalFundings(g[0].id) : []);
+    setLoading(true);
+    try {
+      const [g, b, c, t] = await Promise.all([goals(), budgets(), checklist(), allTransactions()]);
+      setGoalRows(g as never); setBudgetRows(b as never); setCheckRows(c as never); setTxRows(t);
+      setFundRows(g.length ? await goalFundings(g[0].id) : []);
+      setError(null);
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not load plans"); }
+    finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);
 
@@ -28,6 +35,8 @@ export default function GoalsScreen() {
 
   return (
     <Screen title="Plans" subtitle="Goals, budgets and checklists" action={<AppIconButton icon="plus" label="More plans" onPress={() => router.push("/projects")} />}>
+      <AsyncBoundary loading={loading} error={error} onRetry={() => void load()} rows={4}>
+      <FadeIn>
       {goalRows.length ? <Card>
         <SectionTitle>Goals & plans</SectionTitle>
         {goalRows.map((goal) => (
@@ -54,6 +63,8 @@ export default function GoalsScreen() {
         {fundRows.map((f) => <Badge key={f.id} label={`${f.date} · ${(f.cents / 100).toFixed(2)}`} />)}
       </Card> : null}
       <PlanCard title="Emergency fund" targetCents={200000} savedCents={85000} pace="8 paychecks left" />
+      </FadeIn>
+      </AsyncBoundary>
     </Screen>
   );
 }

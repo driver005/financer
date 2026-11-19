@@ -4,3 +4,4 @@ export * from "./navigation";
 export * from "./finance";
 export * from "./features";
 export * from "./upstream";
+export * from "./categoryAssets";

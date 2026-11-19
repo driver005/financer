@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Badge, Box, Button, Card, DayScroller, EmptyState, Icon, Money, Segmented, Text, TextField } from "@finance/ui";
+import { AsyncBoundary, Badge, Box, Button, Card, DayScroller, EmptyState, FadeIn, Icon, Money, Segmented, Text, TextField } from "@finance/ui";
 import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
 import { core } from "../rust/core";
 import { allTransactions, accounts } from "../db/moneyTracker";
@@ -14,8 +14,15 @@ export default function TransactionsScreen() {
   const [mode, setMode] = useState<"list" | "table">("list");
   const [filter, setFilter] = useState("");
   const [day, setDay] = useState("today");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const load = () => void allTransactions().then((data) => setRows(data as unknown as Row[]));
+  const load = () => {
+    setLoading(true);
+    void allTransactions().then((data) => { setRows(data as unknown as Row[]); setError(null); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Could not load transactions"))
+      .finally(() => setLoading(false));
+  };
   useEffect(load, []);
 
   const visible = rows.filter((r) => r.merchant.toLowerCase().includes(filter.toLowerCase()) || r.category.toLowerCase().includes(filter.toLowerCase()));
@@ -27,6 +34,8 @@ export default function TransactionsScreen() {
         <TextField label="Search" value={filter} onChangeText={setFilter} placeholder="Merchant or category" />
         <DayScroller days={["M", "T", "W", "T", "F", "S", "S"].map((label, i) => ({ key: String(i), label }))} active={day} onChange={setDay} />
       </Card>
+      <AsyncBoundary loading={loading} error={error} onRetry={load} rows={5}>
+      <FadeIn>
       <Card>
         <SectionTitle>{mode === "list" ? "Recent" : "Editable table"}</SectionTitle>
         {visible.slice(0, 40).map((row) => (
@@ -42,6 +51,8 @@ export default function TransactionsScreen() {
         ))}
         {!visible.length ? <EmptyState title="No transactions yet" message="Add one with the + button, import a CSV, or connect a provider." icon="receipt" action={{ label: "Add transaction", onPress: () => router.push("/quickadd") }} /> : null}
       </Card>
+      </FadeIn>
+      </AsyncBoundary>
       <Button label="Open full PC editor" icon="laptop" variant="secondary" onPress={() => router.push("/pc")} />
     </Screen>
   );

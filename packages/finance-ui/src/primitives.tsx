@@ -4,7 +4,7 @@ import {
   TextInput, View, type StyleProp, type TextStyle, type ViewStyle,
 } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { darkTheme, lightTheme, radius, spacing, typography, type Theme } from "./tokens";
+import { darkTheme, legacyTypography, lightTheme, radius, spacing, typography, type Theme } from "./tokens";
 
 const ThemeContext = createContext<Theme>(lightTheme);
 
@@ -26,14 +26,14 @@ export function Box({ children, style, row, gap }: { children: ReactNode; style?
   return <View style={[row && styles.row, gap !== undefined && { gap }, style]}>{children}</View>;
 }
 
-export type TextVariant = keyof Pick<typeof typography, "headline1" | "headline2" | "heading1" | "heading2" | "heading3" | "heading4" | "heading5" | "heading6" | "body1" | "body2" | "body3" | "body4" | "body5">;
+export type TextVariant = keyof typeof legacyTypography;
 
 export function Text({ children, variant = "body2", color, style, numberOfLines }: {
   children: ReactNode; variant?: TextVariant; color?: "muted" | "primary" | "income" | "expense" | "transfer"; style?: StyleProp<TextStyle>; numberOfLines?: number;
 }) {
   const theme = useFinanceTheme();
   const tint = color ? theme[color] : theme.text;
-  return <RNText numberOfLines={numberOfLines} style={[{ fontFamily: typography.font.display, color: tint }, typography[variant], style]}>{children}</RNText>;
+  return <RNText numberOfLines={numberOfLines} style={[{ fontFamily: variant.startsWith("heading") || variant.startsWith("headline") ? typography.font.display : typography.font.body, color: tint }, legacyTypography[variant], style]}>{children}</RNText>;
 }
 
 export function Money({ cents, currency = "EUR", variant = "numericTitle", color, style }: {
@@ -41,7 +41,7 @@ export function Money({ cents, currency = "EUR", variant = "numericTitle", color
 }) {
   const theme = useFinanceTheme();
   const value = `${new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2 }).format(cents / 100)} ${currency}`;
-  return <RNText style={[{ fontFamily: typography.font.number, color: color ? theme[color] : theme.text }, typography[variant], style]}>{value}</RNText>;
+  return <RNText style={[{ fontFamily: typography.font.number, color: color ? theme[color] : theme.text }, legacyTypography[variant], style]}>{value}</RNText>;
 }
 
 export function Card({ children, onPress, style, tone }: { children: ReactNode; onPress?: () => void; style?: StyleProp<ViewStyle>; tone?: "primary" | "surface" }) {
@@ -69,7 +69,7 @@ export function Button({ label, onPress, variant = "filled", icon, disabled }: {
       ]}
     >
       {icon ? <Icon name={icon} size={18} color={filled ? theme.surface : theme.primary} /> : null}
-      <RNText style={[typography.body2, { fontFamily: typography.font.display, color: filled ? theme.surface : theme.primary }]}>{label}</RNText>
+      <RNText style={[legacyTypography.body2, { fontFamily: typography.font.body, color: filled ? theme.surface : theme.primary }]}>{label}</RNText>
     </Pressable>
   );
 }
@@ -86,7 +86,7 @@ export function IconButton({ icon, label, onPress, active }: { icon: IconName; l
 export function Chip({ label, selected, onPress }: { label: string; selected?: boolean; onPress?: () => void }) {
   const theme = useFinanceTheme();
   const style: StyleProp<ViewStyle> = [styles.chip, { backgroundColor: selected ? theme.primary : theme.surfaceAlt, borderColor: selected ? theme.primary : theme.border }];
-  const content = <RNText style={[typography.body4, { fontFamily: typography.font.display, color: selected ? theme.surface : theme.muted }]}>{label}</RNText>;
+  const content = <RNText style={[legacyTypography.body4, { fontFamily: typography.font.body, color: selected ? theme.surface : theme.muted }]}>{label}</RNText>;
   if (!onPress) return <View style={style}>{content}</View>;
   return <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }: { pressed: boolean }) => [style, pressed && styles.pressed]}>{content}</Pressable>;
 }
@@ -94,7 +94,7 @@ export function Chip({ label, selected, onPress }: { label: string; selected?: b
 export function Badge({ label, tone = "primary" }: { label: string; tone?: "primary" | "income" | "expense" | "transfer" | "muted"; key?: React.Key }) {
   const theme = useFinanceTheme();
   const color = tone === "muted" ? theme.muted : theme[tone];
-  return <View style={[styles.badge, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}><RNText style={[typography.body5, { fontFamily: typography.font.display, color, fontWeight: "700" }]}>{label}</RNText></View>;
+  return <View style={[styles.badge, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}><RNText style={[legacyTypography.body5, { fontFamily: typography.font.body, color, fontWeight: "700" }]}>{label}</RNText></View>;
 }
 
 export function TextField({ label, value, onChangeText, placeholder, numeric, multiline, keyboardType }: {
@@ -103,11 +103,11 @@ export function TextField({ label, value, onChangeText, placeholder, numeric, mu
   const theme = useFinanceTheme();
   return (
     <View style={styles.fieldWrap}>
-      <RNText style={[typography.body4, { fontFamily: typography.font.display, color: theme.muted }]}>{label}</RNText>
+      <RNText style={[legacyTypography.body4, { fontFamily: typography.font.body, color: theme.muted }]}>{label}</RNText>
       <TextInput
         value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={theme.muted}
         multiline={multiline} keyboardType={keyboardType ?? (numeric ? "decimal-pad" : "default")}
-        style={[styles.field, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text, fontFamily: numeric ? typography.font.number : typography.font.display, minHeight: multiline ? 96 : 48 }]}
+        style={[styles.field, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text, fontFamily: numeric ? typography.font.number : typography.font.body, minHeight: multiline ? 96 : 48 }]}
       />
     </View>
   );
@@ -120,7 +120,7 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
       {options.map((option) => (
         <Pressable key={option.value} onPress={() => onChange(option.value)} accessibilityRole="button"
           style={({ pressed }: { pressed: boolean }) => [styles.segment, option.value === value && { backgroundColor: theme.primary }, pressed && styles.pressed]}>
-          <RNText style={[typography.body4, { fontFamily: typography.font.display, color: option.value === value ? theme.surface : theme.muted }]}>{option.label}</RNText>
+          <RNText style={[legacyTypography.body4, { fontFamily: typography.font.body, color: option.value === value ? theme.surface : theme.muted }]}>{option.label}</RNText>
         </Pressable>
       ))}
     </View>
@@ -170,6 +170,39 @@ export function EmptyState({ title, message, icon = "inbox-outline", action }: {
   );
 }
 
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const theme = useFinanceTheme();
+  return (
+    <View style={[styles.card, { backgroundColor: `${theme.error}12`, borderColor: `${theme.error}55` }]}>
+      <Icon name="alert-circle-outline" size={24} color={theme.error} />
+      <Text variant="body3" color="expense">{message}</Text>
+      {onRetry ? <Button label="Try again" variant="secondary" onPress={onRetry} /> : null}
+    </View>
+  );
+}
+
+/** Compact dashboard tile used by the merged Home and Hub screens. */
+export function Tile({ icon, label, onPress, accent }: { icon: IconName; label: string; onPress: () => void; accent?: boolean }) {
+  const theme = useFinanceTheme();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [
+      styles.tile, { backgroundColor: accent ? theme.primarySoft : theme.surface, borderColor: accent ? theme.primary : theme.border },
+      pressed && styles.pressed,
+    ]}>
+      <Icon name={icon} size={22} color={accent ? theme.primary : theme.muted} />
+      <Text variant="body4" color={accent ? "primary" : undefined} numberOfLines={2}>{label}</Text>
+    </Pressable>
+  );
+}
+
+export function AsyncBoundary({ loading, error, onRetry, rows = 3, children }: {
+  loading?: boolean; error?: string | null; onRetry?: () => void; rows?: number; children: ReactNode;
+}) {
+  if (error) return <ErrorState message={error} onRetry={onRetry} />;
+  if (loading) return <Skeleton rows={rows} />;
+  return <>{children}</>;
+}
+
 export function Skeleton({ rows = 3 }: { rows?: number }) {
   const theme = useFinanceTheme();
   return <View style={styles.column}>{Array.from({ length: rows }, (_, i) => <View key={i} style={[styles.skeleton, { backgroundColor: theme.surfaceAlt }]} />)}</View>;
@@ -211,16 +244,16 @@ export function FadeIn({ children, delay = 0 }: { children: ReactNode; delay?: n
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  column: { gap: spacing.mdSm },
+  column: { gap: spacing.sm },
   rowSpace: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
-  center: { alignItems: "center", padding: spacing.xl, gap: spacing.mdSm },
+  center: { alignItems: "center", padding: spacing.xl, gap: spacing.sm },
   pressed: { opacity: 0.7 },
   disabled: { opacity: 0.4 },
-  card: { borderWidth: 1, borderRadius: radius.card, padding: spacing.lg, gap: spacing.mdSm },
-  button: { minHeight: 48, borderRadius: radius.button, paddingHorizontal: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.mdSm },
+  card: { borderWidth: 1, borderRadius: radius.card, padding: spacing.lg, gap: spacing.sm },
+  button: { minHeight: 48, borderRadius: radius.md, paddingHorizontal: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
   iconButton: { width: 40, height: 40, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
   chip: { minHeight: 34, paddingHorizontal: spacing.md, borderRadius: radius.full, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  badge: { paddingHorizontal: spacing.mdSm, paddingVertical: spacing.xs, borderRadius: radius.full, borderWidth: 1 },
+  badge: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.full, borderWidth: 1 },
   fieldWrap: { gap: spacing.sm },
   field: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md, fontSize: 15 },
   segmented: { flexDirection: "row", borderRadius: radius.full, borderWidth: 1, padding: spacing.xs },
@@ -228,6 +261,7 @@ const styles = StyleSheet.create({
   progress: { borderRadius: radius.full, overflow: "hidden" },
   progressFill: { borderRadius: radius.full },
   checkbox: { width: 24, height: 24, borderWidth: 2, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
+  tile: { width: "47%", minHeight: 86, borderRadius: radius.card, borderWidth: 1, padding: spacing.lg, alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm },
   skeleton: { height: 56, borderRadius: radius.card },
   backdrop: { flex: 1, backgroundColor: "#00000066" },
   sheet: { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, maxHeight: "80%" },

@@ -1,6 +1,8 @@
 # Merged screens — one big app
 
-Stitch project: `11057116803371822050` ("Pantry merged app screens"), 14 generated designs from the four reference apps.
+Stitch project: `11057116803371822050` ("Pantry merged app screens"), 14 generated designs from the four reference apps. Design system **Culinary Capital** (`#027E83` teal, `#8E1AB1` violet, `#B9A115` yellow, `#E50855` red, `#F7F9FA` canvas, Montserrat headings / Plus Jakarta Sans body / Urbanist numerals) is the single token source in `packages/finance-ui/src/tokens.ts`.
+
+Every screen uses `AsyncBoundary` (skeleton/empty/error), `FadeIn` motion (reduced-motion aware) and the themed shell. QA matrix: 375/390/430 px × light/dark, 24 route checks, zero horizontal overflow.
 
 ## Screen map
 
