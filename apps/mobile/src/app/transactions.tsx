@@ -70,7 +70,7 @@ export default function TransactionsScreen() {
           <FgHeaderIcon name="view-grid" label="All apps" onPress={() => router.push("/hub")} />
           <FgHeaderIcon name="send-outline" label="Transfer" onPress={() => router.push("/accounts")} />
           <FgHeaderIcon name="magnify" label="Search" onPress={() => router.push("/pc")} />
-          <FgHeaderIcon name="dots-horizontal" label="More" onPress={() => router.push("/moneytools")} />
+          <FgHeaderIcon name="dots-horizontal" label="More" onPress={() => router.push("/flows")} />
         </>
       }
     >

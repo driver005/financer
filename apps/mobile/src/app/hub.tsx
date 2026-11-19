@@ -34,6 +34,7 @@ const GROUPS: { title: string; items: { label: string; route: string; icon: Icon
     { label: "Finance suite", route: "/finance", icon: "view-dashboard" },
     { label: "Upstream", route: "/upstream", icon: "apps" },
     { label: "Parity gaps", route: "/gaps", icon: "tune" },
+    { label: "Money flows", route: "/flows", icon: "swap-horizontal" },
     { label: "Ask money", route: "/ask", icon: "comment-question" },
     { label: "PC editor", route: "/pc", icon: "laptop" },
     { label: "UI kit", route: "/showcase", icon: "palette" },

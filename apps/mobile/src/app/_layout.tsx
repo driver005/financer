@@ -129,6 +129,7 @@ export default function RootLayout() {
         <Tabs.Screen name="insurance" options={{ title: "Insurance" }} />
         <Tabs.Screen name="savings" options={{ title: "Savings Booster" }} />
         <Tabs.Screen name="prices" options={{ title: "Price comparison" }} />
+        <Tabs.Screen name="flows" options={{ title: "Money flows" }} />
         <Tabs.Screen name="finance" options={{ title: "Finance suite" }} />
         <Tabs.Screen name="upstream" options={{ title: "Upstream features" }} />
         <Tabs.Screen name="gaps" options={{ title: "Parity gaps" }} />

@@ -75,10 +75,23 @@ Real-data loaders for the new screens: `apps/mobile/src/lib/finanzguru.ts`.
 Help-center flow inventory (hilfe.finanzguru.de): login/registration, bank
 connection, account management, booking edits/refunds/forecasts, statistics,
 budgets, analyses, contracts (create/edit/cancel/split), insurance, transfers,
-account/Plus settings, Sparbooster, security, general info and Split. Local
-equivalents exist for all of these; transfers, booking edits, forecasts,
-splits and Plus settings live under `/moneytools`, `/pc`, `/insights`,
-`/gaps` and `/settings` in the same kit.
+account/Plus settings, Sparbooster, security, general info and Split. Every
+flow has a local equivalent in the same purple kit:
+
+| Help-center flow | Local screen | Writes |
+| --- | --- | --- |
+| Transfers | `/flows` → Transfer | `transfer()` updates both account balances and creates two ledger legs |
+| Refunds | `/flows` → Refund | new income transaction + ledger + balance |
+| Rebookings / category edits | `/flows` → Rebook | `updateTransaction()` |
+| Split a bill | `/flows` → Split | Rust `core.splitBill` (equal / by amount / by %) |
+| Forecasts | `/transactions`, `/insights` | Rust `core.forecast`, `core.compareMonths` |
+| Contract split & cancellation | `/contracts`, `/obligations` | local cancellation letter + status |
+| Language, timezone, payday, biometrics, Plus, promo code | `/flows` → Plus | SQLite `settings` table |
+| Advanced settings / security | `/settings`, `/gaps` | passcode hash, bank config, locale |
+
+Fix applied while verifying: the legacy `transfer()` reused one `externalId`
+for both ledger legs, violating the `UNIQUE(source, externalId)` constraint;
+each leg now has its own id.
 
 ## Limitations (honest parity boundaries)
 

@@ -33,8 +33,8 @@ export async function transfer(fromId: string, toId: string, cents: number): Pro
     await db.runAsync("UPDATE accounts SET balanceCents = balanceCents + ? WHERE id = ?", cents, toId);
     const today = new Date().toISOString().slice(0, 10);
     const txId = `transfer-${Date.now()}`;
-    await db.runAsync("INSERT INTO transactions (date, merchant, amountCents, category, storeId, source, externalId, accountId, kind) VALUES (?, 'Transfer', ?, 'Transfer', NULL, 'manual', ?, ?, 'transfer')", today, cents, txId, fromId);
-    await db.runAsync("INSERT INTO transactions (date, merchant, amountCents, category, storeId, source, externalId, accountId, kind) VALUES (?, 'Transfer in', ?, 'Transfer', NULL, 'manual', ?, ?, 'transfer')", today, cents, txId, toId);
+    await db.runAsync("INSERT INTO transactions (date, merchant, amountCents, category, storeId, source, externalId, accountId, kind) VALUES (?, 'Transfer', ?, 'Transfer', NULL, 'manual', ?, ?, 'transfer')", today, cents, `${txId}-out`, fromId);
+    await db.runAsync("INSERT INTO transactions (date, merchant, amountCents, category, storeId, source, externalId, accountId, kind) VALUES (?, 'Transfer in', ?, 'Transfer', NULL, 'manual', ?, ?, 'transfer')", today, cents, `${txId}-in`, toId);
     await db.runAsync("INSERT INTO ledger_entries (txId, accountId, side, cents) VALUES (?, ?, 'debit', ?)", txId, fromId, cents);
     await db.runAsync("INSERT INTO ledger_entries (txId, accountId, side, cents) VALUES (?, ?, 'credit', ?)", txId, toId, cents);
   });
