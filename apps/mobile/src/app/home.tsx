@@ -6,6 +6,7 @@ import {
 } from "@finance/ui";
 import { core } from "../rust/core";
 import { allTransactions, accounts } from "../db/moneyTracker";
+import { gold } from "../db/upstreamFeatures";
 
 /** Values shown in the Finanzguru Play Store Overview screenshot. */
 const SHOWCASE = {
@@ -21,14 +22,19 @@ const SHOWCASE = {
 export default function HomeScreen() {
   const router = useRouter();
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
-  const [accountRows, setAccountRows] = useState<{ id: string; balanceCents: number }[]>([]);
+  const [accountRows, setAccountRows] = useState<{ id: string; balanceCents: number; kind: string }[]>([]);
+  const [portfolioCents, setPortfolioCents] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void Promise.all([allTransactions(), accounts()])
-      .then(([t, a]) => {
-        setRows(t); setAccountRows(a as never); setError(null);
+    void Promise.all([allTransactions(), accounts(), gold()])
+      .then(([t, a, holdings]) => {
+        setRows(t); setAccountRows(a as never);
+        const investments = a.filter((row) => row.kind === "investment").reduce((sum, row) => sum + row.balanceCents, 0);
+        const metal = holdings.reduce((sum, row) => sum + Math.round(row.grams * row.currentCentsPerGram), 0);
+        setPortfolioCents(investments + metal);
+        setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Could not load your dashboard"))
       .finally(() => setLoading(false));
@@ -80,7 +86,7 @@ export default function HomeScreen() {
         <FadeIn delay={180}>
           <FgSection title="Investments" action={<FgLink label="Show all" onPress={() => router.push("/holdings")} />}>
             <Card>
-              <FgAccountRow emoji="📈" name="Portfolio" cents={SHOWCASE.portfolioCents} onPress={() => router.push("/holdings")} />
+              <FgAccountRow emoji="📈" name="Portfolio" cents={portfolioCents || SHOWCASE.portfolioCents} onPress={() => router.push("/holdings")} />
             </Card>
           </FgSection>
         </FadeIn>

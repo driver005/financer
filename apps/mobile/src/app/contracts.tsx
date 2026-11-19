@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import {
-  AsyncBoundary, Card, FadeIn, FgHeaderIcon, FgMerchantRow, FgScreen, FgSection,
-  FgSortButton, FgTipsRow, Text,
+  AsyncBoundary, Button, Card, FadeIn, FgHeaderIcon, FgMerchantRow, FgScreen, FgSection,
+  FgSortButton, FgTipsRow, Sheet, Text, TextField,
 } from "@finance/ui";
 import { recurringList, debts } from "../db/moneyTracker";
 import { subscriptions, receivables } from "../db/upstreamFeatures";
+import { base64Encode, saveDocument } from "../lib/file";
 
 type Item = { name: string; category: string; cents: number; emoji: string; logoColor?: string };
 
@@ -26,6 +27,10 @@ export default function ContractsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cycle, setCycle] = useState<"Monthly" | "Yearly">("Monthly");
+  const [cancelItem, setCancelItem] = useState<Item | null>(null);
+  const [address, setAddress] = useState("");
+  const [customerNo, setCustomerNo] = useState("");
+  const [effective, setEffective] = useState("");
 
   useEffect(() => {
     void Promise.all([recurringList(), debts(), subscriptions(), receivables()])
@@ -45,6 +50,20 @@ export default function ContractsScreen() {
 
   const totalCents = items.reduce((sum, item) => sum + Math.abs(item.cents), 0);
   const shownCents = cycle === "Yearly" ? totalCents * 12 : totalCents;
+
+  const createCancellation = async () => {
+    if (!cancelItem) return;
+    const date = effective || new Date().toISOString().slice(0, 10);
+    const html = `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Kündigung ${cancelItem.name}</title>
+<style>body{font-family:Arial,sans-serif;max-width:700px;margin:40px auto;line-height:1.6;color:#2A2166}h1{color:#3C318F}</style></head><body>
+<h1>Kündigung</h1><p>${cancelItem.name}<br>${address || "Kundenservice"}<br>${date}</p>
+<h2>Kündigung meines Vertrags</h2><p>Sehr geehrte Damen und Herren,</p>
+<p>hiermit kündige ich meinen Vertrag (${cancelItem.category}) mit Kundennummer ${customerNo || "-"} fristgerecht zum ${date}. Bitte bestätigen Sie den Eingang dieser Kündigung schriftlich.</p>
+<p>Mit freundlichen Grüßen</p><p>_____</p><p><small>Generated locally by Pantry — verify the provider address and notice period before sending.</small></p>
+</body></html>`;
+    await saveDocument(base64Encode(html), `kuendigung-${cancelItem.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.html`, "text/html");
+    setCancelItem(null);
+  };
 
   return (
     <FgScreen
@@ -80,12 +99,20 @@ export default function ContractsScreen() {
                 category={item.category}
                 cents={item.cents}
                 logoColor={item.logoColor}
-                onPress={() => router.push("/obligations")}
+                onPress={() => setCancelItem(item)}
               />
             ))}
           </Card>
         </FadeIn>
       </AsyncBoundary>
+
+      <Sheet visible={!!cancelItem} onClose={() => setCancelItem(null)} title={`Cancel ${cancelItem?.name ?? ""}`}>
+        <Text variant="body3" color="muted">Free, legally styled cancellation letter. Saved locally as a printable HTML file — nothing is sent.</Text>
+        <TextField label="Provider address" value={address} onChangeText={setAddress} placeholder="Kundenservice, Musterstr. 1" />
+        <TextField label="Customer number" value={customerNo} onChangeText={setCustomerNo} placeholder="e.g. 123456789" />
+        <TextField label="Effective date" value={effective} onChangeText={setEffective} placeholder="YYYY-MM-DD" />
+        <Button label="Create cancellation letter" icon="file-document-outline" onPress={() => void createCancellation()} />
+      </Sheet>
     </FgScreen>
   );
 }

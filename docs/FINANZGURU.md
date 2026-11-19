@@ -1,6 +1,7 @@
-# Finanzguru – Finance Manager (Play Store) parity
+# Finanzguru – Finance Manager parity
 
 Target: https://play.google.com/store/apps/details?id=de.dwins.financeguru (dwins GmbH, 1M+ downloads, 4.4★).
+Feature list taken from the Play Store "About this app" text and https://finanzguru.de/ (Nov 2026).
 
 ## Research evidence
 
@@ -17,25 +18,45 @@ directly from the store images with Pillow:
 | Mint | `#C9F2DC` | category pills, progress |
 | Violet | `#7B3FE4` | Plus badge, saving tips |
 
-## Screens reproduced
+## Store screens reproduced
 
 | Store screenshot | Local route | What matches |
 | --- | --- | --- |
-| shot1 – Overview | `/home` | Overview title, purple Statistics card (`823 €` available, `16 days until payday`), budget dial row + `Show all`, Accounts (Checking `3.205,99 €`, Credit card `-256,36 €`, PayPal `37.30 €`), Investments (`12.187,22 €`), 5-tab bar |
-| shot4 – Contracts | `/contracts` | Contracts title + calendar/sort icons, `Ø 1.102 € / month` card with `Insights`, `2 money-saving tips`, `Sort by cycle`, `Monthly 1.102,00 €`, merchant rows (RE/MAX, HUK Coburg, E.ON, Telekom, Netflix, Spotify) |
+| shot1 – Overview | `/home` | Overview title, purple Statistics card, budget dial row + `Show all`, Accounts, Investments, 5-tab bar |
+| shot4 – Contracts | `/contracts` | `Ø … € / month` card with `Insights`, `2 money-saving tips`, `Sort by cycle`, monthly total, merchant rows |
 | shot3 – Automatically categorised | `/categorised` | Floating Living / Leisure / Food & Drinks chips, merchant list with mint category pills and checks |
 | shot2 – Connect accounts | `/connect` | Full indigo hero, bold white `Connect accounts` headline, six floating white bank-logo circles |
 
-The bottom tab bar now uses the Finanzguru labels: Overview, Contracts, Insights,
-Insurance, Savings Booster. All pre-existing recipes / shopping / offers / money
-tracker routes are preserved and reachable from the grid icon on Overview and the
-All apps hub.
+Bottom tabs match Finanzguru: **Overview, Contracts, Insights, Insurance, Savings Booster**.
+
+## Full Play Store feature list → local implementation
+
+| Store feature | Local route / implementation | Data source |
+| --- | --- | --- |
+| All bank, investment and insurance accounts in one app | `/home` Accounts + Investments, `/connect` | SQLite `accounts`, `gold` |
+| Income & expenses, statistics, money left until payday | `/home` Statistics card, `/insights` | `allTransactions` + `core.txTotals` |
+| Automatic contract detection, contract folder, subscriptions | `/contracts`, `/obligations` | `recurringList`, `subscriptions`, `debts`, `receivables` |
+| Free cancellation of contracts & insurance | `/contracts` row → cancellation-letter sheet | local printable HTML, no network |
+| Smart budgets / disposable income | `/budgets`, `/insights` | `budgets` + `core.budgetStatus` |
+| Helpful spending insights, trends, saving opportunities | `/insights`, `/gaps` | `core.compareMonths`, `core.categoryTotals` |
+| Insurance overview, needs analysis, coverage gaps, advice | `/insurance` | local policies + coverage checklist, `/ask` |
+| AI companion — any question, answers from real bookings | `/ask` | `core.assistant` on `allTransactions` |
+| Savings Booster — cashback points, retirement depot, 7 % bonus | `/savings` | transactions at matched stores, goals, local reserve setting |
+| Automatic categorisation | `/categorised` | real merchants from `allTransactions`, editable via `updateTransaction` |
+| Connect 4,000+ banks | `/connect` | local adapter: 12 searchable banks, `addAccount` |
+| German banking-grade data privacy | local-first SQLite, no cloud login anywhere | on-device only |
+
+The three previously unrelated tab targets (`/reports`, `/obligations`, `/goals`)
+are preserved and reachable from the All apps hub, but the visible tabs now open
+purpose-built Finanzguru screens.
 
 ## Single design system
 
-One UI kit only: `packages/finance-ui`. The Finanzguru screen components live in
-`src/finanzguru.tsx` and share the same tokens as every other screen.
+One UI kit only: `packages/finance-ui`. Store-screen components live in
+`src/finanzguru.tsx` and share tokens with every other screen.
 `apps/mobile/src/ui/primitives.tsx` and `theme.ts` are thin compatibility shims.
 Primary app colour: dark purple `#3C318F`.
+
+Real-data loaders for the new screens: `apps/mobile/src/lib/finanzguru.ts`.
 
 Stitch reference project: `17031347711862038285` ("Finanzguru parity screens").

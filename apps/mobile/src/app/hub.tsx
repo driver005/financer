@@ -11,6 +11,9 @@ const GROUPS: { title: string; items: { label: string; route: string; icon: Icon
     { label: "Transactions", route: "/transactions", icon: "receipt" },
     { label: "Accounts", route: "/accounts", icon: "wallet" },
     { label: "Reports", route: "/reports", icon: "chart-bar" },
+    { label: "Insights", route: "/insights", icon: "chart-line" },
+    { label: "Insurance", route: "/insurance", icon: "shield-outline" },
+    { label: "Savings Booster", route: "/savings", icon: "piggy-bank" },
   ] },
   { title: "Planning", items: [
     { label: "Goals & budgets", route: "/goals", icon: "target" },

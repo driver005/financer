@@ -1,44 +1,67 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { Card, FadeIn, FgCategoryChip, FgCategoryPill, FgHeaderIcon, FgMerchantRow, FgScreen } from "@finance/ui";
+import { AsyncBoundary, Card, FadeIn, FgCategoryChip, FgCategoryPill, FgHeaderIcon, FgMerchantRow, FgScreen, Text } from "@finance/ui";
+import { fgEuro } from "@finance/ui";
+import { CATEGORY_CHOICES, loadCategorised, setMerchantCategory } from "../lib/finanzguru";
 
-const MERCHANTS = [
-  { emoji: "🅰️", name: "Telekom", category: "Internet & Phone", color: "#FCE4F0" },
-  { emoji: "🟢", name: "Spotify", category: "Streaming", color: "#E4F7E9" },
-  { emoji: "🅽", name: "Netflix", category: "Series & Movies", color: "#FFE5E5" },
-  { emoji: "a", name: "Amazon", category: "Shopping", color: "#FFF1DC" },
-  { emoji: "🏠", name: "Airbnb", category: "Vacation", color: "#FFE8E8" },
-  { emoji: "🚆", name: "Deutsche Bahn", category: "Bus & Train", color: "#FFE5E5" },
-  { emoji: "🛒", name: "REWE", category: "Supermarket", color: "#FFE8E8" },
-];
+type Data = Awaited<ReturnType<typeof loadCategorised>>;
 
 export default function CategorisedScreen() {
   const router = useRouter();
+  const [data, setData] = useState<Data | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    void loadCategorised()
+      .then((d) => { setData(d); setError(null); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Could not load your transactions"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const cycle = async (merchant: string, current: string) => {
+    const index = CATEGORY_CHOICES.indexOf(current);
+    const next = CATEGORY_CHOICES[(index + 1) % CATEGORY_CHOICES.length];
+    await setMerchantCategory(merchant, next);
+    load();
+  };
+
   return (
     <FgScreen
       title="Automatically categorised"
       actions={<FgHeaderIcon name="cog-outline" label="Settings" onPress={() => router.push("/settings")} />}
     >
-      <FadeIn>
-        <Card style={{ gap: 12, alignItems: "center" }}>
-          <FgCategoryChip emoji="🏠" label="Living" align="right" />
-          <FgCategoryChip emoji="😊" label="Leisure" align="left" />
-          <FgCategoryChip emoji="🥤" label="Food & Drinks" />
-        </Card>
-      </FadeIn>
-      <FadeIn delay={80}>
-        <Card style={{ paddingHorizontal: 8 }}>
-          {MERCHANTS.map((merchant) => (
-            <FgMerchantRow
-              key={merchant.name}
-              emoji={merchant.emoji}
-              name={merchant.name}
-              logoColor={merchant.color}
-              pill={<FgCategoryPill label={merchant.category} />}
-            />
-          ))}
-        </Card>
-      </FadeIn>
+      <AsyncBoundary loading={loading} error={error} onRetry={load} rows={5}>
+        {data && <>
+          <FadeIn>
+            <Card style={{ gap: 12, alignItems: "center" }}>
+              <Text variant="body3" color="muted">{`${data.categorised} of ${data.total} transactions categorised locally`}</Text>
+              <FgCategoryChip emoji="🏠" label="Living" align="right" />
+              <FgCategoryChip emoji="😊" label="Leisure" align="left" />
+              <FgCategoryChip emoji="🥤" label="Food & Drinks" />
+            </Card>
+          </FadeIn>
+          <FadeIn delay={80}>
+            <Card style={{ paddingHorizontal: 8 }}>
+              {data.merchants.length ? data.merchants.map((merchant) => (
+                <FgMerchantRow
+                  key={merchant.merchant}
+                  emoji={merchant.merchant.slice(0, 1).toUpperCase()}
+                  name={merchant.merchant}
+                  category={`${merchant.count} booking${merchant.count === 1 ? "" : "s"} · ${fgEuro(Math.abs(merchant.cents))}`}
+                  pill={<FgCategoryPill label={merchant.category} />}
+                  onPress={() => void cycle(merchant.merchant, merchant.category)}
+                />
+              )) : <Text variant="body3" color="muted">No expenses recorded yet. Add a transaction to see automatic categorisation here.</Text>}
+            </Card>
+          </FadeIn>
+          <FadeIn delay={140}>
+            <Text variant="body5" color="muted">Tap a category pill to reassign it. Changes are saved to local SQLite and used by Insights.</Text>
+          </FadeIn>
+        </>}
+      </AsyncBoundary>
     </FgScreen>
   );
 }

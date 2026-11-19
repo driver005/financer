@@ -17,9 +17,9 @@ import { tokens, useTheme } from "../ui/theme";
 const TABS: { route: string; label: string; icon: IconName }[] = [
   { route: "/home", label: "Overview", icon: "home" },
   { route: "/contracts", label: "Contracts", icon: "file-document-outline" },
-  { route: "/reports", label: "Insights", icon: "chart-bar" },
-  { route: "/obligations", label: "Insurance", icon: "shield-outline" },
-  { route: "/goals", label: "Savings Booster", icon: "piggy-bank" },
+  { route: "/insights", label: "Insights", icon: "chart-bar" },
+  { route: "/insurance", label: "Insurance", icon: "shield-outline" },
+  { route: "/savings", label: "Savings Booster", icon: "piggy-bank" },
 ];
 
 function BottomBar() {
@@ -124,6 +124,9 @@ export default function RootLayout() {
         <Tabs.Screen name="contracts" options={{ title: "Contracts" }} />
         <Tabs.Screen name="categorised" options={{ title: "Automatically categorised" }} />
         <Tabs.Screen name="connect" options={{ title: "Connect accounts" }} />
+        <Tabs.Screen name="insights" options={{ title: "Insights" }} />
+        <Tabs.Screen name="insurance" options={{ title: "Insurance" }} />
+        <Tabs.Screen name="savings" options={{ title: "Savings Booster" }} />
         <Tabs.Screen name="finance" options={{ title: "Finance suite" }} />
         <Tabs.Screen name="upstream" options={{ title: "Upstream features" }} />
         <Tabs.Screen name="gaps" options={{ title: "Parity gaps" }} />
