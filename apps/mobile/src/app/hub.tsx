@@ -6,6 +6,8 @@ import { Screen, SectionTitle } from "../ui/primitives";
 const GROUPS: { title: string; items: { label: string; route: string; icon: IconName }[] }[] = [
   { title: "Overview", items: [
     { label: "Home", route: "/home", icon: "home" },
+    { label: "Connect accounts", route: "/connect", icon: "link" },
+    { label: "Automatically categorised", route: "/categorised", icon: "tag-check-outline" },
     { label: "Transactions", route: "/transactions", icon: "receipt" },
     { label: "Accounts", route: "/accounts", icon: "wallet" },
     { label: "Reports", route: "/reports", icon: "chart-bar" },
@@ -15,6 +17,7 @@ const GROUPS: { title: string; items: { label: string; route: string; icon: Icon
     { label: "Projects", route: "/projects", icon: "folder" },
     { label: "Paycheck", route: "/paycheck", icon: "cash" },
     { label: "Obligations", route: "/obligations", icon: "calendar-clock" },
+    { label: "Contracts", route: "/contracts", icon: "file-document-outline" },
     { label: "Assets", route: "/holdings", icon: "gold" },
   ] },
   { title: "Everyday", items: [

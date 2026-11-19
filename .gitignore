@@ -45,3 +45,6 @@ apps/mobile/ios/
 apps/mobile/dist/
 apps/mobile/.test-build/
 .playwright-mcp/
+
+# Local research clones (large, not part of the app)
+docs/reference/financeguru-candidates/

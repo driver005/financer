@@ -18,7 +18,7 @@
     "android": {
       "package": "app.pantry.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#FAFAFA",
+        "backgroundColor": "#3C318F",
         "foregroundImage": "./assets/android-icon-foreground.png"
       }
     },

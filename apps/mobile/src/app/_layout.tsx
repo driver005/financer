@@ -15,11 +15,11 @@ import { LockGate } from "../components/LockGate";
 import { tokens, useTheme } from "../ui/theme";
 
 const TABS: { route: string; label: string; icon: IconName }[] = [
-  { route: "/home", label: "Home", icon: "home" },
-  { route: "/transactions", label: "Money", icon: "cash" },
-  { route: "/goals", label: "Plans", icon: "target" },
-  { route: "/shops", label: "Shops", icon: "store" },
-  { route: "/hub", label: "More", icon: "view-grid" },
+  { route: "/home", label: "Overview", icon: "home" },
+  { route: "/contracts", label: "Contracts", icon: "file-document-outline" },
+  { route: "/reports", label: "Insights", icon: "chart-bar" },
+  { route: "/obligations", label: "Insurance", icon: "shield-outline" },
+  { route: "/goals", label: "Savings Booster", icon: "piggy-bank" },
 ];
 
 function BottomBar() {
@@ -27,7 +27,7 @@ function BottomBar() {
   const path = usePathname();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  if (path === "/showcase") return null;
+  if (path === "/showcase" || path === "/connect") return null;
   return (
     <View style={[styles.outer, { paddingBottom: Math.max(insets.bottom, 10) }]} pointerEvents="box-none">
       <View style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -121,6 +121,9 @@ export default function RootLayout() {
         <Tabs.Screen name="accounts" options={{ title: "Accounts" }} />
         <Tabs.Screen name="obligations" options={{ title: "Obligations" }} />
         <Tabs.Screen name="holdings" options={{ title: "Assets" }} />
+        <Tabs.Screen name="contracts" options={{ title: "Contracts" }} />
+        <Tabs.Screen name="categorised" options={{ title: "Automatically categorised" }} />
+        <Tabs.Screen name="connect" options={{ title: "Connect accounts" }} />
         <Tabs.Screen name="finance" options={{ title: "Finance suite" }} />
         <Tabs.Screen name="upstream" options={{ title: "Upstream features" }} />
         <Tabs.Screen name="gaps" options={{ title: "Parity gaps" }} />

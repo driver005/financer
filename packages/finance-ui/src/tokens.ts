@@ -1,25 +1,26 @@
 /**
- * Design tokens from the Stitch project "Pantry merged app screens"
- * (11057116803371822050), design system "Culinary Capital".
- * Single source of truth for every merged Expo screen.
+ * Single design system for the whole app, taken from the Finanzguru – Finance Manager
+ * Play Store listing (de.dwins.financeguru): deep indigo canvas, white rounded cards,
+ * navy ink, mint status pills and violet accents. Sampled from the store screenshots.
  */
 
 export const palette = {
-  primary: "#027E83",
-  primaryDark: "#006367",
-  primaryLight: "#78D5DA",
-  secondary: "#8E1AB1",
-  secondaryLight: "#D778FA",
-  tertiary: "#B9A115",
-  error: "#E50855",
-  success: "#19A048",
-  canvas: "#F7F9FA",
+  primary: "#3C318F",
+  primaryDark: "#2A2168",
+  primaryLight: "#7B6BD6",
+  accent: "#7B3FE4",
+  mint: "#C9F2DC",
+  mintText: "#0E7A55",
+  canvas: "#F2F1F6",
   surface: "#FFFFFF",
-  border: "#E5E9EB",
-  ink: "#111A1C",
-  inkMuted: "#5A6B70",
-  inkSubtle: "#8E9DA2",
-  chart: ["#027E83", "#8E1AB1", "#B9A115", "#E50855", "#19A048", "#0050AA", "#D99700", "#6B7280"],
+  border: "#E4E2ED",
+  ink: "#2A2166",
+  inkMuted: "#6E689B",
+  inkSubtle: "#9B96BA",
+  error: "#D93050",
+  success: "#0E7A55",
+  warning: "#B7791F",
+  chart: ["#3C318F", "#7B3FE4", "#2FBFA0", "#F2A93B", "#E4647A", "#5B8DEF", "#9B6BE0", "#9B96BA"],
 };
 
 export const spacing = { xs0: 0, xs: 4, sm: 8, mdSm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 };
@@ -52,51 +53,52 @@ export const typography = {
   body3: { fontSize: 12, fontWeight: "400" as const, lineHeight: 16 },
   body4: { fontSize: 12, fontWeight: "400" as const, lineHeight: 16 },
   body5: { fontSize: 11, fontWeight: "700" as const, lineHeight: 14, letterSpacing: 0.04 },
+  subheading: { fontSize: 18, fontWeight: "600" as const, lineHeight: 24 },
+  body: { fontSize: 14, fontWeight: "400" as const, lineHeight: 20 },
+  caption: { fontSize: 11, fontWeight: "500" as const, lineHeight: 15 },
+  label: { fontSize: 13, fontWeight: "600" as const, lineHeight: 18 },
+  number: { fontSize: 26, fontWeight: "700" as const, lineHeight: 32, letterSpacing: -0.02 },
+  price: { fontSize: 14, fontWeight: "600" as const, lineHeight: 20 },
   numericHeading: { fontSize: 32, fontWeight: "700" as const, lineHeight: 38, letterSpacing: -0.03 },
   numericTitle: { fontSize: 20, fontWeight: "700" as const, lineHeight: 26, letterSpacing: -0.02 },
   numericLarge: { fontSize: 15, fontWeight: "600" as const, lineHeight: 20 },
   numericMedium: { fontSize: 15, fontWeight: "600" as const, lineHeight: 20 },
 };
 
-/** Backwards-compatible aliases used by existing components. */
 export const font = typography.font;
-export const legacyTypography = {
-  headline1: typography.headlineLg, headline2: typography.headlineMd,
-  heading1: typography.headlineLg, heading2: typography.headlineMd, heading3: typography.headlineSm,
-  heading4: typography.headlineSm, heading5: typography.headlineSm, heading6: typography.headlineSm,
-  body1: typography.bodyLg, body2: typography.bodyMd, body3: typography.bodySm,
-  body4: typography.bodySm, body5: typography.labelSm,
-  numericHeading: typography.currencyDisplay, numericTitle: typography.currencyMd,
-  numericLarge: typography.currencySm, numericMedium: typography.currencySm,
-};
+export const legacyTypography = typography;
 
 export type Theme = {
   background: string; surface: string; surfaceAlt: string; text: string;
   muted: string; subtle: string; border: string; primary: string; primarySoft: string;
   secondary: string; secondarySoft: string; tertiary: string; error: string;
-  income: string; expense: string; transfer: string; ios: Record<string, string>;
+  income: string; expense: string; transfer: string;
+  offer: string; offerSoft: string; success: string; danger: string;
+  ios: Record<string, string>;
 };
 
 export const lightTheme: Theme = {
-  background: palette.canvas, surface: palette.surface, surfaceAlt: "#F2F4F5",
+  background: palette.canvas, surface: palette.surface, surfaceAlt: "#EAE8F2",
   text: palette.ink, muted: palette.inkMuted, subtle: palette.inkSubtle, border: palette.border,
-  primary: palette.primary, primarySoft: "#E5F7F8", secondary: palette.secondary,
-  secondarySoft: "#F7E8FF", tertiary: palette.tertiary, error: palette.error,
-  income: "#19A048", expense: palette.error, transfer: palette.secondary,
+  primary: palette.primary, primarySoft: "#E6E3F6", secondary: palette.accent,
+  secondarySoft: "#F0E8FB", tertiary: palette.warning, error: palette.error,
+  income: palette.mintText, expense: palette.error, transfer: palette.accent,
+  offer: palette.mintText, offerSoft: palette.mint, success: palette.success, danger: palette.error,
   ios: { label: palette.ink, secondary: palette.inkMuted, tertiary: palette.inkSubtle,
-    background: palette.canvas, separator: palette.border, blue: "#005FCC", income: "#34C759",
-    fixed: "#0A84A5", variable: "#FF9500", guiltFree: "#AF52DE", investment: "#007AFF", goal: "#FF2D55" },
+    background: palette.canvas, separator: palette.border, blue: "#005FCC", income: palette.mintText,
+    fixed: "#0A84A5", variable: "#FF9500", guiltFree: "#AF52DE", investment: "#007AFF", goal: "#7B3FE4" },
 };
 
 export const darkTheme: Theme = {
-  background: "#0E1416", surface: "#182021", surfaceAlt: "#222B2D",
-  text: "#F7FAFB", muted: "#A9B9BC", subtle: "#7E8F93", border: "#2C383A",
-  primary: palette.primaryLight, primarySoft: "#10383A", secondary: palette.secondaryLight,
-  secondarySoft: "#3A0E48", tertiary: "#E0C63E", error: "#FF7096",
-  income: "#52DF83", expense: "#FF7096", transfer: palette.secondaryLight,
-  ios: { label: "#F7FAFB", secondary: "#A9B9BC", tertiary: "#7E8F93",
-    background: "#0E1416", separator: "#2C383A", blue: "#5AC8FA", income: "#52DF83",
-    fixed: "#0A84A5", variable: "#FF9500", guiltFree: "#AF52DE", investment: "#007AFF", goal: "#FF2D55" },
+  background: "#191536", surface: "#241F4C", surfaceAlt: "#2E285E",
+  text: "#F5F3FF", muted: "#B9B2DF", subtle: "#8F88B8", border: "#3E3672",
+  primary: "#A99BF0", primarySoft: "#332A6B", secondary: "#B68BF5",
+  secondarySoft: "#3B2A63", tertiary: "#E0C63E", error: "#FF8098",
+  income: "#7BE0B4", expense: "#FF8098", transfer: "#B68BF5",
+  offer: "#7BE0B4", offerSoft: "#224C3D", success: "#7BE0B4", danger: "#FF8098",
+  ios: { label: "#F5F3FF", secondary: "#B9B2DF", tertiary: "#8F88B8",
+    background: "#191536", separator: "#3E3672", blue: "#5AC8FA", income: "#7BE0B4",
+    fixed: "#0A84A5", variable: "#FF9500", guiltFree: "#AF52DE", investment: "#007AFF", goal: "#B68BF5" },
 };
 
 export const money = (cents: number, currency = "EUR"): string =>

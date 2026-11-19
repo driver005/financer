@@ -26,13 +26,13 @@ export function Box({ children, style, row, gap }: { children: ReactNode; style?
   return <View style={[row && styles.row, gap !== undefined && { gap }, style]}>{children}</View>;
 }
 
-export type TextVariant = keyof typeof legacyTypography;
+export type TextVariant = Exclude<keyof typeof legacyTypography, "font">;
 
 export function Text({ children, variant = "body2", color, style, numberOfLines }: {
-  children: ReactNode; variant?: TextVariant; color?: "muted" | "primary" | "income" | "expense" | "transfer"; style?: StyleProp<TextStyle>; numberOfLines?: number;
+  children: ReactNode; variant?: TextVariant; color?: "muted" | "subtle" | "primary" | "accent" | "income" | "expense" | "transfer" | "success" | "danger" | "offer"; style?: StyleProp<TextStyle>; numberOfLines?: number;
 }) {
   const theme = useFinanceTheme();
-  const tint = color ? theme[color] : theme.text;
+  const tint = color ? (color === "accent" ? theme.secondary : theme[color]) : theme.text;
   return <RNText numberOfLines={numberOfLines} style={[{ fontFamily: variant.startsWith("heading") || variant.startsWith("headline") ? typography.font.display : typography.font.body, color: tint }, legacyTypography[variant], style]}>{children}</RNText>;
 }
 
@@ -44,25 +44,27 @@ export function Money({ cents, currency = "EUR", variant = "numericTitle", color
   return <RNText style={[{ fontFamily: typography.font.number, color: color ? theme[color] : theme.text }, legacyTypography[variant], style]}>{value}</RNText>;
 }
 
-export function Card({ children, onPress, style, tone }: { children: ReactNode; onPress?: () => void; style?: StyleProp<ViewStyle>; tone?: "primary" | "surface" }) {
+export function Card({ children, onPress, style, tone }: { children: ReactNode; onPress?: () => void; style?: StyleProp<ViewStyle>; tone?: "primary" | "surface" | "accent" }) {
   const theme = useFinanceTheme();
-  const base: StyleProp<ViewStyle> = [styles.card, { backgroundColor: tone === "primary" ? theme.primarySoft : theme.surface, borderColor: theme.border }, style];
+  const base: StyleProp<ViewStyle> = [styles.card, { backgroundColor: tone === "primary" || tone === "accent" ? theme.primarySoft : theme.surface, borderColor: theme.border }, style];
   if (!onPress) return <View style={base}>{children}</View>;
   return <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }: { pressed: boolean }) => [base, pressed && styles.pressed]}>{children}</Pressable>;
 }
 
-export function Button({ label, onPress, variant = "filled", icon, disabled }: {
-  label: string; onPress: () => void; variant?: "filled" | "outlined" | "secondary" | "tertiary"; icon?: IconName; disabled?: boolean;
+export function Button({ label, onPress, variant, tone, icon, disabled }: {
+  label: string; onPress: () => void; variant?: "filled" | "outlined" | "secondary" | "tertiary";
+  tone?: "accent" | "secondary" | "danger"; icon?: IconName; disabled?: boolean;
 }) {
   const theme = useFinanceTheme();
-  const filled = variant === "filled";
+  const resolved = variant ?? (tone === "secondary" ? "secondary" : "filled");
+  const filled = resolved === "filled";
   return (
     <Pressable
       accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress}
       style={({ pressed }: { pressed: boolean }) => [
         styles.button,
         {
-          backgroundColor: filled ? theme.primary : variant === "secondary" ? theme.surfaceAlt : "transparent",
+          backgroundColor: filled ? theme.primary : resolved === "secondary" ? theme.surfaceAlt : "transparent",
           borderColor: theme.primary, borderWidth: filled ? 0 : 1,
         },
         pressed && styles.pressed, disabled && styles.disabled,
@@ -91,10 +93,11 @@ export function Chip({ label, selected, onPress }: { label: string; selected?: b
   return <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }: { pressed: boolean }) => [style, pressed && styles.pressed]}>{content}</Pressable>;
 }
 
-export function Badge({ label, tone = "primary" }: { label: string; tone?: "primary" | "income" | "expense" | "transfer" | "muted"; key?: React.Key }) {
+export function Badge({ label, tone = "primary" }: { label: string; tone?: "primary" | "income" | "expense" | "transfer" | "muted" | "offer" | "success" | "danger" | "accent"; key?: React.Key }) {
   const theme = useFinanceTheme();
-  const color = tone === "muted" ? theme.muted : theme[tone];
-  return <View style={[styles.badge, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}><RNText style={[legacyTypography.body5, { fontFamily: typography.font.body, color, fontWeight: "700" }]}>{label}</RNText></View>;
+  const color = tone === "muted" ? theme.muted : tone === "accent" ? theme.primary : theme[tone];
+  const background = tone === "offer" ? theme.offerSoft : theme.surfaceAlt;
+  return <View style={[styles.badge, { backgroundColor: background, borderColor: theme.border }]}><RNText style={[legacyTypography.body5, { fontFamily: typography.font.body, color, fontWeight: "700" }]}>{label}</RNText></View>;
 }
 
 export function TextField({ label, value, onChangeText, placeholder, numeric, multiline, keyboardType }: {
@@ -242,7 +245,66 @@ export function FadeIn({ children, delay = 0 }: { children: ReactNode; delay?: n
   return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
 }
 
+/** App shell used by every screen. Kept here so there is only one UI kit. */
+export function Screen({ title, subtitle, action, back, children }: {
+  title: string; subtitle?: string; action?: ReactNode; back?: ReactNode; children: ReactNode;
+}) {
+  const theme = useFinanceTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <View style={[styles.screenHeader, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+        <View style={{ width: 44 }}>{back}</View>
+        <View style={{ flex: 1 }}>
+          <Text variant="heading3">{title}</Text>
+          {subtitle ? <Text variant="caption" color="muted">{subtitle}</Text> : null}
+        </View>
+        <View style={{ minWidth: 44, alignItems: "flex-end" }}>{action}</View>
+      </View>
+      <ScrollView contentContainerStyle={styles.screenContent}>{children}</ScrollView>
+    </View>
+  );
+}
+
+export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  const theme = useFinanceTheme();
+  return (
+    <View style={[styles.sectionTitle, { borderBottomColor: theme.border }]}>
+      <Text variant="heading3">{children}</Text>
+      {action}
+    </View>
+  );
+}
+
+/** Compatibility wrapper: same props as the old Empty component. */
+export function Empty({ title, message, actionLabel, onAction, icon = "inbox-outline" }: {
+  title: string; message: string; actionLabel?: string; onAction?: () => void; icon?: IconName;
+}) {
+  return <EmptyState title={title} message={message} icon={icon} action={actionLabel && onAction ? { label: actionLabel, onPress: onAction } : undefined} />;
+}
+
+/** Compatibility wrapper: same props as the old Loading component. */
+export function Loading({ rows = 3 }: { rows?: number }) { return <Skeleton rows={rows} />; }
+
+export function Note({ children, tone = "info" }: { children: ReactNode; tone?: "info" | "error" | "success" | "muted" }) {
+  const theme = useFinanceTheme();
+  const color = tone === "error" ? theme.danger : tone === "success" ? theme.success : theme.muted;
+  return <Text variant="body3" color={tone === "info" ? "muted" : undefined} style={{ color }}>{children}</Text>;
+}
+
+export function Stepper({ value, onChange, min = 1, max = 12 }: { value: number; onChange: (n: number) => void; min?: number; max?: number }) {
+  return (
+    <Box row gap={12}>
+      <IconButton icon="minus" label="Decrease" onPress={() => onChange(Math.max(min, value - 1))} active={value > min} />
+      <Text variant="number">{value}</Text>
+      <IconButton icon="plus" label="Increase" onPress={() => onChange(Math.min(max, value + 1))} active={value < max} />
+    </Box>
+  );
+}
+
 const styles = StyleSheet.create({
+  screenHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: 1, gap: spacing.sm },
+  screenContent: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 110 },
+  sectionTitle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingBottom: spacing.sm, borderBottomWidth: 1, marginTop: spacing.sm },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   column: { gap: spacing.sm },
   rowSpace: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },

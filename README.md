@@ -59,7 +59,7 @@ crates/uiconv      standalone icon generator for packages/ui
 
 The Money area follows feature sets from Google Play money trackers (Money Manager, Monefy, Money Tracker); see `docs/MONEY_TRACKER.md`.
 
-Design follows Dribbble food-app references (Foody by SLAB, Bodega by Ipanadh, Meto by V. Labici) with Fraunces + Plus Jakarta Sans, a sage canvas and fresh-green accent; see `docs/DESIGN.md`. Stitch reference screens live in project `9534181714922376088`. The shopping list can be generated from what you buy at each supermarket; items matching an Angebot are marked with price.
+Primary design: Finanzguru (Play Store, de.dwins.financeguru), deep purple `#3C318F` — see `docs/FINANZGURU.md`. Earlier Dribbble food-app references (Foody by SLAB, Bodega by Ipanadh, Meto by V. Labici) with Fraunces + Plus Jakarta Sans, a sage canvas and fresh-green accent; see `docs/DESIGN.md`. Stitch reference screens live in project `9534181714922376088`. The shopping list can be generated from what you buy at each supermarket; items matching an Angebot are marked with price.
 Rebuild the Rust core with `make core-build`, test it with `make core-test`.
 
 The data lives in `apps/mobile`'s local SQLite database (`pantry.db`). Deleting the app deletes

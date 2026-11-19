@@ -5,3 +5,4 @@ export * from "./finance";
 export * from "./features";
 export * from "./upstream";
 export * from "./categoryAssets";
+export * from "./finanzguru";
