@@ -50,6 +50,9 @@
       [
         "./plugins/withQuickAddShortcut.js"
       ],
+      [
+        "./plugins/withMinSdk.js"
+      ],
       "expo-secure-store",
       "expo-status-bar",
       "expo-web-browser",
