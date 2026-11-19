@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { Badge, Box, Button, Card, Money, ObligationRow, ReceivableRow, RecurringRow, SubscriptionRow, Text, TextField } from "@finance/ui";
-import { Screen, SectionTitle } from "../ui/primitives";
+import { AsyncBoundary, Badge, Box, Button, Card, EmptyState, FadeIn, Money, ObligationRow, ReceivableRow, RecurringRow, SubscriptionRow, Text, TextField } from "@finance/ui";
+import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
 import { core } from "../rust/core";
 import { parseEuro } from "../lib/money";
 import { recurringList, debts, addDebt } from "../db/moneyTracker";
@@ -10,6 +10,15 @@ import { subscriptions, addSubscription, receivables, addReceivable } from "../d
 
 export default function ObligationsScreen() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const guard = async (fn: () => Promise<void>) => {
+    setLoading(true);
+    try { await fn(); setError(null); }
+    catch (e) { setError(e instanceof Error ? e.message : "Could not load this screen"); }
+    finally { setLoading(false); }
+  };
   const [rec, setRec] = useState<{ id: number; name: string; amountCents: number; dayOfMonth: number; active: number }[]>([]);
   const [debtRows, setDebtRows] = useState<{ id: number; name: string; totalCents: number; paidCents: number; dueDate: string }[]>([]);
   const [subs, setSubs] = useState<{ id: number; name: string; amountCents: number; interval: string; startDate: string }[]>([]);
@@ -19,12 +28,15 @@ export default function ObligationsScreen() {
   const [due, setDue] = useState("");
 
   const load = async () => { const [r, d, s, v] = await Promise.all([recurringList(), debts(), subscriptions(), receivables()]); setRec(r as never); setDebtRows(d); setSubs(s as never); setReceiv(v); };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void guard(load); }, []);
 
   return (
-    <Screen title="Obligations" subtitle="Recurring, debts, subscriptions, receivables" back={<Button label="Back" variant="secondary" onPress={() => router.back()} />}>
+    <Screen title="Obligations" subtitle="Recurring, debts, subscriptions, receivables" back={<AppIconButton icon="arrow-left" label="Back" onPress={() => router.back()} />}>
+      <AsyncBoundary loading={loading} error={error} onRetry={() => void guard(load)} rows={4}>
+      <FadeIn>
       <Card>
         <SectionTitle>Recurring events</SectionTitle>
+        {!rec.length ? <EmptyState title="No recurring events" message="Add one below." icon="calendar-clock" /> : null}
         {core.scheduled(rec).map((r, i) => <RecurringRow key={i} name={r.name} nextDate={r.nextDate} cents={r.amountCents} />)}
       </Card>
       <Card>
@@ -41,10 +53,13 @@ export default function ObligationsScreen() {
       </Card>
       <Card>
         <SectionTitle>Subscriptions</SectionTitle>
+        {!subs.length ? <EmptyState title="No subscriptions" message="Add one below." icon="calendar" /> : null}
         {core.subscriptionNext(subs).map((s, i) => <SubscriptionRow key={i} name={s.name} amountCents={s.amountCents} interval={s.interval} nextDate={s.nextDate} />)}
         <Button label="Add subscription" icon="plus" onPress={() => { const c = parseEuro(amount); if (c !== null && name) void addSubscription(name, c, "monthly", new Date().toISOString().slice(0, 10), 0).then(() => { setName(""); setAmount(""); void load(); }); }} />
       </Card>
       <Text variant="body5" color="muted">Local due reminders are scheduled from Money tools.</Text>
+    </FadeIn>
+    </AsyncBoundary>
     </Screen>
   );
 }

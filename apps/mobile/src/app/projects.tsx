@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { Box, Button, Card, EnvelopeList, ProjectCard, Text, TextField } from "@finance/ui";
-import { Screen, SectionTitle } from "../ui/primitives";
+import { AsyncBoundary, Box, Button, Card, EmptyState, EnvelopeList, FadeIn, ProjectCard, Text, TextField } from "@finance/ui";
+import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
 import { core } from "../rust/core";
 import { parseEuro } from "../lib/money";
 import { envelopes, addEnvelope, fundEnvelope } from "../db/appFeatures";
@@ -9,6 +9,15 @@ import { projects, projectPurchases, addProject, addProjectPurchase, projectGrou
 
 export default function ProjectsScreen() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const guard = async (fn: () => Promise<void>) => {
+    setLoading(true);
+    try { await fn(); setError(null); }
+    catch (e) { setError(e instanceof Error ? e.message : "Could not load this screen"); }
+    finally { setLoading(false); }
+  };
   const [envs, setEnvs] = useState<{ id: number; name: string; balanceCents: number; limitCents: number; rollover: number }[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [projs, setProjs] = useState<{ id: number; name: string; targetCents: number }[]>([]);
@@ -24,14 +33,16 @@ export default function ProjectsScreen() {
     const [e, g, p, pp] = await Promise.all([envelopes(), projectGroups(), projects(), projectPurchases()]);
     setEnvs(e as never); setGroups(g); setProjs(p); setPurchases(pp);
   };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void guard(load); }, []);
 
   const project = projs[0];
   const items = purchases.filter((p) => p.projectId === project?.id).map((p) => ({ name: p.name, cents: p.cents }));
   const funding = core.projectFunding(items, 5000);
 
   return (
-    <Screen title="Projects" subtitle="Jings projects + Dompetku envelopes" back={<Button label="Back" variant="secondary" onPress={() => router.back()} />}>
+    <Screen title="Projects" subtitle="Jings projects + Dompetku envelopes" back={<AppIconButton icon="arrow-left" label="Back" onPress={() => router.back()} />}>
+      <AsyncBoundary loading={loading} error={error} onRetry={() => void guard(load)} rows={4}>
+      <FadeIn>
       <Card>
         <SectionTitle>Projects</SectionTitle>
         <TextField label="New group" value={groupName} onChangeText={setGroupName} />
@@ -41,16 +52,20 @@ export default function ProjectsScreen() {
         <TextField label="Purchase" value={purchaseName} onChangeText={setPurchaseName} />
         <TextField label="Cost" value={purchaseAmount} onChangeText={setPurchaseAmount} numeric />
         <Button label="Add purchase" icon="plus" onPress={() => { const c = parseEuro(purchaseAmount); if (c !== null && purchaseName && project) void addProjectPurchase(project.id, purchaseName, c, false).then(() => { setPurchaseName(""); setPurchaseAmount(""); void load(); }); }} />
+        {!project ? <EmptyState title="No projects yet" message="Create a group and a project above." icon="folder" /> : null}
         {project ? <ProjectCard name={project.name} targetCents={project.targetCents} items={funding.items} unusedCents={funding.unused} /> : null}
       </Card>
       <Card>
         <SectionTitle>Envelopes / Kantong</SectionTitle>
+        {!envs.length ? <EmptyState title="No envelopes" message="Create an envelope below." icon="wallet-outline" /> : null}
         <EnvelopeList envelopes={envs.map((e) => ({ id: String(e.id), name: e.name, balanceCents: e.balanceCents, limitCents: e.limitCents, rollover: !!e.rollover }))} />
         <TextField label="New envelope" value={envName} onChangeText={setEnvName} />
         <TextField label="Limit" value={envLimit} onChangeText={setEnvLimit} numeric />
         <Button label="Add envelope" icon="plus" onPress={() => { const c = parseEuro(envLimit); if (c !== null && envName) void addEnvelope(envName, c, true).then(() => { setEnvName(""); void load(); }); }} />
-        <Box gap={8}>{envs.map((e) => <Button key={e.id} label={`+10 ${e.name}`} variant="secondary" onPress={() => void fundEnvelope(e.id, 1000).then(load)} />)}</Box>
+        <Box gap={8}>{envs.map((e) => <Button key={e.id} label={`+10 ${e.name}`} variant="secondary" onPress={() => void fundEnvelope(e.id, 1000).then(() => void guard(load))} />)}</Box>
       </Card>
+    </FadeIn>
+    </AsyncBoundary>
     </Screen>
   );
 }

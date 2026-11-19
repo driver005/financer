@@ -1,13 +1,22 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { Badge, Box, Button, Card, PaycheckWaterfall, Segmented, Text, TextField } from "@finance/ui";
-import { Screen, SectionTitle } from "../ui/primitives";
+import { AsyncBoundary, Badge, Box, Button, Card, EmptyState, FadeIn, PaycheckWaterfall, Segmented, Text, TextField } from "@finance/ui";
+import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
 import { core } from "../rust/core";
 import { parseEuro } from "../lib/money";
 import { paychecks, allocations, savePaycheck } from "../db/appFeatures";
 
 export default function PaycheckScreen() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const guard = async (fn: () => Promise<void>) => {
+    setLoading(true);
+    try { await fn(); setError(null); }
+    catch (e) { setError(e instanceof Error ? e.message : "Could not load this screen"); }
+    finally { setLoading(false); }
+  };
   const [pays, setPays] = useState<{ id: number; date: string; takeHomeCents: number }[]>([]);
   const [allocs, setAllocs] = useState<{ id: number; paycheckId: number; label: string; cents: number; kind: string }[]>([]);
   const [takeHome, setTakeHome] = useState("2450");
@@ -17,7 +26,7 @@ export default function PaycheckScreen() {
   const [frequency, setFrequency] = useState("monthly");
 
   const load = async () => { const [p, a] = await Promise.all([paychecks(), allocations()]); setPays(p); setAllocs(a); };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void guard(load); }, []);
 
   const run = async () => {
     const take = parseEuro(takeHome);
@@ -36,7 +45,9 @@ export default function PaycheckScreen() {
   const currentRows = current ? allocs.filter((a) => a.paycheckId === current.id) : [];
 
   return (
-    <Screen title="Paycheck" subtitle="Jings waterfall + Dompetku allocations" back={<Button label="Back" variant="secondary" onPress={() => router.back()} />}>
+    <Screen title="Paycheck" subtitle="Jings waterfall + Dompetku allocations" back={<AppIconButton icon="arrow-left" label="Back" onPress={() => router.back()} />}>
+      <AsyncBoundary loading={loading} error={error} onRetry={() => void guard(load)} rows={4}>
+      <FadeIn>
       <Card>
         <SectionTitle>New paycheck</SectionTitle>
         <TextField label="Take-home" value={takeHome} onChangeText={setTakeHome} numeric />
@@ -55,8 +66,11 @@ export default function PaycheckScreen() {
       {current ? <PaycheckWaterfall takeHomeCents={current.takeHomeCents} steps={currentRows.map((a) => ({ label: a.label, cents: a.cents, kind: a.kind as never }))} /> : null}
       <Card>
         <SectionTitle>History</SectionTitle>
+        {!pays.length ? <EmptyState title="No paychecks yet" message="Set take-home pay and allocate above." icon="cash" /> : null}
         {core.paycheckHistory(pays, allocs).map((h, i) => <Badge key={i} label={`${h.date} · guilt-free ${(h.guiltFree / 100).toFixed(2)}`} />)}
       </Card>
+    </FadeIn>
+    </AsyncBoundary>
     </Screen>
   );
 }
