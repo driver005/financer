@@ -7,3 +7,4 @@ export * from "./upstream";
 export * from "./categoryAssets";
 export * from "./finanzguru";
 export * from "./playful";
+export * from "./priceChart";

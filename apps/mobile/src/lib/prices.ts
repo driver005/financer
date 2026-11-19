@@ -19,6 +19,9 @@ export type StoreQuote = {
   offer?: Offer;
 };
 
+export type PricePoint = { date: string; cents: number };
+export type PriceSeries = { storeId: string; storeName: string; color: string; points: PricePoint[] };
+
 export type ComparedItem = {
   name: string;
   quotes: StoreQuote[];
@@ -26,6 +29,8 @@ export type ComparedItem = {
   bestStore: string;
   savingCents: number;
   hasSale: boolean;
+  history: PricePoint[];
+  series: PriceSeries[];
 };
 
 const STORE_COLORS: Record<string, string> = {
@@ -82,6 +87,15 @@ export async function loadPriceComparison() {
     quotes.sort((a, b) => a.cents - b.cents);
     const best = quotes[0];
     const avg = quotes.length ? quotes.reduce((sum, q) => sum + q.avgCents, 0) / quotes.length : 0;
+    const sortedRows = [...priceRows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const history = sortedRows.map((row) => ({ date: String(row.date), cents: Number(row.cents) }));
+    const series: PriceSeries[] = stores.map((store) => ({
+      storeId: store.id,
+      storeName: store.name,
+      color: storeColor(store.id),
+      points: sortedRows.filter((row) => row.storeId === store.id)
+        .map((row) => ({ date: String(row.date), cents: Number(row.cents) })),
+    })).filter((s) => s.points.length > 0);
     return {
       name,
       quotes,
@@ -89,6 +103,8 @@ export async function loadPriceComparison() {
       bestStore: best?.storeName ?? "",
       savingCents: best ? Math.max(0, Math.round(avg - best.cents)) : 0,
       hasSale: quotes.some((q) => q.onSale),
+      history,
+      series,
     };
   }).sort((a, b) => (b.hasSale ? 1 : 0) - (a.hasSale ? 1 : 0) || a.name.localeCompare(b.name));
 
@@ -98,4 +114,14 @@ export async function loadPriceComparison() {
 export async function saveItemPrice(name: string, storeId: string, cents: number) {
   const { addPrice } = await import("../db/prices");
   await addPrice({ storeId, name, cents, date: new Date().toISOString().slice(0, 10) });
+}
+
+/** Records today's observed price at every discounter so the graph grows over time. */
+export async function savePriceSnapshot(name: string, quotes: { storeId: string; cents: number }[]) {
+  const { addPrice } = await import("../db/prices");
+  const date = new Date().toISOString().slice(0, 10);
+  for (const quote of quotes) {
+    await addPrice({ storeId: quote.storeId, name, cents: quote.cents, date });
+  }
+  return quotes.length;
 }

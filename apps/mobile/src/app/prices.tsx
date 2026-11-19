@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import {
   AsyncBoundary, Badge, Box, Button, Card, Chip, FadeIn, FgHeaderIcon, FgScreen,
-  Segmented, Sheet, Text, TextField,
+  PriceHistoryChart, Segmented, Sheet, Text, TextField,
 } from "@finance/ui";
 import { fgEuro } from "@finance/ui";
-import { loadPriceComparison, saveItemPrice, storeColor, type ComparedItem } from "../lib/prices";
+import { loadPriceComparison, saveItemPrice, savePriceSnapshot, storeColor, type ComparedItem } from "../lib/prices";
 import { parseEuro } from "../lib/money";
 
 type Data = Awaited<ReturnType<typeof loadPriceComparison>>;
@@ -28,6 +28,7 @@ export default function PricesScreen() {
     void loadPriceComparison()
       .then((d) => {
         setData(d);
+        if (d.items.length && !expanded) setExpanded(d.items[0].name);
         if (d.stores.length && !storeId) setStoreId(d.stores[0].id);
         setError(null);
       })
@@ -69,7 +70,10 @@ export default function PricesScreen() {
           </FadeIn>
           {items.map((item, index) => (
             <FadeIn key={item.name} delay={Math.min(index * 30, 180)}>
-              <FgItemCard item={item} expanded={expanded === item.name} onToggle={() => setExpanded(expanded === item.name ? null : item.name)} router={router} />
+              <FgItemCard item={item} expanded={expanded === item.name}
+                onToggle={() => setExpanded(expanded === item.name ? null : item.name)}
+                onSnapshot={() => { void savePriceSnapshot(item.name, item.quotes.map((q) => ({ storeId: q.storeId, cents: q.cents }))).then(load); }}
+                router={router} />
             </FadeIn>
           ))}
           {!items.length ? (
@@ -98,8 +102,8 @@ export default function PricesScreen() {
   );
 }
 
-function FgItemCard({ item, expanded, onToggle, router }: {
-  item: ComparedItem; expanded: boolean; onToggle: () => void; router: ReturnType<typeof useRouter>;
+function FgItemCard({ item, expanded, onToggle, onSnapshot, router }: {
+  item: ComparedItem; expanded: boolean; onToggle: () => void; onSnapshot: () => void; router: ReturnType<typeof useRouter>;
 }) {
   return (
     <Card>
@@ -123,6 +127,7 @@ function FgItemCard({ item, expanded, onToggle, router }: {
       <Button label={expanded ? "Hide prices" : `Compare ${item.quotes.length} prices`} variant="secondary" onPress={onToggle} />
       {expanded ? (
         <Box gap={8}>
+          <PriceHistoryChart series={item.series} title={`${item.name} price history`} />
           {item.quotes.map((quote) => (
             <Box key={quote.storeId} row gap={10} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#E5E5E5" }}>
               <Box style={{ width: 34, height: 34, borderRadius: 9, backgroundColor: storeColor(quote.storeId), alignItems: "center", justifyContent: "center" }}>
@@ -141,6 +146,7 @@ function FgItemCard({ item, expanded, onToggle, router }: {
               <Text variant="numericMedium">{fgEuro(quote.cents)}</Text>
             </Box>
           ))}
+          <Button label="Save today's prices" icon="content-save" onPress={onSnapshot} />
           <Button label="Open shopping list" variant="tertiary" onPress={() => router.push("/list")} />
         </Box>
       ) : null}
