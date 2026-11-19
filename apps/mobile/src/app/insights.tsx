@@ -95,7 +95,7 @@ export default function InsightsScreen() {
               <Card>
                 {data.tips.map((tip) => (
                   <Box key={tip} row gap={8} style={{ alignItems: "flex-start" }}>
-                    <Icon name="lightbulb-outline" size={18} color="#7B3FE4" />
+                    <Icon name="lightbulb-outline" size={18} color="#FFC800" />
                     <Text variant="body3" style={{ flex: 1 }}>{tip}</Text>
                   </Box>
                 ))}

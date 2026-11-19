@@ -96,8 +96,8 @@ export default function TransactionsScreen() {
                   const pill = pillFor(row);
                   const missed = core.matchStore(row.merchant, stores) !== null;
                   return (
-                    <Box key={row.id} row gap={12} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#E4E2ED" }}>
-                      <Box style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: "#F2F1F6", alignItems: "center", justifyContent: "center" }}>
+                    <Box key={row.id} row gap={12} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#E5E5E5" }}>
+                      <Box style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: "#F0F0F0", alignItems: "center", justifyContent: "center" }}>
                         <Text variant="body2">{EMOJI[row.category] ?? "🏷️"}</Text>
                       </Box>
                       <Box style={{ flex: 1, gap: 3 }}>
@@ -108,7 +108,7 @@ export default function TransactionsScreen() {
                         </Box>
                         {missed ? <FgCashbackPill onPress={() => router.push("/savings")} /> : null}
                       </Box>
-                      <Text variant="numericMedium" style={{ color: row.kind === "income" ? "#0E7A55" : "#2A2166" }}>
+                      <Text variant="numericMedium" style={{ color: row.kind === "income" ? "#3C8C00" : "#3C3C3C" }}>
                         {fgEuro(row.kind === "income" ? row.amountCents : -Math.abs(row.amountCents))}
                       </Text>
                     </Box>

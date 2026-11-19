@@ -11,7 +11,7 @@ const EMOJI: Record<string, string> = {
   "Lifestyle & Sports": "😊", Shopping: "🛍️", Transport: "🚗", "Internet & Phone": "📱",
   Streaming: "🎬", Health: "🏥", Salary: "💼",
 };
-const COLORS = ["#3C318F", "#2F80ED", "#2FBFA0", "#F2A93B", "#E4647A"];
+const COLORS = ["#58CC02", "#2F80ED", "#1CB0F6", "#FFC800", "#FF9600"];
 const iconFor = (category: string) => EMOJI[category] ?? "🏷️";
 
 type Status = { category: string; spent: number; limit: number; remaining: number; percent: number };

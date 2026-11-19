@@ -6,3 +6,4 @@ export * from "./features";
 export * from "./upstream";
 export * from "./categoryAssets";
 export * from "./finanzguru";
+export * from "./playful";

@@ -2,9 +2,9 @@ import React, { useEffect } from "react";
 import { Pressable, StyleSheet, Text as RNText, useColorScheme, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
-import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold } from "@expo-google-fonts/montserrat";
-import { PlusJakartaSans_400Regular, PlusJakartaSans_600SemiBold } from "@expo-google-fonts/plus-jakarta-sans";
-import { Urbanist_500Medium, Urbanist_600SemiBold } from "@expo-google-fonts/urbanist";
+import {
+  NunitoSans_400Regular, NunitoSans_600SemiBold, NunitoSans_700Bold, NunitoSans_800ExtraBold,
+} from "@expo-google-fonts/nunito-sans";
 import { FinanceUIProvider, darkTheme, lightTheme } from "@finance/ui";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
@@ -16,11 +16,10 @@ import { tokens, useTheme } from "../ui/theme";
 
 const TABS: { route: string; label: string; icon: IconName }[] = [
   { route: "/home", label: "Overview", icon: "home" },
+  { route: "/prices", label: "Prices", icon: "tag-search" },
   { route: "/contracts", label: "Contracts", icon: "file-document-outline" },
   { route: "/insights", label: "Insights", icon: "chart-bar" },
-  { route: "/insurance", label: "Insurance", icon: "shield-outline" },
-  { route: "/savings", label: "Savings Booster", icon: "piggy-bank" },
-  { route: "/prices", label: "Prices", icon: "tag-search" },
+  { route: "/hub", label: "More", icon: "view-grid" },
 ];
 
 function BottomBar() {
@@ -42,8 +41,8 @@ function BottomBar() {
               onPress={() => router.push(tab.route as never)}
               style={styles.tab}
             >
-              <View style={[styles.iconWrap, active && { backgroundColor: colors.accentSoft }]}>
-                <MaterialCommunityIcons name={tab.icon} size={20} color={active ? colors.accent : colors.subtle} />
+              <View style={[styles.iconWrap, active && { backgroundColor: "#D7FFB8" }]}>
+                <MaterialCommunityIcons name={tab.icon} size={22} color={active ? colors.accent : colors.subtle} />
               </View>
               <RNText style={[styles.tabLabel, { color: active ? colors.accent : colors.subtle }]}>{tab.label}</RNText>
             </Pressable>
@@ -55,14 +54,14 @@ function BottomBar() {
 }
 
 const styles = StyleSheet.create({
-  outer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 8 },
+  outer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 12, paddingTop: 6 },
   bar: {
-    flexDirection: "row", borderWidth: 1, borderRadius: tokens.radius.card, paddingVertical: 8,
-    shadowColor: "#3C318F", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.16, shadowRadius: 16, elevation: 6,
+    flexDirection: "row", borderWidth: 2, borderColor: "#E5E5E5", borderRadius: tokens.radius.card, paddingVertical: 8,
+    shadowColor: "#000000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 4,
   },
-  tab: { flex: 1, minHeight: 52, alignItems: "center", justifyContent: "center", gap: 3 },
-  iconWrap: { width: 40, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  tabLabel: { fontSize: 10, fontFamily: tokens.sans, fontWeight: "600" },
+  tab: { flex: 1, minHeight: 54, alignItems: "center", justifyContent: "center", gap: 4 },
+  iconWrap: { width: 46, height: 34, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  tabLabel: { fontSize: 11, fontFamily: tokens.serif, fontWeight: "800" },
 });
 
 export default function RootLayout() {
@@ -80,13 +79,10 @@ export default function RootLayout() {
   }, [router, pathname]);
   const scheme = useColorScheme();
   const [fontsLoaded] = useFonts({
-    Montserrat: Montserrat_600SemiBold,
-    "Montserrat Regular": Montserrat_400Regular,
-    "Montserrat Bold": Montserrat_700Bold,
-    Urbanist: Urbanist_600SemiBold,
-    "Urbanist Medium": Urbanist_500Medium,
-    "Plus Jakarta Sans": PlusJakartaSans_400Regular,
-    "Plus Jakarta Sans SemiBold": PlusJakartaSans_600SemiBold,
+    "Nunito Sans": NunitoSans_400Regular,
+    "Nunito Sans SemiBold": NunitoSans_600SemiBold,
+    "Nunito Sans Bold": NunitoSans_700Bold,
+    "Nunito Sans ExtraBold": NunitoSans_800ExtraBold,
   });
   if (!fontsLoaded) return null;
   return (

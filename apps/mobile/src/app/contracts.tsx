@@ -66,7 +66,7 @@ export default function ContractsScreen() {
     if (!cancelItem) return null;
     const date = effective || new Date().toISOString().slice(0, 10);
     const html = `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Kündigung ${cancelItem.name}</title>
-<style>body{font-family:Arial,sans-serif;max-width:700px;margin:40px auto;line-height:1.6;color:#2A2166}h1{color:#3C318F}</style></head><body>
+<style>body{font-family:Arial,sans-serif;max-width:700px;margin:40px auto;line-height:1.6;color:#3C3C3C}h1{color:#58CC02}</style></head><body>
 <h1>Kündigung</h1><p>${cancelItem.name}<br>${address || "Kundenservice"}<br>${date}</p>
 <h2>Kündigung meines Vertrags</h2><p>Sehr geehrte Damen und Herren,</p>
 <p>hiermit kündige ich meinen Vertrag (${cancelItem.category}) mit Kundennummer ${customerNo || "-"} fristgerecht zum ${date}. Bitte bestätigen Sie den Eingang dieser Kündigung schriftlich.</p>

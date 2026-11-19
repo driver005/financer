@@ -4,7 +4,7 @@ import {
   TextInput, View, type StyleProp, type TextStyle, type ViewStyle,
 } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { darkTheme, legacyTypography, lightTheme, radius, spacing, typography, type Theme } from "./tokens";
+import { darkTheme, legacyTypography, lightTheme, palette, radius, spacing, typography, type Theme } from "./tokens";
 
 const ThemeContext = createContext<Theme>(lightTheme);
 
@@ -65,13 +65,15 @@ export function Button({ label, onPress, variant, tone, icon, disabled }: {
         styles.button,
         {
           backgroundColor: filled ? theme.primary : resolved === "secondary" ? theme.surfaceAlt : "transparent",
-          borderColor: theme.primary, borderWidth: filled ? 0 : 1,
+          borderColor: filled ? palette.primaryDark : theme.primary,
+          borderTopWidth: filled ? 0 : 2, borderLeftWidth: filled ? 0 : 2, borderRightWidth: filled ? 0 : 2,
+          borderBottomWidth: filled ? 4 : 2,
         },
         pressed && styles.pressed, disabled && styles.disabled,
       ]}
     >
       {icon ? <Icon name={icon} size={18} color={filled ? theme.surface : theme.primary} /> : null}
-      <RNText style={[legacyTypography.body2, { fontFamily: typography.font.body, color: filled ? theme.surface : theme.primary }]}>{label}</RNText>
+      <RNText style={[legacyTypography.label, { fontFamily: typography.font.display, color: filled ? "#FFFFFF" : theme.primary, textTransform: "uppercase" }]}>{label}</RNText>
     </Pressable>
   );
 }
@@ -302,28 +304,28 @@ export function Stepper({ value, onChange, min = 1, max = 12 }: { value: number;
 }
 
 const styles = StyleSheet.create({
-  screenHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: 1, gap: spacing.sm },
-  screenContent: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 110 },
-  sectionTitle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingBottom: spacing.sm, borderBottomWidth: 1, marginTop: spacing.sm },
+  screenHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.xl, paddingVertical: spacing.md, gap: spacing.sm },
+  screenContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, gap: spacing.lg, paddingBottom: 120 },
+  sectionTitle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingBottom: spacing.sm, marginTop: spacing.sm },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   column: { gap: spacing.sm },
   rowSpace: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
   center: { alignItems: "center", padding: spacing.xl, gap: spacing.sm },
   pressed: { opacity: 0.7 },
   disabled: { opacity: 0.4 },
-  card: { borderWidth: 1, borderRadius: radius.card, padding: spacing.lg, gap: spacing.sm },
-  button: { minHeight: 48, borderRadius: radius.md, paddingHorizontal: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
-  iconButton: { width: 40, height: 40, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
-  chip: { minHeight: 34, paddingHorizontal: spacing.md, borderRadius: radius.full, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  badge: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.full, borderWidth: 1 },
+  card: { borderWidth: 2, borderRadius: radius.card, padding: spacing.xl, gap: spacing.md },
+  button: { minHeight: 54, borderRadius: radius.button, paddingHorizontal: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  iconButton: { width: 44, height: 44, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
+  chip: { minHeight: 42, paddingHorizontal: spacing.lg, borderRadius: radius.full, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  badge: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 0 },
   fieldWrap: { gap: spacing.sm },
-  field: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md, fontSize: 15 },
-  segmented: { flexDirection: "row", borderRadius: radius.full, borderWidth: 1, padding: spacing.xs },
-  segment: { flex: 1, minHeight: 36, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
-  progress: { borderRadius: radius.full, overflow: "hidden" },
-  progressFill: { borderRadius: radius.full },
-  checkbox: { width: 24, height: 24, borderWidth: 2, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  tile: { width: "47%", minHeight: 86, borderRadius: radius.card, borderWidth: 1, padding: spacing.lg, alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm },
+  field: { borderWidth: 2, borderRadius: radius.md, paddingHorizontal: spacing.lg, fontSize: 16, minHeight: 56 },
+  segmented: { flexDirection: "row", borderRadius: radius.md, borderWidth: 2, padding: spacing.xs },
+  segment: { flex: 1, minHeight: 42, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
+  progress: { borderRadius: radius.full, overflow: "hidden", height: 16 },
+  progressFill: { borderRadius: radius.full, height: 16 },
+  checkbox: { width: 26, height: 26, borderWidth: 3, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
+  tile: { width: "47%", minHeight: 100, borderRadius: radius.card, borderWidth: 2, padding: spacing.lg, alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm },
   skeleton: { height: 56, borderRadius: radius.card },
   backdrop: { flex: 1, backgroundColor: "#00000066" },
   sheet: { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, maxHeight: "80%" },

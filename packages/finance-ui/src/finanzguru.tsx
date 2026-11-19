@@ -1,8 +1,7 @@
 /**
  * Finanzguru (de.dwins.financeguru) screen components.
- * Faithful to the four Play Store screenshots — deep indigo #3C318F,
- * off-white #F2F1F6 canvas, white rounded cards, navy #2A2166 ink,
- * mint #C9F2DC pills and violet #7B3FE4 accents.
+ * Stitch "Pantry Playful" design system — bright green #58CC02,
+ * chalk canvas, white rounded cards, ink #3C3C3C and mint #D7FFB8 accents.
  * Part of the single @finance/ui kit; no separate design system.
  */
 import React, { type ReactNode } from "react";
@@ -94,7 +93,7 @@ export function FgBudgetRing({ emoji, progress, color = palette.accent, onPress 
   return (
     <Pressable onPress={onPress} accessibilityRole="button" style={styles.budgetRing}>
       <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke="#EAE7F3" strokeWidth={stroke} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke="#D7FFB8" strokeWidth={stroke} fill="none" />
         <Circle cx={size / 2} cy={size / 2} r={r} stroke={color} strokeWidth={stroke} fill="none"
           strokeDasharray={`${length} ${circumference}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} strokeLinecap="round" />
       </Svg>
@@ -219,7 +218,7 @@ export function FgBudgetCard({ emoji, label, leftCents, progress, onPress }: {
   emoji: string; label: string; leftCents: number; progress: number; onPress?: () => void;
 }) {
   const over = leftCents < 0;
-  const color = over ? "#F2A93B" : palette.success;
+  const color = over ? "#FF9600" : palette.success;
   return (
     <Pressable onPress={onPress} accessibilityRole={onPress ? "button" : undefined} style={[styles.budgetCard, { borderColor: `${color}44` }]}>
       <Box row gap={12}>
@@ -311,21 +310,21 @@ export function FgHeaderIcon({ name, onPress, label }: { name: IconName; onPress
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120, gap: 20 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 48 },
-  headerTitle: { fontSize: 30, fontWeight: "700", letterSpacing: -0.5 },
+  headerTitle: { fontSize: 30, fontWeight: "800", letterSpacing: -0.5 },
   headerActions: { flexDirection: "row", gap: 8 },
   headerIcon: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   section: { gap: 8 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  link: { fontSize: 14, fontWeight: "600" },
+  link: { fontSize: 14, fontWeight: "700" },
   statCard: { backgroundColor: palette.primary, borderRadius: 18, padding: 18, gap: 4 },
   statTop: { flexDirection: "row", alignItems: "center", gap: 8 },
   plusBadge: { backgroundColor: palette.accent, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  plusText: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
-  statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
+  plusText: { color: "#FFFFFF", fontSize: 10, fontWeight: "800" },
+  statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
   payday: { color: palette.mint, fontSize: 12 },
-  statAmount: { color: "#FFFFFF", fontSize: 34, fontWeight: "700", marginTop: 8 },
-  statCaption: { color: "#D9D5F2", fontSize: 12 },
-  progressTrack: { height: 6, borderRadius: 3, backgroundColor: "#5B4FB5", marginTop: 10, overflow: "hidden" },
+  statAmount: { color: "#FFFFFF", fontSize: 34, fontWeight: "800", marginTop: 8 },
+  statCaption: { color: "#EAFFD8", fontSize: 12 },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: "#46A302", marginTop: 10, overflow: "hidden" },
   progressFill: { height: 6, borderRadius: 3, backgroundColor: palette.mint },
   budgetRing: { width: 46, height: 46, alignItems: "center", justifyContent: "center" },
   budgetEmoji: { position: "absolute", fontSize: 18 },
@@ -333,52 +332,52 @@ const styles = StyleSheet.create({
   logoBox: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   logoEmoji: { fontSize: 20 },
   accountName: { flex: 1 },
-  accountAmount: { fontSize: 15, fontWeight: "600" },
+  accountAmount: { fontSize: 15, fontWeight: "700" },
   merchantRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
   merchantLogo: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   merchantEmoji: { fontSize: 22 },
   merchantBody: { flex: 1, gap: 2 },
-  merchantName: { fontWeight: "600" },
-  merchantAmount: { fontSize: 15, fontWeight: "600" },
+  merchantName: { fontWeight: "700" },
+  merchantAmount: { fontSize: 15, fontWeight: "700" },
   categoryPill: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: palette.mint, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
-  categoryPillText: { color: palette.mintText, fontSize: 13, fontWeight: "600" },
-  categoryChip: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, shadowColor: "#2A2166", shadowOpacity: 0.12, shadowRadius: 12, elevation: 4 },
+  categoryPillText: { color: palette.mintText, fontSize: 13, fontWeight: "700" },
+  categoryChip: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, shadowColor: "#3C3C3C", shadowOpacity: 0.12, shadowRadius: 12, elevation: 4 },
   chipEmoji: { fontSize: 22 },
-  chipLabel: { fontSize: 17, fontWeight: "700" },
-  bankCircle: { position: "absolute", backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", shadowColor: "#1B144F", shadowOpacity: 0.18, shadowRadius: 14, elevation: 6 },
-  bankEmoji: { fontWeight: "700" },
+  chipLabel: { fontSize: 17, fontWeight: "800" },
+  bankCircle: { position: "absolute", backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", shadowColor: "#3C3C3C", shadowOpacity: 0.18, shadowRadius: 14, elevation: 6 },
+  bankEmoji: { fontWeight: "800" },
   onboarding: { flex: 1, backgroundColor: palette.primary, paddingHorizontal: 24, paddingTop: 80, alignItems: "center" },
-  onboardingTitle: { color: "#FFFFFF", fontSize: 38, fontWeight: "700", textAlign: "center", lineHeight: 44 },
+  onboardingTitle: { color: "#FFFFFF", fontSize: 38, fontWeight: "800", textAlign: "center", lineHeight: 44 },
   tipsRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderRadius: radius.card },
-  tipsText: { flex: 1, color: palette.accent, fontWeight: "600" },
+  tipsText: { flex: 1, color: palette.accent, fontWeight: "700" },
   sortButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 12, paddingVertical: 14, marginTop: 4 },
-  sortText: { fontSize: 15, fontWeight: "600" },
+  sortText: { fontSize: 15, fontWeight: "700" },
   budgetBarRow: { alignItems: "center" },
   budgetBarEmoji: { fontSize: 24, width: 30, textAlign: "center" },
   budgetBarTrack: { height: 34, borderRadius: 10, justifyContent: "center", paddingHorizontal: 12, minWidth: 80, maxWidth: 250 },
   budgetBarFill: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: "#FFFFFF33", borderRadius: 10 },
-  budgetBarAmount: { color: "#FFFFFF", fontFamily: typography.font.number, fontSize: 16, fontWeight: "700", textAlign: "right" },
+  budgetBarAmount: { color: "#FFFFFF", fontFamily: typography.font.number, fontSize: 16, fontWeight: "800", textAlign: "right" },
   budgetBarLabel: { flex: 1, fontSize: 14, color: palette.ink },
   budgetCard: { borderWidth: 1, borderRadius: 18, padding: 16, gap: 12 },
   budgetCardEmoji: { fontSize: 30, width: 38, textAlign: "center" },
-  budgetStatus: { fontSize: 14, fontWeight: "600", marginTop: 2 },
-  budgetProgressTrack: { height: 8, borderRadius: 4, backgroundColor: "#EAE7F3", overflow: "hidden" },
+  budgetStatus: { fontSize: 14, fontWeight: "700", marginTop: 2 },
+  budgetProgressTrack: { height: 8, borderRadius: 4, backgroundColor: "#D7FFB8", overflow: "hidden" },
   budgetProgressFill: { height: 8, borderRadius: 4 },
   pointsCard: { gap: 12 },
-  coin: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#EFE7FB", alignItems: "center", justifyContent: "center" },
-  pointsValue: { color: palette.accent, fontSize: 30, fontWeight: "700" },
-  pointsUnit: { color: palette.ink, fontSize: 16, fontWeight: "600", marginTop: 7 },
-  pointsEuro: { color: palette.ink, fontSize: 15, fontWeight: "600" },
-  pointsTrack: { height: 8, borderRadius: 4, backgroundColor: "#EAE7F3", overflow: "hidden" },
+  coin: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#D7FFB8", alignItems: "center", justifyContent: "center" },
+  pointsValue: { color: palette.accent, fontSize: 30, fontWeight: "800" },
+  pointsUnit: { color: palette.ink, fontSize: 16, fontWeight: "700", marginTop: 7 },
+  pointsEuro: { color: palette.ink, fontSize: 15, fontWeight: "700" },
+  pointsTrack: { height: 8, borderRadius: 4, backgroundColor: "#D7FFB8", overflow: "hidden" },
   pointsFill: { height: 8, borderRadius: 4, backgroundColor: palette.accent },
   cashOutRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   cashOutText: { color: palette.inkMuted },
   voucherRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 10 },
-  voucherLogo: { width: 46, height: 46, borderRadius: 10, backgroundColor: "#FFE500", alignItems: "center", justifyContent: "center" },
+  voucherLogo: { width: 46, height: 46, borderRadius: 10, backgroundColor: "#FFC800", alignItems: "center", justifyContent: "center" },
   voucherEmoji: { fontSize: 22 },
-  cashbackPill: { backgroundColor: "#F0E4FA", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignSelf: "flex-start" },
-  cashbackPillText: { color: palette.accent, fontSize: 12, fontWeight: "600" },
-  cancelledBadge: { backgroundColor: "#00C46A", borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8, alignSelf: "flex-start" },
-  cancelledText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  cashbackPill: { backgroundColor: "#F3E8FF", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignSelf: "flex-start" },
+  cashbackPillText: { color: palette.accent, fontSize: 12, fontWeight: "700" },
+  cancelledBadge: { backgroundColor: "#58CC02", borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8, alignSelf: "flex-start" },
+  cancelledText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
   dateHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
 });

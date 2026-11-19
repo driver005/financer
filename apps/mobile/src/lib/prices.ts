@@ -32,7 +32,7 @@ const STORE_COLORS: Record<string, string> = {
   rewe: "#E2231A", kaufland: "#E30613", lidl: "#0050AA", aldi: "#005CA9",
   penny: "#D99700", netto: "#C9A200", edeka: "#E2231A", real: "#005CA9",
 };
-export const storeColor = (id: string) => STORE_COLORS[id] ?? "#3C318F";
+export const storeColor = (id: string) => STORE_COLORS[id] ?? "#58CC02";
 
 export async function loadPriceComparison() {
   const [rows, storeRows, offerRows, purchased] = await Promise.all([

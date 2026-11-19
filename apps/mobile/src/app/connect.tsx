@@ -198,9 +198,9 @@ const styles = StyleSheet.create({
   note: { color: "#D9D5F2", marginBottom: 12 },
   cta: { backgroundColor: "#FFFFFF", borderRadius: 999, paddingHorizontal: 28, paddingVertical: 14, marginBottom: 48 },
   ctaText: { color: palette.primary, fontSize: 16, fontWeight: "700" },
-  search: { borderWidth: 1, borderColor: "#E4E2ED", borderRadius: 12, paddingHorizontal: 14, minHeight: 46, fontFamily: typography.font.body },
+  search: { borderWidth: 1, borderColor: "#E5E5E5", borderRadius: 12, paddingHorizontal: 14, minHeight: 46, fontFamily: typography.font.body },
   list: { maxHeight: 220 },
-  bankRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#E4E2ED" },
+  bankRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#E5E5E5" },
   bankIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   bankGlyph: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
 });

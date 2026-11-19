@@ -76,7 +76,7 @@ export default function SavingsScreen() {
               {data.offers.length ? data.offers.slice(0, 3).map((offer) => (
                 <Card key={`save-${offer.id}`}>
                   <Box row gap={12}>
-                    <Icon name="store-outline" size={22} color="#7B3FE4" />
+                    <Icon name="store-outline" size={22} color="#CE82FF" />
                     <Box style={{ flex: 1 }}>
                       <Text variant="body2">{offer.storeName}</Text>
                       <Text variant="caption" color="income">{offer.note || "Save on your expenses"}</Text>

@@ -124,7 +124,7 @@ function FgItemCard({ item, expanded, onToggle, router }: {
       {expanded ? (
         <Box gap={8}>
           {item.quotes.map((quote) => (
-            <Box key={quote.storeId} row gap={10} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#E4E2ED" }}>
+            <Box key={quote.storeId} row gap={10} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#E5E5E5" }}>
               <Box style={{ width: 34, height: 34, borderRadius: 9, backgroundColor: storeColor(quote.storeId), alignItems: "center", justifyContent: "center" }}>
                 <Text variant="body4" style={{ color: "#FFFFFF", fontWeight: "700" }}>{quote.storeName.slice(0, 1)}</Text>
               </Box>
