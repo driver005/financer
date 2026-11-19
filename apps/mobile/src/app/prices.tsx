@@ -52,7 +52,7 @@ export default function PricesScreen() {
 
   return (
     <FgScreen
-      title="Price comparison"
+      title="Prices"
       actions={<>
         <FgHeaderIcon name="view-grid" label="All apps" onPress={() => router.push("/hub")} />
         <FgHeaderIcon name="plus" label="Add price" onPress={() => setOpen(true)} />

@@ -64,7 +64,7 @@ export default function TransactionsScreen() {
 
   return (
     <FgScreen
-      title="All Transactions"
+      title="Transactions"
       actions={
         <>
           <FgHeaderIcon name="view-grid" label="All apps" onPress={() => router.push("/hub")} />
@@ -77,10 +77,15 @@ export default function TransactionsScreen() {
       <AsyncBoundary loading={loading} error={error} onRetry={load} rows={6}>
         <FadeIn>
           <Card>
-            <Box row style={{ justifyContent: "space-between" }}>
-              <Text variant="caption" color="muted">Tomorrow</Text>
-              <Text variant="numericTitle" color="income">{fgEuro(forecastCents)}</Text>
-              <Text variant="caption" color="muted">Today · {fgEuro(balanceCents)}</Text>
+            <Box row style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <Box>
+                <Text variant="caption" color="muted">Tomorrow</Text>
+                <Text variant="numericMedium" color="income">{fgEuro(forecastCents)}</Text>
+              </Box>
+              <Box>
+                <Text variant="caption" color="muted">Today</Text>
+                <Text variant="numericMedium">{fgEuro(balanceCents)}</Text>
+              </Box>
             </Box>
           </Card>
         </FadeIn>

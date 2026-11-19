@@ -10,7 +10,7 @@ import { Tabs, usePathname, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { IconButton, type IconName } from "../ui/primitives";
+import { type IconName } from "../ui/primitives";
 import { LockGate } from "../components/LockGate";
 import { tokens, useTheme } from "../ui/theme";
 
@@ -131,9 +131,6 @@ export default function RootLayout() {
         <Tabs.Screen name="gaps" options={{ title: "Parity gaps" }} />
       </Tabs>
       </LockGate>
-      <View style={{ position: "absolute", top: 8, right: tokens.md, zIndex: 10 }}>
-        <IconButton icon="cog-outline" label="Settings" onPress={() => router.push("/settings")} />
-      </View>
     </View>
     </FinanceUIProvider>
   );

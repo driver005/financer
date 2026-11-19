@@ -309,9 +309,9 @@ export function FgHeaderIcon({ name, onPress, label }: { name: IconName; onPress
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120, gap: 20 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 48 },
-  headerTitle: { fontSize: 30, fontWeight: "800", letterSpacing: -0.5 },
-  headerActions: { flexDirection: "row", gap: 8 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 48, gap: 8 },
+  headerTitle: { fontSize: 28, fontWeight: "800", letterSpacing: -0.5, flexShrink: 1 },
+  headerActions: { flexDirection: "row", gap: 8, flexShrink: 0 },
   headerIcon: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   section: { gap: 8 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

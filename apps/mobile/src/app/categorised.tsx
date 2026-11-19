@@ -30,7 +30,7 @@ export default function CategorisedScreen() {
 
   return (
     <FgScreen
-      title="Automatically categorised"
+      title="Auto-sorted"
       actions={<>
         <FgHeaderIcon name="view-grid" label="All apps" onPress={() => router.push("/hub")} />
         <FgHeaderIcon name="cog-outline" label="Settings" onPress={() => router.push("/settings")} />
