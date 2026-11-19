@@ -95,8 +95,12 @@ each leg now has its own id.
 
 ## Limitations (honest parity boundaries)
 
-- **Bank connection has two adapters.** `/connect` → Demo banks uses 12 local
-  examples with no network. `/connect` → Real PSD2 implements the GoCardless
+- **Bank connection has four adapters.** `/connect` → Demo banks uses 12 local
+  examples with no network. `/connect` → Plaid uses the native Link SDK v13
+  (development build only) with a runtime-configured backend that creates the
+  link_token and exchanges the public_token. `/connect` → Custom API posts to
+  any HTTPS bank-data backend (TrueLayer, Tink, Yapily or self-hosted) and
+  imports the accounts and transactions it returns. `/connect` → Real PSD2 implements the GoCardless
   Bank Account Data API v2 (`/token/new/`, `/institutions/`, `/requisitions/`,
   account details and booked transactions), with credentials entered at runtime
   and stored in SecureStore (localStorage on web). Bank login opens in a secure

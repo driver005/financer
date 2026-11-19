@@ -8,6 +8,8 @@ import {
   createRequisition, importRequisition, listInstitutions, loadProviderConfig,
   openBankLogin, saveProviderConfig, type Institution, type ProviderConfig,
 } from "../lib/bankProvider";
+import { connectWithPlaid, loadPlaidConfig, plaidAvailable, savePlaidConfig, type PlaidConfig } from "../lib/plaidProvider";
+import { connectCustom, loadCustomConfig, saveCustomConfig, type CustomConfig } from "../lib/customProvider";
 
 type Data = Awaited<ReturnType<typeof loadConnect>>;
 
@@ -17,17 +19,21 @@ export default function ConnectScreen() {
   const [data, setData] = useState<Data>({ accounts: [] });
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [mode, setMode] = useState<"local" | "psd2">("local");
+  const [mode, setMode] = useState<"local" | "psd2" | "plaid" | "custom">("local");
   const [config, setConfig] = useState<ProviderConfig>({ secretId: "", secretKey: "", redirectUri: "", agreement: "" });
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [plaidConfig, setPlaidConfig] = useState<PlaidConfig>({ backendUrl: "", clientId: "", environment: "sandbox", userId: "pantry-local-user" });
+  const [customConfig, setCustomConfig] = useState<CustomConfig>({ endpoint: "", token: "" });
 
   const load = () => { void loadConnect().then(setData); };
   useEffect(load, []);
 
   const openSheet = () => {
     void loadProviderConfig().then(setConfig);
+    void loadPlaidConfig().then(setPlaidConfig);
+    void loadCustomConfig().then(setCustomConfig);
     setMessage(null); setOpen(true);
   };
 
@@ -66,6 +72,24 @@ export default function ConnectScreen() {
     finally { setBusy(false); }
   };
 
+  const launchCustom = async () => {
+    setBusy(true); setMessage(null);
+    try {
+      await saveCustomConfig(customConfig);
+      const result = await connectCustom();
+      load();
+      setMessage(`Imported ${result.imported} transactions from ${result.accounts} accounts.`);
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Bank import failed"); }
+    finally { setBusy(false); }
+  };
+
+  const launchPlaid = async () => {
+    setBusy(true); setMessage(null);
+    try { await savePlaidConfig(plaidConfig); const result = await connectWithPlaid(); setMessage(result.message); load(); }
+    catch (e) { setMessage(e instanceof Error ? e.message : "Plaid connection failed"); }
+    finally { setBusy(false); }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: palette.primary }}>
       <View style={styles.topBar}>
@@ -89,6 +113,8 @@ export default function ConnectScreen() {
       <Sheet visible={open} onClose={() => setOpen(false)} title="Connect accounts">
         <Chip label="Demo banks" selected={mode === "local"} onPress={() => setMode("local")} />
         <Chip label="Real PSD2" selected={mode === "psd2"} onPress={() => setMode("psd2")} />
+        <Chip label="Plaid" selected={mode === "plaid"} onPress={() => setMode("plaid")} />
+        <Chip label="Custom API" selected={mode === "custom"} onPress={() => setMode("custom")} />
         {message ? <Text variant="body3" color="accent">{message}</Text> : null}
 
         {mode === "psd2" ? (
@@ -111,9 +137,27 @@ export default function ConnectScreen() {
               ))}
             </ScrollView>
           </>
+        ) : mode === "plaid" ? (
+          <>
+            <Text variant="body4" color="muted">Plaid Link v13 native SDK. Your HTTPS backend creates the link_token and exchanges the public_token. Requires a development build — not Expo Go or web.</Text>
+            <TextField label="Backend URL" value={plaidConfig.backendUrl} onChangeText={(v) => setPlaidConfig({ ...plaidConfig, backendUrl: v })} placeholder="https://your-server.com" />
+            <TextField label="Client ID" value={plaidConfig.clientId} onChangeText={(v) => setPlaidConfig({ ...plaidConfig, clientId: v })} />
+            <TextField label="User ID" value={plaidConfig.userId} onChangeText={(v) => setPlaidConfig({ ...plaidConfig, userId: v })} />
+            <Chip label="Sandbox" selected={plaidConfig.environment === "sandbox"} onPress={() => setPlaidConfig({ ...plaidConfig, environment: "sandbox" })} />
+            <Chip label="Production" selected={plaidConfig.environment === "production"} onPress={() => setPlaidConfig({ ...plaidConfig, environment: "production" })} />
+            <Text variant="body5" color="muted">{plaidAvailable() ? "Native Link SDK available." : "Native Link SDK unavailable on this platform."}</Text>
+            <Button label="Connect with Plaid" icon="bank" onPress={() => void launchPlaid()} disabled={busy} />
+          </>
+        ) : mode === "custom" ? (
+          <>
+            <Text variant="body4" color="muted">Point at any HTTPS bank-data backend (TrueLayer, Tink, Yapily or self-hosted). It returns accounts and transactions; everything is stored locally.</Text>
+            <TextField label="Endpoint URL" value={customConfig.endpoint} onChangeText={(v) => setCustomConfig({ ...customConfig, endpoint: v })} placeholder="https://your-server.com/banks" />
+            <TextField label="Bearer token" value={customConfig.token} onChangeText={(v) => setCustomConfig({ ...customConfig, token: v })} />
+            <Button label="Import accounts" icon="download" onPress={() => void launchCustom()} disabled={busy} />
+          </>
         ) : (
           <>
-            <Text variant="body4" color="muted">Local adapter with 12 example banks — no credentials stored, no cloud connection. Use Real PSD2 for live banks.</Text>
+            <Text variant="body4" color="muted">Local adapter with 12 example banks — no credentials stored, no cloud connection. Use Real PSD2, Plaid or Custom API for live banks.</Text>
             {data.accounts.length ? (
               <Card>
                 <Text variant="heading6">Connected</Text>
