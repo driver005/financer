@@ -99,6 +99,22 @@ export async function addPolicy(areaKey: string, monthlyCents: number) {
   await addRecurring({ name: `${area.label} (Finanzguru)`, amountCents: monthlyCents, dayOfMonth: day, category: "Insurance", active: 1 });
 }
 
+/* ---------------- Contract cancellations ---------------- */
+
+export type Cancellation = { name: string; date: string };
+
+export async function loadCancellations(): Promise<Cancellation[]> {
+  const raw = await getSetting("fgCancellations");
+  if (!raw) return [];
+  try { return JSON.parse(raw) as Cancellation[]; } catch { return []; }
+}
+
+export async function saveCancellation(name: string) {
+  const rows = await loadCancellations();
+  const entry = { name, date: new Date().toISOString().slice(0, 10) };
+  await setSetting("fgCancellations", JSON.stringify([entry, ...rows.filter((r) => r.name !== name)]));
+}
+
 /* ---------------- Savings Booster ---------------- */
 
 export async function loadSavings() {

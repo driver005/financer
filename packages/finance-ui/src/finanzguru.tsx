@@ -8,7 +8,7 @@
 import React, { type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text as RNText, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { Box, Icon, Text, type IconName, useFinanceTheme } from "./primitives";
+import { Box, Card, Icon, Text, type IconName, useFinanceTheme } from "./primitives";
 import { palette, radius, spacing, typography } from "./tokens";
 
 const de = (cents: number, decimals = true) =>
@@ -197,6 +197,109 @@ export function FgSortButton({ label, onPress }: { label: string; onPress?: () =
   );
 }
 
+/** Horizontal category bar from the Budgets store screenshot. */
+export function FgBudgetBar({ emoji, label, cents, maxCents, color }: {
+  emoji: string; label: string; cents: number; maxCents: number; color?: string;
+}) {
+  const width = maxCents > 0 ? Math.max(4, Math.min(100, (cents / maxCents) * 100)) : 0;
+  return (
+    <Box row gap={10} style={styles.budgetBarRow}>
+      <RNText style={styles.budgetBarEmoji}>{emoji}</RNText>
+      <View style={[styles.budgetBarTrack, { backgroundColor: color ?? palette.primary }]}>
+        <View style={[styles.budgetBarFill, { width: `${width}%` }]} />
+        <RNText style={styles.budgetBarAmount}>{fgEuro(cents, false)}</RNText>
+      </View>
+      <RNText style={styles.budgetBarLabel}>{label}</RNText>
+    </Box>
+  );
+}
+
+/** Budget card with left/over budget status and a progress bar (store Budgets screen). */
+export function FgBudgetCard({ emoji, label, leftCents, progress, onPress }: {
+  emoji: string; label: string; leftCents: number; progress: number; onPress?: () => void;
+}) {
+  const over = leftCents < 0;
+  const color = over ? "#F2A93B" : palette.success;
+  return (
+    <Pressable onPress={onPress} accessibilityRole={onPress ? "button" : undefined} style={[styles.budgetCard, { borderColor: `${color}44` }]}>
+      <Box row gap={12}>
+        <RNText style={styles.budgetCardEmoji}>{emoji}</RNText>
+        <View style={{ flex: 1 }}>
+          <Text variant="heading5">{label}</Text>
+          <RNText style={[styles.budgetStatus, { color }]}>
+            {over ? `${fgEuro(Math.abs(leftCents), false)} over budget` : `${fgEuro(leftCents, false)} left`}
+          </RNText>
+        </View>
+      </Box>
+      <View style={styles.budgetProgressTrack}>
+        <View style={[styles.budgetProgressFill, { width: `${Math.min(100, Math.max(0, progress))}%`, backgroundColor: color }]} />
+      </View>
+    </Pressable>
+  );
+}
+
+/** Savings Booster points card with coin, euro value and cash-out row (store Cashback screen). */
+export function FgPointsCard({ points, euroCents, progress = 1, onCashOut }: {
+  points: number; euroCents: number; progress?: number; onCashOut?: () => void;
+}) {
+  return (
+    <Card style={styles.pointsCard}>
+      <Box row gap={12} style={{ alignItems: "center" }}>
+        <View style={styles.coin}><Icon name="circle-multiple" size={26} color={palette.accent} /></View>
+        <RNText style={[styles.pointsValue, { fontFamily: typography.font.number }]}>{points.toLocaleString("de-DE")}</RNText>
+        <RNText style={styles.pointsUnit}>Points</RNText>
+        <View style={{ flex: 1 }} />
+        <RNText style={styles.pointsEuro}>{`Equals ${fgEuro(euroCents)}`}</RNText>
+      </Box>
+      <View style={styles.pointsTrack}><View style={[styles.pointsFill, { width: `${Math.max(2, Math.min(100, progress * 100))}%` }]} /></View>
+      <Pressable onPress={onCashOut} accessibilityRole="button" style={styles.cashOutRow}>
+        <Text variant="body2" style={styles.cashOutText}>You can cash out your points 🎉</Text>
+        <Icon name="chevron-right" size={18} color={palette.inkSubtle} />
+      </Pressable>
+    </Card>
+  );
+}
+
+/** Voucher row from the Savings Booster store screenshot. */
+export function FgVoucherRow({ store, amountCents, emoji = "🎟️", onPress }: {
+  store: string; amountCents: number; emoji?: string; onPress?: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole={onPress ? "button" : undefined} style={[styles.voucherRow, { borderColor: palette.border }]}>
+      <View style={styles.voucherLogo}><RNText style={styles.voucherEmoji}>{emoji}</RNText></View>
+      <Text variant="body2" style={{ flex: 1 }}>{store}</Text>
+      <Text variant="body2" color="income">{fgEuro(amountCents)}</Text>
+    </Pressable>
+  );
+}
+
+/** Purple "Missed cashback" pill on transaction rows. */
+export function FgCashbackPill({ onPress }: { onPress?: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" style={styles.cashbackPill}>
+      <RNText style={[styles.cashbackPillText, { fontFamily: typography.font.body }]}>Missed cashback</RNText>
+    </Pressable>
+  );
+}
+
+/** Green "Cancelled!" badge from the cancellation store screenshot. */
+export function FgCancelledBadge() {
+  return (
+    <View style={styles.cancelledBadge}><RNText style={styles.cancelledText}>Cancelled!</RNText></View>
+  );
+}
+
+/** Date section header used by the All Transactions screen. */
+export function FgDateHeader({ label, right, highlight }: { label: string; right?: string; highlight?: boolean }) {
+  const theme = useFinanceTheme();
+  return (
+    <View style={[styles.dateHeader, highlight && { backgroundColor: palette.primary }]}>
+      <Text variant="body3" style={{ color: highlight ? "#FFFFFF" : theme.muted }}>{label}</Text>
+      {right ? <Text variant="body3" color={highlight ? undefined : "income"} style={highlight ? { color: palette.mint } : undefined}>{right}</Text> : null}
+    </View>
+  );
+}
+
 export function FgHeaderIcon({ name, onPress, label }: { name: IconName; onPress?: () => void; label: string }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={styles.headerIcon}>
@@ -250,4 +353,32 @@ const styles = StyleSheet.create({
   tipsText: { flex: 1, color: palette.accent, fontWeight: "600" },
   sortButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 12, paddingVertical: 14, marginTop: 4 },
   sortText: { fontSize: 15, fontWeight: "600" },
+  budgetBarRow: { alignItems: "center" },
+  budgetBarEmoji: { fontSize: 24, width: 30, textAlign: "center" },
+  budgetBarTrack: { height: 34, borderRadius: 10, justifyContent: "center", paddingHorizontal: 12, minWidth: 80, maxWidth: 250 },
+  budgetBarFill: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: "#FFFFFF33", borderRadius: 10 },
+  budgetBarAmount: { color: "#FFFFFF", fontFamily: typography.font.number, fontSize: 16, fontWeight: "700", textAlign: "right" },
+  budgetBarLabel: { flex: 1, fontSize: 14, color: palette.ink },
+  budgetCard: { borderWidth: 1, borderRadius: 18, padding: 16, gap: 12 },
+  budgetCardEmoji: { fontSize: 30, width: 38, textAlign: "center" },
+  budgetStatus: { fontSize: 14, fontWeight: "600", marginTop: 2 },
+  budgetProgressTrack: { height: 8, borderRadius: 4, backgroundColor: "#EAE7F3", overflow: "hidden" },
+  budgetProgressFill: { height: 8, borderRadius: 4 },
+  pointsCard: { gap: 12 },
+  coin: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#EFE7FB", alignItems: "center", justifyContent: "center" },
+  pointsValue: { color: palette.accent, fontSize: 30, fontWeight: "700" },
+  pointsUnit: { color: palette.ink, fontSize: 16, fontWeight: "600", marginTop: 7 },
+  pointsEuro: { color: palette.ink, fontSize: 15, fontWeight: "600" },
+  pointsTrack: { height: 8, borderRadius: 4, backgroundColor: "#EAE7F3", overflow: "hidden" },
+  pointsFill: { height: 8, borderRadius: 4, backgroundColor: palette.accent },
+  cashOutRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cashOutText: { color: palette.inkMuted },
+  voucherRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 10 },
+  voucherLogo: { width: 46, height: 46, borderRadius: 10, backgroundColor: "#FFE500", alignItems: "center", justifyContent: "center" },
+  voucherEmoji: { fontSize: 22 },
+  cashbackPill: { backgroundColor: "#F0E4FA", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignSelf: "flex-start" },
+  cashbackPillText: { color: palette.accent, fontSize: 12, fontWeight: "600" },
+  cancelledBadge: { backgroundColor: "#00C46A", borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8, alignSelf: "flex-start" },
+  cancelledText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  dateHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
 });

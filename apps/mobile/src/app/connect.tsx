@@ -44,7 +44,7 @@ export default function ConnectScreen() {
       </FgOnboarding>
 
       <Sheet visible={open} onClose={() => setOpen(false)} title="Connect accounts">
-        <Text variant="body4" color="muted">4,000+ banks supported. Local adapter — no cloud login, no credentials stored.</Text>
+        <Text variant="body4" color="muted">Local adapter with 12 example banks — not real PSD2 bank login. No credentials stored, no cloud connection.</Text>
         {data.accounts.length ? (
           <Card>
             <Text variant="heading6">Connected</Text>

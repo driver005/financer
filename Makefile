@@ -5,7 +5,7 @@ SHELL := /bin/sh
 APP        := apps/mobile
 NPM_STAMP  := $(APP)/node_modules/.package-lock.json
 
-.PHONY: help doctor setup core-test core-build start web web-build typecheck test ui-icons ui-test ui-catalog ui-catalog-export clean
+.PHONY: help doctor setup core-test core-build core-verify start web web-build typecheck test ui-icons ui-test ui-catalog ui-catalog-export clean
 
 help: ## Show this list
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[1m%-13s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -17,6 +17,9 @@ doctor: ## Check which tools are installed
 
 core-test: ## Rust business-logic tests
 	cargo test -p pantry-core
+
+core-verify: ## Verify the embedded WASM matches the binary and rebuilds deterministically
+	node scripts/verify-wasm.mjs
 
 core-build: ## Rebuild the WebAssembly core used by Expo
 	wasm-pack build crates/pantry-core --target web --out-dir ../../apps/mobile/src/rust --out-name pantry --release

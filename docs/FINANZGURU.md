@@ -59,4 +59,45 @@ Primary app colour: dark purple `#3C318F`.
 
 Real-data loaders for the new screens: `apps/mobile/src/lib/finanzguru.ts`.
 
+## Store screenshot coverage (all 8)
+
+| Screenshot | Headline | Local screen |
+| --- | --- | --- |
+| shot1 | Full control of your finances | `/home` Overview |
+| shot2 | Connect accounts | `/connect` |
+| shot3 | Automatically categorised | `/categorised` |
+| shot4 | All contracts at a glance | `/contracts` |
+| shot5 | Cancel & save money | `/contracts` cancellation sheet + `Cancelled!` status |
+| shot6 | Budgets under control | `/budgets` monthly bars + budget cards |
+| shot7 | Cashback on expenses | `/savings` points → euro, vouchers, savings potential |
+| shot8 | Look into the future | `/transactions` dated groups, cashback pills, forecast balance |
+
+Help-center flow inventory (hilfe.finanzguru.de): login/registration, bank
+connection, account management, booking edits/refunds/forecasts, statistics,
+budgets, analyses, contracts (create/edit/cancel/split), insurance, transfers,
+account/Plus settings, Sparbooster, security, general info and Split. Local
+equivalents exist for all of these; transfers, booking edits, forecasts,
+splits and Plus settings live under `/moneytools`, `/pc`, `/insights`,
+`/gaps` and `/settings` in the same kit.
+
+## Limitations (honest parity boundaries)
+
+- **Bank connection is a local adapter, not real PSD2/open banking.** `/connect`
+  offers 12 searchable example banks and creates a local SQLite account with a
+  zero balance. It does **not** connect to the 4,000+ real banks, does not use a
+  bank API, and stores no credentials. Real bank login requires a licensed
+  banking/PSD2 provider plus user consent and credentials — outside a local-first
+  offline app.
+- **Cancellation generates a printable local letter; it is not sent.** The app
+  cannot legally transmit a cancellation to a provider without an integration
+  and the user's authorisation. The generated HTML must be checked and sent by
+  the user.
+- **Savings Booster points, vouchers and the 7 % bonus are local simulations**
+  computed from the user's own transactions, goals and offers. No cashback is
+  actually earned and no retirement product is opened.
+- **Insurance coverage checks are heuristic** (keyword matching on local
+  policies), not an underwriting assessment.
+- **Savings potential is an estimate** (5 % of tracked 12-month spending), not a
+  guarantee.
+
 Stitch reference project: `17031347711862038285` ("Finanzguru parity screens").

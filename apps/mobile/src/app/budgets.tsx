@@ -1,57 +1,90 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { AsyncBoundary, Box, BudgetCard, Button, Card, EmptyState, FadeIn, Segmented, Text, TextField } from "@finance/ui";
-import { IconButton as AppIconButton, Screen, SectionTitle } from "../ui/primitives";
+import { AsyncBoundary, Box, Button, Card, FadeIn, FgBudgetBar, FgBudgetCard, FgHeaderIcon, FgScreen, FgSection, Sheet, Text, TextField } from "@finance/ui";
+import { fgEuro } from "@finance/ui";
 import { core } from "../rust/core";
 import { parseEuro } from "../lib/money";
 import { allTransactions, budgets, setBudget } from "../db/moneyTracker";
 
+const EMOJI: Record<string, string> = {
+  Living: "🏠", Rent: "🏠", "Food & Drinks": "🥤", Groceries: "🛒", Leisure: "😊",
+  "Lifestyle & Sports": "😊", Shopping: "🛍️", Transport: "🚗", "Internet & Phone": "📱",
+  Streaming: "🎬", Health: "🏥", Salary: "💼",
+};
+const COLORS = ["#3C318F", "#2F80ED", "#2FBFA0", "#F2A93B", "#E4647A"];
+const iconFor = (category: string) => EMOJI[category] ?? "🏷️";
+
+type Status = { category: string; spent: number; limit: number; remaining: number; percent: number };
+
 export default function BudgetsScreen() {
   const router = useRouter();
+  const [rows, setRows] = useState<{ id: number; category: string; limitCents: number; rolloverCents: number }[]>([]);
+  const [status, setStatus] = useState<Status[]>([]);
+  const [spending, setSpending] = useState<{ category: string; cents: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const guard = async (fn: () => Promise<void>) => {
-    setLoading(true);
-    try { await fn(); setError(null); }
-    catch (e) { setError(e instanceof Error ? e.message : "Could not load this screen"); }
-    finally { setLoading(false); }
-  };
-  const [rows, setRows] = useState<{ id: number; category: string; limitCents: number; rolloverCents: number }[]>([]);
-  const [tx, setTx] = useState<Record<string, unknown>[]>([]);
-  const [scope, setScope] = useState<"weekly" | "monthly">("monthly");
+  const [open, setOpen] = useState(false);
   const [category, setCategory] = useState("Groceries");
   const [limit, setLimit] = useState("250");
-  const [rolloverText, setRolloverText] = useState("20");
 
-  const load = async () => { const [b, t] = await Promise.all([budgets(), allTransactions()]); setRows(b as never); setTx(t); };
-  useEffect(() => { void guard(load); }, []);
+  const load = () => {
+    setLoading(true);
+    void Promise.all([budgets(), allTransactions()])
+      .then(([b, tx]) => {
+        const month = core.monthKey(new Date());
+        const totals = core.categoryTotals(tx, month) as { category: string; cents: number }[];
+        setRows(b as never);
+        setSpending([...totals].sort((a, z) => z.cents - a.cents).slice(0, 5));
+        setStatus(core.budgetStatus(b, totals) as Status[]);
+        setError(null);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Could not load budgets"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
 
-  const month = core.monthKey(new Date());
-  const spending = scope === "monthly" ? core.categoryTotals(tx, month) : core.categoryTotals(tx.filter((r) => core.periodKey("week", new Date(String(r.date))) === core.periodKey("week", new Date())), "");
-  const status = core.rolloverStatus(rows, spending);
+  const save = () => {
+    const cents = parseEuro(limit);
+    if (cents === null || !category) return;
+    void setBudget(category, cents, 0, true).then(() => { setOpen(false); load(); });
+  };
+
+  const max = Math.max(1, ...spending.map((s) => Math.abs(s.cents)));
 
   return (
-    <Screen title="Budgets" subtitle="Pockaw periods + Dompetku rollover + Boring analysis" back={<AppIconButton icon="arrow-left" label="Back" onPress={() => router.back()} />}>
-      <AsyncBoundary loading={loading} error={error} onRetry={() => void guard(load)} rows={4}>
-      <FadeIn>
-      <Card>
-        <Segmented value={scope} onChange={setScope} options={[{ value: "weekly", label: "Weekly" }, { value: "monthly", label: "Monthly" }]} />
-        <Text variant="body5" color="muted">Alerts trigger at 80% and 100% of the available amount.</Text>
-      </Card>
-      {!status.length ? <EmptyState title="No budgets" message="Create a budget below." icon="target" /> : null}
-      {status.map((s) => <BudgetCard key={s.category} category={s.category} spentCents={s.spent} limitCents={s.limit} rolloverCents={s.rollover} />)}
-      <Card>
-        <SectionTitle>New budget</SectionTitle>
+    <FgScreen title="Budgets" actions={<FgHeaderIcon name="plus" label="Add budget" onPress={() => setOpen(true)} />}>
+      <AsyncBoundary loading={loading} error={error} onRetry={load} rows={5}>
+        <FadeIn>
+          <Card>
+            <Text variant="heading5">Monatliche Ausgaben</Text>
+            {spending.length ? spending.map((item, i) => (
+              <FgBudgetBar key={item.category} emoji={iconFor(item.category)} label={item.category}
+                cents={Math.abs(item.cents)} maxCents={max} color={COLORS[i % COLORS.length]} />
+            )) : <Text variant="body3" color="muted">No expenses recorded this month.</Text>}
+          </Card>
+        </FadeIn>
+        <FadeIn delay={80}>
+          <FgSection title="Your budgets">
+            {status.length ? status.map((item) => (
+              <FgBudgetCard key={item.category} emoji={iconFor(item.category)} label={item.category}
+                leftCents={item.remaining - (rows.find((r) => r.category === item.category)?.rolloverCents ?? 0)}
+                progress={item.percent} onPress={() => router.push("/insights")} />
+            )) : <Card><Text variant="body3" color="muted">No budgets yet. Tap + to create one.</Text></Card>}
+          </FgSection>
+        </FadeIn>
+        <FadeIn delay={140}>
+          <Card>
+            <Text variant="body4" color="muted">{`${rows.length} budgets · ${spending.length} categories tracked locally`}</Text>
+          </Card>
+        </FadeIn>
+      </AsyncBoundary>
+
+      <Sheet visible={open} onClose={() => setOpen(false)} title="New budget">
+        <Text variant="body4" color="muted">Monthly limit, stored locally and used by Insights.</Text>
         <TextField label="Category" value={category} onChangeText={setCategory} />
-        <Box row gap={8}>
-          <TextField label="Limit" value={limit} onChangeText={setLimit} numeric />
-          <TextField label="Rollover" value={rolloverText} onChangeText={setRolloverText} numeric />
-        </Box>
-        <Button label="Save budget" icon="plus" onPress={() => { const l = parseEuro(limit); const r = parseEuro(rolloverText); if (l !== null && r !== null && category) void setBudget(category, l, r, true).then(() => void guard(load)); }} />
-      </Card>
-    </FadeIn>
-    </AsyncBoundary>
-    </Screen>
+        <TextField label="Monthly limit" value={limit} onChangeText={setLimit} numeric placeholder="e.g. 250" />
+        <Button label="Save budget" icon="plus" onPress={save} />
+      </Sheet>
+    </FgScreen>
   );
 }

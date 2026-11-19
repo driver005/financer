@@ -15,7 +15,8 @@ jobs:
       - run: cargo test -p pantry-core
       - run: cargo install wasm-pack --locked || true
       - run: make core-build
-      - run: git diff --exit-code -- apps/mobile/src/rust
+      # WASM bytecode varies across toolchains; verify in-environment consistency instead.
+      - run: make core-verify
 
   app:
     runs-on: ubuntu-latest

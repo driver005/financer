@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import {
-  AsyncBoundary, Button, Card, FadeIn, FgHeaderIcon, FgMerchantRow, FgScreen, FgSection,
+  AsyncBoundary, Box, Button, Card, FadeIn, FgCancelledBadge, FgHeaderIcon, FgMerchantRow, FgScreen, FgSection,
   FgSortButton, FgTipsRow, Sheet, Text, TextField,
 } from "@finance/ui";
 import { recurringList, debts } from "../db/moneyTracker";
 import { subscriptions, receivables } from "../db/upstreamFeatures";
 import { base64Encode, saveDocument } from "../lib/file";
+import { loadCancellations, saveCancellation, type Cancellation } from "../lib/finanzguru";
 
 type Item = { name: string; category: string; cents: number; emoji: string; logoColor?: string };
 
@@ -31,8 +32,10 @@ export default function ContractsScreen() {
   const [address, setAddress] = useState("");
   const [customerNo, setCustomerNo] = useState("");
   const [effective, setEffective] = useState("");
+  const [cancelled, setCancelled] = useState<Cancellation[]>([]);
 
   useEffect(() => {
+    void loadCancellations().then(setCancelled);
     void Promise.all([recurringList(), debts(), subscriptions(), receivables()])
       .then(([rec, debt, subs, receiv]) => {
         const local: Item[] = [
@@ -62,6 +65,8 @@ export default function ContractsScreen() {
 <p>Mit freundlichen Grüßen</p><p>_____</p><p><small>Generated locally by Pantry — verify the provider address and notice period before sending.</small></p>
 </body></html>`;
     await saveDocument(base64Encode(html), `kuendigung-${cancelItem.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.html`, "text/html");
+    await saveCancellation(cancelItem.name);
+    setCancelled(await loadCancellations());
     setCancelItem(null);
   };
 
@@ -92,18 +97,34 @@ export default function ContractsScreen() {
         <FadeIn delay={140}>
           <Card>
             {items.map((item, i) => (
-              <FgMerchantRow
-                key={`${item.name}-${i}`}
-                emoji={item.emoji}
-                name={item.name}
-                category={item.category}
-                cents={item.cents}
-                logoColor={item.logoColor}
-                onPress={() => setCancelItem(item)}
-              />
+              <Box key={`${item.name}-${i}`} gap={4}>
+                {cancelled.find((c) => c.name === item.name) ? <FgCancelledBadge /> : null}
+                <FgMerchantRow
+                  emoji={item.emoji}
+                  name={item.name}
+                  category={item.category}
+                  cents={item.cents}
+                  logoColor={item.logoColor}
+                  onPress={() => setCancelItem(item)}
+                />
+              </Box>
             ))}
           </Card>
         </FadeIn>
+        {cancelled.length ? (
+          <FadeIn delay={200}>
+            <FgSection title="Cancelled">
+              <Card>
+                {cancelled.map((item) => (
+                  <Box key={item.name} row style={{ justifyContent: "space-between", paddingVertical: 8 }}>
+                    <Text variant="body3">{item.name}</Text>
+                    <Text variant="body4" color="muted">{`Yesterday · ${item.date}`}</Text>
+                  </Box>
+                ))}
+              </Card>
+            </FgSection>
+          </FadeIn>
+        ) : null}
       </AsyncBoundary>
 
       <Sheet visible={!!cancelItem} onClose={() => setCancelItem(null)} title={`Cancel ${cancelItem?.name ?? ""}`}>
