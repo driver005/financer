@@ -22,5 +22,10 @@ source of truth for the app implementation:
   `MascotEmpty`, `StepCard`
 - `apps/mobile/src/app/_layout.tsx` — five-tab green bottom nav, Nunito Sans fonts
 
-All 21 routes were verified in light and dark at 320/375/390/430px: 168 checks,
+Usability pass (ui-ux-pro-max skill): deep content moved out of the list into a
+dedicated full-screen price-detail page with a breadcrumb/back action and no
+bottom nav; 44px+ touch targets with 8–12px gaps; `hitSlop` on header icons;
+nested pressables removed.
+
+All 22 routes were verified in light and dark at 320/375/390/430px: 176 checks,
 zero overflow, zero console errors.

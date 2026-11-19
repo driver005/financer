@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   card: { borderWidth: 2, borderRadius: radius.card, padding: spacing.xl, gap: spacing.md },
   button: { minHeight: 54, borderRadius: radius.button, paddingHorizontal: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
   iconButton: { width: 44, height: 44, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
-  chip: { minHeight: 42, paddingHorizontal: spacing.lg, borderRadius: radius.full, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  chip: { minHeight: 44, paddingHorizontal: spacing.lg, borderRadius: radius.full, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   badge: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 0 },
   fieldWrap: { gap: spacing.sm },
   field: { borderWidth: 2, borderRadius: radius.md, paddingHorizontal: spacing.lg, fontSize: 16, minHeight: 56 },

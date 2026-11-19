@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import {
   AsyncBoundary, Badge, Box, Button, Card, Chip, FadeIn, FgHeaderIcon, FgScreen,
-  PriceHistoryChart, Segmented, Sheet, Text, TextField,
+  Segmented, Sheet, Text, TextField,
 } from "@finance/ui";
 import { fgEuro } from "@finance/ui";
-import { loadPriceComparison, saveItemPrice, savePriceSnapshot, storeColor, type ComparedItem } from "../lib/prices";
+import { loadPriceComparison, saveItemPrice, type ComparedItem } from "../lib/prices";
 import { parseEuro } from "../lib/money";
 
 type Data = Awaited<ReturnType<typeof loadPriceComparison>>;
@@ -18,7 +18,6 @@ export default function PricesScreen() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"saving" | "name">("saving");
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
   const [itemName, setItemName] = useState("");
   const [storeId, setStoreId] = useState("");
   const [price, setPrice] = useState("");
@@ -28,7 +27,6 @@ export default function PricesScreen() {
     void loadPriceComparison()
       .then((d) => {
         setData(d);
-        if (d.items.length && !expanded) setExpanded(d.items[0].name);
         if (d.stores.length && !storeId) setStoreId(d.stores[0].id);
         setError(null);
       })
@@ -37,12 +35,10 @@ export default function PricesScreen() {
   };
   useEffect(load, []);
 
-  const items = useMemo(() => {
-    const list = (data?.items ?? []).filter((item) => item.name.toLowerCase().includes(query.toLowerCase()));
-    return sort === "saving"
-      ? [...list].sort((a, b) => b.savingCents - a.savingCents || a.name.localeCompare(b.name))
-      : [...list].sort((a, b) => a.name.localeCompare(b.name));
-  }, [data, query, sort]);
+  const items = (data?.items ?? []).filter((item) => item.name.toLowerCase().includes(query.toLowerCase()));
+  const sorted = sort === "saving"
+    ? [...items].sort((a, b) => b.savingCents - a.savingCents || a.name.localeCompare(b.name))
+    : [...items].sort((a, b) => a.name.localeCompare(b.name));
 
   const save = async () => {
     const cents = parseEuro(price);
@@ -63,23 +59,23 @@ export default function PricesScreen() {
         {data && <>
           <FadeIn>
             <Card>
-              <Text variant="body4" color="muted">{`${data.items.length} items · ${data.stores.length} discounters · ${data.offerCount} offers · ${data.items.reduce((n, i) => n + i.quotes.filter((q) => q.onSale).length, 0)} sales`}</Text>
+              <Text variant="body4" color="muted">{`${data.items.length} items · ${data.stores.length} discounters`}</Text>
               <TextField label="Search" value={query} onChangeText={setQuery} placeholder="e.g. Milk, Coffee, pasta" />
-              <Segmented value={sort} onChange={setSort} options={[{ value: "saving", label: "Biggest saving" }, { value: "name", label: "A–Z" }]} />
+              <Segmented value={sort} onChange={setSort} options={[
+                { value: "saving", label: "Biggest saving" }, { value: "name", label: "A–Z" },
+              ]} />
+              <Text variant="body5" color="muted">Tap an item for its full price history and all discounters.</Text>
             </Card>
           </FadeIn>
-          {items.map((item, index) => (
-            <FadeIn key={item.name} delay={Math.min(index * 30, 180)}>
-              <FgItemCard item={item} expanded={expanded === item.name}
-                onToggle={() => setExpanded(expanded === item.name ? null : item.name)}
-                onSnapshot={() => { void savePriceSnapshot(item.name, item.quotes.map((q) => ({ storeId: q.storeId, cents: q.cents }))).then(load); }}
-                router={router} />
+          {sorted.map((item, index) => (
+            <FadeIn key={item.name} delay={Math.min(index * 30, 150)}>
+              <ItemRow item={item} onPress={() => router.push(`/price-detail?item=${encodeURIComponent(item.name)}`)} />
             </FadeIn>
           ))}
-          {!items.length ? (
+          {!sorted.length ? (
             <Card>
-              <Text variant="heading5">No price data yet</Text>
-              <Text variant="body3" color="muted">Add a price for an item at a discounter, or import receipts under Shops & offers.</Text>
+              <Text variant="heading5">No prices yet</Text>
+              <Text variant="body3" color="muted">Add a price and the comparison chart will appear here.</Text>
               <Button label="Add first price" icon="plus" onPress={() => setOpen(true)} />
             </Card>
           ) : null}
@@ -91,7 +87,7 @@ export default function PricesScreen() {
         <TextField label="Item" value={itemName} onChangeText={setItemName} placeholder="e.g. Milk" />
         <TextField label="Price" value={price} onChangeText={setPrice} numeric placeholder="e.g. 1,29" />
         <Text variant="body4" color="muted">Store</Text>
-        <Box row gap={8} style={{ flexWrap: "wrap" }}>
+        <Box row gap={10} style={{ flexWrap: "wrap" }}>
           {(data?.stores ?? []).map((store) => (
             <Chip key={store.id} label={store.name} selected={storeId === store.id} onPress={() => setStoreId(store.id)} />
           ))}
@@ -102,19 +98,17 @@ export default function PricesScreen() {
   );
 }
 
-function FgItemCard({ item, expanded, onToggle, onSnapshot, router }: {
-  item: ComparedItem; expanded: boolean; onToggle: () => void; onSnapshot: () => void; router: ReturnType<typeof useRouter>;
-}) {
+function ItemRow({ item, onPress }: { item: ComparedItem; onPress: () => void }) {
   return (
-    <Card>
+    <Card style={{ gap: 12 }}>
       <Box row gap={12} style={{ alignItems: "center" }}>
-        <Box style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: "#EFE7FB", alignItems: "center", justifyContent: "center" }}>
-          <Text variant="body2">{item.name.slice(0, 1).toUpperCase()}</Text>
+        <Box style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: "#D7FFB8", alignItems: "center", justifyContent: "center" }}>
+          <Text variant="heading5" color="primary">{item.name.slice(0, 1).toUpperCase()}</Text>
         </Box>
-        <Box style={{ flex: 1, gap: 3 }}>
+        <Box style={{ flex: 1, gap: 4 }}>
           <Text variant="heading5">{item.name}</Text>
           <Text variant="caption" color="muted">{`Best at ${item.bestStore || "—"} · ${item.quotes.length} prices`}</Text>
-          <Box row gap={6}>
+          <Box row gap={6} style={{ flexWrap: "wrap" }}>
             {item.hasSale ? <Badge label="Sale" tone="offer" /> : null}
             {item.savingCents > 0 ? <Badge label={`Save ${fgEuro(item.savingCents, false)}`} tone="income" /> : null}
           </Box>
@@ -124,32 +118,7 @@ function FgItemCard({ item, expanded, onToggle, onSnapshot, router }: {
           <Text variant="body5" color="muted">lowest</Text>
         </Box>
       </Box>
-      <Button label={expanded ? "Hide prices" : `Compare ${item.quotes.length} prices`} variant="secondary" onPress={onToggle} />
-      {expanded ? (
-        <Box gap={8}>
-          <PriceHistoryChart series={item.series} title={`${item.name} price history`} />
-          {item.quotes.map((quote) => (
-            <Box key={quote.storeId} row gap={10} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#E5E5E5" }}>
-              <Box style={{ width: 34, height: 34, borderRadius: 9, backgroundColor: storeColor(quote.storeId), alignItems: "center", justifyContent: "center" }}>
-                <Text variant="body4" style={{ color: "#FFFFFF", fontWeight: "700" }}>{quote.storeName.slice(0, 1)}</Text>
-              </Box>
-              <Box style={{ flex: 1, gap: 2 }}>
-                <Box row gap={6} style={{ alignItems: "center" }}>
-                  <Text variant="body3">{quote.storeName}</Text>
-                  {quote.cents === item.bestCents ? <Badge label="Cheapest" tone="income" /> : null}
-                  {quote.onSale ? <Badge label={quote.offer?.note || "Sale"} tone="offer" /> : null}
-                </Box>
-                <Text variant="caption" color="muted">
-                  {`avg ${fgEuro(quote.avgCents)} · ${quote.samples} prices${quote.buyNow ? " · buy now" : ` · wait for ${quote.nextDate}`}`}
-                </Text>
-              </Box>
-              <Text variant="numericMedium">{fgEuro(quote.cents)}</Text>
-            </Box>
-          ))}
-          <Button label="Save today's prices" icon="content-save" onPress={onSnapshot} />
-          <Button label="Open shopping list" variant="tertiary" onPress={() => router.push("/list")} />
-        </Box>
-      ) : null}
+      <Button label="View price history" variant="secondary" onPress={onPress} />
     </Card>
   );
 }

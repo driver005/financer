@@ -23,7 +23,10 @@ Shops & offers `/shops`, Settings & Plus `/settings`.
 ## Flows
 
 1. **Overview** → see balance → tap Budgets → adjust → back → tap Accounts → detail.
-2. **Price comparison** → search item → compare all discounters → see sale badge → tap cheapest → add to shopping list. Empty state → Add first price.
+2. **Price comparison** → search item → tap **View price history** → dedicated full page
+   `/price-detail?item=…` with best-price hero, all-store history chart, every
+   discounter's current/average price and buy-now advice → Save today's prices,
+   Add a price, or add to shopping list → Back to prices. Empty state → Add first price.
 3. **Contracts** → see monthly total → money-saving tips → tap contract → cancellation sheet → download or send (email/SMS/webhook) → `Cancelled!` badge.
 4. **Insights** → disposable income → month trend → category bars → AI tips → budget status.
 5. **Insurance** → coverage check → tap missing area → add premium → policy appears.

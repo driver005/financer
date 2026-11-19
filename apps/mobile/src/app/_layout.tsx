@@ -27,7 +27,7 @@ function BottomBar() {
   const path = usePathname();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  if (path === "/showcase" || path === "/connect") return null;
+  if (path === "/showcase" || path === "/connect" || path.startsWith("/price-detail")) return null;
   return (
     <View style={[styles.outer, { paddingBottom: Math.max(insets.bottom, 10) }]} pointerEvents="box-none">
       <View style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -125,6 +125,7 @@ export default function RootLayout() {
         <Tabs.Screen name="insurance" options={{ title: "Insurance" }} />
         <Tabs.Screen name="savings" options={{ title: "Savings Booster" }} />
         <Tabs.Screen name="prices" options={{ title: "Price comparison" }} />
+        <Tabs.Screen name="price-detail" options={{ title: "Price details" }} />
         <Tabs.Screen name="flows" options={{ title: "Money flows" }} />
         <Tabs.Screen name="finance" options={{ title: "Finance suite" }} />
         <Tabs.Screen name="upstream" options={{ title: "Upstream features" }} />

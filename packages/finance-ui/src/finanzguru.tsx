@@ -301,7 +301,7 @@ export function FgDateHeader({ label, right, highlight }: { label: string; right
 
 export function FgHeaderIcon({ name, onPress, label }: { name: IconName; onPress?: () => void; label: string }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={styles.headerIcon}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={10} style={styles.headerIcon}>
       <Icon name={name} size={22} color={palette.primary} />
     </Pressable>
   );
