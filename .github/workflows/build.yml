@@ -72,7 +72,7 @@ jobs:
           path: release-assets/ios
 
       - name: Publish release with both apps
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: Pantry ${{ github.ref_name }}
