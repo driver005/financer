@@ -60,13 +60,13 @@ jobs:
       contents: write
     steps:
       - name: Download Android APK
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: pantry-android-apk
           path: release-assets/android
 
       - name: Download iOS app
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: pantry-ios-simulator-app
           path: release-assets/ios
